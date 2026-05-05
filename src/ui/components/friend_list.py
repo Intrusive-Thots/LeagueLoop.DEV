@@ -271,10 +271,10 @@ class FriendPriorityList(ctk.CTkFrame):
     def _safe_render(self):
         """Thread-safe render wrapper."""
         try:
-            if self.winfo_exists() and self.winfo_ismapped():
+            if self.winfo_exists():
                 self._render_list()
         except Exception:
-            pass  # Widget not packed (different tab active) — skip silently
+            pass
 
     # ─────────── Auto-Join Toggle ───────────
 
@@ -325,12 +325,6 @@ class FriendPriorityList(ctk.CTkFrame):
 
     def _render_list(self):
         if not self.winfo_exists():
-            return
-        # Skip rendering if the widget isn't currently packed/visible
-        try:
-            if not self.winfo_ismapped():
-                return
-        except Exception:
             return
 
         sig = self._get_render_signature()

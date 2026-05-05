@@ -83,7 +83,7 @@ class SystemTrayApp:
         try:
             if hasattr(self.app_root, "after") and hasattr(self.app_root, "sidebar"):
                 if hasattr(self.app_root.sidebar, "switch_tab"):
-                    self.app_root.after(0, lambda: self.app_root.sidebar.switch_tab("Advanced"))
+                    self.app_root.after(0, lambda: self.app_root.sidebar.switch_tab("Settings"))
                     self.app_root.after(50, self._sync_show)
         except Exception:
             pass

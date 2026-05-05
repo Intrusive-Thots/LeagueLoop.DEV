@@ -87,7 +87,7 @@ class SidebarWidget(ctk.CTkFrame):
             )
         self.btn_close.pack(side="right", padx=(4, 2))
         CTkTooltip(self.btn_close, "Close Application")
-        self.drag_widgets = [self, self.header, self.lbl_title]
+        self.drag_widgets = [self.header, self.lbl_title]
 
         # Gold accent divider below header (pre-blended: #C8AA6E at ~12% on #091428)
         ctk.CTkFrame(self, height=1, fg_color="#1E1E2D").pack(fill="x", padx=CARD_PAD)
@@ -115,7 +115,7 @@ class SidebarWidget(ctk.CTkFrame):
             self.game_tool_container.pack_forget()
             if getattr(self, "accounts_tool", None): self.accounts_tool.pack_forget()
             
-            if getattr(self, "automation_frame", None): self.automation_frame.pack_forget()
+            if getattr(self, "automation_frame", None): self.automation_frame._card.pack_forget()
             if getattr(self, "friend_list", None): self.friend_list.pack_forget()
             
             self.advanced_scroll.pack_forget()
@@ -136,7 +136,7 @@ class SidebarWidget(ctk.CTkFrame):
                 self.spacer.pack(fill="both", expand=True)
                 
             elif tab_name == "Actions":
-                if getattr(self, "automation_frame", None): self.automation_frame.pack(fill="x", pady=(0, SECTION_GAP))
+                if getattr(self, "automation_frame", None): self.automation_frame._card.pack(fill="x", pady=(0, SECTION_GAP))
                 self.spacer.pack(fill="both", expand=True)
                 
             elif tab_name == "Config":

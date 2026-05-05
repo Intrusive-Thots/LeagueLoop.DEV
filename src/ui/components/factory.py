@@ -370,8 +370,8 @@ def make_card(parent, title=None, fg_color=None, border_color=None, corner_radiu
                     self.animate_collapse()
                 else:
                     chevron.configure(text="▼  ")
-                    divider.pack(fill="x", padx=inner_padx, pady=(0, inner_pady - 2), before=content_wrapper)
                     content_wrapper.pack(fill="x", padx=inner_padx, pady=(0 if title else inner_pady, inner_pady))
+                    divider.pack(fill="x", padx=inner_padx, pady=(0, inner_pady - 2), before=content_wrapper)
                     
                     # Temporarily allow propagation to calculate required height
                     content_wrapper.pack_propagate(True)
