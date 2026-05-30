@@ -21,7 +21,6 @@ The CustomTkinter interface. Separated into views, components, and layout.
 - **`components/`**: Reusable generic widgets.
   - `priority_grid.py`: The drag-and-drop champion priority list.
   - `friend_list.py`: The friend invite/auto-join UI.
-  - `omnibar.py`: The Ctrl+K global command input.
   - `hotkey_recorder.py`: Keyboard shortcut capture widget for the Advanced settings tab.
   - `toast.py`: Temporary notification popups.
 - **`layout/`**: Structural containers.

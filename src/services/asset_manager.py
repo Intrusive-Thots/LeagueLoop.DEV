@@ -83,7 +83,6 @@ DEFAULT_CONFIG = {
     "hotkey_toggle_automation": "ctrl+shift+a",
     "hotkey_find_match": "ctrl+shift+f",
     "hotkey_compact_mode": "ctrl+shift+m",
-    "hotkey_omnibar": "ctrl+k",
     "priority_picker": {
         "enabled": True,
         "list": [

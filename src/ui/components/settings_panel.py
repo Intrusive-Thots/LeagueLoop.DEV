@@ -53,6 +53,18 @@ class SettingsPanel(ctk.CTkScrollableFrame):
             self.config.set("run_in_tray", self.tray_var.get())
         self.tray_switch = LolToggle(row_tray, variable=self.tray_var, command=_on_tray_toggle)
         self.tray_switch.pack(side="right")
+
+        # ── Stealth Mode ──
+        row_stealth = ctk.CTkFrame(card_auto, fg_color="transparent")
+        row_stealth.pack(fill="x", pady=(INNER_GAP, 0))
+        ctk.CTkLabel(row_stealth, text="Stealth Mode", font=get_font("body"), text_color=get_color("colors.text.primary")).pack(side="left")
+        ctk.CTkLabel(row_stealth, text="Restore silently after game", font=get_font("caption"), text_color=get_color("colors.text.disabled")).pack(side="left", padx=(6, 0))
+
+        self.stealth_var = ctk.BooleanVar(value=bool(self.config.get("stealth_mode", False)))
+        def _on_stealth_toggle():
+            self.config.set("stealth_mode", self.stealth_var.get())
+        self.stealth_switch = LolToggle(row_stealth, variable=self.stealth_var, command=_on_stealth_toggle)
+        self.stealth_switch.pack(side="right")
         
     def _build_social(self):
         card_social = make_card(self, title="SOCIAL & IDENTITY", padx=0, pady=(0, SECTION_GAP), collapsible=True, start_collapsed=True)
@@ -84,7 +96,6 @@ class SettingsPanel(ctk.CTkScrollableFrame):
             ("Client Launch", "hotkey_launch_client", "ctrl+shift+l"),
             ("Toggle Auto", "hotkey_toggle_automation", "ctrl+shift+a"),
             ("Find Match", "hotkey_find_match", "ctrl+shift+f"),
-            ("Omnibar", "hotkey_omnibar", "ctrl+k"),
         ]
         self.recorders = {}
         for i, (label_text, config_key, default_val) in enumerate(hotkeys):

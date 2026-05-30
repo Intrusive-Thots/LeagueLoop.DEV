@@ -1,8 +1,16 @@
 import unittest
 from unittest.mock import MagicMock, patch, mock_open
 import os
+import json
 
 from services.asset_manager import AssetManager
+
+SAMPLE_CHAMP_DATA = {
+    "data": {
+        "Aatrox": {"id": "Aatrox", "key": "266", "name": "Aatrox", "tags": ["Fighter"]},
+        "Ahri": {"id": "Ahri", "key": "103", "name": "Ahri", "tags": ["Mage"]}
+    }
+}
 
 class TestAssetManager(unittest.TestCase):
     def setUp(self):
@@ -15,54 +23,47 @@ class TestAssetManager(unittest.TestCase):
 
     @patch('os.makedirs')
     @patch('os.path.exists')
-    @patch('builtins.open', new_callable=mock_open)
-    @patch('requests.Session.get')
-    def test_load_champion_data_cache_miss(self, mock_get, mock_open_file, mock_exists, mock_makedirs):
-        mock_exists.return_value = False
+    def test_load_champion_data_cache_miss(self, mock_exists, mock_makedirs):
+        """When cache file doesn't exist, download from DDragon and populate maps."""
+        # First call: cache file doesn't exist -> download
+        # Second call: file now exists for reading
+        mock_exists.side_effect = [False]
 
+        # Mock the session.get() on the instance
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "data": {
-                "Aatrox": {"id": "Aatrox", "key": "266", "name": "Aatrox"},
-                "Ahri": {"id": "Ahri", "key": "103", "name": "Ahri"}
-            }
-        }
-        mock_get.return_value = mock_response
+        mock_response.json.return_value = SAMPLE_CHAMP_DATA
+        self.assets.session = MagicMock()
+        self.assets.session.get.return_value = mock_response
 
-        # We need to mock json.load because mock_open read() returns magic mock when accessed by json.load
-        with patch('json.load') as mock_json_load:
-            mock_json_load.return_value = {
-                "data": {
-                    "Aatrox": {"id": "Aatrox", "key": "266", "name": "Aatrox"},
-                    "Ahri": {"id": "Ahri", "key": "103", "name": "Ahri"}
-                }
-            }
-            self.assets.ddragon_ver = "14.4.1"
-            self.assets._load_champion_data()
+        self.assets.ddragon_ver = "14.4.1"
+
+        # Mock file write + read to return our sample data
+        data_json = json.dumps(SAMPLE_CHAMP_DATA)
+        m = mock_open(read_data=data_json)
+        with patch('builtins.open', m):
+            with patch('json.load', return_value=SAMPLE_CHAMP_DATA):
+                with patch('json.dump'):
+                    self.assets._load_champion_data()
 
         self.assertIn("Aatrox", self.assets.champ_data)
         self.assertEqual(self.assets.id_to_key[266], "Aatrox")
         self.assertEqual(self.assets.name_to_id["aatrox"], 266)
 
-    @patch('os.path.exists')
-    @patch('builtins.open', new_callable=mock_open)
-    def test_load_champion_data_cache_hit(self, mock_open_file, mock_exists):
-        mock_exists.return_value = True
+    @patch('os.path.exists', return_value=True)
+    def test_load_champion_data_cache_hit(self, mock_exists):
+        """When cache file exists, load from disk without downloading."""
+        self.assets.ddragon_ver = "14.4.1"
 
-        with patch('json.load') as mock_json_load:
-            mock_json_load.return_value = {
-                "data": {
-                    "Aatrox": {"id": "Aatrox", "key": "266", "name": "Aatrox"},
-                    "Ahri": {"id": "Ahri", "key": "103", "name": "Ahri"}
-                }
-            }
-            self.assets.ddragon_ver = "14.4.1"
-            self.assets._load_champion_data()
+        with patch('builtins.open', mock_open()):
+            with patch('json.load', return_value=SAMPLE_CHAMP_DATA):
+                self.assets._load_champion_data()
 
         self.assertIn("Aatrox", self.assets.champ_data)
         self.assertEqual(self.assets.id_to_key[266], "Aatrox")
         self.assertEqual(self.assets.name_to_id["aatrox"], 266)
+        # Should NOT have called session.get since cache exists
+        self.assets.session.get.assert_not_called()
 
 if __name__ == '__main__':
     unittest.main()

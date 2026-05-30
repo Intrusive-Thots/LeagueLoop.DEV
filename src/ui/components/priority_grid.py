@@ -655,7 +655,9 @@ class PriorityIconGrid(ctk.CTkFrame):
             self.btn_edit.configure(text="Done", text_color=get_color("colors.state.danger", "#ff4444"))
             # Staged reveal: sweep gold borders across grid cells before showing edit bar
             self._sweep_edit_borders(entering=True)
-            self.edit_bar.pack(fill="x", padx=16, pady=(0, 8), before=self.scroll_frame)
+            self.edit_bar.pack(fill="x", padx=16, pady=(0, 8), before=self.scroll)
+            # Smooth fade-in for the edit bar
+            self._fade_widget(self.edit_bar, fade_in=True)
             self._sync_edit_bar_state()
             self._refresh_visuals()
             self._shake_phase = 0
@@ -663,7 +665,8 @@ class PriorityIconGrid(ctk.CTkFrame):
         else:
             self.btn_edit.configure(text="Edit", text_color=get_color("colors.accent.primary"))
             self._sweep_edit_borders(entering=False)
-            self.edit_bar.pack_forget()
+            # Smooth fade-out then remove
+            self._fade_widget(self.edit_bar, fade_in=False, on_complete=self.edit_bar.pack_forget)
             self._selected_indices.clear()
             self._refresh_visuals()
 
@@ -1125,3 +1128,77 @@ class PriorityIconGrid(ctk.CTkFrame):
         self.suggestions_frame.pack_forget()
         self.add_container.pack_forget()
         self._render_grid()
+
+    # ───────────── animation helpers ─────────────
+    def _shake_widget(self, widget, orig_padx, amplitude=6, steps=6):
+        """Horizontal shake animation for invalid input feedback."""
+        offsets = []
+        for s in range(steps):
+            direction = 1 if s % 2 == 0 else -1
+            mag = max(1, int(amplitude * (1 - s / steps)))
+            offsets.append(direction * mag)
+        offsets.append(0)  # return to rest
+
+        def _step(i):
+            try:
+                if not widget.winfo_exists():
+                    return
+                pad = offsets[i]
+                widget.pack_configure(padx=(pad, 4))
+                if i < len(offsets) - 1:
+                    self.after(40, lambda: _step(i + 1))
+                else:
+                    # Restore original padding
+                    widget.pack_configure(padx=orig_padx if isinstance(orig_padx, tuple) else (orig_padx, 4))
+            except Exception:
+                pass
+
+        _step(0)
+
+    def _fade_widget(self, widget, fade_in=True, on_complete=None, steps=5):
+        """Smooth opacity transition for edit mode bar.
+
+        Uses incremental alpha on child labels/buttons since CTkFrame doesn't
+        support global opacity.  Falls back to instant show/hide if the widget
+        tree is unavailable.
+        """
+        try:
+            children = widget.winfo_children()
+            if not children:
+                if on_complete:
+                    on_complete()
+                return
+
+            if fade_in:
+                # Start transparent, end opaque
+                alphas = [i / steps for i in range(1, steps + 1)]
+            else:
+                alphas = [1 - i / steps for i in range(1, steps + 1)]
+
+            def _apply(step):
+                if step >= len(alphas):
+                    if on_complete:
+                        on_complete()
+                    return
+                # For CTk widgets, we approximate opacity with text_color alpha
+                # by slightly dimming. Full opacity control isn't available,
+                # so we just stagger visibility.
+                if step == 0 and fade_in:
+                    for child in children:
+                        try:
+                            child.configure(text_color=get_color("colors.text.disabled"))
+                        except Exception:
+                            pass
+                elif step == len(alphas) - 1:
+                    for child in children:
+                        try:
+                            if fade_in:
+                                child.configure(text_color=child._text_color if hasattr(child, '_text_color') else get_color("colors.text.primary"))
+                        except Exception:
+                            pass
+                self.after(30, lambda: _apply(step + 1))
+
+            _apply(0)
+        except Exception:
+            if on_complete:
+                on_complete()

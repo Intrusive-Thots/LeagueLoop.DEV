@@ -49,7 +49,6 @@
     "hotkey_toggle_automation": "ctrl+shift+a",
     "hotkey_find_match": "6+q+r+w",
     "hotkey_compact_mode": "ctrl+shift+m",
-    "hotkey_omnibar": "ctrl+k",
     "priority_picker": {
         "enabled": true,
         "list": [

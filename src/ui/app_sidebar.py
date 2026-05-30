@@ -489,7 +489,6 @@ class SidebarWidget(ctk.CTkFrame):
             ("Client Launch", "hotkey_launch_client", "ctrl+shift+l"),
             ("Toggle Auto", "hotkey_toggle_automation", "ctrl+shift+a"),
             ("Find Match", "hotkey_find_match", "ctrl+shift+f"),
-            ("Omnibar", "hotkey_omnibar", "ctrl+k"),
         ]
         self.recorders = {}
         for i, (label_text, config_key, default_val) in enumerate(hotkeys):

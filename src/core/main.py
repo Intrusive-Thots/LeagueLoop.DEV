@@ -44,7 +44,6 @@ from ui.app_sidebar import SidebarWidget  # type: ignore
 from ui.components.factory import get_color, get_font, TOKENS  # type: ignore
 from ui.components.toast import ToastManager  # type: ignore
 from ui.ui_shared import CTkTooltip  # type: ignore
-from ui.components.omnibar import Omnibar  # type: ignore
 from ui.components.mini_player import MiniPlayer
 from ui.components.tray_icon import SystemTrayApp
 from utils.acrylic_blur import apply_acrylic_blur
@@ -125,7 +124,6 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self.running = True
         self._stop_event = threading.Event()
         self._drag_data = {"x": 0, "y": 0}
-        self.omnibar = None
 
         # Initialize automation before UI to avoid NoneType in callbacks
         self.stop_func = lambda: self.after(0, lambda: self.sidebar._on_power_click()) if hasattr(self, "sidebar") else None
@@ -244,7 +242,6 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self.sidebar = SidebarWidget(self, self.toggle_power, self.config, lcu=self.lcu, assets=self.assets, scraper=self.scraper)
         self.sidebar.grid(row=0, column=0, sticky="nsew")
         
-        self.omnibar = Omnibar(self, self._provide_commands)
         self.mini_player = MiniPlayer(self, self.config)
 
     def _setup_window_dragging(self):
@@ -296,6 +293,20 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
             self.after(0, self.deiconify)
             self.after(50, self.lift)
             Logger.info("SYS", "Game ended. Restoring window.")
+        elif state == "restore_quiet":
+            # Stealth Mode: restore the window without stealing focus or lifting.
+            # The window becomes visible again but stays behind the active window,
+            # so it doesn't flash on screen for streamers or observers.
+            try:
+                import ctypes
+                SW_SHOWNOACTIVATE = 4
+                hwnd = ctypes.windll.user32.GetParent(self.winfo_id())
+                if hwnd == 0: hwnd = self.winfo_id()
+                ctypes.windll.user32.ShowWindow(hwnd, SW_SHOWNOACTIVATE)
+            except Exception:
+                self.after(0, self.deiconify)
+            self.attributes("-topmost", False)
+            Logger.info("SYS", "Game ended. Stealth restore (no focus steal).")
 
     def _attach_to_hwnd(self, parent_hwnd):
         """OS-level bond to League Client. Syncs minimize/restore and Z-order natively."""
@@ -374,86 +385,9 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
     def _hotkey_toggle_automation(self):
         self.after(0, self.sidebar._on_power_click)
 
-    def _provide_commands(self):
-        base_cmds = [
-            {
-                "title": "Launch League of Legends",
-                "subtitle": "Opens the Riot Client and boots League",
-                "icon": "🚀",
-                "action": self._hotkey_launch_client
-            },
-            {
-                "title": "Restart League UX",
-                "subtitle": "Restarts LeagueClientUx without closing the game",
-                "icon": "🔄",
-                "action": self._restart_ux
-            },
-            {
-                "title": "Clear UI Cache",
-                "subtitle": "Deletes downloaded champion images",
-                "icon": "🗑️",
-                "action": self.assets.clear_cache
-            },
-            {
-                "title": "Quit LeagueLoop",
-                "subtitle": "Closes the application completely",
-                "icon": "❌",
-                "action": self._on_close
-            },
-            {
-                "title": "Toggle Mini-Player",
-                "subtitle": "Show/hide the compact tracker toolbar",
-                "icon": "📱",
-                "action": lambda: self.after(0, self.mini_player.toggle)
-            },
-            {
-                "title": "Queue Roulette",
-                "subtitle": "Feeling lucky? Randomly pick a mode and queue up!",
-                "icon": "🎲",
-                "action": self._queue_roulette
-            },
-            {
-                "title": "Link Mobile Device",
-                "subtitle": "Show QR Code to control LeagueLoop from your phone",
-                "icon": "📱",
-                "action": self._show_mobile_qr
-            }
-        ]
-
-        # Inject dynamic queue modes
-        modes = [
-            "Quickplay", "Draft Pick", "Ranked Solo/Duo", "Ranked Flex",
-            "ARAM", "ARAM Mayhem", "Arena", "Brawl", "URF", "ARURF", "Nexus Blitz",
-            "One For All", "Ultimate Spellbook", "TFT Normal", "TFT Ranked"
-        ]
-
-        for mode in modes:
-            # We capture the mode name via a default argument in the lambda
-            # so the loop closure binds correctly
-            base_cmds.append({
-                "title": f"Queue: {mode}",
-                "subtitle": f"Switch mode and start searching for {mode}",
-                "icon": "🎮",
-                "action": lambda m=mode: self._quick_queue(m)
-            })
-
-        # Inject dynamic account switching commands
-        if hasattr(self, "account_manager"):
-            for acct in self.account_manager.get_accounts():
-                label = acct.get("label", "Account")
-                username = acct.get("username", "")
-                tagline = acct.get("tagline", "NA1")
-                base_cmds.append({
-                    "title": f"Switch Account: {label}",
-                    "subtitle": f"Log in as {username}#{tagline}",
-                    "icon": "🔐",
-                    "action": lambda l=label: self._switch_account_by_label(l)
-                })
-
-        return base_cmds
 
     def _switch_account_by_label(self, label):
-        """Switch to an account identified by its label (from omnibar)."""
+        """Switch to an account identified by its label."""
         if not hasattr(self, "account_manager"):
             return
         for i, acct in enumerate(self.account_manager.get_accounts()):
@@ -603,14 +537,12 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self._launch_hotkey = self.config.get("hotkey_launch_client", "ctrl+shift+l")
         self._automation_hotkey = self.config.get("hotkey_toggle_automation", "ctrl+shift+a")
         self._queue_hotkey = self.config.get("hotkey_find_match", "ctrl+shift+f")
-        self._omnibar_hotkey = self.config.get("hotkey_omnibar", "ctrl+k")
         self._mini_hotkey = self.config.get("hotkey_compact_mode", "ctrl+shift+m")
 
         try:
             keyboard.add_hotkey(self._launch_hotkey, self._hotkey_launch_client, suppress=False)
             keyboard.add_hotkey(self._automation_hotkey, self._hotkey_toggle_automation, suppress=False)
             keyboard.add_hotkey(self._queue_hotkey, self._hotkey_find_match, suppress=False)
-            keyboard.add_hotkey(self._omnibar_hotkey, lambda: self.after(0, self.omnibar.show) if self.omnibar is not None else None, suppress=False)  # type: ignore
             keyboard.add_hotkey(self._mini_hotkey, lambda: self.after(0, self.mini_player.toggle), suppress=False)
         except Exception as e:
             Logger.error("SYS", f"Failed to register hotkeys: {e}")

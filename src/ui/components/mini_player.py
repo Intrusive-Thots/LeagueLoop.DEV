@@ -1,5 +1,6 @@
 import customtkinter as ctk # type: ignore
 from ui.components.factory import get_color, get_font # type: ignore
+from ui.ui_shared import CTkTooltip # type: ignore
 from utils.logger import Logger # type: ignore
 
 class MiniPlayer(ctk.CTkToplevel):
@@ -38,6 +39,7 @@ class MiniPlayer(ctk.CTkToplevel):
             command=self.hide
         )
         self.btn_close.pack(side="right", padx=8)
+        CTkTooltip(self.btn_close, "Hide Compact Tracker")
         
         self.btn_restore = ctk.CTkButton(
             self, text="[ ]", width=30, height=30,
@@ -47,6 +49,7 @@ class MiniPlayer(ctk.CTkToplevel):
             command=self._restore_main
         )
         self.btn_restore.pack(side="right", padx=4)
+        CTkTooltip(self.btn_restore, "Restore Full Window")
 
     def _bind_events(self):
         self.bind("<ButtonPress-1>", self._start_drag)

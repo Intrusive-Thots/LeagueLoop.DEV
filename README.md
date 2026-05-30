@@ -49,8 +49,6 @@ Whether you're dodging queues, insta-locking ARAM priorities, or managing your a
 ### 3. **The "Orb" (Compact Mode)**
 - Tired of huge windows during drafting? A single click (or shortcut) morphs LeagueLoop into a glowing, draggable **Orb** that stays above your client natively via Win32 OS-level injection hooks.
 
-### 4. **Omnibar Palette** (Press `CTRL+K`)
-- Rapid interface access: Switch queues *(Arena, TFT, ARAM Mayhem, Quickplay, etc.)*, reboot the League Client UX, wipe cache directories, or trigger Queue Roulette—all from a sleek command bar.
 
 ---
 

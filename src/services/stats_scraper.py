@@ -8,6 +8,15 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from utils.logger import Logger
 
+try:
+    from bs4 import BeautifulSoup
+    _HAS_BS4 = True
+except ImportError:
+    _HAS_BS4 = False
+
+# Cache TTL for live-scraped winrates (seconds)
+_LIVE_CACHE_TTL = 1800  # 30 minutes
+
 # Baseline ARAM win rates (approximate, sourced from public tier lists).
 # Preserved here as an offline database since web scraping was removed.
 BASELINE_ARAM_WINRATES = {
@@ -89,9 +98,75 @@ class StatsScraper:
         self.set_mode(mode)
 
     def _fetch_live_data_background(self, mode):
-        # Item #195: Live API URL is a placeholder — skip entirely until a real endpoint is configured.
-        # When a real API is available, replace this with actual fetch logic.
-        pass
+        """Attempt to scrape live win rate data in the background.
+
+        Falls back to baseline data silently if BeautifulSoup is not installed
+        or the scrape fails.
+        """
+        # Check in-memory cache first
+        ts = self._cache_timestamps.get(mode)
+        if ts and (time.time() - ts) < _LIVE_CACHE_TTL and mode in self.live_winrates:
+            return
+
+        if not _HAS_BS4:
+            Logger.debug("StatsScraper", "bs4 not installed — using baseline win rates.")
+            return
+
+        self._executor.submit(self._scrape_winrates, mode)
+
+    def _scrape_winrates(self, mode):
+        """BeautifulSoup fallback scraper for community win rate data."""
+        ml = str(mode).lower()
+        if "aram" in ml:
+            url = "https://lolalytics.com/lol/tierlist/?tier=all&patch=30&mode=aram"
+        elif "arena" in ml:
+            url = "https://lolalytics.com/lol/tierlist/?tier=all&patch=30&mode=arena"
+        else:
+            url = "https://lolalytics.com/lol/tierlist/?tier=all&patch=30"
+
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept-Language": "en-US,en;q=0.9",
+            }
+            resp = requests.get(url, timeout=12, headers=headers)
+            if resp.status_code != 200:
+                Logger.debug("StatsScraper", f"Scrape failed (HTTP {resp.status_code}) for {mode}")
+                return
+
+            soup = BeautifulSoup(resp.text, "html.parser")
+
+            scraped = {}
+            # lolalytics uses data attributes or table rows — attempt common patterns
+            # Pattern 1: table rows with champion name + win rate cells
+            for row in soup.select("tr"):
+                cells = row.find_all("td")
+                if len(cells) >= 3:
+                    name_cell = cells[0].get_text(strip=True)
+                    # Try to find a cell that looks like a percentage (e.g. "52.3%")
+                    for cell in cells[1:]:
+                        txt = cell.get_text(strip=True).replace("%", "")
+                        try:
+                            wr = float(txt)
+                            if 30.0 <= wr <= 75.0:  # sanity check
+                                clean_name = name_cell.translate(_CLEAN_TRANS).lower()
+                                if clean_name and len(clean_name) > 1:
+                                    scraped[clean_name] = round(wr, 1)
+                                break
+                        except ValueError:
+                            continue
+
+            if scraped and len(scraped) >= 20:
+                self.live_winrates[mode] = scraped
+                self._cache_timestamps[mode] = time.time()
+                Logger.info("StatsScraper", f"Scraped {len(scraped)} live win rates for {mode}")
+            else:
+                Logger.debug("StatsScraper", f"Scrape yielded too few results ({len(scraped)}) for {mode} — keeping baseline")
+
+        except requests.RequestException as e:
+            Logger.debug("StatsScraper", f"Network error during scrape: {e}")
+        except Exception as e:
+            Logger.debug("StatsScraper", f"Scrape parse error: {e}")
 
     def set_mode(self, mode):
         """Switch active dataset based on game mode string."""

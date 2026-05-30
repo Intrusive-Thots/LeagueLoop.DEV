@@ -1,6 +1,5 @@
 import unittest
-from unittest.mock import MagicMock, patch
-import os
+from unittest.mock import MagicMock, patch, PropertyMock
 
 from services.api_handler import LCUClient
 
@@ -13,43 +12,45 @@ class TestLCUClient(unittest.TestCase):
         self.assertIsNone(self.client.port)
         self.assertIsNone(self.client.auth_token)
 
-    @patch('psutil.process_iter')
-    @patch('os.path.exists')
-    @patch('builtins.open')
-    @patch('requests.get')
-    def test_connect_success(self, mock_get, mock_open, mock_exists, mock_process_iter):
+    @patch('services.api_handler.psutil.process_iter')
+    def test_connect_success(self, mock_process_iter):
+        """Test connect via cmdline extraction (primary path)."""
         mock_proc = MagicMock()
-        mock_proc.info = {'name': 'LeagueClientUx.exe'} # For the attrs=['name'] call
-        mock_proc.cwd.return_value = "C:\\Riot Games\\League of Legends"
+        mock_proc.info = {'name': 'LeagueClientUx.exe'}
+        mock_proc.pid = 12345
+        mock_proc.is_running.return_value = True
+        mock_proc.name.return_value = 'LeagueClientUx.exe'
+        mock_proc.cmdline.return_value = [
+            "LeagueClientUx.exe",
+            "--app-port=54321",
+            "--remoting-auth-token=password",
+        ]
         mock_process_iter.return_value = [mock_proc]
-
-        mock_exists.return_value = True
-        mock_open.return_value.__enter__.return_value.read.return_value = "LeagueClient:1234:54321:password:https"
-
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_get.return_value = mock_response
 
         # Override cooldown
         self.client._last_scan_time = 0
+        self.client._backoff = 0
+
         self.assertTrue(self.client.connect())
         self.assertTrue(self.client.is_connected)
         self.assertEqual(self.client.port, "54321")
         self.assertEqual(self.client.auth_token, "password")
 
-    @patch('services.api_handler.requests.Session.request')
-    def test_request_success(self, mock_request):
+    def test_request_success(self):
+        """Test request sends through session and returns response."""
         self.client.is_connected = True
         self.client.port = "1234"
-        self.client.base_url = "https://127.0.0.1:1234" # Need to set base_url
+        self.client.base_url = "https://127.0.0.1:1234"
         self.client.headers = {"Authorization": "Basic xxx"}
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_request.return_value = mock_response
+        self.client.session = MagicMock()
+        self.client.session.request.return_value = mock_response
 
-        result = self.client.request("GET", "/test")
+        result = self.client.request("GET", "/test", silent=True)
         self.assertEqual(result, mock_response)
+        self.client.session.request.assert_called_once()
 
     def test_request_not_connected(self):
         self.client.is_connected = False
