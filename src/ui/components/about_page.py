@@ -7,7 +7,7 @@ class AboutPage(ctk.CTkToplevel):
         super().__init__(master, **kwargs)
         
         self.title("About LeagueLoop")
-        self.geometry("460x380")
+        self.geometry("460x420")
         self._egg_clicks = 0
         self.resizable(False, False)
         self.attributes("-topmost", True)
@@ -23,6 +23,9 @@ class AboutPage(ctk.CTkToplevel):
             
         self._setup_ui()
         self.focus_force()
+        
+        # Bind Escape key to close window
+        self.bind("<Escape>", lambda e: self.destroy())
 
     def _setup_ui(self):
         header = ctk.CTkFrame(self, fg_color=get_color("colors.background.app", "#0A1428"), corner_radius=0, height=56)
@@ -80,6 +83,21 @@ class AboutPage(ctk.CTkToplevel):
             text_color=get_color("colors.text.muted"),
             justify="left"
         ).pack(anchor="w", padx=12, pady=(0, 12))
+
+        # Close Button
+        btn_close = ctk.CTkButton(
+            body,
+            text="Close",
+            font=get_font("body", "bold"),
+            fg_color=get_color("colors.background.card"),
+            text_color=get_color("colors.text.primary"),
+            hover_color=get_color("colors.state.hover"),
+            border_width=1,
+            border_color=get_color("colors.border.subtle"),
+            command=self.destroy,
+            height=30
+        )
+        btn_close.pack(fill="x", side="bottom", pady=(0, 12))
 
         footer = ctk.CTkFrame(body, fg_color="transparent")
         footer.pack(fill="x", side="bottom")

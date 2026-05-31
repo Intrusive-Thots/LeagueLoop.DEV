@@ -17,6 +17,7 @@ from ui.components.game_tools.arena_tool import ArenaTool  # type: ignore
 from ui.components.game_tools.accounts_tool import AccountsTool  # type: ignore
 from ui.components.game_tools.draft_tool import DraftTool  # type: ignore
 from ui.components.tab_bar import TabBar  # type: ignore
+from utils.smooth_scroll import apply_smooth_scroll
 
 from ui.components.lol_toggle import LolToggle  # type: ignore
 from ui.components.friend_list import FriendPriorityList  # type: ignore
@@ -582,6 +583,9 @@ class SidebarWidget(ctk.CTkFrame):
             )
             btn.pack(side="left", padx=(0, 4))
             CTkTooltip(btn, f"Set status to: {text}")
+
+        # Enable mousewheel scrolling on advanced settings frame
+        apply_smooth_scroll(self.advanced_scroll)
 
         # ── Action Log (Bottom) ──
         self.spacer = ctk.CTkFrame(self.main_body, fg_color="transparent")

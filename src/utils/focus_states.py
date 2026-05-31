@@ -77,6 +77,42 @@ def apply_focus_ring(widget, color=None, width=2):
         pass
 
 
+def scroll_to_widget(scrollable_frame, widget):
+    """Scroll a CTkScrollableFrame to bring a widget into view."""
+    try:
+        canvas = scrollable_frame._parent_canvas
+        if not canvas.winfo_exists():
+            return
+            
+        canvas.update_idletasks()
+        
+        w_y = widget.winfo_rooty()
+        w_h = widget.winfo_height()
+        c_y = canvas.winfo_rooty()
+        c_h = canvas.winfo_height()
+        
+        y1, y2 = canvas.yview()
+        visible_fraction = y2 - y1
+        if visible_fraction <= 0 or visible_fraction >= 1.0:
+            return
+            
+        total_height = c_h / visible_fraction
+        
+        scroll_pixels = 0
+        if w_y < c_y:
+            scroll_pixels = w_y - c_y
+        elif (w_y + w_h) > (c_y + c_h):
+            scroll_pixels = (w_y + w_h) - (c_y + c_h)
+            
+        if scroll_pixels != 0:
+            fraction_diff = scroll_pixels / total_height
+            new_y = y1 + fraction_diff
+            new_y = max(0.0, min(1.0 - visible_fraction, new_y))
+            canvas.yview_moveto(new_y)
+    except Exception:
+        pass
+
+
 def apply_focus_states_recursive(container, skip_types=None):
     """
     Walk a container's widget tree and apply focus rings to all
@@ -101,9 +137,33 @@ def apply_focus_states_recursive(container, skip_types=None):
     )
 
     def _walk(widget):
-        if isinstance(widget, interactive_types) and type(widget).__name__ not in skip:
-            apply_focus_ring(widget)
-        for child in widget.winfo_children():
-            _walk(child)
+        is_interactive = isinstance(widget, interactive_types)
+        is_toggle = type(widget).__name__ == "LolToggle"
+
+        if (is_interactive or is_toggle) and type(widget).__name__ not in skip:
+            if is_interactive:
+                apply_focus_ring(widget)
+
+            # Bind scroll-to-view on focus
+            def _on_focus_scroll(event, w=widget):
+                if event.widget == w:
+                    parent = w.master
+                    scroll_parent = None
+                    while parent is not None:
+                        if isinstance(parent, ctk.CTkScrollableFrame):
+                            scroll_parent = parent
+                            break
+                        parent = parent.master
+                    if scroll_parent:
+                        scroll_to_widget(scroll_parent, w)
+
+            widget.bind("<FocusIn>", _on_focus_scroll, add="+")
+
+        for child in widget.winfo_exists() and widget.winfo_children() or []:
+            try:
+                _walk(child)
+            except Exception:
+                pass
 
     _walk(container)
+
