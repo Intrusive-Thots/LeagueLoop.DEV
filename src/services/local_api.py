@@ -50,10 +50,14 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                     if callable(queue_mode):
                         queue_mode = queue_mode()
 
+            sidebar = getattr(app, 'sidebar', None) if app else None
             data = {
                 "phase": phase,
                 "automation_enabled": power_state,
-                "queue_mode": queue_mode
+                "queue_mode": queue_mode,
+                "queue_timer": getattr(sidebar, '_current_queue_time', 0) if sidebar else 0,
+                "queue_estimated": getattr(sidebar, '_estimated_queue_time', 120) if sidebar else 120,
+                "summoner_name": getattr(app, '_summoner_name', '') if app else ''
             }
             self.wfile.write(json.dumps(data).encode('utf-8'))
         elif self.path == '/health':
@@ -84,9 +88,42 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                     "auto_aram_swap": cfg.get("auto_aram_swap", False),
                     "auto_requeue": cfg.get("auto_requeue", False),
                     "aram_mode": cfg.get("aram_mode", "ARAM Mayhem"),
-                    "skip_stats_enabled": cfg.get("skip_stats_enabled", False)
+                    "skip_stats_enabled": cfg.get("skip_stats_enabled", False),
+                    "priority_picker_enabled": cfg.get('priority_picker', {}).get('enabled', False),
+                    "auto_join_enabled": cfg.get('auto_join_enabled', False),
+                    "auto_runes_enabled": cfg.get('auto_runes_enabled', False),
+                    "discord_rpc_enabled": cfg.get('discord_rpc_enabled', True),
+                    "accept_delay": cfg.get('accept_delay', 0),
+                    "honor_strategy": cfg.get('honor_strategy', 'random'),
+                    "auto_hover": cfg.get('auto_hover', False),
+                    "arena_auto_lock": cfg.get('arena_auto_lock', False),
+                    "arena_synergy_enabled": cfg.get('arena_synergy_enabled', False)
                 }
             self.wfile.write(json.dumps(config_data).encode('utf-8'))
+        elif self.path == '/aram-list':
+            self.send_response(200)
+            self._set_cors_headers()
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            app = self.app_instance
+            aram_list = []
+            if app and hasattr(app, 'config_manager'):
+                pp = app.config_manager.config.get('priority_picker', {})
+                aram_list = pp.get('list', [])
+            self.wfile.write(json.dumps({'list': aram_list}).encode('utf-8'))
+        elif self.path == '/queue-modes':
+            self.send_response(200)
+            self._set_cors_headers()
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            modes = {
+                'ARAM': 450, 'Ranked Solo/Duo': 420, 'Ranked Flex': 440,
+                'Draft Pick': 400, 'Quickplay': 490, 'Arena': 1700,
+                'ARAM Mayhem': 2400, 'Brawl': 2300, 'URF': 900, 'ARURF': 1010,
+                'Nexus Blitz': 1300, 'One For All': 1020, 'Ultimate Spellbook': 1400,
+                'TFT Normal': 1090, 'TFT Ranked': 1100
+            }
+            self.wfile.write(json.dumps({'modes': modes}).encode('utf-8'))
         else:
             self.send_response(404)
             self._set_cors_headers()
@@ -109,7 +146,8 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps({"status": "error", "message": "Invalid JSON"}).encode('utf-8'))
                 return
 
-            valid_actions = {"find_match", "launch_client", "toggle_automation", "dodge_queue", "toggle_honor"}
+            valid_actions = {"find_match", "launch_client", "toggle_automation", "dodge_queue", "toggle_honor",
+                             "requeue", "play_again", "cancel_matchmaking", "change_queue_mode", "set_status", "mass_invite"}
             if action not in valid_actions:
                 self.send_response(400)
                 self._set_cors_headers()
@@ -136,12 +174,74 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                         current = app.config_manager.config.get('auto_honor_enabled', False)
                         app.config_manager.config['auto_honor_enabled'] = not current
                         app.config_manager.save()
+                elif action == 'requeue':
+                    if hasattr(app, 'sidebar') and app.sidebar:
+                        app.after(0, app.sidebar._force_requeue)
+                elif action == 'play_again':
+                    if hasattr(app, 'sidebar') and app.sidebar:
+                        app.after(0, app.sidebar._play_again)
+                elif action == 'cancel_matchmaking':
+                    if hasattr(app, 'automation') and app.automation:
+                        app.after(0, lambda: app.automation.lcu.request('DELETE', '/lol-lobby/v2/lobby/matchmaking/search'))
+                elif action == 'change_queue_mode':
+                    queue_mode = body.get('queue_mode', '')
+                    if hasattr(app, 'sidebar') and app.sidebar and queue_mode:
+                        app.after(0, lambda: app.sidebar._on_mode_change(queue_mode))
+                elif action == 'set_status':
+                    message = body.get('message', '')
+                    if hasattr(app, 'automation') and app.automation and message:
+                        threading.Thread(target=lambda: app.automation.set_custom_status(message), daemon=True).start()
+                elif action == 'mass_invite':
+                    if hasattr(app, 'automation') and app.automation:
+                        threading.Thread(target=lambda: app.automation.mass_invite_friends(), daemon=True).start()
             
             self.send_response(200)
             self._set_cors_headers()
             self.send_header('Content-type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({"status": "success", "action": action}).encode('utf-8'))
+        elif self.path == '/config':
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                body = json.loads(post_data.decode('utf-8'))
+                key = body.get('key', '')
+                value = body.get('value')
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self.send_response(400)
+                self._set_cors_headers()
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'error', 'message': 'Invalid JSON'}).encode('utf-8'))
+                return
+
+            # Whitelist of remotely-writable config keys
+            writable_keys = {
+                'auto_accept', 'auto_lock_in', 'auto_random_skin', 'auto_honor_enabled',
+                'auto_join_enabled', 'skip_stats_enabled', 'auto_runes_enabled',
+                'discord_rpc_enabled', 'accept_delay', 'honor_strategy',
+                'auto_hover', 'arena_auto_lock', 'arena_synergy_enabled',
+                'aram_mode'
+            }
+
+            if key not in writable_keys:
+                self.send_response(403)
+                self._set_cors_headers()
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'error', 'message': f'Key not writable: {key}'}).encode('utf-8'))
+                return
+
+            app = self.app_instance
+            if app and hasattr(app, 'config_manager'):
+                app.config_manager.config[key] = value
+                app.config_manager.save()
+
+            self.send_response(200)
+            self._set_cors_headers()
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'status': 'success', 'key': key, 'value': value}).encode('utf-8'))
         else:
             self.send_response(404)
             self._set_cors_headers()
