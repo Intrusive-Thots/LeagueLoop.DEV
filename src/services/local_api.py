@@ -153,6 +153,8 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                                     'championName': auto.assets.get_champ_name(cid) if cid else '',
                                     'assignedPosition': p.get('assignedPosition', ''),
                                     'summonerId': p.get('summonerId', 0),
+                                    'spell1Id': p.get('spell1Id', 0),
+                                    'spell2Id': p.get('spell2Id', 0),
                                     'championPickIntent': p.get('championPickIntent', 0),
                                     'completed': False
                                 })
@@ -475,6 +477,49 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                         status_code = 200
                     else:
                         result = {'status': 'error', 'message': f'Swap failed: {res.status_code if res else "no response"}'}
+                except Exception as e:
+                    result = {'status': 'error', 'message': str(e)}
+
+            self.send_response(status_code)
+            self._set_cors_headers()
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(result).encode('utf-8'))
+
+        elif self.path == '/champ-select/spells':
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                body = json.loads(post_data.decode('utf-8'))
+                spell1_id = body.get('spell1Id')
+                spell2_id = body.get('spell2Id')
+            except:
+                self.send_response(400)
+                self._set_cors_headers()
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'error', 'message': 'Invalid JSON'}).encode('utf-8'))
+                return
+
+            app = self.app_instance
+            result = {'status': 'error', 'message': 'Not in champ select'}
+            status_code = 400
+
+            if app and hasattr(app, 'automation') and app.automation:
+                auto = app.automation
+                try:
+                    payload = {}
+                    if spell1_id is not None:
+                        payload['spell1Id'] = int(spell1_id)
+                    if spell2_id is not None:
+                        payload['spell2Id'] = int(spell2_id)
+                    
+                    res = auto.lcu.request('PATCH', '/lol-champ-select/v1/session/my-selection', data=payload)
+                    if res and res.status_code in (200, 204):
+                        result = {'status': 'success'}
+                        status_code = 200
+                    else:
+                        result = {'status': 'error', 'message': f'LCU returned {res.status_code if res else "no response"}'}
                 except Exception as e:
                     result = {'status': 'error', 'message': str(e)}
 
