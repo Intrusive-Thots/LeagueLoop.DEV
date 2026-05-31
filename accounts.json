@@ -6,12 +6,12 @@
             "password_enc": "AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAAM87HFfIspEyrahLEPtDBswAAAAAmAAAATABlAGEAZwB1AGUATABvAG8AcAAgAEEAYwBjAG8AdQBuAHQAAAAQZgAAAAEAACAAAABeQBugJzvvhjkl7yLqik1W4Rp6heeNBTkWVlO45C2EZAAAAAAOgAAAAAIAACAAAAAsaU40ZzLcKI1cm/bn2X+WI1dDC3OyQxDLHj37WBlMxRAAAADunQTlIEdTeuhfmklaQxa5QAAAANbgBzF4IvsGp6q06ZbryvCNo9A1BFng3DxJXZRBI0nwSOmzS85K7JeIcl2ZhknWOoklFcts88lIAKJbpaRfhnc=",
             "tagline": "IntrusiveThots\n#NTRSV",
             "region": "NA1",
-            "last_used": "2026-04-26T12:50:40.671660",
+            "last_used": "2026-05-08T05:14:08.679664",
             "wallet": {
                 "be": 0,
                 "rp": 0
             }
         }
     ],
-    "active_account_idx": -1
+    "active_account_idx": 0
 }

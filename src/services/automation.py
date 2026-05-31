@@ -1096,6 +1096,27 @@ class AutomationEngine:
                 play_again = self.lcu.request("POST", "/lol-lobby/v2/play-again", silent=True)
                 if play_again and play_again.status_code in [200, 204]:
                     self._log("Proceeded to Lobby (Skipped Stats)")
+
+            # Auto-add played champion to ARAM list
+            if self.config.get("aram_auto_add_played", False):
+                try:
+                    local_player = data.get("localPlayer", {})
+                    played_champ_id = local_player.get("championId", 0)
+                    if played_champ_id:
+                        played_name = self.assets.get_champ_name(played_champ_id)
+                        if played_name and played_name != str(played_champ_id):
+                            priority_cfg = self.config.get("priority_picker", {})
+                            plist = priority_cfg.get("list", [])
+                            # Check if already in list (case-insensitive)
+                            played_lower = played_name.lower()
+                            already_in = any(p.lower() == played_lower for p in plist)
+                            if not already_in:
+                                plist.append(played_name)
+                                priority_cfg["list"] = plist
+                                self.config.set("priority_picker", priority_cfg)
+                                self._log(f"ARAM List: Auto-added {played_name}")
+                except Exception as e:
+                    Logger.debug("Auto", f"Auto-add played champion error: {e}")
                 
         except Exception as e:
             Logger.debug("Auto", f"End of game error: {e}")

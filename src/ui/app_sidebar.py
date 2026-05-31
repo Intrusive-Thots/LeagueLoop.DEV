@@ -370,7 +370,17 @@ class SidebarWidget(ctk.CTkFrame):
             command=self._on_toggle_auto_runes, tooltip_text="Automatically equips recommended runes for your champion",
             icon_item_id="3340", assets=self.assets, height=TOGGLE_ROW_HEIGHT
         )
-        self.row_auto_runes.pack(fill="x", padx=CARD_PAD, pady=(0, CARD_PAD))
+        self.row_auto_runes.pack(fill="x", padx=CARD_PAD, pady=(0, INNER_GAP))
+
+        # Auto-Add Played Champions
+        self.var_auto_add_played = ctk.BooleanVar(value=self.config.get("aram_auto_add_played", False))
+        self.row_auto_add_played = ToggleRow(
+            self.automation_frame, label_text="Auto-Add Played", variable=self.var_auto_add_played,
+            command=self._on_toggle_auto_add_played, tooltip_text="Automatically adds champions you play to the ARAM List after each game",
+            icon_item_id="2052", assets=self.assets, height=TOGGLE_ROW_HEIGHT
+        )
+        self.row_auto_add_played.pack(fill="x", padx=CARD_PAD, pady=(0, CARD_PAD))
+
         # Honor Strategy
         row_honor = ctk.CTkFrame(self.automation_frame, fg_color="transparent")
         row_honor.pack(fill="x", padx=CARD_PAD, pady=(INNER_GAP, 0))
@@ -990,6 +1000,10 @@ class SidebarWidget(ctk.CTkFrame):
         
     def _on_toggle_auto_runes(self):
         self.config.set("auto_runes_enabled", self.var_auto_runes.get())
+        self._update_auto_header()
+
+    def _on_toggle_auto_add_played(self):
+        self.config.set("aram_auto_add_played", self.var_auto_add_played.get())
         self._update_auto_header()
 
     def _on_mass_invite(self):

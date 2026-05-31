@@ -104,7 +104,8 @@ DEFAULT_CONFIG = {
     "run_in_tray": True,
     "discord_rpc_enabled": True,
     "skip_stats_enabled": True,
-    "auto_runes_enabled": False
+    "auto_runes_enabled": False,
+    "aram_auto_add_played": False
 }
 
 
