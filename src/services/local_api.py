@@ -1,5 +1,6 @@
 import json
 import copy
+import time
 import threading
 import socket
 import subprocess
@@ -39,11 +40,80 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
             phase = "Unknown"
             power_state = False
             queue_mode = "None"
+            summoner_info = None
+            lobby_info = None
             
             app = self.app_instance
             if app:
                 if hasattr(app, "automation") and app.automation:
                     phase = app.automation.last_phase
+                    lcu = app.automation.lcu
+                    if lcu and lcu.is_connected:
+                        now = time.time()
+                        # Refresh summoner info cache every 15 seconds
+                        if not getattr(self.server, '_summoner_cache', None) or (now - getattr(self.server, '_summoner_cache_time', 0) > 15):
+                            try:
+                                s_res = lcu.request('GET', '/lol-summoner/v1/current-summoner', silent=True)
+                                if s_res and s_res.status_code == 200:
+                                    sdata = s_res.json()
+                                    
+                                    # Fetch ranked stats
+                                    tier = "UNRANKED"
+                                    rank = ""
+                                    lp = 0
+                                    r_res = lcu.request('GET', '/lol-ranked/v1/current-ranked-stats', silent=True)
+                                    if r_res and r_res.status_code == 200:
+                                        rdata = r_res.json()
+                                        for q in rdata.get('queues', []):
+                                            if q.get('queueType') == 'RANKED_SOLO_5x5':
+                                                tier = q.get('tier', 'UNRANKED')
+                                                rank = q.get('division', '')
+                                                lp = q.get('leaguePoints', 0)
+                                                break
+                                    
+                                    self.server._summoner_cache = {
+                                        "summoner_name": sdata.get("displayName") or f"{sdata.get('gameName')}#{sdata.get('tagLine')}",
+                                        "profile_icon_id": sdata.get("profileIconId", 1),
+                                        "level": sdata.get("summonerLevel", 1),
+                                        "puuid": sdata.get("puuid"),
+                                        "tier": tier,
+                                        "rank": rank,
+                                        "lp": lp
+                                    }
+                                    self.server._summoner_cache_time = now
+                            except Exception as e:
+                                Logger.debug("API", f"Error updating summoner cache: {e}")
+                        
+                        summoner_info = getattr(self.server, '_summoner_cache', None)
+                        
+                        # Fetch lobby info
+                        try:
+                            lobby_res = lcu.request('GET', '/lol-lobby/v2/lobby', silent=True)
+                            if lobby_res and lobby_res.status_code == 200:
+                                lobby_data = lobby_res.json()
+                                members = []
+                                for m in lobby_data.get('members', []):
+                                    m_name = m.get('summonerName')
+                                    if not m_name and m.get('gameName'):
+                                        m_name = f"{m.get('gameName')}#{m.get('tagLine')}"
+                                    if not m_name and summoner_info and m.get('puuid') == summoner_info.get("puuid"):
+                                        m_name = summoner_info.get("summoner_name")
+                                    if not m_name:
+                                        m_name = "Summoner"
+                                    
+                                    members.append({
+                                        "summonerName": m_name,
+                                        "isLeader": m.get('isLeader', False),
+                                        "position1": m.get('firstPositionPreference', 'UNSELECTED'),
+                                        "position2": m.get('secondPositionPreference', 'UNSELECTED')
+                                    })
+                                lobby_info = {
+                                    "queueId": lobby_data.get('gameConfig', {}).get('queueId', 0),
+                                    "members": members
+                                }
+                        except Exception as e:
+                            Logger.debug("API", f"Error fetching lobby info: {e}")
+
                 if hasattr(app, "sidebar") and app.sidebar:
                     power_state = getattr(app.sidebar, "power_state", False)
                     queue_mode = getattr(app.sidebar, "queue_label_text", "None")
@@ -57,7 +127,9 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                 "queue_mode": queue_mode,
                 "queue_timer": getattr(sidebar, '_current_queue_time', 0) if sidebar else 0,
                 "queue_estimated": getattr(sidebar, '_estimated_queue_time', 120) if sidebar else 120,
-                "summoner_name": getattr(app, '_summoner_name', '') if app else ''
+                "summoner_name": getattr(app, '_summoner_name', '') if app else '',
+                "summoner": summoner_info,
+                "lobby": lobby_info
             }
             self.wfile.write(json.dumps(data).encode('utf-8'))
         elif self.path == '/health':
@@ -220,7 +292,8 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                             'benchChampions': bench,
                             'currentAction': current_action,
                             'pickableChampions': pickable,
-                            'queueId': getattr(auto, 'current_queue_id', 0) or 0
+                            'queueId': getattr(auto, 'current_queue_id', 0) or 0,
+                            'rerollsRemaining': session.get('rerollsRemaining', 0)
                         }
                 except Exception as e:
                     result = {'active': False, 'error': str(e)}
@@ -249,7 +322,8 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                 return
 
             valid_actions = {"find_match", "launch_client", "toggle_automation", "dodge_queue", "toggle_honor",
-                             "requeue", "play_again", "cancel_matchmaking", "change_queue_mode", "set_status", "mass_invite"}
+                             "requeue", "play_again", "cancel_matchmaking", "change_queue_mode", "set_status", "mass_invite",
+                             "leave_lobby", "create_lobby"}
             if action not in valid_actions:
                 self.send_response(400)
                 self._set_cors_headers()
@@ -296,6 +370,15 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                 elif action == 'mass_invite':
                     if hasattr(app, 'automation') and app.automation:
                         threading.Thread(target=lambda: app.automation.mass_invite_friends(), daemon=True).start()
+                elif action == 'leave_lobby':
+                    if hasattr(app, 'automation') and app.automation:
+                        app.after(0, lambda: app.automation.lcu.request('DELETE', '/lol-lobby/v2/lobby'))
+                elif action == 'create_lobby':
+                    queue_mode = body.get('queue_mode', '')
+                    if queue_mode and hasattr(app, 'sidebar') and app.sidebar:
+                        target_q_id = app.sidebar._get_queue_id_for_mode(queue_mode)
+                        if target_q_id:
+                            app.after(0, lambda: app.automation.lcu.request("POST", "/lol-lobby/v2/lobby", {"queueId": target_q_id}))
             
             self.send_response(200)
             self._set_cors_headers()
@@ -528,6 +611,54 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
             self.send_header('Content-type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps(result).encode('utf-8'))
+
+        elif self.path == '/champ-select/reroll':
+            app = self.app_instance
+            result = {'status': 'error', 'message': 'Not in champ select'}
+            status_code = 400
+
+            if app and hasattr(app, 'automation') and app.automation:
+                auto = app.automation
+                try:
+                    res = auto.lcu.request('POST', '/lol-champ-select/v1/session/my-selection/reroll')
+                    if res and res.status_code in (200, 204):
+                        result = {'status': 'success'}
+                        status_code = 200
+                    else:
+                        result = {'status': 'error', 'message': f'Reroll failed: {res.status_code if res else "no response"}'}
+                except Exception as e:
+                    result = {'status': 'error', 'message': str(e)}
+
+            self.send_response(status_code)
+            self._set_cors_headers()
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(result).encode('utf-8'))
+
+        elif self.path == '/ready-check/accept' or self.path == '/ready-check/decline':
+            app = self.app_instance
+            action_type = 'accept' if '/accept' in self.path else 'decline'
+            result = {'status': 'error', 'message': 'Not connected'}
+            status_code = 400
+
+            if app and hasattr(app, 'automation') and app.automation:
+                auto = app.automation
+                try:
+                    res = auto.lcu.request('POST', f'/lol-matchmaking/v1/ready-check/{action_type}')
+                    if res and res.status_code in (200, 204):
+                        result = {'status': 'success'}
+                        status_code = 200
+                    else:
+                        result = {'status': 'error', 'message': f'Ready check {action_type} failed: {res.status_code if res else "no response"}'}
+                except Exception as e:
+                    result = {'status': 'error', 'message': str(e)}
+
+            self.send_response(status_code)
+            self._set_cors_headers()
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(result).encode('utf-8'))
+
         else:
             self.send_response(404)
             self._set_cors_headers()
@@ -592,6 +723,8 @@ def start_api_server(app_instance, port=8337):
 
         server = ThreadingHTTPServer((host, port), LeagueLoopAPIHandler)
         server.app_instance = app_instance
+        server._summoner_cache = None
+        server._summoner_cache_time = 0
         
         server_thread = threading.Thread(target=server.serve_forever, daemon=True)
         server_thread.start()
