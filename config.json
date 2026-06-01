@@ -10,7 +10,7 @@
     "auto_hover": false,
     "auto_lock_in": true,
     "auto_random_skin": true,
-    "accept_delay": 0.0,
+    "accept_delay": 1.5,
     "polling_rate_champ_select": 0.5,
     "pick_TOP_1": "",
     "pick_TOP_2": "",
@@ -114,6 +114,10 @@
         },
         {
             "name": "zerb",
+            "enabled": false
+        },
+        {
+            "name": "reiemtroj",
             "enabled": false
         }
     ],

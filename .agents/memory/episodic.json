@@ -70,5 +70,15 @@
       "Coded full companion features in main.js (summoner profile, lobby manager, ready check overlay, active draft helper, spells selection, bench swaps, remote config toggles, and phase-adaptive polling)."
     ],
     "outcome": "Success. Coded all features, tests pass with 100% success rate."
+  },
+  {
+    "timestamp": "2026-06-01T12:08:00Z",
+    "task": "Fix UnboundLocalError in main.py show_mobile_qr",
+    "duration_seconds": 300,
+    "actions": [
+      "Removed redundant local import customtkinter as ctk in _show_mobile_qr that was causing UnboundLocalError due to local scoping rules.",
+      "Restarted the dev server in the background and verified successful startup without errors."
+    ],
+    "outcome": "Success. Application is running and stable."
   }
 ]
