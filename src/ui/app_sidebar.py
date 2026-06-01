@@ -533,6 +533,13 @@ class SidebarWidget(ctk.CTkFrame):
         btn_about = make_button(card_about, text="Info & Legal", style="ghost", font=get_font("caption", "bold"), width=100, height=24, command=_open_about)
         btn_about.pack(anchor="w")
 
+        def _open_mobile_qr():
+            if hasattr(self.master, "_show_mobile_qr"):
+                self.master._show_mobile_qr()
+        
+        btn_mobile = make_button(card_about, text="Link Mobile Device", style="primary", font=get_font("caption", "bold"), width=150, height=24, command=_open_mobile_qr)
+        btn_mobile.pack(anchor="w", pady=(INNER_GAP, 0))
+
         # ── Profile Section (Moved into Advanced Scroll) ──
         self.profile_frame = make_card(
             self.advanced_scroll,

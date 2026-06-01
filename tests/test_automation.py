@@ -170,7 +170,7 @@ class TestAutomationEngineWindowState(unittest.TestCase):
         engine.window_func.assert_called_with("restore_quiet")
 
     def test_inprogress_always_minimizes(self):
-        """Regardless of stealth mode, entering InProgress always minimizes."""
+        """Regardless of stealth mode, entering InProgress does not auto-minimize."""
         for stealth in (True, False):
             engine = self._make_engine(stealth=stealth)
             engine.last_phase = "ChampSelect"
@@ -186,7 +186,7 @@ class TestAutomationEngineWindowState(unittest.TestCase):
 
             engine._tick()
 
-            engine.window_func.assert_called_with("minimize")
+            engine.window_func.assert_not_called()
 
 
 class TestAutomationEnginePrioritySniper(unittest.TestCase):

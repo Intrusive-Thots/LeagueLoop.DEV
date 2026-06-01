@@ -75,9 +75,12 @@ class SystemTrayApp:
             Logger.error("TrayIcon", str(e))
 
     def _sync_show(self):
-        self.app_root.deiconify()
-        self.app_root.lift()
-        self.app_root.focus_force()
+        if hasattr(self.app_root, "show_from_tray"):
+            self.app_root.show_from_tray()
+        else:
+            self.app_root.deiconify()
+            self.app_root.app_root.lift() if hasattr(self.app_root, "app_root") else self.app_root.lift()
+            self.app_root.app_root.focus_force() if hasattr(self.app_root, "app_root") else self.app_root.focus_force()
 
     def _open_settings(self, icon=None, item=None):
         try:

@@ -122,6 +122,7 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self.scraper = StatsScraper(mode=self.config.get("aram_mode", "ARAM"))
         
         self.running = True
+        self._manually_hidden = False
         self._stop_event = threading.Event()
         self._drag_data = {"x": 0, "y": 0}
 
@@ -195,11 +196,20 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
     def _on_close_request(self):
         """Intercept X button. Hide to tray if enabled, otherwise quit."""
         if self.config.get("run_in_tray", True):
+            self._manually_hidden = True
             self.withdraw()  # hide the window
             if not self.tray._is_running:
                 self.tray.start()
         else:
             self.destroy()
+
+    def show_from_tray(self):
+        """Restore the window from system tray and reset manual hide flag."""
+        self._manually_hidden = False
+        self._is_minimized_by_sync = False
+        self.deiconify()
+        self.app_root.lift() if hasattr(self, "app_root") else self.lift()
+        self.app_root.focus_force() if hasattr(self, "app_root") else self.focus_force()
 
     def _on_tk_error(self, exc, val, tb):
         """Log Tkinter callback errors."""
@@ -284,8 +294,11 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                 ctypes.windll.user32.ShowWindow(hwnd, SW_MINIMIZE)
             except Exception:
                 self.withdraw()
-            Logger.info("SYS", "Game started. Minimizing window.")
+            Logger.info("SYS", "Minimizing window.")
         elif state == "restore":
+            if getattr(self, "_manually_hidden", False):
+                Logger.info("SYS", "Window is manually hidden to tray, skipping restore.")
+                return
             try:
                 import ctypes
                 SW_RESTORE = 9
@@ -296,8 +309,11 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                 pass
             self.after(0, self.deiconify)
             self.after(50, self.lift)
-            Logger.info("SYS", "Game ended. Restoring window.")
+            Logger.info("SYS", "Restoring window.")
         elif state == "restore_quiet":
+            if getattr(self, "_manually_hidden", False):
+                Logger.info("SYS", "Window is manually hidden to tray, skipping restore_quiet.")
+                return
             # Stealth Mode: restore the window without stealing focus or lifting.
             # The window becomes visible again but stays behind the active window,
             # so it doesn't flash on screen for streamers or observers.
@@ -310,7 +326,7 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
             except Exception:
                 self.after(0, self.deiconify)
             self.attributes("-topmost", False)
-            Logger.info("SYS", "Game ended. Stealth restore (no focus steal).")
+            Logger.info("SYS", "Stealth restore (no focus steal).")
 
     def _attach_to_hwnd(self, parent_hwnd):
         """OS-level bond to League Client. Syncs minimize/restore and Z-order natively."""
@@ -590,10 +606,53 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
 
     def docking_loop(self):
         """Finds League of Legends client and clips to the right side of it."""
+        import psutil
         last_hwnd = 0
         last_geom = (0, 0, 0, 0) # x, y, w, h
         last_topmost = None
+        self._is_dock_attached = False
+        self._is_minimized_by_sync = False
         
+        def is_client_window(h):
+            try:
+                pid = ctypes.wintypes.DWORD()
+                user32.GetWindowThreadProcessId(h, ctypes.byref(pid))
+                if pid.value == 0:
+                    return False
+                proc = psutil.Process(pid.value)
+                return proc.name().lower() in ("leagueclient.exe", "riotclientservices.exe")
+            except Exception:
+                return False
+
+        def find_client_hwnd():
+            try:
+                target_hwnd = [0]
+                def enum_callback(h, extra):
+                    length = user32.GetWindowTextLengthW(h)
+                    if length > 0:
+                        buf = ctypes.create_unicode_buffer(length + 1)
+                        user32.GetWindowTextW(h, buf, length + 1)
+                        title = buf.value
+                        if title in ("League of Legends", "Riot Client"):
+                            if is_client_window(h):
+                                target_hwnd[0] = h
+                                return False # Stop enumeration
+                    return True
+                WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.wintypes.BOOL, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
+                user32.EnumWindows(WNDENUMPROC(enum_callback), 0)
+                return target_hwnd[0]
+            except Exception:
+                return 0
+
+        def is_game_process_running():
+            try:
+                for p in psutil.process_iter(attrs=["name"]):
+                    if p.info["name"] and p.info["name"].lower() == "league of legends.exe":
+                        return True
+            except Exception:
+                pass
+            return False
+
         while self.running and not self._stop_event.is_set():  # type: ignore
             try:
                 hwnd = 0
@@ -604,63 +663,80 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                     time.sleep(2.0)
                     continue
 
-                if last_hwnd != 0 and user32.IsWindow(last_hwnd):
+                # Sync state with League/Riot Client (no bypass during game)
+                if last_hwnd != 0 and user32.IsWindow(last_hwnd) and is_client_window(last_hwnd):
                     hwnd = last_hwnd
                 else:
-                    hwnd = user32.FindWindowW(None, "League of Legends")
-                    if hwnd == 0:
-                        hwnd = user32.FindWindowW(None, "Riot Client")
+                    hwnd = find_client_hwnd()
 
                 if hwnd != 0:
-                    if hwnd != last_hwnd:
+                    if hwnd != last_hwnd or not self._is_dock_attached:
                         last_hwnd = hwnd
-                        # Bond cleanly to the newly detected HWND
                         self.after(0, lambda h=hwnd: self._attach_to_hwnd(h))
+                        self._is_dock_attached = True
 
-                    rect = ctypes.wintypes.RECT()
-                    user32.GetWindowRect(hwnd, ctypes.byref(rect))
-                    
-                    client_x = rect.left
-                    client_y = rect.top
-                    client_w = rect.right - rect.left
-                    client_h = rect.bottom - rect.top
-                    
-                    if client_w > 100:
-                        is_expanded = getattr(self, "sidebar", None) is None or getattr(self.sidebar, "_body_expanded", True)
-                        my_w = 200 if is_expanded else 44
-                        my_h = client_h if is_expanded else 44
-                        target_x = client_x + client_w
-                        target_y = client_y
+                    # Mirror client window state: minimize if client is minimized or invisible
+                    is_client_minimized = (user32.IsIconic(hwnd) != 0) or (user32.IsWindowVisible(hwnd) == 0)
+                    if is_client_minimized:
+                        # Client minimized/invisible -> minimize LeagueLoop
+                        if self.state() != "withdrawn" and self.state() != "iconic" and not self._is_minimized_by_sync:
+                            self.after(0, lambda: self._handle_window_state("minimize"))
+                            self._is_minimized_by_sync = True
+                    else:
+                        # Client restored/visible -> restore LeagueLoop if minimized by sync and not manually hidden
+                        if self._is_minimized_by_sync and not self._manually_hidden:
+                            self.after(0, lambda: self._handle_window_state("restore"))
+                            self._is_minimized_by_sync = False
+
+                        # Do docking/repositioning
+                        rect = ctypes.wintypes.RECT()
+                        user32.GetWindowRect(hwnd, ctypes.byref(rect))
                         
-                        # Clamp target_x so application doesn't get pushed off-screen if client is on the edge
-                        screen_w = self.winfo_screenwidth()
-                        if target_x + my_w > screen_w:
-                            target_x = client_x - my_w
+                        client_x = rect.left
+                        client_y = rect.top
+                        client_w = rect.right - rect.left
+                        client_h = rect.bottom - rect.top
                         
-                        curr_geom = (target_x, target_y, my_w, my_h)
-                        if any(abs(curr_geom[i] - last_geom[i]) > GEOMETRY_THRESHOLD for i in range(4)):  # type: ignore
-                            self.after(0, lambda x=target_x, y=target_y, h=my_h: self.geometry(f"{my_w}x{h}+{x}+{y}"))
-                            last_geom = curr_geom
+                        if client_w > 100:
+                            is_expanded = getattr(self, "sidebar", None) is None or getattr(self.sidebar, "_body_expanded", True)
+                            my_w = 200 if is_expanded else 44
+                            my_h = client_h if is_expanded else 44
+                            target_x = client_x + client_w
+                            target_y = client_y
                             
-                        # DYNAMIC TOPMOST LOGIC
-                        fg_hwnd = user32.GetForegroundWindow()
-                        my_id = user32.GetParent(self.winfo_id())
-                        if my_id == 0: 
-                            my_id = self.winfo_id()
+                            # Clamp target_x so application doesn't get pushed off-screen if client is on the edge
+                            screen_w = self.winfo_screenwidth()
+                            if target_x + my_w > screen_w:
+                                target_x = client_x - my_w
                             
-                        # Topmost & Visible only if Riot Client, or League Client, or LeagueLoop is active
-                        is_active = (fg_hwnd == hwnd) or (fg_hwnd == my_id)
-                        
-                        if is_active != last_topmost:
-                            last_topmost = is_active
-                            if is_active:
-                                self.after(0, lambda: self.attributes("-alpha", 1.0))
-                                self.after(0, lambda: self.attributes("-topmost", True))
-                            else:
-                                self.after(0, lambda: self.attributes("-topmost", False))
-                        
+                            curr_geom = (target_x, target_y, my_w, my_h)
+                            if any(abs(curr_geom[i] - last_geom[i]) > GEOMETRY_THRESHOLD for i in range(4)):  # type: ignore
+                                self.after(0, lambda x=target_x, y=target_y, h=my_h: self.geometry(f"{my_w}x{h}+{x}+{y}"))
+                                last_geom = curr_geom
+                                
+                            # DYNAMIC TOPMOST LOGIC
+                            fg_hwnd = user32.GetForegroundWindow()
+                            my_id = user32.GetParent(self.winfo_id())
+                            if my_id == 0: 
+                                my_id = self.winfo_id()
+                                
+                            # Topmost & Visible only if Riot Client, or League Client, or LeagueLoop is active
+                            is_active = (fg_hwnd == hwnd) or (fg_hwnd == my_id)
+                            
+                            if is_active != last_topmost:
+                                last_topmost = is_active
+                                if is_active:
+                                    self.after(0, lambda: self.attributes("-alpha", 1.0))
+                                    self.after(0, lambda: self.attributes("-topmost", True))
+                                else:
+                                    self.after(0, lambda: self.attributes("-topmost", False))
+                            
                     time.sleep(DOCKING_POLL_INTERVAL)
                 else:
+                    # Client not running / closed: detach and clean up
+                    if self._is_dock_attached:
+                        self.after(0, lambda: self._attach_to_hwnd(0))
+                        self._is_dock_attached = False
                     last_hwnd = 0
                     last_geom = (0, 0, 0, 0)
                     last_topmost = None

@@ -148,8 +148,8 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
 
             config_data = {}
             app = self.app_instance
-            if app and hasattr(app, 'config_manager'):
-                cfg = app.config_manager.config
+            if app and hasattr(app, 'config'):
+                cfg = app.config.cfg
                 config_data = {
                     "auto_accept": cfg.get("auto_accept", False),
                     "auto_pick": cfg.get("auto_pick", ""),
@@ -179,8 +179,8 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
             self.end_headers()
             app = self.app_instance
             aram_list = []
-            if app and hasattr(app, 'config_manager'):
-                pp = app.config_manager.config.get('priority_picker', {})
+            if app and hasattr(app, 'config'):
+                pp = app.config.cfg.get('priority_picker', {})
                 aram_list = pp.get('list', [])
             self.wfile.write(json.dumps({'list': aram_list}).encode('utf-8'))
         elif self.path == '/queue-modes':
@@ -346,10 +346,10 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                         app.after(0, lambda: app.automation.lcu.request('DELETE', '/lol-lobby/v2/matchmaking/search'))
                 elif action == "toggle_honor":
                     # Toggle the auto_honor_enabled config flag
-                    if hasattr(app, 'config_manager'):
-                        current = app.config_manager.config.get('auto_honor_enabled', False)
-                        app.config_manager.config['auto_honor_enabled'] = not current
-                        app.config_manager.save()
+                    if hasattr(app, 'config'):
+                        current = app.config.cfg.get('auto_honor_enabled', False)
+                        app.config.cfg['auto_honor_enabled'] = not current
+                        app.config.save()
                 elif action == 'requeue':
                     if hasattr(app, 'sidebar') and app.sidebar:
                         app.after(0, app.sidebar._force_requeue)
@@ -418,9 +418,9 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                 return
 
             app = self.app_instance
-            if app and hasattr(app, 'config_manager'):
-                app.config_manager.config[key] = value
-                app.config_manager.save()
+            if app and hasattr(app, 'config'):
+                app.config.cfg[key] = value
+                app.config.save()
 
             self.send_response(200)
             self._set_cors_headers()

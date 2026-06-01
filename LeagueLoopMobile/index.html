@@ -14,8 +14,11 @@
       <!-- Connection Screen -->
       <div id="connect-screen" class="screen full-center">
         <div class="glass-card fade-in">
-          <h2>🔗 Sync Device</h2>
-          <p class="subtitle">Enter the Local IP Address shown<br/>on LeagueLoop Desktop.</p>
+          <div class="logo-container">
+            <span class="logo-icon">⚙️</span>
+            <h2>LeagueLoop Remote</h2>
+          </div>
+          <p class="subtitle">Enter the Local IP Address shown on your LeagueLoop Desktop client.</p>
           <div class="input-group">
             <input type="text" id="ip-input" placeholder="192.168.1.50" value="" />
             <span class="port-suffix">:8337</span>
@@ -25,53 +28,296 @@
         </div>
       </div>
 
-      <!-- Dashboard Screen -->
+      <!-- Main Dashboard Screen -->
       <div id="dashboard-screen" class="screen hidden">
         <header class="header glass-bar">
-          <div>
-            <h1>LEAGUELOOP</h1>
-            <span id="connection-status" class="status-indicator">● LINKED</span>
+          <div class="header-profile">
+            <div class="profile-icon-wrapper">
+              <div id="summoner-icon" class="profile-icon-placeholder">👤</div>
+            </div>
+            <div>
+              <h1 id="summoner-name">LEAGUELOOP</h1>
+              <span id="connection-status" class="status-indicator">● LINKED</span>
+            </div>
           </div>
           <button id="btn-disconnect" class="btn-icon">🚪</button>
         </header>
 
-        <main class="dashboard-content">
-          <!-- Status Card -->
-          <section class="glass-card">
-            <div class="card-header">
-              <h3>System Phase</h3>
+        <!-- Tab Views Container -->
+        <main class="tab-views">
+          
+          <!-- HOME TAB -->
+          <div id="tab-home" class="tab-view active">
+            <!-- Phase Card -->
+            <section class="glass-card flex-row">
+              <div>
+                <span class="section-label">SYSTEM PHASE</span>
+                <div id="phase-display" class="large-value">Scanning...</div>
+              </div>
               <div class="pulse-ring"></div>
-            </div>
-            <div id="phase-display" class="large-value">Scanning...</div>
-          </section>
+            </section>
 
-          <!-- Control Grid -->
-          <section class="control-grid">
-            <div class="glass-card stat-box" id="btn-launch">
-              <span class="icon">🚀</span>
-              <h4>Boot Client</h4>
-            </div>
-            
-            <div class="glass-card stat-box highlight" id="btn-queue">
-              <span class="icon">🎯</span>
-              <h4>Enter Queue</h4>
-              <small id="queue-mode-display">Mode: None</small>
-            </div>
-          </section>
+            <!-- Quick Controls -->
+            <section class="control-grid">
+              <div class="glass-card stat-box" id="btn-launch">
+                <span class="icon">🚀</span>
+                <h4>Boot Client</h4>
+              </div>
+              <div class="glass-card stat-box highlight" id="btn-queue">
+                <span class="icon">🎯</span>
+                <h4 id="queue-btn-text">Enter Queue</h4>
+                <small id="queue-mode-display">Mode: None</small>
+              </div>
+            </section>
 
-          <!-- Automation Toggle Card -->
-          <section class="glass-card flex-row">
-            <div>
-              <h3>AI Automation</h3>
-              <p class="subtitle" style="margin-bottom: 0;">Auto-Accept & Pick</p>
+            <!-- Lobby Management Panel -->
+            <section id="lobby-section" class="glass-card lobby-panel">
+              <h3>Lobby Manager</h3>
+              
+              <!-- In Lobby state -->
+              <div id="lobby-active" class="hidden">
+                <div class="lobby-meta">
+                  <span id="lobby-queue-mode" class="badge">ARAM</span>
+                  <span id="lobby-members-count" class="subtitle-text">1/5 Players</span>
+                </div>
+                <div id="lobby-members-list" class="members-grid">
+                  <!-- Dynamically populated -->
+                </div>
+                <div class="lobby-actions">
+                  <button id="btn-lobby-invite" class="btn-secondary">Invite Friends</button>
+                  <button id="btn-lobby-leave" class="btn-danger">Leave Lobby</button>
+                </div>
+              </div>
+
+              <!-- Inactive lobby state -->
+              <div id="lobby-inactive">
+                <p class="subtitle">Not in a lobby. Choose a mode to initialize one.</p>
+                <div class="lobby-creation">
+                  <select id="select-queue-mode" class="glass-select">
+                    <!-- Loaded dynamically -->
+                  </select>
+                  <button id="btn-create-lobby" class="btn-primary">Create Lobby</button>
+                </div>
+              </div>
+            </section>
+
+            <!-- System Logs -->
+            <section class="glass-card log-card">
+              <h3>Action Log</h3>
+              <div id="log-container" class="log-container">
+                <div class="log-entry">Waiting for client actions...</div>
+              </div>
+            </section>
+          </div>
+
+          <!-- DRAFT / CHAMP SELECT TAB -->
+          <div id="tab-draft" class="tab-view">
+            <!-- If inactive -->
+            <div id="draft-inactive-view" class="full-center flex-column py-5">
+              <span style="font-size: 4rem; margin-bottom: 16px;">⚔️</span>
+              <h3>Waiting for Champion Select</h3>
+              <p class="subtitle text-center">This panel unlocks automatically when a match begins drafting.</p>
             </div>
-            <label class="switch">
-              <input type="checkbox" id="auto-toggle">
-              <span class="slider round"></span>
-            </label>
-          </section>
+
+            <!-- If active -->
+            <div id="draft-active-view" class="hidden">
+              <!-- Timer and Phase -->
+              <div class="glass-card timer-card">
+                <div class="flex-row">
+                  <div>
+                    <span id="draft-phase-title" class="section-label">BANNING PHASE</span>
+                    <h2 id="draft-phase-sub">My Turn</h2>
+                  </div>
+                  <div id="draft-timer" class="timer-display">30</div>
+                </div>
+                <div class="timer-bar-wrapper">
+                  <div id="draft-timer-bar" class="timer-bar" style="width: 100%"></div>
+                </div>
+              </div>
+
+              <!-- Bench Champions (ARAM) -->
+              <div id="bench-section" class="glass-card hidden">
+                <h3>ARAM Bench</h3>
+                <div id="bench-list" class="bench-grid">
+                  <!-- Populated dynamically -->
+                </div>
+                <div class="bench-controls">
+                  <button id="btn-draft-reroll" class="btn-secondary">🎲 Reroll (<span id="reroll-count">0</span>)</button>
+                </div>
+              </div>
+
+              <!-- Summoner Spells Selection -->
+              <div id="spells-section" class="glass-card">
+                <h3>Summoner Spells</h3>
+                <div id="spells-list" class="spells-grid">
+                  <!-- Populated dynamically -->
+                </div>
+              </div>
+
+              <!-- Pick and Ban Interface -->
+              <div id="draft-action-section" class="glass-card">
+                <h3 id="draft-action-title">Search & Select Champion</h3>
+                <div class="search-box">
+                  <input type="text" id="draft-search" placeholder="Type champion name..." />
+                  <button id="btn-clear-search" class="btn-clear">✕</button>
+                </div>
+                <div id="champion-grid" class="champ-grid">
+                  <!-- Dynamically populated pickable champions -->
+                </div>
+                <button id="btn-lock-in" class="btn-primary glow mt-4">Confirm Selection</button>
+              </div>
+
+              <!-- Team Grid -->
+              <div class="glass-card">
+                <h3>My Team</h3>
+                <div id="draft-team-list" class="team-list">
+                  <!-- Populated dynamically -->
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SETTINGS TAB -->
+          <div id="tab-settings" class="tab-view">
+            <section class="glass-card">
+              <h3>Automation Controls</h3>
+              <p class="subtitle">Enable/disable autopilot modes on the fly.</p>
+              
+              <div class="toggle-list">
+                <div class="toggle-row">
+                  <div>
+                    <h4>Auto-Accept Match</h4>
+                    <p class="desc">Accepts matchmaking queues instantly.</p>
+                  </div>
+                  <label class="switch">
+                    <input type="checkbox" id="cfg-auto-accept">
+                    <span class="slider round"></span>
+                  </label>
+                </div>
+
+                <div class="toggle-row">
+                  <div>
+                    <h4>Auto Lock-in</h4>
+                    <p class="desc">Instantly locks hovered picks.</p>
+                  </div>
+                  <label class="switch">
+                    <input type="checkbox" id="cfg-auto-lock">
+                    <span class="slider round"></span>
+                  </label>
+                </div>
+
+                <div class="toggle-row">
+                  <div>
+                    <h4>Auto Runes</h4>
+                    <p class="desc">Equips optimal rune pages.</p>
+                  </div>
+                  <label class="switch">
+                    <input type="checkbox" id="cfg-auto-runes">
+                    <span class="slider round"></span>
+                  </label>
+                </div>
+
+                <div class="toggle-row">
+                  <div>
+                    <h4>Auto Honor</h4>
+                    <p class="desc">Commends teammates after game.</p>
+                  </div>
+                  <label class="switch">
+                    <input type="checkbox" id="cfg-auto-honor">
+                    <span class="slider round"></span>
+                  </label>
+                </div>
+
+                <div class="toggle-row">
+                  <div>
+                    <h4>Skip Post-Game Stats</h4>
+                    <p class="desc">Bypasses lobby recap screens.</p>
+                  </div>
+                  <label class="switch">
+                    <input type="checkbox" id="cfg-skip-stats">
+                    <span class="slider round"></span>
+                  </label>
+                </div>
+
+                <div class="toggle-row">
+                  <div>
+                    <h4>Auto Hover Pick</h4>
+                    <p class="desc">Shows intention to team early.</p>
+                  </div>
+                  <label class="switch">
+                    <input type="checkbox" id="cfg-auto-hover">
+                    <span class="slider round"></span>
+                  </label>
+                </div>
+
+                <div class="toggle-row">
+                  <div>
+                    <h4>Arena Auto-Lock</h4>
+                    <p class="desc">Locks selection in Arena mode.</p>
+                  </div>
+                  <label class="switch">
+                    <input type="checkbox" id="cfg-arena-lock">
+                    <span class="slider round"></span>
+                  </label>
+                </div>
+
+                <div class="toggle-row">
+                  <div>
+                    <h4>Arena Synergy Matching</h4>
+                    <p class="desc">Suggests ideal companion champions.</p>
+                  </div>
+                  <label class="switch">
+                    <input type="checkbox" id="cfg-arena-synergy">
+                    <span class="slider round"></span>
+                  </label>
+                </div>
+              </div>
+            </section>
+
+            <!-- Accept Delay settings -->
+            <section class="glass-card">
+              <h3>Accept Delay</h3>
+              <p class="subtitle">Adds a human delay (seconds) to queue accept.</p>
+              <div class="range-group">
+                <input type="range" id="cfg-accept-delay" min="0" max="8" step="0.5" value="2" />
+                <span id="accept-delay-val" class="range-value">2.0s</span>
+              </div>
+            </section>
+          </div>
+
         </main>
+
+        <!-- Bottom Navigation Bar -->
+        <nav class="nav-bar glass-bar">
+          <button id="nav-btn-home" class="nav-item active">
+            <span class="nav-icon">🏠</span>
+            <span class="nav-label">Home</span>
+          </button>
+          <button id="nav-btn-draft" class="nav-item">
+            <span class="nav-icon">⚔️</span>
+            <span class="nav-label">Draft</span>
+            <span id="draft-badge" class="badge-dot hidden"></span>
+          </button>
+          <button id="nav-btn-settings" class="nav-item">
+            <span class="nav-icon">⚙️</span>
+            <span class="nav-label">Settings</span>
+          </button>
+        </nav>
       </div>
+
+      <!-- MATCH FOUND / READY CHECK OVERLAY -->
+      <div id="ready-check-overlay" class="overlay full-center hidden">
+        <div class="ready-modal glass-card text-center">
+          <div class="pulse-ring-large"></div>
+          <h2>Match Found!</h2>
+          <p class="subtitle">Your match is ready. Accept it now.</p>
+          <div class="overlay-actions">
+            <button id="btn-ready-accept" class="btn-primary glow accept-glow">ACCEPT</button>
+            <button id="btn-ready-decline" class="btn-secondary">DECLINE</button>
+          </div>
+        </div>
+      </div>
+
     </div>
     
     <script type="module" src="./main.js"></script>

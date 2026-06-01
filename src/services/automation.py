@@ -204,8 +204,8 @@ class AutomationEngine:
                     wf = self.window_func
                     if wf is not None and inferred_phase != self.last_phase:
                         if inferred_phase == "InProgress":
-                            wf("minimize")
-                            Logger.info("AutoLoop", "Game detected (process). Minimizing.")
+                            # Prevent auto-hiding during a game
+                            Logger.info("AutoLoop", "Game detected (process). Keeping window visible.")
                         elif self.last_phase == "InProgress":
                             if self.config.get("stealth_mode", False):
                                 wf("restore_quiet")
@@ -296,10 +296,8 @@ class AutomationEngine:
         is_first = getattr(self, "_is_first_tick", True)
         if wf is not None and phase != self.last_phase:
             if phase == "InProgress":
-                if not is_first:
-                    wf("minimize")
-                else:
-                    Logger.info("AutoLoop", "Game already running on startup. Skipping auto-minimize.")
+                # Prevent auto-hiding during a game
+                Logger.info("AutoLoop", "Game phase transition to InProgress. Keeping window visible.")
             elif self.last_phase == "InProgress" and phase in ["EndOfGame", "Lobby", "None"]:
                 if self.config.get("stealth_mode", False):
                     wf("restore_quiet")
