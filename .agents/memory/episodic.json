@@ -107,5 +107,18 @@
       "Rebuilt with PyInstaller, signed both exe and installer, compiled Inno Setup, copied to distribution repo, pushed both repos via GitKraken."
     ],
     "outcome": "Success. Docking now correctly attaches to both League Client and Riot Client windows."
+  },
+  {
+    "timestamp": "2026-06-01T13:45:00Z",
+    "task": "Update and Deploy LeagueLoop Mobile App to Android",
+    "duration_seconds": 900,
+    "actions": [
+      "Converted desktop app.ico into Android launcher icons for all density buckets.",
+      "Generated adaptive icon foregrounds and updated the background color to match the dark theme (#1A1A2E).",
+      "Updated Android strings.xml and capacitor.config.json to change the app display name from 'LeagueLoopMobile' to 'LeagueLoop'.",
+      "Built the Vite web frontend, synced assets using Capacitor, and compiled the debug APK with Gradle.",
+      "Installed the compiled APK via ADB to the connected authorized device and launched it."
+    ],
+    "outcome": "Success. Mobile app successfully installed and launched with updated branding."
   }
 ]
