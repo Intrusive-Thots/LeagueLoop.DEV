@@ -612,6 +612,15 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self._is_dock_attached = False
         self._is_minimized_by_sync = False
         
+        # All known process names for visible Riot/League windows
+        _CLIENT_PROCS = {
+            "leagueclientux.exe",      # Main League client UI
+            "leagueclient.exe",        # League backend (sometimes owns a window)
+            "riot client.exe",         # Riot Client launcher (note the space)
+            "riotclientux.exe",        # Riot Client UI (older builds)
+            "riotclientservices.exe",  # Riot Client services backend
+        }
+
         def is_client_window(h):
             try:
                 pid = ctypes.wintypes.DWORD()
@@ -619,23 +628,28 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                 if pid.value == 0:
                     return False
                 proc = psutil.Process(pid.value)
-                return proc.name().lower() in ("leagueclient.exe", "riotclientservices.exe")
+                return proc.name().lower() in _CLIENT_PROCS
             except Exception:
                 return False
+
+        # All known window titles for Riot/League client windows
+        _CLIENT_TITLES = {"league of legends", "riot client"}
 
         def find_client_hwnd():
             try:
                 target_hwnd = [0]
                 def enum_callback(h, extra):
+                    if not user32.IsWindowVisible(h):
+                        return True  # Skip invisible windows
                     length = user32.GetWindowTextLengthW(h)
                     if length > 0:
                         buf = ctypes.create_unicode_buffer(length + 1)
                         user32.GetWindowTextW(h, buf, length + 1)
-                        title = buf.value
-                        if title in ("League of Legends", "Riot Client"):
+                        title = buf.value.lower().strip()
+                        if title in _CLIENT_TITLES:
                             if is_client_window(h):
                                 target_hwnd[0] = h
-                                return False # Stop enumeration
+                                return False  # Stop enumeration
                     return True
                 WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.wintypes.BOOL, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
                 user32.EnumWindows(WNDENUMPROC(enum_callback), 0)
