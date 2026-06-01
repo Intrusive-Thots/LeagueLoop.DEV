@@ -95,5 +95,17 @@
       "Committed and pushed release changes to both the LeagueLoop-Lock and LeagueLoop-Installer master branches."
     ],
     "outcome": "Success. Signed executable and installer built and pushed successfully."
+  },
+  {
+    "timestamp": "2026-06-01T12:48:00Z",
+    "task": "Fix Docking Loop Client Recognition (build 1-06-213-0842)",
+    "duration_seconds": 600,
+    "actions": [
+      "Diagnosed docking_loop failure: is_client_window checked for 'leagueclient.exe' and 'riotclientservices.exe' but actual visible windows belong to 'leagueclientux.exe' and 'riot client.exe' (with space).",
+      "Added comprehensive _CLIENT_PROCS set: leagueclientux.exe, leagueclient.exe, riot client.exe, riotclientux.exe, riotclientservices.exe.",
+      "Made find_client_hwnd title matching case-insensitive and added IsWindowVisible pre-filter to skip invisible windows.",
+      "Rebuilt with PyInstaller, signed both exe and installer, compiled Inno Setup, copied to distribution repo, pushed both repos via GitKraken."
+    ],
+    "outcome": "Success. Docking now correctly attaches to both League Client and Riot Client windows."
   }
 ]

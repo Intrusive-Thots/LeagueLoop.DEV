@@ -43,5 +43,10 @@
     "error_pattern": "UnboundLocalError: cannot access local variable 'x' where it is not associated with a value due to local import shading",
     "fix": "Remove redundant local module import statements if the module is already imported globally at the top of the file, which prevents Python's scope analyzer from flags-shading global variable references.",
     "context": "Calling _show_mobile_qr raised an UnboundLocalError for 'ctk' because of a redundant local import customtkinter as ctk placed later in the function."
+  },
+  {
+    "error_pattern": "Docking loop fails to find or attach to client window despite League/Riot client running",
+    "fix": "The visible League Client window belongs to 'LeagueClientUx.exe' (not 'LeagueClient.exe'), and the Riot Client window belongs to 'Riot Client.exe' (with a space, not 'RiotClientServices.exe'). Use a comprehensive set of process names: leagueclientux.exe, leagueclient.exe, riot client.exe, riotclientux.exe, riotclientservices.exe. Also make window title matching case-insensitive and skip invisible windows with IsWindowVisible.",
+    "context": "docking_loop in main.py checked for 'leagueclient.exe' and 'riotclientservices.exe' but the actual windows were owned by 'leagueclientux.exe' and 'riot client.exe'."
   }
 ]
