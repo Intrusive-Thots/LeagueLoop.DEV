@@ -23,5 +23,10 @@
     "error_pattern": "LCU Champ Select actions matrix iteration yields false teammate locked state",
     "fix": "Do not iterate the actions matrix to find completed: True. Instead, check the myTeam array for the player: teammate.get(\"championId\", 0) != 0.",
     "context": "Arena synergy instantly locked in before the teammate chose because the actions matrix structure caused premature loop exit / false positives."
+  },
+  {
+    "error_pattern": "LCUClient request test fails when local League client is running on the host system",
+    "fix": "Mock the connect method of LCUClient using patch.object to prevent it from scanning processes or making real requests in tests that simulate offline/disconnected states.",
+    "context": "test_request_not_connected in tests/test_api_handler.py failed because the real connect method was called, successfully connecting to a running client on the test runner machine."
   }
 ]

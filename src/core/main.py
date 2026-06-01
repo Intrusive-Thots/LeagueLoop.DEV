@@ -202,10 +202,12 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
             self.destroy()
 
     def _on_tk_error(self, exc, val, tb):
+        """Log Tkinter callback errors."""
         err_str = "".join(traceback.format_exception(exc, val, tb))
         Logger.error("UI", f"Tkinter Error:\n{err_str}")
 
     def _process_ui_queue(self):
+        """Processes the thread-safe UI task queue to execute background tasks on the main thread."""
         # Bolt optimization: checking .empty() is faster than catching queue.Empty
         # in a 16ms polling loop where the queue is usually empty.
         for _ in range(100):
@@ -245,6 +247,7 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self.mini_player = MiniPlayer(self, self.config)
 
     def _setup_window_dragging(self):
+        """Binds drag mouse events to enable moving the borderless window."""
         for widget in self.sidebar.drag_widgets:
             widget.bind("<ButtonPress-1>", self.on_drag_start)
             widget.bind("<B1-Motion>", self.on_drag_motion)
@@ -265,6 +268,7 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self.geometry(f"+{x}+{y}")
 
     def _hotkey_find_match(self):
+        """Invokes the match finder via global hotkey registration."""
         self.state("normal")
         self.attributes("-topmost", True)
         self.after(0, self.sidebar._find_match)

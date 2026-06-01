@@ -356,6 +356,25 @@ class TestAutomationEngineDraftAssistant(unittest.TestCase):
         engine.lcu.request.assert_called_once_with("PATCH", "/lol-champ-select/v1/session/actions/5", data={"championId": 30, "completed": True})
         self.assertEqual(engine._last_draft_action_time, 100)
 
+    @patch("time.time", return_value=100)
+    def test_draft_assistant_teammate_respect_pick(self, mock_time):
+        engine = self._make_engine()
+        engine.config.get.side_effect = lambda key, default="": {"pick_MIDDLE_1": "yasuo", "pick_MIDDLE_2": "teemo", "auto_lock_in": False}.get(key, default)
+
+        session = {
+            "localPlayerCellId": 1,
+            "myTeam": [{"cellId": 1, "assignedPosition": "middle"}, {"cellId": 2, "championPickIntent": 30}], # Teammate hovering Yasuo
+            "bannedChampions": [],
+            "theirTeam": [],
+            "actions": [[{"actorCellId": 1, "isInProgress": True, "type": "pick", "id": 5, "championId": 0}]]
+        }
+
+        engine._perform_draft_assistant(session)
+
+        # Yasuo is hovered by teammate, so it should skip Yasuo and hover Teemo (20)
+        engine.lcu.request.assert_called_once_with("PATCH", "/lol-champ-select/v1/session/actions/5", data={"championId": 20})
+        self.assertEqual(engine._last_draft_action_time, 100)
+
 
 class TestAutomationEngineArenaSynergy(unittest.TestCase):
     def _make_engine(self):
@@ -561,6 +580,95 @@ class TestAutomationEngineAutoHonor(unittest.TestCase):
             "puuid": "friend-1"
         })
 
+    def test_auto_honor_conflict_409(self):
+        engine = self._make_engine()
+        engine.config.get.side_effect = lambda key, default=False: {"auto_honor_enabled": True, "honor_strategy": "random"}.get(key, default)
+
+        def mock_request(method, endpoint, *args, **kwargs):
+            mock = MagicMock()
+            if endpoint == "/lol-end-of-game/v1/eog-stats-block":
+                mock.status_code = 200
+                mock.json.return_value = {
+                    "gameId": 1234,
+                    "localPlayer": {"puuid": "player-1"},
+                    "teams": [{"isPlayerTeam": True, "players": [{"puuid": "player-1"}, {"puuid": "player-2", "summonerId": 2}]}]
+                }
+            elif endpoint == "/lol-chat/v1/friends":
+                mock.status_code = 200
+                mock.json.return_value = []
+            elif endpoint == "/lol-honor-v2/v1/honor-player":
+                mock.status_code = 409
+            return mock
+
+        engine.lcu.request.side_effect = mock_request
+        engine._handle_end_of_game("EndOfGame")
+        
+        # It should mark as handled on 409 conflict
+        self.assertTrue(engine._honor_handled)
+
+    def test_auto_honor_rate_limit_429(self):
+        engine = self._make_engine()
+        engine.config.get.side_effect = lambda key, default=False: {"auto_honor_enabled": True, "honor_strategy": "random"}.get(key, default)
+
+        def mock_request(method, endpoint, *args, **kwargs):
+            mock = MagicMock()
+            if endpoint == "/lol-end-of-game/v1/eog-stats-block":
+                mock.status_code = 200
+                mock.json.return_value = {
+                    "gameId": 1234,
+                    "localPlayer": {"puuid": "player-1"},
+                    "teams": [{"isPlayerTeam": True, "players": [{"puuid": "player-1"}, {"puuid": "player-2", "summonerId": 2}]}]
+                }
+            elif endpoint == "/lol-chat/v1/friends":
+                mock.status_code = 200
+                mock.json.return_value = []
+            elif endpoint == "/lol-honor-v2/v1/honor-player":
+                mock.status_code = 429
+            return mock
+
+        engine.lcu.request.side_effect = mock_request
+        engine._handle_end_of_game("EndOfGame")
+        
+        # It should NOT mark as handled on 429 so we retry
+        self.assertFalse(engine._honor_handled)
+
+    def test_auto_honor_retry_limit(self):
+        engine = self._make_engine()
+        engine.config.get.side_effect = lambda key, default=False: {"auto_honor_enabled": True, "honor_strategy": "random"}.get(key, default)
+
+        def mock_request(method, endpoint, *args, **kwargs):
+            mock = MagicMock()
+            if endpoint == "/lol-end-of-game/v1/eog-stats-block":
+                mock.status_code = 200
+                mock.json.return_value = {
+                    "gameId": 1234,
+                    "localPlayer": {"puuid": "player-1"},
+                    "teams": [{"isPlayerTeam": True, "players": [{"puuid": "player-1"}, {"puuid": "player-2", "summonerId": 2}]}]
+                }
+            elif endpoint == "/lol-chat/v1/friends":
+                mock.status_code = 200
+                mock.json.return_value = []
+            elif endpoint == "/lol-honor-v2/v1/honor-player":
+                mock.status_code = 500
+            return mock
+
+        engine.lcu.request.side_effect = mock_request
+        
+        # Attempt 1
+        engine._handle_end_of_game("EndOfGame")
+        self.assertFalse(engine._honor_handled)
+        self.assertEqual(engine._honor_attempts, 1)
+
+        # Attempt 2
+        engine._handle_end_of_game("EndOfGame")
+        self.assertFalse(engine._honor_handled)
+        self.assertEqual(engine._honor_attempts, 2)
+
+        # Attempt 3 - should give up and set handled to True
+        engine._handle_end_of_game("EndOfGame")
+        self.assertTrue(engine._honor_handled)
+        self.assertEqual(engine._honor_attempts, 0)
+
 
 
 class TestAutomationEngineDraftAssistantCoverage(unittest.TestCase):
@@ -633,6 +741,63 @@ class TestAutomationEngineArenaPickCoverage(unittest.TestCase):
         engine._handle_arena_pick(session, me, action, banned_ids)
 
         engine.lcu.request.assert_called_with("PATCH", "/lol-champ-select/v1/session/actions/1", data={"championId": 777})
+
+class TestAutomationEngineChampSelect(unittest.TestCase):
+    def _make_engine(self):
+        engine = AutomationEngine.__new__(AutomationEngine)
+        engine.lcu = MagicMock()
+        engine.config = MagicMock()
+        engine.assets = MagicMock()
+        engine.log = MagicMock()
+        engine._log = MagicMock()
+        engine.paused = False
+        engine._skin_equipped = True
+        engine._runes_equipped = True
+        engine._last_champ_id = 0
+        engine.stats_func = None
+        engine.current_queue_id = 0
+        
+        # Mock sub-handlers to avoid running unrelated logic
+        engine._handle_auto_dodge = MagicMock()
+        engine._handle_chat_warden = MagicMock()
+        engine._perform_priority_sniper = MagicMock()
+        engine._perform_arena_synergy = MagicMock()
+        engine._perform_draft_assistant = MagicMock()
+        engine._equip_random_skin = MagicMock()
+        engine._auto_equip_runes = MagicMock()
+        return engine
+
+    def test_champ_select_champion_change_resets_flags(self):
+        engine = self._make_engine()
+        
+        # Mock _get_local_player to return cellId and championId
+        session = {
+            "localPlayerCellId": 1,
+            "myTeam": [{"cellId": 1, "assignedPosition": "middle", "championId": 10}] # Garen
+        }
+        
+        # First call, should set _last_champ_id and reset flags
+        engine._handle_champ_select("ChampSelect", session)
+        self.assertEqual(engine._last_champ_id, 10)
+        self.assertFalse(engine._skin_equipped)
+        self.assertFalse(engine._runes_equipped)
+
+        # Set flags to True again
+        engine._skin_equipped = True
+        engine._runes_equipped = True
+
+        # Second call with same champion ID, flags should remain True
+        engine._handle_champ_select("ChampSelect", session)
+        self.assertTrue(engine._skin_equipped)
+        self.assertTrue(engine._runes_equipped)
+
+        # Third call with new champion ID (e.g. swap or picker), flags should reset
+        session["myTeam"][0]["championId"] = 20 # Teemo
+        engine._handle_champ_select("ChampSelect", session)
+        self.assertEqual(engine._last_champ_id, 20)
+        self.assertFalse(engine._skin_equipped)
+        self.assertFalse(engine._runes_equipped)
+
 
 if __name__ == '__main__':
     unittest.main()

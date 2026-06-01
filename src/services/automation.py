@@ -72,6 +72,7 @@ class AutomationEngine:
         self._last_search_state_time: float = 0.0
         self._honor_handled: bool = False
         self._runes_equipped: bool = False
+        self._last_champ_id: int = 0
         self._cached_search_state: Optional[dict] = None
         # Item #40: Consecutive error killswitch
         self._consecutive_errors: int = 0
@@ -415,6 +416,7 @@ class AutomationEngine:
             self._runes_equipped = False  # Item #167: Reset so runes re-equip next game
             self._chat_warden_warned = False  # Item #166: Reset so toxicity is re-checked next game
             self._bravery_pick_id = 0
+            self._last_champ_id = 0
             sf = self.stats_func
             if sf is not None:
                 sf([], [])
@@ -425,6 +427,14 @@ class AutomationEngine:
             if sf is not None:
                 sf([], [])
             return
+
+        # Track champion changes to re-equip runes and skins
+        me = self._get_local_player(session)
+        my_champ_id = me.get("championId", 0) if me else 0
+        if my_champ_id != 0 and my_champ_id != getattr(self, "_last_champ_id", 0):
+            self._last_champ_id = my_champ_id
+            self._skin_equipped = False
+            self._runes_equipped = False
 
         # 2.2 Blacklist Dodging
         self._handle_auto_dodge(session)
@@ -845,6 +855,15 @@ class AutomationEngine:
             from itertools import chain
             enemy_team = session.get("theirTeam", [])
             picked_ids = {cid for p in chain(my_team, enemy_team) if (cid := p.get("championId", 0)) > 0}
+            
+            my_cell_id = me.get("cellId")
+            teammate_hovers = {
+                champ_id
+                for p in my_team
+                if p.get("cellId") != my_cell_id
+                for champ_id in (p.get("championPickIntent", 0), p.get("championId", 0))
+                if champ_id > 0
+            }
                     
             for i in range(1, 4):
                 pick_str = self.config.get(f"pick_{assigned}_{i}", "")
@@ -852,7 +871,9 @@ class AutomationEngine:
                 pick_id = self.assets.name_to_id.get(pick_str.lower(), 0)
                 if not pick_id: continue
                 
-                if pick_id in banned_champ_ids or pick_id in picked_ids:
+                if pick_id in banned_champ_ids or pick_id in picked_ids or pick_id in teammate_hovers:
+                    if pick_id in teammate_hovers:
+                        self._log(f"Draft: Skipping pick {pick_str} because a teammate is hovering it.")
                     continue
                 
                 if my_action.get("championId") != pick_id and (now - self._last_draft_action_time > 0.5):
@@ -999,6 +1020,7 @@ class AutomationEngine:
     def _handle_end_of_game(self, phase):
         if phase not in ["PreEndOfGame", "EndOfGame"]:
             self._honor_handled = False
+            self._honor_attempts = 0
             return
 
         auto_honor = self.config.get("auto_honor_enabled", False)
@@ -1015,7 +1037,6 @@ class AutomationEngine:
             if not eog or eog.status_code != 200:
                 return
             
-            self._honor_handled = True
             data = eog.json()
             game_id = data.get("gameId")
             
@@ -1046,6 +1067,7 @@ class AutomationEngine:
                     break
 
             if not teammates:
+                self._honor_handled = True
                 return
 
             friend_teammates = []
@@ -1088,35 +1110,49 @@ class AutomationEngine:
                 name = target.get("summonerName", "teammate")
                 if res and res.status_code in [200, 204]:
                     self._log(f"Honored {name} ({strategy})")
+                    self._honor_handled = True
+                elif res and res.status_code == 409:
+                    self._log(f"Honor already submitted or invalid: {name}")
+                    self._honor_handled = True
+                elif res and res.status_code == 429:
+                    self._log(f"Honor rate limited (429). Retrying next tick...")
                 else:
                     Logger.debug("Auto", f"Honor request returned {res.status_code if res else 'None'}. Full target: {name}")
+                    self._honor_attempts = getattr(self, "_honor_attempts", 0) + 1
+                    if self._honor_attempts >= 3:
+                        self._log(f"Honor failed after 3 attempts. Giving up.")
+                        self._honor_handled = True
+                        self._honor_attempts = 0
+            else:
+                self._honor_handled = True
 
-            if skip_stats:
-                # Auto proceed to lobby ("Play Again")
-                play_again = self.lcu.request("POST", "/lol-lobby/v2/play-again", silent=True)
-                if play_again and play_again.status_code in [200, 204]:
-                    self._log("Proceeded to Lobby (Skipped Stats)")
+            if self._honor_handled:
+                if skip_stats:
+                    # Auto proceed to lobby ("Play Again")
+                    play_again = self.lcu.request("POST", "/lol-lobby/v2/play-again", silent=True)
+                    if play_again and play_again.status_code in [200, 204]:
+                        self._log("Proceeded to Lobby (Skipped Stats)")
 
-            # Auto-add played champion to ARAM list
-            if self.config.get("aram_auto_add_played", False):
-                try:
-                    local_player = data.get("localPlayer", {})
-                    played_champ_id = local_player.get("championId", 0)
-                    if played_champ_id:
-                        played_name = self.assets.get_champ_name(played_champ_id)
-                        if played_name and played_name != str(played_champ_id):
-                            priority_cfg = self.config.get("priority_picker", {})
-                            plist = priority_cfg.get("list", [])
-                            # Check if already in list (case-insensitive)
-                            played_lower = played_name.lower()
-                            already_in = any(p.lower() == played_lower for p in plist)
-                            if not already_in:
-                                plist.append(played_name)
-                                priority_cfg["list"] = plist
-                                self.config.set("priority_picker", priority_cfg)
-                                self._log(f"ARAM List: Auto-added {played_name}")
-                except Exception as e:
-                    Logger.debug("Auto", f"Auto-add played champion error: {e}")
+                # Auto-add played champion to ARAM list
+                if self.config.get("aram_auto_add_played", False):
+                    try:
+                        local_player = data.get("localPlayer", {})
+                        played_champ_id = local_player.get("championId", 0)
+                        if played_champ_id:
+                            played_name = self.assets.get_champ_name(played_champ_id)
+                            if played_name and played_name != str(played_champ_id):
+                                priority_cfg = self.config.get("priority_picker", {})
+                                plist = priority_cfg.get("list", [])
+                                # Check if already in list (case-insensitive)
+                                played_lower = played_name.lower()
+                                already_in = any(p.lower() == played_lower for p in plist)
+                                if not already_in:
+                                    plist.append(played_name)
+                                    priority_cfg["list"] = plist
+                                    self.config.set("priority_picker", priority_cfg)
+                                    self._log(f"ARAM List: Auto-added {played_name}")
+                    except Exception as e:
+                        Logger.debug("Auto", f"Auto-add played champion error: {e}")
                 
         except Exception as e:
             Logger.debug("Auto", f"End of game error: {e}")

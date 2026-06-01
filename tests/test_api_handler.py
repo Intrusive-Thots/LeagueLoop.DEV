@@ -54,8 +54,10 @@ class TestLCUClient(unittest.TestCase):
 
     def test_request_not_connected(self):
         self.client.is_connected = False
-        result = self.client.request("GET", "/test")
-        self.assertIsNone(result)
+        with patch.object(self.client, 'connect', return_value=False) as mock_connect:
+            result = self.client.request("GET", "/test")
+            self.assertIsNone(result)
+            mock_connect.assert_called_once()
 
 if __name__ == '__main__':
     unittest.main()

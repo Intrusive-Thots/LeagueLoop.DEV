@@ -53,6 +53,7 @@ class TestAssetManager(unittest.TestCase):
     @patch('os.path.exists', return_value=True)
     def test_load_champion_data_cache_hit(self, mock_exists):
         """When cache file exists, load from disk without downloading."""
+        self.assets.session = MagicMock()
         self.assets.ddragon_ver = "14.4.1"
 
         with patch('builtins.open', mock_open()):

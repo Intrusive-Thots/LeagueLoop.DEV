@@ -33,5 +33,16 @@
       "Generated Colab C2 automator capability to satisfy SELF_DIRECTED_CAPABILITY_GROWTH rule"
     ],
     "outcome": "Success. Reusable scripts created in payloads/colab_c2 and skill mapped."
+  },
+  {
+    "timestamp": "2026-06-01T07:03:00Z",
+    "task": "Fix LCU API client unit test mock isolation",
+    "duration_seconds": 180,
+    "actions": [
+      "Identified test failure in test_request_not_connected due to LCU client detecting running LoL processes on host machine.",
+      "Mocked the connect method of LCUClient to return False using patch.object.",
+      "Verified all 60 unit tests pass successfully in local environment."
+    ],
+    "outcome": "Success. Unit tests are fully passing and decoupled from the host machine's process state."
   }
 ]
