@@ -33,5 +33,10 @@
     "error_pattern": "Gradle build for Android fails with invalid source release: 21",
     "fix": "Set JAVA_HOME to a JDK 21 path (e.g., C:\\Program Files\\Android\\openjdk\\jdk-21.0.8 on this system) before executing gradlew commands.",
     "context": "Execution failed for task ':capacitor-android:compileDebugJavaWithJavac' because the default system JDK was version 17."
+  },
+  {
+    "error_pattern": "Remote config loading/saving and ARAM priority list fetching fails silently due to naming discrepancy",
+    "fix": "Verify core app class instance properties naming system. Replace app.config_manager with app.config, app.config_manager.config with app.config.cfg, and app.config_manager.save() with app.config.save().",
+    "context": "Remote configuration toggle switches and aram priority lists failed to load or persist on mobile remote clients because app.config was incorrectly referenced as app.config_manager on local_api.py."
   }
 ]

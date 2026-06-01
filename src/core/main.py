@@ -443,7 +443,6 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         import urllib.request
         from io import BytesIO
         from PIL import Image
-        import customtkinter as ctk
 
         img_label = ctk.CTkLabel(popup, text="Loading QR Code...")
         img_label.pack(pady=10)

@@ -8,8 +8,8 @@
     "auto_aram_swap": false,
     "auto_set_roles": false,
     "auto_hover": false,
-    "auto_lock_in": false,
-    "auto_random_skin": false,
+    "auto_lock_in": true,
+    "auto_random_skin": true,
     "accept_delay": 0.0,
     "polling_rate_champ_select": 0.5,
     "pick_TOP_1": "",
@@ -49,7 +49,6 @@
     "hotkey_toggle_automation": "ctrl+shift+a",
     "hotkey_find_match": "6+q+r+w",
     "hotkey_compact_mode": "ctrl+shift+m",
-    "hotkey_omnibar": "alt+,",
     "priority_picker": {
         "enabled": true,
         "list": [
@@ -104,9 +103,10 @@
     "skip_stats_enabled": false,
     "auto_runes_enabled": true,
     "aram_auto_add_played": true,
+    "hotkey_omnibar": "alt+,",
     "aram_mode": "ARAM Mayhem",
     "auto_join_enabled": false,
-    "auto_honor_enabled": false,
+    "auto_honor_enabled": true,
     "auto_join_list": [
         {
             "name": "i am ston3d",

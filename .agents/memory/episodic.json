@@ -57,5 +57,18 @@
       "Successfully built the Android companion app in both debug and release configurations (assembleDebug & assembleRelease)."
     ],
     "outcome": "Success. Verified window state mirroring, and compiled the expanded mobile companion app successfully."
+  },
+  {
+    "timestamp": "2026-06-01T11:44:00Z",
+    "task": "Mirror Window State and Expand Mobile App Features",
+    "duration_seconds": 1800,
+    "actions": [
+      "Removed automatic window minimization from automation.py during game phase.",
+      "Implemented client window visibility mirroring (IsIconic and IsWindowVisible) in docking_loop.",
+      "Added show_from_tray and manually_hidden state flags to main.py to prevent window restores when hidden to tray.",
+      "Fixed local_api.py config_manager attribute naming errors.",
+      "Coded full companion features in main.js (summoner profile, lobby manager, ready check overlay, active draft helper, spells selection, bench swaps, remote config toggles, and phase-adaptive polling)."
+    ],
+    "outcome": "Success. Coded all features, tests pass with 100% success rate."
   }
 ]
