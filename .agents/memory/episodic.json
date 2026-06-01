@@ -80,5 +80,20 @@
       "Restarted the dev server in the background and verified successful startup without errors."
     ],
     "outcome": "Success. Application is running and stable."
+  },
+  {
+    "timestamp": "2026-06-01T12:22:00Z",
+    "task": "Build and Sign Desktop Release 1-06-213-0810",
+    "duration_seconds": 900,
+    "actions": [
+      "Cleaned previous build directories.",
+      "Ran PyInstaller to build ONEDIR distribution.",
+      "Signed the LeagueLoop.exe binary with the developer certificate.",
+      "Compiled the Inno Setup installer passing version arguments.",
+      "Signed the LeagueLoop_Installer.exe binary.",
+      "Copied the installer to the LeagueLoop-Installer repository.",
+      "Committed and pushed release changes to both the LeagueLoop-Lock and LeagueLoop-Installer master branches."
+    ],
+    "outcome": "Success. Signed executable and installer built and pushed successfully."
   }
 ]
