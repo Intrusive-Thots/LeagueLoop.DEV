@@ -12,19 +12,19 @@ Tests are in: `tests/`
 
 1. Run all tests:
 ```powershell
-$env:PYTHONPATH = "C:\Users\Administrator\Desktop\LeagueLoop\src"
-& ".venv\Scripts\python.exe" -m pytest tests/ -v
+$env:PYTHONPATH = "c:\Users\Administrator\antigravity-worspaces-1\LeagueLoop\src"
+& "c:\Users\Administrator\antigravity-worspaces-1\antigravity-worspaces\.venv\Scripts\python.exe" -m pytest tests/ -v
 ```
 
 2. Run a specific test file:
 ```powershell
-$env:PYTHONPATH = "C:\Users\Administrator\Desktop\LeagueLoop\src"
-& ".venv\Scripts\python.exe" -m pytest tests/test_ui_kwargs.py -v
+$env:PYTHONPATH = "c:\Users\Administrator\antigravity-worspaces-1\LeagueLoop\src"
+& "c:\Users\Administrator\antigravity-worspaces-1\antigravity-worspaces\.venv\Scripts\python.exe" -m pytest tests/test_ui_kwargs.py -v
 ```
 
 3. Run with output capture disabled (for debugging):
 ```powershell
-& ".venv\Scripts\python.exe" -m pytest tests/ -v -s
+& "c:\Users\Administrator\antigravity-worspaces-1\antigravity-worspaces\.venv\Scripts\python.exe" -m pytest tests/ -v -s
 ```
 
 ## Writing New Tests
@@ -40,7 +40,7 @@ def test_my_feature():
 2. For tests that import project modules:
 ```python
 import sys
-sys.path.insert(0, "C:\\Users\\Administrator\\Desktop\\LeagueLoop\\src")
+sys.path.insert(0, "c:\\Users\\Administrator\\antigravity-worspaces-1\\LeagueLoop\\src")
 from services.automation import AutomationEngine
 ```
 

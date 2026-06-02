@@ -9,7 +9,7 @@ description: Install a new pip dependency into the project venv and update requi
 
 1. Activate the venv:
 ```powershell
-& "C:\Users\Administrator\Desktop\LeagueLoop\.venv\Scripts\Activate.ps1"
+& "c:\Users\Administrator\antigravity-worspaces-1\antigravity-worspaces\.venv\Scripts\Activate.ps1"
 ```
 
 2. Install the package:

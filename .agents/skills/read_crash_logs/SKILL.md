@@ -16,12 +16,12 @@ description: Parse and diagnose LeagueLoop crash logs and error files
 
 1. Check the most recent crash:
 ```powershell
-Get-Content "C:\Users\Administrator\Desktop\LeagueLoop\crash.log" -Tail 50
+Get-Content "c:\Users\Administrator\antigravity-worspaces-1\LeagueLoop\crash.log" -Tail 50
 ```
 
 2. Check recent errors:
 ```powershell
-Get-Content "C:\Users\Administrator\Desktop\LeagueLoop\error.log" -Tail 100
+Get-Content "c:\Users\Administrator\antigravity-worspaces-1\LeagueLoop\error.log" -Tail 100
 ```
 
 3. Search for a specific error pattern:

@@ -9,13 +9,13 @@ description: Launch the LeagueLoop application in development mode with proper P
 
 1. Set PYTHONPATH and run via module mode:
 ```powershell
-$env:PYTHONPATH = "C:\Users\Administrator\Desktop\LeagueLoop\src"
-& "C:\Users\Administrator\Desktop\LeagueLoop\.venv\Scripts\python.exe" -m core.main
+$env:PYTHONPATH = "c:\Users\Administrator\antigravity-worspaces-1\LeagueLoop\src"
+& "c:\Users\Administrator\antigravity-worspaces-1\antigravity-worspaces\.venv\Scripts\python.exe" -m core.main
 ```
 
 Or use the batch launcher:
 ```powershell
-& "C:\Users\Administrator\Desktop\LeagueLoop\launch_dev.bat"
+& "c:\Users\Administrator\antigravity-worspaces-1\LeagueLoop\launch_dev.bat"
 ```
 
 ## Critical Rules

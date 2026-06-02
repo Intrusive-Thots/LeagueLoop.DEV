@@ -15,7 +15,7 @@ description: Compile the Inno Setup installer for LeagueLoop distribution
 
 2. Compile the installer:
 ```powershell
-& "C:\InnoSetup\ISCC.exe" "c:\Users\Administrator\Desktop\LeagueLoop\installer.iss" 2>&1
+& "C:\InnoSetup\ISCC.exe" "c:\Users\Administrator\antigravity-worspaces-1\LeagueLoop\installer.iss" 2>&1
 ```
 
 3. Verify the output:
@@ -27,8 +27,8 @@ Test-Path "dist\LeagueLoop_Installer.exe"
 ## Publishing to Installer Repo
 After building, copy to the public installer repo:
 ```powershell
-Copy-Item "dist\LeagueLoop_Installer.exe" "C:\Users\Administrator\Desktop\LeagueLoop-Installer\LeagueLoop_Installer.exe" -Force
-cd C:\Users\Administrator\Desktop\LeagueLoop-Installer
+Copy-Item "dist\LeagueLoop_Installer.exe" "c:\Users\Administrator\Desktop\LeagueLoop-Installer\LeagueLoop_Installer.exe" -Force
+cd c:\Users\Administrator\Desktop\LeagueLoop-Installer
 git add -A
 git commit -m "release: update installer"
 git push origin master

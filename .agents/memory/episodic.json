@@ -155,5 +155,17 @@
       "Fixed directory drift in `.agents/workflows/` (build_pipeline_fixes.md, quickfix.md, and release.md) by migrating old desktop paths to the active antigravity-worspaces-1/LeagueLoop path."
     ],
     "outcome": "Success. Workflows are aligned with actual paths, tests pass, and Windows-safe fallback scan is established."
+  },
+  {
+    "timestamp": "2026-06-02T13:04:00Z",
+    "task": "Fix file path and virtual environment drifts in `.agents/skills`",
+    "duration_seconds": 180,
+    "actions": [
+      "Analyzed skills inside `.agents/skills` and identified references to old Desktop paths.",
+      "Corrected build_executable, build_installer, edit_config, git_sync, install_dependency, launch_dev, read_crash_logs, refresh_assets, and run_tests skills to reference active workspace path c:\\Users\\Administrator\\antigravity-worspaces-1\\LeagueLoop.",
+      "Updated virtual environment references to the shared venv at c:\\Users\\Administrator\\antigravity-worspaces-1\\antigravity-worspaces\\.venv.",
+      "Verified all unit tests pass (60 passed, 7 skipped) in the corrected environment."
+    ],
+    "outcome": "Success. Resolved directory drifts across all skill assets and verified test suite stability."
   }
 ]

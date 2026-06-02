@@ -6,7 +6,7 @@ description: Safely modify config.json values with validation
 # Edit Config
 
 ## File Locations
-- **Dev config:** `C:\Users\Administrator\Desktop\LeagueLoop\config.json`
+- **Dev config:** `c:\Users\Administrator\antigravity-worspaces-1\LeagueLoop\config.json`
 - **User config (installed):** `%APPDATA%\LeagueLoop\config.json`
 - **Defaults:** `src\services\asset_manager.py` → `DEFAULT_CONFIG` dict
 
@@ -14,7 +14,7 @@ description: Safely modify config.json values with validation
 
 1. Read the current config:
 ```powershell
-Get-Content "C:\Users\Administrator\Desktop\LeagueLoop\config.json" | ConvertFrom-Json | ConvertTo-Json -Depth 10
+Get-Content "c:\Users\Administrator\antigravity-worspaces-1\LeagueLoop\config.json" | ConvertFrom-Json | ConvertTo-Json -Depth 10
 ```
 
 2. To modify a value, edit `config.json` directly using the file edit tools.

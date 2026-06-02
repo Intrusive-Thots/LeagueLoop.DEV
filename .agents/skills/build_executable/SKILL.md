@@ -9,7 +9,7 @@ description: Build the LeagueLoop PyInstaller executable in ONEDIR mode
 
 1. Activate the project venv:
 ```powershell
-& "C:\Users\Administrator\Desktop\LeagueLoop\.venv\Scripts\Activate.ps1"
+& "c:\Users\Administrator\antigravity-worspaces-1\antigravity-worspaces\.venv\Scripts\Activate.ps1"
 ```
 
 2. Run PyInstaller with the spec file:

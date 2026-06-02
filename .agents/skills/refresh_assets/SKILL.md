@@ -6,7 +6,7 @@ description: Clear and rebuild the champion icon asset cache from DDragon
 # Refresh Assets
 
 ## Asset Location
-`C:\Users\Administrator\Desktop\LeagueLoop\cache\assets\`
+`c:\Users\Administrator\antigravity-worspaces-1\LeagueLoop\cache\assets\`
 
 Champion icons follow the naming pattern: `champion_<DDragonKey>.png`
 
@@ -14,13 +14,13 @@ Champion icons follow the naming pattern: `champion_<DDragonKey>.png`
 
 1. Clear existing cached assets:
 ```powershell
-Remove-Item "C:\Users\Administrator\Desktop\LeagueLoop\cache\assets\champion_*.png" -Force
+Remove-Item "c:\Users\Administrator\antigravity-worspaces-1\LeagueLoop\cache\assets\champion_*.png" -Force
 ```
 
 2. Clear cached data files:
 ```powershell
-Remove-Item "C:\Users\Administrator\Desktop\LeagueLoop\cache\champion.json" -Force -ErrorAction SilentlyContinue
-Remove-Item "C:\Users\Administrator\Desktop\LeagueLoop\cache\meraki_champions.json" -Force -ErrorAction SilentlyContinue
+Remove-Item "c:\Users\Administrator\antigravity-worspaces-1\LeagueLoop\cache\champion.json" -Force -ErrorAction SilentlyContinue
+Remove-Item "c:\Users\Administrator\antigravity-worspaces-1\LeagueLoop\cache\meraki_champions.json" -Force -ErrorAction SilentlyContinue
 ```
 
 3. Launch the app — `AssetManager.start_loading()` will automatically re-download everything on startup.

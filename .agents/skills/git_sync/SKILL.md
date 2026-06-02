@@ -9,7 +9,7 @@ description: Commit all changes and sync with the remote repository
 
 1. Stage all changes (source repo only):
 ```powershell
-cd c:\Users\Administrator\Desktop\LeagueLoop
+cd c:\Users\Administrator\antigravity-worspaces-1\LeagueLoop
 git add -A
 ```
 
@@ -37,7 +37,7 @@ git push origin master
 ## Dual-Repo Sync (after a release)
 If the installer was rebuilt, also sync the installer repo:
 ```powershell
-cd C:\Users\Administrator\Desktop\LeagueLoop-Installer
+cd c:\Users\Administrator\Desktop\LeagueLoop-Installer
 git add -A
 git commit -m "chore: sync installer"
 git push origin master
@@ -47,5 +47,5 @@ git push origin master
 - Always pull before push to avoid rejected pushes.
 - Use `--rebase` to keep a linear commit history.
 - **NEVER** stage `build/` or `dist/` contents — they corrupt stash/rebase with binary patch errors.
-- Source repo: `C:\Users\Administrator\Desktop\LeagueLoop` → `Intrusive-Thots/LeagueLoop-Lock`
-- Installer repo: `C:\Users\Administrator\Desktop\LeagueLoop-Installer` → `Intrusive-Thots/LeagueLoop-Installer`
+- Source repo: `c:\Users\Administrator\antigravity-worspaces-1\LeagueLoop` → `Intrusive-Thots/LeagueLoop-Lock`
+- Installer repo: `c:\Users\Administrator\Desktop\LeagueLoop-Installer` → `Intrusive-Thots/LeagueLoop-Installer`
