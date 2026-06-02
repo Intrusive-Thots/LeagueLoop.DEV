@@ -2,10 +2,12 @@ import sys
 try:
     import uiautomation as auto
 except ImportError:
-    print("uiautomation not installed")
-    sys.exit(0)
+    auto = None
 
 def test_uia():
+    if auto is None:
+        print("uiautomation not installed")
+        return
     print("Searching for Riot Client...")
     riot_window = auto.WindowControl(searchDepth=1, Name="Riot Client")
     if not riot_window.Exists(3, 1):

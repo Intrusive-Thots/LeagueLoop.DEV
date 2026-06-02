@@ -53,5 +53,15 @@
     "error_pattern": "Git remote authentication fails due to invalid/dummy GITHUB_TOKEN environment variable overriding local gh credential helper",
     "fix": "Temporarily clear the GITHUB_TOKEN environment variable ($env:GITHUB_TOKEN = \"\") so the GitHub CLI and git credential helper fall back to using the authenticated keyring credentials.",
     "context": "git pull/push failed with 'Invalid username or token' because GITHUB_TOKEN was populated with a dummy value."
+  },
+  {
+    "error_pattern": "Pytest hangs or exits prematurely during collection due to top-level sys.exit(0) in scratch or test files when optional dependencies are missing",
+    "fix": "Avoid using sys.exit(0) at the module import level when a dependency is missing. Instead, set the imported library to None and place a conditional check inside the test or execution function.",
+    "context": "test_uia.py in scratch/ called sys.exit(0) when uiautomation was missing, causing the entire pytest test collection process to exit immediately with code 0."
+  },
+  {
+    "error_pattern": "ImportError: Failed to import test module due to mock modules being imported as packages rather than modules (e.g. websockets.exceptions)",
+    "fix": "Ensure websockets is mocked with __path__ = [] and all submodules like websockets.exceptions are explicitly shimmed in sys.modules during test setup.",
+    "context": "Running pytest directly or via run_tests_mocked.py raised ModuleNotFoundError for websockets.exceptions because it was not in the shimed modules list, while websockets was defined as a standard MagicMock without __path__."
   }
 ]
