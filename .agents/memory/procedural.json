@@ -1,1 +1,15 @@
-[]
+[
+  {
+    "method": "Bypass PowerShell Profile Prompts",
+    "procedure": [
+      "Run non-interactive command line actions via 'cmd.exe /c' or start powershell with the '-NoProfile' parameter.",
+      "If a background task hangs because of interactive profile input, terminate it using the manage_task tool with action 'kill'."
+    ]
+  },
+  {
+    "method": "Pure Python Text Search",
+    "procedure": [
+      "When running on environments (like Windows) where grep/ripgrep are missing or fail, execute an os.walk-based Python inline one-liner or run a python scratch script."
+    ]
+  }
+]

@@ -38,20 +38,20 @@ This document contains the historical context of all build issues encountered an
 
 ```powershell
 # Full clean build
-cd c:\Users\Administrator\Desktop\LeagueLoop
+cd c:\Users\Administrator\antigravity-worspaces-1\LeagueLoop
 if (Test-Path build) { Remove-Item -Recurse -Force build }
 if (Test-Path dist\LeagueLoop) { Remove-Item -Recurse -Force dist\LeagueLoop }
 .venv\Scripts\pyinstaller --clean LeagueLoop.spec 2>&1
 
 # Compile installer
-& "C:\InnoSetup\ISCC.exe" "c:\Users\Administrator\Desktop\LeagueLoop\installer.iss" 2>&1
+& "C:\InnoSetup\ISCC.exe" "c:\Users\Administrator\antigravity-worspaces-1\LeagueLoop\installer.iss" 2>&1
 ```
 
 ## Key Paths
 | Asset | Path |
 |-------|------|
-| Spec file | `c:\Users\Administrator\Desktop\LeagueLoop\LeagueLoop.spec` |
-| ISS script | `c:\Users\Administrator\Desktop\LeagueLoop\installer.iss` |
+| Spec file | `c:\Users\Administrator\antigravity-worspaces-1\LeagueLoop\LeagueLoop.spec` |
+| ISS script | `c:\Users\Administrator\antigravity-worspaces-1\LeagueLoop\installer.iss` |
 | PyInstaller output | `dist\LeagueLoop\` |
 | Installer output | `dist\LeagueLoop_Installer.exe` |
 | Inno Setup compiler | `C:\InnoSetup\ISCC.exe` |

@@ -11,7 +11,7 @@ Use this for rapid hotfixes. Commits only modified files (not untracked) with a 
 
 1. Show what changed:
 ```powershell
-cd c:\Users\Administrator\Desktop\LeagueLoop
+cd c:\Users\Administrator\antigravity-worspaces-1\LeagueLoop
 git status -s
 ```
 

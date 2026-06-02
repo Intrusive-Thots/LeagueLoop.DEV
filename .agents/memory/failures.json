@@ -63,5 +63,10 @@
     "error_pattern": "ImportError: Failed to import test module due to mock modules being imported as packages rather than modules (e.g. websockets.exceptions)",
     "fix": "Ensure websockets is mocked with __path__ = [] and all submodules like websockets.exceptions are explicitly shimmed in sys.modules during test setup.",
     "context": "Running pytest directly or via run_tests_mocked.py raised ModuleNotFoundError for websockets.exceptions because it was not in the shimed modules list, while websockets was defined as a standard MagicMock without __path__."
+  },
+  {
+    "error_pattern": "grep_search tool fails with error executing cascade step: CORTEX_STEP_TYPE_GREP_SEARCH: exec: \"grep\": executable file not found in %PATH%",
+    "fix": "Avoid using the grep_search tool on Windows environments without ensuring grep/ripgrep is installed. Instead, run a powershell/cmd command like 'Select-String' or 'findstr', or use a simple Python script to scan directory files.",
+    "context": "Searching for TODO/FIXME comments using grep_search failed on Windows because the underlying grep executable was not in the PATH."
   }
 ]

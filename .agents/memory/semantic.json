@@ -1,1 +1,7 @@
-[]
+[
+  {
+    "concept": "PowerShell Profile Blocking",
+    "description": "In automated environments, PowerShell profiles that contain interactive questions or output banners can block background tasks that wait for stdout stabilization or expect non-interactive environments.",
+    "learned_at": "2026-06-02T11:04:00Z"
+  }
+]
