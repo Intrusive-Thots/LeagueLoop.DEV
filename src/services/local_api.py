@@ -310,6 +310,27 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                     result = {'active': False, 'error': str(e)}
 
             self.wfile.write(json.dumps(result).encode('utf-8'))
+        elif self.path == '/accounts':
+            self.send_response(200)
+            self._set_cors_headers()
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            app = self.app_instance
+            accounts = []
+            active_index = -1
+            if app and hasattr(app, 'account_manager') and app.account_manager:
+                am = app.account_manager
+                # Return accounts excluding passwords
+                for i, a in enumerate(am.get_accounts()):
+                    accounts.append({
+                        "label": a.get("label", ""),
+                        "username": a.get("username", ""),
+                        "tagline": a.get("tagline", ""),
+                        "region": a.get("region", "NA1"),
+                        "wallet": a.get("wallet", {"be": 0, "rp": 0})
+                    })
+                active_index = am.get_active_index()
+            self.wfile.write(json.dumps({"accounts": accounts, "active_index": active_index}).encode('utf-8'))
         else:
             self.send_response(404)
             self._set_cors_headers()
@@ -438,6 +459,39 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
             self.send_header('Content-type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({'status': 'success', 'key': key, 'value': value}).encode('utf-8'))
+        elif self.path == '/accounts/login':
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                body = json.loads(post_data.decode('utf-8'))
+                idx = int(body.get('index', -1))
+            except (json.JSONDecodeError, ValueError):
+                self.send_response(400)
+                self._set_cors_headers()
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'error', 'message': 'Invalid JSON or index'}).encode('utf-8'))
+                return
+
+            app = self.app_instance
+            if app and hasattr(app, 'account_manager') and app.account_manager:
+                app.account_manager.login_account(idx, log_func=None, completion_func=None)
+
+            self.send_response(200)
+            self._set_cors_headers()
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "success", "message": "Login initiated"}).encode('utf-8'))
+        elif self.path == '/accounts/logout':
+            app = self.app_instance
+            if app and hasattr(app, 'account_manager') and app.account_manager:
+                app.account_manager.sign_out(log_func=None, completion_func=None)
+
+            self.send_response(200)
+            self._set_cors_headers()
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "success", "message": "Logout initiated"}).encode('utf-8'))
         elif self.path == '/champ-select/pick' or self.path == '/champ-select/ban':
             content_length = int(self.headers.get('Content-Length', 0))
             post_data = self.rfile.read(content_length)

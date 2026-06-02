@@ -96,6 +96,13 @@ const UI = {
     aramAddBtn: document.getElementById("btn-aram-add"),
     aramAutocomplete: document.getElementById("aram-autocomplete-box"),
     aramList: document.getElementById("aram-priority-list")
+  },
+  accounts: {
+    btnProfile: document.getElementById("btn-profile-accounts"),
+    overlay: document.getElementById("account-selector-overlay"),
+    btnClose: document.getElementById("btn-close-accounts"),
+    list: document.getElementById("account-list"),
+    btnLogout: document.getElementById("btn-account-logout")
   }
 };
 
@@ -870,4 +877,86 @@ if (UI.config.aramAddBtn) {
     UI.config.aramAutocomplete.classList.add("hidden");
     saveAramPriorityList();
   });
+}
+
+// ============================================
+// Account Management Logic
+// ============================================
+
+if (UI.accounts.btnProfile) {
+  UI.accounts.btnProfile.addEventListener("click", () => {
+    UI.accounts.overlay.classList.remove("hidden");
+    fetchAccounts();
+  });
+}
+
+if (UI.accounts.btnClose) {
+  UI.accounts.btnClose.addEventListener("click", () => {
+    UI.accounts.overlay.classList.add("hidden");
+  });
+}
+
+if (UI.accounts.btnLogout) {
+  UI.accounts.btnLogout.addEventListener("click", async () => {
+    try {
+      const res = await fetch(`${baseUrl}/accounts/logout`, { method: "POST" });
+      if (res.ok) {
+        addLog("Logout initiated.");
+        UI.accounts.overlay.classList.add("hidden");
+      }
+    } catch (err) {
+      addLog(`Failed to logout: ${err}`);
+    }
+  });
+}
+
+async function fetchAccounts() {
+  if (!baseUrl) return;
+  try {
+    const res = await fetch(`${baseUrl}/accounts`);
+    if (!res.ok) return;
+    const data = await res.json();
+    
+    UI.accounts.list.innerHTML = "";
+    
+    if (!data.accounts || data.accounts.length === 0) {
+      UI.accounts.list.innerHTML = "<p class='subtitle' style='text-align: center; padding: 1rem;'>No accounts saved.<br>Add accounts via the desktop app.</p>";
+      return;
+    }
+    
+    data.accounts.forEach((acct, idx) => {
+      const el = document.createElement("div");
+      el.className = `account-item glass-card ${idx === data.active_index ? "active-account" : ""}`;
+      el.innerHTML = `
+        <div class="acct-info">
+          <h4 class="acct-label">${acct.label || acct.username}</h4>
+          <span class="acct-tag">${acct.tagline ? acct.tagline : (acct.username || "Unknown")}</span>
+          <span class="acct-region badge">${acct.region}</span>
+        </div>
+        <div class="acct-wallet">
+           <span class="wallet-item">🔵 ${acct.wallet.be || 0}</span>
+           <span class="wallet-item">🟡 ${acct.wallet.rp || 0}</span>
+        </div>
+      `;
+      el.addEventListener("click", () => loginAccount(idx));
+      UI.accounts.list.appendChild(el);
+    });
+  } catch (err) {
+    addLog(`Failed to fetch accounts: ${err}`);
+  }
+}
+
+async function loginAccount(idx) {
+  if (!baseUrl) return;
+  try {
+    addLog(`Switching to account #${idx}...`);
+    UI.accounts.overlay.classList.add("hidden");
+    await fetch(`${baseUrl}/accounts/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ index: idx })
+    });
+  } catch (err) {
+    addLog(`Login request failed: ${err}`);
+  }
 }

@@ -31,7 +31,7 @@
       <!-- Main Dashboard Screen -->
       <div id="dashboard-screen" class="screen hidden">
         <header class="header glass-bar">
-          <div class="header-profile">
+          <div class="header-profile" id="btn-profile-accounts">
             <div class="profile-icon-wrapper">
               <div id="summoner-icon" class="profile-icon-placeholder">👤</div>
             </div>
@@ -39,9 +39,26 @@
               <h1 id="summoner-name">LEAGUELOOP</h1>
               <span id="connection-status" class="status-indicator">● LINKED</span>
             </div>
+            <span class="dropdown-icon">▼</span>
           </div>
           <button id="btn-disconnect" class="btn-icon">🚪</button>
         </header>
+
+        <!-- Account Selector Overlay -->
+        <div id="account-selector-overlay" class="overlay hidden">
+          <div class="glass-card popup-card">
+            <div class="popup-header">
+              <h3>Switch Account</h3>
+              <button id="btn-close-accounts" class="btn-icon">✖</button>
+            </div>
+            <div id="account-list" class="account-list">
+              <!-- Accounts populated here -->
+            </div>
+            <div class="popup-footer">
+              <button id="btn-account-logout" class="btn-danger w-full">Sign Out Current Session</button>
+            </div>
+          </div>
+        </div>
 
         <!-- Tab Views Container -->
         <main class="tab-views">

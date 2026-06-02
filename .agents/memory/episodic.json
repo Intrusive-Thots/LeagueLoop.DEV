@@ -167,5 +167,18 @@
       "Verified all unit tests pass (60 passed, 7 skipped) in the corrected environment."
     ],
     "outcome": "Success. Resolved directory drifts across all skill assets and verified test suite stability."
+  },
+  {
+    "timestamp": "2026-06-02T13:24:00Z",
+    "task": "Add Account Switcher to Mobile Companion App",
+    "duration_seconds": 600,
+    "actions": [
+      "Updated local_api.py to expose /accounts, /accounts/login, and /accounts/logout by tying into AccountManager.",
+      "Added Account Selector modal UI overlay to LeagueLoopMobile/index.html.",
+      "Added fetchAccounts, loginAccount, and logout event handlers to main.js.",
+      "Styled the account switcher with CSS matching the dark glassmorphism theme.",
+      "Built the Vite application, synced Capacitor assets, and compiled a debug Android APK."
+    ],
+    "outcome": "Success. Account switching and automation login sequence is now controllable from the mobile application."
   }
 ]
