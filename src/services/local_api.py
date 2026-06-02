@@ -196,6 +196,17 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                 'TFT Normal': 1090, 'TFT Ranked': 1100
             }
             self.wfile.write(json.dumps({'modes': modes}).encode('utf-8'))
+        elif self.path == '/champions':
+            self.send_response(200)
+            self._set_cors_headers()
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            app = self.app_instance
+            champs = []
+            if app and hasattr(app, 'automation') and app.automation:
+                champs = sorted(list(app.automation.assets.name_to_id.keys()))
+            champs = [c.title() for c in champs]
+            self.wfile.write(json.dumps({'champions': champs}).encode('utf-8'))
         elif self.path == '/champ-select':
             self.send_response(200)
             self._set_cors_headers()
@@ -658,6 +669,39 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
             self.send_header('Content-type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps(result).encode('utf-8'))
+
+        elif self.path == '/aram-list':
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                body = json.loads(post_data.decode('utf-8'))
+                aram_list = body.get('list', [])
+            except:
+                self.send_response(400)
+                self._set_cors_headers()
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'error', 'message': 'Invalid JSON'}).encode('utf-8'))
+                return
+
+            app = self.app_instance
+            if app and hasattr(app, 'config'):
+                pp = app.config.cfg.get('priority_picker', {})
+                pp['list'] = aram_list
+                app.config.cfg['priority_picker'] = pp
+                app.config.save()
+                
+                try:
+                    from core.events import EventBus
+                    EventBus.emit("config_event", app.config.cfg)
+                except:
+                    pass
+
+            self.send_response(200)
+            self._set_cors_headers()
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'status': 'success'}).encode('utf-8'))
 
         else:
             self.send_response(404)

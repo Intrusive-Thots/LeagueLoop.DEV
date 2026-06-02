@@ -689,8 +689,21 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                         self._is_dock_attached = True
 
                     # Mirror client window state: minimize if client is minimized or invisible
+                    # EXCEPT when the game is active.
+                    is_game_active = is_game_process_running()
                     is_client_minimized = (user32.IsIconic(hwnd) != 0) or (user32.IsWindowVisible(hwnd) == 0)
-                    if is_client_minimized:
+                    
+                    if is_game_active:
+                        # Game is active: do not minimize, and restore if minimized by sync
+                        if self._is_minimized_by_sync and not self._manually_hidden:
+                            self.after(0, lambda: self._handle_window_state("restore"))
+                            self._is_minimized_by_sync = False
+                        
+                        # Ensure topmost is False so we don't cover the game window
+                        if last_topmost is not False:
+                            self.after(0, lambda: self.attributes("-topmost", False))
+                            last_topmost = False
+                    elif is_client_minimized:
                         # Client minimized/invisible -> minimize LeagueLoop
                         if self.state() != "withdrawn" and self.state() != "iconic" and not self._is_minimized_by_sync:
                             self.after(0, lambda: self._handle_window_state("minimize"))

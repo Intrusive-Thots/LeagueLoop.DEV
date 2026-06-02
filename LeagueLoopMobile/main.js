@@ -8,6 +8,8 @@ let configData = {};
 let searchFilter = "";
 let pickableChampions = [];
 let currentActionType = "pick"; // "pick" or "ban"
+let allChampions = [];
+let aramPriorityList = [];
 
 const UI = {
   screens: {
@@ -89,7 +91,11 @@ const UI = {
     arenaLock: document.getElementById("cfg-arena-lock"),
     arenaSynergy: document.getElementById("cfg-arena-synergy"),
     acceptDelay: document.getElementById("cfg-accept-delay"),
-    acceptDelayVal: document.getElementById("accept-delay-val")
+    acceptDelayVal: document.getElementById("accept-delay-val"),
+    aramSearch: document.getElementById("aram-add-search"),
+    aramAddBtn: document.getElementById("btn-aram-add"),
+    aramAutocomplete: document.getElementById("aram-autocomplete-box"),
+    aramList: document.getElementById("aram-priority-list")
   }
 };
 
@@ -202,6 +208,8 @@ async function initData() {
       configData = await cRes.json();
       updateConfigUI();
     }
+
+    await loadAramData();
   } catch (err) {
     console.error("Failed to initialize API data", err);
   }
@@ -710,4 +718,156 @@ function formatPhase(phase) {
     "InProgress": "In Game"
   };
   return map[phase] || phase;
+}
+
+// ARAM Priority Picker functions
+async function loadAramData() {
+  try {
+    const listRes = await fetch(`${baseUrl}/aram-list`);
+    if (listRes.ok) {
+      const listData = await listRes.json();
+      aramPriorityList = listData.list || [];
+      renderAramPriorityList();
+    }
+    const champsRes = await fetch(`${baseUrl}/champions`);
+    if (champsRes.ok) {
+      const champsData = await champsRes.json();
+      allChampions = champsData.champions || [];
+    }
+  } catch (err) {
+    console.error("Failed to load ARAM priority data", err);
+  }
+}
+
+function renderAramPriorityList() {
+  if (!UI.config.aramList) return;
+  if (aramPriorityList.length === 0) {
+    UI.config.aramList.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 16px;">Priority list is empty. Add champions above.</div>`;
+    return;
+  }
+
+  UI.config.aramList.innerHTML = aramPriorityList.map((champ, idx) => `
+    <div class="member-card" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; margin-bottom: 8px;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="font-size: 0.8rem; font-weight: 700; color: var(--accent-hextech); width: 20px;">#${idx + 1}</span>
+        <span style="font-weight: 600; color: white;">${champ}</span>
+      </div>
+      <div style="display: flex; gap: 6px;">
+        <button class="btn-icon aram-up-btn" data-index="${idx}" style="width: 32px; height: 32px; font-size: 0.85rem; padding: 0; display: flex; align-items: center; justify-content: center;" ${idx === 0 ? 'disabled style="opacity: 0.3; cursor: not-allowed;"' : ''}>🔼</button>
+        <button class="btn-icon aram-down-btn" data-index="${idx}" style="width: 32px; height: 32px; font-size: 0.85rem; padding: 0; display: flex; align-items: center; justify-content: center;" ${idx === aramPriorityList.length - 1 ? 'disabled style="opacity: 0.3; cursor: not-allowed;"' : ''}>🔽</button>
+        <button class="btn-icon aram-del-btn" data-index="${idx}" style="width: 32px; height: 32px; font-size: 0.85rem; padding: 0; display: flex; align-items: center; justify-content: center; background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.2); color: #fca5a5;">✕</button>
+      </div>
+    </div>
+  `).join("");
+
+  // Bind move/delete actions
+  UI.config.aramList.querySelectorAll(".aram-up-btn").forEach(btn => {
+    if (btn.hasAttribute('disabled')) return;
+    btn.addEventListener("click", () => {
+      const idx = parseInt(btn.dataset.index);
+      if (idx > 0) {
+        const temp = aramPriorityList[idx];
+        aramPriorityList[idx] = aramPriorityList[idx - 1];
+        aramPriorityList[idx - 1] = temp;
+        saveAramPriorityList();
+      }
+    });
+  });
+
+  UI.config.aramList.querySelectorAll(".aram-down-btn").forEach(btn => {
+    if (btn.hasAttribute('disabled')) return;
+    btn.addEventListener("click", () => {
+      const idx = parseInt(btn.dataset.index);
+      if (idx < aramPriorityList.length - 1) {
+        const temp = aramPriorityList[idx];
+        aramPriorityList[idx] = aramPriorityList[idx + 1];
+        aramPriorityList[idx + 1] = temp;
+        saveAramPriorityList();
+      }
+    });
+  });
+
+  UI.config.aramList.querySelectorAll(".aram-del-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const idx = parseInt(btn.dataset.index);
+      aramPriorityList.splice(idx, 1);
+      saveAramPriorityList();
+    });
+  });
+}
+
+async function saveAramPriorityList() {
+  renderAramPriorityList();
+  try {
+    const res = await fetch(`${baseUrl}/aram-list`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ list: aramPriorityList })
+    });
+    if (res.ok) {
+      addLog("ARAM Priority List saved.");
+    }
+  } catch (err) {
+    console.error("Failed to save ARAM priority list", err);
+  }
+}
+
+// Autocomplete and search logic
+if (UI.config.aramSearch) {
+  UI.config.aramSearch.addEventListener("input", (e) => {
+    const val = e.target.value.toLowerCase().trim();
+    if (!val) {
+      UI.config.aramAutocomplete.classList.add("hidden");
+      return;
+    }
+    const filtered = allChampions.filter(c => c.toLowerCase().includes(val) && !aramPriorityList.map(p => p.toLowerCase()).includes(c.toLowerCase())).slice(0, 5);
+    if (filtered.length === 0) {
+      UI.config.aramAutocomplete.classList.add("hidden");
+      return;
+    }
+    UI.config.aramAutocomplete.innerHTML = filtered.map(c => `
+      <div class="autocomplete-item" style="padding: 10px 14px; cursor: pointer; color: white; border-bottom: 1px solid rgba(255,255,255,0.04);" data-name="${c}">
+        ${c}
+      </div>
+    `).join("");
+    UI.config.aramAutocomplete.classList.remove("hidden");
+
+    UI.config.aramAutocomplete.querySelectorAll(".autocomplete-item").forEach(item => {
+      item.addEventListener("click", () => {
+        UI.config.aramSearch.value = item.dataset.name;
+        UI.config.aramAutocomplete.classList.add("hidden");
+      });
+    });
+  });
+
+  // Add click listener outside to dismiss autocomplete
+  document.addEventListener("click", (e) => {
+    if (UI.config.aramAutocomplete && !UI.config.aramAutocomplete.contains(e.target) && e.target !== UI.config.aramSearch) {
+      UI.config.aramAutocomplete.classList.add("hidden");
+    }
+  });
+}
+
+if (UI.config.aramAddBtn) {
+  UI.config.aramAddBtn.addEventListener("click", () => {
+    const rawVal = UI.config.aramSearch.value.trim();
+    if (!rawVal) return;
+    
+    // Find matching case-insensitive champion name from valid list
+    const found = allChampions.find(c => c.toLowerCase() === rawVal.toLowerCase());
+    if (!found) {
+      addLog(`Error: "${rawVal}" is not a valid champion name.`);
+      return;
+    }
+
+    if (aramPriorityList.map(p => p.toLowerCase()).includes(found.toLowerCase())) {
+      addLog(`Error: "${found}" is already in priority list.`);
+      return;
+    }
+
+    aramPriorityList.push(found);
+    UI.config.aramSearch.value = "";
+    UI.config.aramAutocomplete.classList.add("hidden");
+    saveAramPriorityList();
+  });
 }

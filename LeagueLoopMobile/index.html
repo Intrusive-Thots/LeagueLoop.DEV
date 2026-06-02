@@ -283,6 +283,22 @@
                 <span id="accept-delay-val" class="range-value">2.0s</span>
               </div>
             </section>
+
+            <!-- ARAM Priority Picker settings -->
+            <section class="glass-card">
+              <h3>ARAM Priority Picker</h3>
+              <p class="subtitle">Customize the automatic selection priority list for ARAM champions.</p>
+              <div style="display: flex; gap: 8px; margin-bottom: 12px; position: relative;">
+                <input type="text" id="aram-add-search" placeholder="Type champion name to add..." style="flex: 1; padding: 10px 14px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: white; outline: none; font-size: 0.9rem;" autocomplete="off" />
+                <button id="btn-aram-add" class="btn-primary" style="width: auto; padding: 0 16px; margin: 0; font-size: 0.9rem; height: 42px;">Add</button>
+                <div id="aram-autocomplete-box" class="hidden" style="position: absolute; top: 46px; left: 0; right: 0; max-height: 180px; overflow-y: auto; background: #0c101b; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; z-index: 100; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+                  <!-- Suggestions filled dynamically -->
+                </div>
+              </div>
+              <div id="aram-priority-list" class="flex-column" style="gap: 8px; max-height: 250px; overflow-y: auto; padding-right: 4px;">
+                <!-- Populated dynamically with sorted priority items -->
+              </div>
+            </section>
           </div>
 
         </main>
