@@ -59,22 +59,58 @@ if not _logger.handlers:
 class Logger:
     """Provides standard logging access."""
     
-    @staticmethod
-    def debug(tag, msg):
+    _logs = []
+    MAX_LOGS = 1000
+
+    @classmethod
+    def _prune(cls):
+        """Prunes the in-memory logs list if it exceeds MAX_LOGS."""
+        if len(cls._logs) > cls.MAX_LOGS:
+            cls._logs = cls._logs[-cls.MAX_LOGS:]
+
+    @classmethod
+    def _add_log(cls, level, tag, msg):
+        """Helper to append a log to the in-memory list."""
+        cls._logs.append({
+            "level": level,
+            "module": tag,
+            "msg": msg
+        })
+        cls._prune()
+
+    @classmethod
+    def get_logs(cls, module=None, limit=None):
+        """Retrieves in-memory logs, optionally filtered by module and/or limited."""
+        cls._prune()
+        filtered = cls._logs
+        if module is not None:
+            filtered = [log for log in filtered if log.get("module") == module]
+        if limit is not None:
+            if limit <= 0:
+                return []
+            filtered = filtered[-limit:]
+        return filtered
+
+    @classmethod
+    def debug(cls, tag, msg):
         """Log a debug message."""
         _logger.debug(f"[{tag}] {msg}")
+        cls._add_log("DEBUG", tag, msg)
 
-    @staticmethod
-    def error(tag, msg):
+    @classmethod
+    def error(cls, tag, msg):
         """Log an error message."""
         _logger.error(f"[{tag}] {msg}")
+        cls._add_log("ERROR", tag, msg)
 
-    @staticmethod
-    def info(tag, msg):
+    @classmethod
+    def info(cls, tag, msg):
         """Log an info message."""
         _logger.info(f"[{tag}] {msg}")
+        cls._add_log("INFO", tag, msg)
 
-    @staticmethod
-    def warning(tag, msg):
+    @classmethod
+    def warning(cls, tag, msg):
         """Log a warning message."""
         _logger.warning(f"[{tag}] {msg}")
+        cls._add_log("WARNING", tag, msg)
