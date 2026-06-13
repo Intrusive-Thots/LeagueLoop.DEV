@@ -89,9 +89,10 @@ _QUEUE_DATASET_MAP = {
 class StatsScraper:
     """Provides base champion stats. Live web scraping legacy has been removed."""
 
-    def __init__(self, mode="ARAM"):
+    def __init__(self, mode="ARAM", fetch_live=True):
         """Initializes the StatsScraper."""
         self.mode = mode
+        self.fetch_live = fetch_live
         self.win_rates = dict()
         self.live_winrates = dict()
         self._cache_timestamps = dict()
@@ -104,6 +105,9 @@ class StatsScraper:
         Falls back to baseline data silently if BeautifulSoup is not installed
         or the scrape fails.
         """
+        if not self.fetch_live:
+            return
+
         # Check in-memory cache first
         ts = self._cache_timestamps.get(mode)
         if ts and (time.time() - ts) < _LIVE_CACHE_TTL and mode in self.live_winrates:

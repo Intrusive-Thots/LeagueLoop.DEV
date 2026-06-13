@@ -6,11 +6,11 @@ from services.stats_scraper import StatsScraper
 class TestStatsScraper(unittest.TestCase):
 
     def setUp(self):
-        self.scraper = StatsScraper()
+        self.scraper = StatsScraper(fetch_live=False)
 
     def test_get_winrate(self):
         # Disable background fetch for clean state
-        scraper = StatsScraper()
+        scraper = StatsScraper(fetch_live=False)
 
         # Test normal baseline retrieval
         self.assertEqual(scraper.get_winrate("aatrox"), 49.5)

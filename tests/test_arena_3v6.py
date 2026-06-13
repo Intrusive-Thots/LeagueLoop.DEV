@@ -9,7 +9,7 @@ from core.constants import QUEUE_ARENA, QUEUE_ARENA_3V6
 class TestArena3v6(unittest.TestCase):
     def test_stats_scraper_arena_3v6(self):
         """Test that StatsScraper correctly maps queue ID 1710 to Arena 3v6."""
-        scraper = StatsScraper()
+        scraper = StatsScraper(fetch_live=False)
         scraper.set_mode_by_queue_id(1710)
         self.assertEqual(scraper.mode, "Arena 3v6")
         

@@ -68,5 +68,10 @@
     "error_pattern": "grep_search tool fails with error executing cascade step: CORTEX_STEP_TYPE_GREP_SEARCH: exec: \"grep\": executable file not found in %PATH%",
     "fix": "Avoid using the grep_search tool on Windows environments without ensuring grep/ripgrep is installed. Instead, run a powershell/cmd command like 'Select-String' or 'findstr', or use a simple Python script to scan directory files.",
     "context": "Searching for TODO/FIXME comments using grep_search failed on Windows because the underlying grep executable was not in the PATH."
+  },
+  {
+    "error_pattern": "StatsScraper background thread launches automatically on instantiation and causes SSL/network errors during unit testing in sandboxed/offline environments",
+    "fix": "Add a fetch_live parameter to StatsScraper.__init__ (default True) and check it before submitting scraper tasks to the ThreadPoolExecutor. During tests, initialize StatsScraper with fetch_live=False to prevent background requests.",
+    "context": "pytest returned exit code 1 because StatsScraper threads spawned in tests were raising SSLErrors trying to reach lolalytics.com and trying to write to closed log streams post-teardown."
   }
 ]

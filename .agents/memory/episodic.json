@@ -247,5 +247,17 @@
       "Successfully ran all 70 unit tests in the workspace (100% pass rate) with correct PYTHONPATH setup."
     ],
     "outcome": "Success. Arena 3v6 is fully integrated, verified, and test coverage is complete."
+  },
+  {
+    "timestamp": "2026-06-13T11:03:30Z",
+    "task": "Resolve StatsScraper unit test background network/SSL errors",
+    "duration_seconds": 300,
+    "actions": [
+      "Added fetch_live parameter to StatsScraper.__init__.",
+      "Prevented StatsScraper from spawning background fetch threads in _fetch_live_data_background when fetch_live=False.",
+      "Updated test_stats_scraper.py and test_arena_3v6.py to initialize StatsScraper with fetch_live=False.",
+      "Verified all 70 tests pass cleanly with exit code 0 and no background thread logging errors."
+    ],
+    "outcome": "Success. Unit tests are completely robust, isolated from host system internet state, and pass cleanly."
   }
 ]
