@@ -100,7 +100,7 @@ class SessionHeader(ctk.CTkFrame):
                        font=("Segoe UI", 9))
         modes = [
             "Quickplay", "Draft Pick", "Ranked Solo/Duo", "Ranked Flex",
-            "ARAM", "ARAM Mayhem", "Arena", "Brawl", "URF", "ARURF",
+            "ARAM", "ARAM Mayhem", "Arena", "Arena 3v6", "Brawl", "URF", "ARURF",
             "Nexus Blitz", "One For All", "Ultimate Spellbook",
             "TFT Normal", "TFT Ranked"
         ]

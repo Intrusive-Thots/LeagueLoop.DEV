@@ -756,7 +756,7 @@ class SidebarWidget(ctk.CTkFrame):
         if mode in ["ARAM", "ARAM Mayhem"]:
             if hasattr(self, "priority_grid"):
                 self.priority_grid.pack(fill="x", pady=(0, SPACING_MD), padx=0)
-        elif mode == "Arena":
+        elif mode in ["Arena", "Arena 3v6"]:
             if hasattr(self, "arena_tool"):
                 self.arena_tool.pack(fill="x", pady=(0, SPACING_MD), padx=0)
         elif mode in ["Draft Pick", "Ranked Solo/Duo", "Ranked Flex", "Quickplay"]:
@@ -792,6 +792,7 @@ class SidebarWidget(ctk.CTkFrame):
             450: "ARAM",
             2400: "ARAM Mayhem",
             1700: "Arena",
+            1710: "Arena 3v6",
             2300: "Brawl",
             900: "URF",
             1010: "ARURF",
@@ -874,6 +875,7 @@ class SidebarWidget(ctk.CTkFrame):
             "ARAM": 450,
             "ARAM Mayhem": 2400,
             "Arena": 1700,
+            "Arena 3v6": 1710,
             "Brawl": 2300,
             "URF": 900,
             "ARURF": 1010,

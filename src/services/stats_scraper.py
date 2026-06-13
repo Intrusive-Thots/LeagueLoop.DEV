@@ -75,6 +75,7 @@ _QUEUE_DATASET_MAP = {
     400: BASELINE_RANKED_WINRATES,   # Draft Pick
     # Arena
     1700: BASELINE_ARENA_WINRATES,   # Arena
+    1710: BASELINE_ARENA_WINRATES,   # Arena 3v6
     # Quickplay / Fun modes
     490: BASELINE_QUICKPLAY_WINRATES,  # Quickplay
     900: BASELINE_ARAM_WINRATES,     # URF
@@ -191,7 +192,7 @@ class StatsScraper:
         # Update self.mode string so is_offline returns accurate results
         _QUEUE_MODE_NAMES = {
             450: "ARAM", 2400: "ARAM Mayhem", 420: "Ranked Solo/Duo",
-            440: "Ranked Flex", 400: "Draft Pick", 1700: "Arena",
+            440: "Ranked Flex", 400: "Draft Pick", 1700: "Arena", 1710: "Arena 3v6",
             490: "Quickplay", 900: "URF", 1010: "ARURF",
             1300: "Nexus Blitz", 1020: "One For All", 1400: "Ultimate Spellbook",
         }

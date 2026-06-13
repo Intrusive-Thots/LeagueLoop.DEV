@@ -17,7 +17,7 @@ from .asset_manager import AssetManager, ConfigManager  # type: ignore
 from .discord_rpc import DiscordPresenceManager  # type: ignore
 from utils.logger import Logger  # type: ignore
 from core.constants import (
-    QUEUE_ARENA, QUEUE_DRAFT, QUEUE_RANKED_SOLO, QUEUE_RANKED_FLEX,
+    QUEUE_ARENA, QUEUE_ARENA_3V6, QUEUE_DRAFT, QUEUE_RANKED_SOLO, QUEUE_RANKED_FLEX,
     TICK_SLEEP_DEFAULT, TICK_SLEEP_CHAMPSELECT,
     TICK_SLEEP_READYCHECK, TICK_SLEEP_LOBBY, TICK_SLEEP_INGAME,
     PRIORITY_SWAP_COOLDOWN,
@@ -449,7 +449,7 @@ class AutomationEngine:
             sf2(my_team, bench, me)
 
         has_bench = len(bench) > 0
-        is_arena = self.current_queue_id == QUEUE_ARENA
+        is_arena = self.current_queue_id in {QUEUE_ARENA, QUEUE_ARENA_3V6}
         is_draft = self.current_queue_id in {QUEUE_DRAFT, QUEUE_RANKED_SOLO, QUEUE_RANKED_FLEX}
 
         if has_bench and not is_arena:
