@@ -118,6 +118,8 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
             
         self.config = ConfigManager()
         self.assets = AssetManager()
+        from core.state import State
+        State.assets = self.assets
         self.lcu = LCUClient()
         self.scraper = StatsScraper(mode=self.config.get("aram_mode", "ARAM"))
         

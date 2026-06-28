@@ -18,6 +18,7 @@ class AppState:
         self.settings = {}
         self.auto_accept = True
         self.arena_synergy_enabled = True
+        self.assets = None
 
 # Global Singleton instance
 State = AppState()
