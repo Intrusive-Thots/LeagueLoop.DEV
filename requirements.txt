@@ -1,5 +1,4 @@
-
-aiohappyeyeballs==2.6.1
+﻿aiohappyeyeballs==2.6.1
 aiohttp==3.13.3
 aiosignal==1.4.0
 altgraph==0.17.5
@@ -23,6 +22,8 @@ pluggy==1.6.0
 propcache==0.4.1
 psutil==7.2.2
 Pygments==2.20.0
+pyinstaller==6.21.0
+pyinstaller-hooks-contrib==2026.6
 pypresence==4.6.1
 PySide6==6.11.0
 PySide6_Addons==6.11.0
@@ -30,11 +31,13 @@ PySide6_Essentials==6.11.0
 pystray==0.19.5
 pytest==9.0.3
 pytest-cov==7.1.0
+pywin32==312
+pywin32-ctypes==0.2.3
 requests==2.32.5
-setuptools==82.0.1
 shiboken6==6.11.0
 six==1.17.0
 tkinterdnd2==0.4.3
+typing_extensions==4.16.0
 urllib3==2.6.3
 vulture==2.16
 watchdog==6.0.0
@@ -42,5 +45,3 @@ websocket-client==1.9.0
 websockets==16.0
 windnd==1.0.7
 yarl==1.23.0
-
-
