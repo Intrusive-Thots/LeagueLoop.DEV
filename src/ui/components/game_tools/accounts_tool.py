@@ -166,6 +166,21 @@ class AccountsTool(ctk.CTkFrame):
         )
         self.entry_tagline.pack(side="left", fill="x", expand=True, padx=(4, 0))
 
+        # Default Account checkbox
+        default_row = ctk.CTkFrame(self.form_container, fg_color="transparent")
+        default_row.pack(fill="x", padx=4, pady=(0, 4))
+        ctk.CTkLabel(default_row, text="", width=60).pack(side="left")
+        self.chk_default = ctk.CTkCheckBox(
+            default_row, text="Set as Default Account",
+            font=get_font("caption"),
+            checkbox_width=14, checkbox_height=14,
+            fg_color=get_color("colors.accent.primary"),
+            hover_color=get_color("colors.state.hover"),
+            text_color=get_color("colors.text.primary"),
+            border_color=get_color("colors.border.subtle"),
+        )
+        self.chk_default.pack(side="left", padx=(4, 0))
+
         # Action buttons row
         btn_row = ctk.CTkFrame(self.form_container, fg_color="transparent")
         btn_row.pack(fill="x", padx=4, pady=(0, 4))
@@ -247,7 +262,11 @@ class AccountsTool(ctk.CTkFrame):
         self.entry_label.insert(0, acct.get("label", ""))
         self.entry_username.insert(0, acct.get("username", ""))
         # Don't pre-fill password — user must re-enter if changing
-        self.entry_tagline.insert(0, acct.get("tagline", "NA1"))
+        self.entry_tagline.insert(0, acct.get("tagline", ""))
+        if acct.get("is_default", False):
+            self.chk_default.select()
+        else:
+            self.chk_default.deselect()
 
         self.btn_save.configure(text="💾 Update")
 
@@ -262,6 +281,7 @@ class AccountsTool(ctk.CTkFrame):
         self.entry_password.delete(0, "end")
         self.entry_tagline.delete(0, "end")
         self.entry_password.configure(show="•")
+        self.chk_default.deselect()
         self._show_password = False
         self.btn_save.configure(text="💾 Save")
 
@@ -280,6 +300,7 @@ class AccountsTool(ctk.CTkFrame):
         username = self.entry_username.get().strip()
         password = self.entry_password.get().strip()
         tagline = self.entry_tagline.get().strip()
+        is_default = (self.chk_default.get() == 1)
 
         if not label or not username:
             self._flash_field(self.entry_label if not label else self.entry_username)
@@ -293,6 +314,7 @@ class AccountsTool(ctk.CTkFrame):
                 username=username,
                 password=password if password else None,  # Keep existing if blank
                 tagline=tagline,
+                is_default=is_default,
             )
             action = "updated"
         else:
@@ -300,7 +322,9 @@ class AccountsTool(ctk.CTkFrame):
             if not password:
                 self._flash_field(self.entry_password)
                 return
-            self.acct_mgr.add_account(label, username, password, tagline)
+            new_idx = self.acct_mgr.add_account(label, username, password, tagline)
+            if is_default:
+                self.acct_mgr.set_default_account(new_idx)
             action = "saved"
 
         self._cancel_form()
@@ -380,30 +404,38 @@ class AccountsTool(ctk.CTkFrame):
 
             # Label
             label_text = acct.get("label", "Account")
+            if acct.get("is_default", False):
+                label_text = "★ " + label_text
             ctk.CTkLabel(
                 top, text=label_text,
                 font=get_font("caption", "bold"),
-                text_color=get_color("colors.accent.gold", "#C8AA6E") if is_active else get_color("colors.text.primary"),
+                text_color=get_color("colors.accent.gold", "#C8AA6E") if is_active or acct.get("is_default", False) else get_color("colors.text.primary"),
                 anchor="w"
             ).pack(side="left", fill="x", expand=True)
 
             # Login / Sign-Out button
             # Check LCU connection — if disconnected, always show Login even for active account
             lcu_connected = self.lcu.is_connected if self.lcu else False
+            has_credentials = bool(acct.get("password_enc"))
 
             if not is_active or not lcu_connected:
+                btn_text = "▶ Login" if has_credentials else "⚠️ Update"
+                btn_color = get_color("colors.accent.primary") if has_credentials else get_color("colors.state.warning", "#FFA726")
+                btn_cmd = (lambda idx=i: self._login_account(idx)) if has_credentials else (lambda idx=i: self._show_edit_form(idx))
+                btn_tooltip = f"Log in as {label_text}" if has_credentials else "Incomplete login details. Click to edit/update credentials."
+
                 login_btn = ctk.CTkButton(
-                    top, text="▶ Login", width=56, height=20,
+                    top, text=btn_text, width=56, height=20,
                     corner_radius=get_radius("sm"),
                     font=get_font("caption", "bold"),
-                    fg_color=get_color("colors.accent.primary"),
+                    fg_color=btn_color,
                     hover_color=get_color("colors.state.hover"),
                     text_color="#ffffff",
-                    command=lambda idx=i: self._login_account(idx),
+                    command=btn_cmd,
                     cursor="hand2",
                 )
                 login_btn.pack(side="right", padx=(4, 0))
-                CTkTooltip(login_btn, f"Log in as {label_text}")
+                CTkTooltip(login_btn, btn_tooltip)
 
             if is_active:
                 # Sign out button for active account

@@ -116,7 +116,7 @@ class SidebarWidget(ctk.CTkFrame):
             self.game_tool_container.pack_forget()
             if getattr(self, "accounts_tool", None): self.accounts_tool.pack_forget()
             
-            if getattr(self, "automation_frame", None): self.automation_frame._card.pack_forget()
+            if getattr(self, "automations_scroll", None): self.automations_scroll.pack_forget()
             if getattr(self, "friend_list", None): self.friend_list.pack_forget()
             
             self.advanced_scroll.pack_forget()
@@ -136,9 +136,8 @@ class SidebarWidget(ctk.CTkFrame):
                     self.accounts_tool.pack(fill="x", pady=(0, SECTION_GAP))
                 self.spacer.pack(fill="both", expand=True)
                 
-            elif tab_name == "Actions":
-                if getattr(self, "automation_frame", None): self.automation_frame._card.pack(fill="x", pady=(0, SECTION_GAP))
-                self.spacer.pack(fill="both", expand=True)
+            elif tab_name == "Automations":
+                if getattr(self, "automations_scroll", None): self.automations_scroll.pack(fill="both", expand=True, pady=(0, SPACING_XS))
                 
             elif tab_name == "Config":
                 # Config tab shows game tools
@@ -155,7 +154,7 @@ class SidebarWidget(ctk.CTkFrame):
         
         self.tab_bar = TabBar(
             self.tab_frame,
-            tabs=["Play", "Actions", "Config", "Settings"],
+            tabs=["Play", "Automations", "Config", "Settings"],
             default_tab=None,
             command=self.switch_tab
         )
@@ -276,124 +275,136 @@ class SidebarWidget(ctk.CTkFrame):
 
         # (Divider removed — card containers provide visual separation)
 
-        # ── Toggles Section (Automation) ──
-        self.automation_frame = make_card(
-            self.main_body,
-            title="AUTOMATION",
-            padx=0,
-            pady=(0, SECTION_GAP),
-            collapsible=True,
-            start_collapsed=False
+        # ── Automations Tab Content (Scrollable) ──
+        self.automations_scroll = ctk.CTkScrollableFrame(
+            self.main_body, fg_color="transparent",
+            scrollbar_button_color=get_color("colors.text.disabled"),
+            scrollbar_button_hover_color=get_color("colors.text.muted"),
+            scrollbar_fg_color="transparent",
         )
-        
-        # Inject custom icon header frame into the card's header
-        self.icon_header_frame = ctk.CTkFrame(self.automation_frame._header, fg_color="transparent")
-        self.icon_header_frame.pack(side="right", padx=(0, INNER_GAP))
-        
-        # Bind the click events to the card's toggle controller so clicking icons collapses the card
-        def _bind_toggle(widget):
-            widget.configure(cursor="hand2")
-            widget.bind("<Button-1>", self.automation_frame._toggle_controller.toggle)
-            
-        _bind_toggle(self.icon_header_frame)
-        
-        self.hdr_icon_honor = ctk.CTkLabel(self.icon_header_frame, text="", width=16)
-        self.hdr_icon_auto_join = ctk.CTkLabel(self.icon_header_frame, text="", width=16)
-        self.hdr_icon_priority = ctk.CTkLabel(self.icon_header_frame, text="", width=16)
-        self.hdr_icon_accept = ctk.CTkLabel(self.icon_header_frame, text="", width=16)
-        self.hdr_icon_skip_stats = ctk.CTkLabel(self.icon_header_frame, text="", width=16)
-        self.hdr_icon_auto_runes = ctk.CTkLabel(self.icon_header_frame, text="", width=16)
-        
-        for w in (self.hdr_icon_honor, self.hdr_icon_auto_join, self.hdr_icon_priority, self.hdr_icon_accept, self.hdr_icon_skip_stats, self.hdr_icon_auto_runes):
-            _bind_toggle(w)
+        try:
+            self.automations_scroll._scrollbar.configure(width=6)
+        except Exception:
+            pass
+        apply_smooth_scroll(self.automations_scroll)
 
-        if getattr(self, "assets", None):
-            self.assets.get_icon_async("item", "3105", lambda img, l=self.hdr_icon_honor: l.configure(image=img) if l.winfo_exists() else None, size=(16, 16), widget=self.hdr_icon_honor)
-            self.assets.get_icon_async("item", "3109", lambda img, l=self.hdr_icon_auto_join: l.configure(image=img) if l.winfo_exists() else None, size=(16, 16), widget=self.hdr_icon_auto_join)
-            self.assets.get_icon_async("item", "2052", lambda img, l=self.hdr_icon_priority: l.configure(image=img) if l.winfo_exists() else None, size=(16, 16), widget=self.hdr_icon_priority)
-            self.assets.get_icon_async("item", "2420", lambda img, l=self.hdr_icon_accept: l.configure(image=img) if l.winfo_exists() else None, size=(16, 16), widget=self.hdr_icon_accept)
-            self.assets.get_icon_async("item", "3111", lambda img, l=self.hdr_icon_skip_stats: l.configure(image=img) if l.winfo_exists() else None, size=(16, 16), widget=self.hdr_icon_skip_stats)
-            self.assets.get_icon_async("item", "3340", lambda img, l=self.hdr_icon_auto_runes: l.configure(image=img) if l.winfo_exists() else None, size=(16, 16), widget=self.hdr_icon_auto_runes)
-        
+        # ── Master On/Off Switch ──
+        self.master_switch_frame = ctk.CTkFrame(
+            self.automations_scroll, fg_color=get_color("colors.background.card", "#1E2328"),
+            corner_radius=get_radius("md"), height=48
+        )
+        self.master_switch_frame.pack(fill="x", pady=(0, SECTION_GAP))
+        self.master_switch_frame.pack_propagate(False)
+
+        self.var_master = ctk.BooleanVar(value=True)
+        self._master_label = ctk.CTkLabel(
+            self.master_switch_frame, text="⚡ ALL ON",
+            font=get_font("title"),
+            text_color=get_color("colors.accent.gold", "#C8AA6E"),
+            anchor="w"
+        )
+        self._master_label.pack(side="left", padx=CARD_PAD)
+
+        self._master_toggle = LolToggle(
+            self.master_switch_frame, width=48, height=24,
+            variable=self.var_master, command=self._on_master_toggle,
+            bg_color=get_color("colors.background.card", "#1E2328")
+        )
+        self._master_toggle.pack(side="right", padx=CARD_PAD)
+
         TOGGLE_ROW_HEIGHT = 28
 
         from ui.components.toggle_row import ToggleRow  # type: ignore
+        from ui.components.automation_editor import AutomationEditor  # type: ignore
+
+        # Store all automation rows for master switch control
+        self._automation_rows = []
+        self._automation_saved_states = {}  # Saved states when master is turned off
 
         # Auto Accept
         self.var_accept = ctk.BooleanVar(value=self.config.get("auto_accept", True))
         self.row_accept = ToggleRow(
-            self.automation_frame, label_text="Auto Accept", variable=self.var_accept,
+            self.automations_scroll, label_text="Auto Accept", variable=self.var_accept,
             command=self._on_toggle_accept, tooltip_text="Automatically accepts match queue pops",
-            icon_item_id="2420", assets=self.assets, height=TOGGLE_ROW_HEIGHT
+            icon_item_id="2420", assets=self.assets, height=TOGGLE_ROW_HEIGHT,
+            on_edit=lambda: self._open_editor("auto_accept")
         )
         self.row_accept.pack(fill="x", padx=CARD_PAD, pady=(0, INNER_GAP))
+        self._automation_rows.append(("auto_accept", self.var_accept, self.row_accept))
 
         # ARAM Picker
         self.var_priority = ctk.BooleanVar(value=self.config.get("priority_picker", {}).get("enabled", False))
         self.row_priority = ToggleRow(
-            self.automation_frame, label_text="ARAM Picker", variable=self.var_priority,
+            self.automations_scroll, label_text="ARAM Picker", variable=self.var_priority,
             command=self._on_toggle_priority, tooltip_text="Attempts to pick highest available champion from ARAM List",
-            icon_item_id="2052", assets=self.assets, height=TOGGLE_ROW_HEIGHT
+            icon_item_id="2052", assets=self.assets, height=TOGGLE_ROW_HEIGHT,
+            on_edit=lambda: self._open_editor("priority_picker")
         )
         self.row_priority.pack(fill="x", padx=CARD_PAD, pady=(0, INNER_GAP))
+        self._automation_rows.append(("priority_picker", self.var_priority, self.row_priority))
         
         # Friend Auto-Join
         self.var_auto_join = ctk.BooleanVar(value=self.config.get("auto_join_enabled", True))
         self.row_auto_join = ToggleRow(
-            self.automation_frame, label_text="Friend Auto-Join", variable=self.var_auto_join,
+            self.automations_scroll, label_text="Friend Auto-Join", variable=self.var_auto_join,
             command=self._on_toggle_auto_join, tooltip_text="Automatically joins available friend lobbies",
-            icon_item_id="3109", assets=self.assets, height=TOGGLE_ROW_HEIGHT
+            icon_item_id="3109", assets=self.assets, height=TOGGLE_ROW_HEIGHT,
+            on_edit=lambda: self._open_editor("auto_join")
         )
         self.row_auto_join.pack(fill="x", padx=CARD_PAD, pady=(0, INNER_GAP))
+        self._automation_rows.append(("auto_join", self.var_auto_join, self.row_auto_join))
 
         # Auto Honor
         self.var_auto_honor = ctk.BooleanVar(value=self.config.get("auto_honor_enabled", False))
         self.row_auto_honor = ToggleRow(
-            self.automation_frame, label_text="Auto Honor", variable=self.var_auto_honor,
+            self.automations_scroll, label_text="Auto Honor", variable=self.var_auto_honor,
             command=self._on_toggle_auto_honor, tooltip_text="Automatically honors a teammate after each game",
-            icon_item_id="3105", assets=self.assets, height=TOGGLE_ROW_HEIGHT
+            icon_item_id="3105", assets=self.assets, height=TOGGLE_ROW_HEIGHT,
+            on_edit=lambda: self._open_editor("auto_honor")
         )
         self.row_auto_honor.pack(fill="x", padx=CARD_PAD, pady=(0, INNER_GAP))
+        self._automation_rows.append(("auto_honor", self.var_auto_honor, self.row_auto_honor))
 
         # Skip Stats
         self.var_skip_stats = ctk.BooleanVar(value=self.config.get("skip_stats_enabled", True))
         self.row_skip_stats = ToggleRow(
-            self.automation_frame, label_text="Skip Stats", variable=self.var_skip_stats,
+            self.automations_scroll, label_text="Skip Stats", variable=self.var_skip_stats,
             command=self._on_toggle_skip_stats, tooltip_text="Automatically skips the post-match stats screen",
             icon_item_id="3111", assets=self.assets, height=TOGGLE_ROW_HEIGHT
         )
         self.row_skip_stats.pack(fill="x", padx=CARD_PAD, pady=(0, INNER_GAP))
+        self._automation_rows.append(("skip_stats", self.var_skip_stats, self.row_skip_stats))
 
         # Auto Runes
         self.var_auto_runes = ctk.BooleanVar(value=self.config.get("auto_runes_enabled", False))
         self.row_auto_runes = ToggleRow(
-            self.automation_frame, label_text="Auto Runes", variable=self.var_auto_runes,
+            self.automations_scroll, label_text="Auto Runes", variable=self.var_auto_runes,
             command=self._on_toggle_auto_runes, tooltip_text="Automatically equips recommended runes for your champion",
             icon_item_id="3340", assets=self.assets, height=TOGGLE_ROW_HEIGHT
         )
         self.row_auto_runes.pack(fill="x", padx=CARD_PAD, pady=(0, INNER_GAP))
+        self._automation_rows.append(("auto_runes", self.var_auto_runes, self.row_auto_runes))
 
         # Auto-Add Played Champions
         self.var_auto_add_played = ctk.BooleanVar(value=self.config.get("aram_auto_add_played", False))
         self.row_auto_add_played = ToggleRow(
-            self.automation_frame, label_text="Auto-Add Played", variable=self.var_auto_add_played,
+            self.automations_scroll, label_text="Auto-Add Played", variable=self.var_auto_add_played,
             command=self._on_toggle_auto_add_played, tooltip_text="Automatically adds champions you play to the ARAM List after each game",
             icon_item_id="2052", assets=self.assets, height=TOGGLE_ROW_HEIGHT
         )
-        self.row_auto_add_played.pack(fill="x", padx=CARD_PAD, pady=(0, CARD_PAD))
+        self.row_auto_add_played.pack(fill="x", padx=CARD_PAD, pady=(0, INNER_GAP))
+        self._automation_rows.append(("auto_add_played", self.var_auto_add_played, self.row_auto_add_played))
 
-        # Honor Strategy
-        row_honor = ctk.CTkFrame(self.automation_frame, fg_color="transparent")
-        row_honor.pack(fill="x", padx=CARD_PAD, pady=(INNER_GAP, 0))
-        ctk.CTkLabel(row_honor, text="Honor Strategy", font=get_font("body"), text_color=get_color("colors.text.primary")).pack(side="top", anchor="w")
-        
-        self.honor_var = ctk.StringVar(value=self.config.get("honor_strategy", "random"))
-        def _on_honor_change(val):
-            self.config.set("honor_strategy", val)
-        self.honor_select = ctk.CTkOptionMenu(row_honor, values=["random", "best_kda", "mvp"], variable=self.honor_var, font=get_font("body", "bold"), fg_color=get_color("colors.background.app"), button_color="#1A2733", button_hover_color=get_color("colors.state.hover"), dropdown_fg_color=get_color("colors.background.app"), dropdown_hover_color=get_color("colors.state.hover"), dropdown_font=get_font("caption"), command=_on_honor_change, height=24)
-        self.honor_select.pack(fill="x", pady=(4,0))
-
-        self._update_auto_header()
+        # Auto-Ban (Cockblocker) — uses Yuumi's champion icon
+        self.var_auto_ban = ctk.BooleanVar(value=self.config.get("auto_ban_enabled", False))
+        self.row_auto_ban = ToggleRow(
+            self.automations_scroll, label_text="Auto-Ban", variable=self.var_auto_ban,
+            command=self._on_toggle_auto_ban, tooltip_text="Automatically bans configured champions in champ select",
+            icon_champion_id="350", icon_type="champion", assets=self.assets, height=TOGGLE_ROW_HEIGHT,
+            on_edit=lambda: self._open_editor("auto_ban")
+        )
+        self.row_auto_ban.pack(fill="x", padx=CARD_PAD, pady=(0, CARD_PAD))
+        self._automation_rows.append(("auto_ban", self.var_auto_ban, self.row_auto_ban))
         
         # (Divider removed — card containers provide visual separation)
 
@@ -991,44 +1002,80 @@ class SidebarWidget(ctk.CTkFrame):
 
     def _on_toggle_accept(self):
         self.config.set("auto_accept", self.var_accept.get())
-        self._update_auto_header()
 
     def _on_toggle_priority(self):
         cfg = self.config.get("priority_picker", {})
         cfg["enabled"] = self.var_priority.get()
         self.config.set("priority_picker", cfg)
-        self._update_auto_header()
 
     def _on_toggle_auto_join(self):
         self.config.set("auto_join_enabled", self.var_auto_join.get())
-        self._update_auto_header()
 
     def _on_toggle_auto_honor(self):
         self.config.set("auto_honor_enabled", self.var_auto_honor.get())
-        self._update_auto_header()
 
     def _on_toggle_skip_stats(self):
         self.config.set("skip_stats_enabled", self.var_skip_stats.get())
-        self._update_auto_header()
         
     def _on_toggle_auto_runes(self):
         self.config.set("auto_runes_enabled", self.var_auto_runes.get())
-        self._update_auto_header()
 
     def _on_toggle_auto_add_played(self):
         self.config.set("aram_auto_add_played", self.var_auto_add_played.get())
-        self._update_auto_header()
 
-    def _on_mass_invite(self):
-        engine = getattr(self.master, "automation", None)
-        if engine:
-            def _invite():
-                engine.mass_invite_friends()
-            threading.Thread(target=_invite, daemon=True).start()
+    def _on_toggle_auto_ban(self):
+        self.config.set("auto_ban_enabled", self.var_auto_ban.get())
+
+    def _on_master_toggle(self):
+        """Master switch: toggle all automations on or off."""
+        master_on = self.var_master.get()
+        
+        if master_on:
+            # Restore saved states
+            self._master_label.configure(
+                text="⚡ ALL ON",
+                text_color=get_color("colors.accent.gold", "#C8AA6E")
+            )
+            for key, var, row in self._automation_rows:
+                saved = self._automation_saved_states.get(key)
+                if saved is not None:
+                    var.set(saved)
+                row.set_enabled(True)
+                row._update_icon_state()
+            # Persist each restored state
+            self._on_toggle_accept()
+            self._on_toggle_priority()
+            self._on_toggle_auto_join()
+            self._on_toggle_auto_honor()
+            self._on_toggle_skip_stats()
+            self._on_toggle_auto_runes()
+            self._on_toggle_auto_add_played()
+            self._on_toggle_auto_ban()
         else:
-            self.update_action_log("Automation engine not available.")
+            # Save current states then turn all off
+            self._master_label.configure(
+                text="ALL OFF",
+                text_color=get_color("colors.text.muted", "#5B5A56")
+            )
+            for key, var, row in self._automation_rows:
+                self._automation_saved_states[key] = var.get()
+                var.set(False)
+                row.set_enabled(False)
+                row._update_icon_state()
+            # Persist the off states
+            self._on_toggle_accept()
+            self._on_toggle_priority()
+            self._on_toggle_auto_join()
+            self._on_toggle_auto_honor()
+            self._on_toggle_skip_stats()
+            self._on_toggle_auto_runes()
+            self._on_toggle_auto_add_played()
+            self._on_toggle_auto_ban()
 
-
+    def _open_editor(self, automation_key):
+        """Open the automation parameter editor popup."""
+        from ui.components.automation_editor import AutomationEditor
+        AutomationEditor(self, automation_key, self.config, assets=self.assets)
 
     def _on_status_submit(self, event=None):
         text = self.entry_status.get().strip()
@@ -1050,39 +1097,8 @@ class SidebarWidget(ctk.CTkFrame):
                 theme="success",
                 duration=2000
             )
-        except Exception as e:
+        except Exception:
             pass
-
-    def _update_auto_header(self):
-        if getattr(self, "var_accept", None) and getattr(self, "hdr_icon_accept", None):
-            if self.var_accept.get(): self.hdr_icon_accept.pack(side="left", padx=2)
-            else: self.hdr_icon_accept.pack_forget()
-
-        if getattr(self, "var_priority", None) and getattr(self, "hdr_icon_priority", None):
-            if self.var_priority.get(): self.hdr_icon_priority.pack(side="left", padx=2)
-            else: self.hdr_icon_priority.pack_forget()
-            
-        if getattr(self, "var_auto_join", None) and getattr(self, "hdr_icon_auto_join", None):
-            if self.var_auto_join.get(): self.hdr_icon_auto_join.pack(side="left", padx=2)
-            else: self.hdr_icon_auto_join.pack_forget()
-            
-        if getattr(self, "var_auto_honor", None) and getattr(self, "hdr_icon_honor", None):
-            if self.var_auto_honor.get(): self.hdr_icon_honor.pack(side="left", padx=2)
-            else: self.hdr_icon_honor.pack_forget()
-
-        if getattr(self, "var_skip_stats", None) and getattr(self, "hdr_icon_skip_stats", None):
-            if self.var_skip_stats.get(): self.hdr_icon_skip_stats.pack(side="left", padx=2)
-            else: self.hdr_icon_skip_stats.pack_forget()
-            
-        if getattr(self, "var_auto_runes", None) and getattr(self, "hdr_icon_auto_runes", None):
-            if self.var_auto_runes.get(): self.hdr_icon_auto_runes.pack(side="left", padx=2)
-            else: self.hdr_icon_auto_runes.pack_forget()
-        
-        arrow = "▼" if getattr(self, "auto_expanded", True) else "▶"
-        base_text = f"{arrow}  AUTOMATION"
-        
-        if getattr(self, "lbl_auto_section", None):
-            self.lbl_auto_section.configure(text=base_text)
 
     def update_action_log(self, text):
         """Updates the action log."""

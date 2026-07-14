@@ -10,7 +10,8 @@
             "wallet": {
                 "be": 0,
                 "rp": 0
-            }
+            },
+            "is_default": false
         }
     ],
     "active_account_idx": 0

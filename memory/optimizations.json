@@ -1,0 +1,10 @@
+[
+  {
+    "optimization": "LCU process detection speed-up",
+    "details": "Scan psutil processes in a single pass looking for priority executable, caching PID to avoid repeated scans"
+  },
+  {
+    "optimization": "Consolidated Riot & League process scan pass",
+    "details": "Instead of LCUClient and RiotClientAPI scanning the active process list independently, they now fetch information from client_detector.py which runs a single pass and caches it with a 2-second TTL."
+  }
+]

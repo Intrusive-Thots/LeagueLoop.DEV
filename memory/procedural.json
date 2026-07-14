@@ -1,0 +1,49 @@
+[
+  {
+    "pattern_name": "LCU Process Scan & Connection",
+    "steps": [
+      "Scan running processes using psutil for LeagueClientUx.exe or LeagueClient.exe",
+      "Read command-line arguments to extract app-port and remoting-auth-token",
+      "If access denied, locate process directory and read physical lockfile",
+      "Construct basic auth header using credentials and target 127.0.0.1 with port",
+      "Start background WebSocket for OnJsonApiEvent updates"
+    ]
+  },
+  {
+    "pattern_name": "Automated Account Sign-In",
+    "steps": [
+      "Retrieve encrypted password_enc from accounts.json",
+      "Decrypt password using win32crypt.CryptUnprotectData",
+      "Locate local Riot Client port and token",
+      "Send PUT request to /rso-authenticator/v1/authentication with credentials",
+      "If response is multifactor, prompt the user; if success, launch League of Legends"
+    ]
+  },
+  {
+    "pattern_name": "Dynamic winrate scraping and caching",
+    "steps": [
+      "Map current Queue ID to mode baseline dataset",
+      "Spawn thread using ThreadPoolExecutor to scrape Lolalytics page in background",
+      "If bs4 available, parse champion names and win rate cells, updating memory cache",
+      "Return scraped win rate if cached and timestamp < 30 minutes; otherwise return mode baseline"
+    ]
+  },
+  {
+    "pattern_name": "Unified Riot & League Client Detection",
+    "steps": [
+      "Read RiotClientInstalls.json to resolve installation directories for Riot Client and League of Legends",
+      "Perform a single process list iteration to find PIDs and cmdline arguments for both clients",
+      "If cmdline arguments are not accessible, read the lockfile directly from the resolved install directories",
+      "Cache the results using a 2-second TTL to prevent performance overhead on multiple queries"
+    ]
+  },
+  {
+    "pattern_name": "Default Account Autoload Configuration",
+    "steps": [
+      "Add default flag 'is_default' to accounts.json profile schema",
+      "Create set_default_account(idx) and get_default_account_index() API in AccountManager",
+      "Integrate default selection checkbox in accounts UI add/edit form",
+      "Check connection state at application startup; if disconnected and a default account exists, trigger client launch and login macros automatically after a 2-second delay"
+    ]
+  }
+]

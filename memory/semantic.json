@@ -1,0 +1,30 @@
+[
+  {
+    "concept": "LeagueLoop Architecture",
+    "learned_knowledge": "LeagueLoop is a CustomTkinter borderless overlay that docks to the League of Legends client. It uses a background AutomationEngine running a WebSocket connection to LCU (League Client Update) APIs to automate actions like auto-accept, champion pick/ban, runes/skins configuration, and end-of-game honors."
+  },
+  {
+    "concept": "Riot Client Local API & DPAPI Encryption",
+    "learned_knowledge": "RiotClientServices.exe runs a local API on 127.0.0.1. Port and token are extracted from active process cmdline args or lockfile at %LocalAppData%/Riot Games/Riot Client/Config/lockfile. It accepts PUT requests on /rso-authenticator/v1/authentication for login. Credentials in accounts.json are encrypted using Windows Data Protection API (DPAPI) CryptProtectData to tie them to the local Windows profile."
+  },
+  {
+    "concept": "StatsScraper Datasets & Scraping Fallback",
+    "learned_knowledge": "StatsScraper holds static hardcoded databases of champion win rates for different game modes (ARAM, Ranked, Arena, Quickplay). In the background, it runs a ThreadPoolExecutor to scrape live win rates from Lolalytics using BeautifulSoup, caching results for 30 minutes. If bs4 is missing or scraping fails, it falls back to the local database."
+  },
+  {
+    "concept": "Holographic Toast System",
+    "learned_knowledge": "ToastManager handles non-blocking notifications container (pinned bottom-right). Single Toast instances have hover highlights and can spawn physics-based canvas particles (confetti) that drift down using gravity and air resistance simulations."
+  },
+  {
+    "concept": "Unified Client Detection & Path Resolution",
+    "learned_knowledge": "Unifies Riot Client and League Client scanning into a single, cached process scan pass. Reads RiotClientInstalls.json to resolve installation directories. If process cmdline is restricted by access permissions, reads the physical lockfiles directly from the resolved installation directories."
+  },
+  {
+    "concept": "Default Account & Startup Autoload",
+    "learned_knowledge": "Allows selecting a default account stored in accounts.json. On application startup, if no client connection is detected, the application automatically launches the Riot Client using the resolved installation executable path and automates the RSO login macro for the default account."
+  },
+  {
+    "concept": "Placeholder Account Auto-Population",
+    "learned_knowledge": "When an active client session is detected, if the account's Riot ID or tagline is not found in the local database, a placeholder account entry is created with an empty password. In the UI, this displays as a warning button (⚠️ Update) which links directly to the credentials edit form."
+  }
+]

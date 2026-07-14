@@ -20,6 +20,7 @@ from websockets.sync.client import connect as ws_connect
 from websockets.exceptions import ConnectionClosed
 
 from utils.logger import Logger
+from utils.client_detector import scan_clients
 
 
 class LCUClient:
@@ -79,63 +80,19 @@ class LCUClient:
                 return True
 
             try:
-                # Look for League Client processes
-                client_procs = [
-                    "LeagueClientUx.exe",
-                    "LeagueClient.exe",
-                ]
-                process = None
+                # Check connection throttling
+                now = time.time()
+                if now - self._last_scan_time < self._backoff:
+                    return False
+                self._last_scan_time = now
 
-                # Bolt Optimization: Iterate process list ONCE instead of up to 3 times.
-                # Prioritize LeagueClientUx.exe, but scan for others in the same pass.
-                found_procs = {}
-                highest_priority = client_procs[0]
-
-                scan_start = time.time()
-
-                if self._client_pid is not None:
-                    try:
-                        p = psutil.Process(self._client_pid)
-                        if p.is_running() and p.name() in client_procs:
-                            process = p
-                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                        self._client_pid = None
-
-                if not process:
-                    # Throttle heavily using Exponential Backoff (3.1)
-                    now = time.time()
-                    if now - self._last_scan_time < self._backoff:
-                        return False
-                    self._last_scan_time = now
-
-                    # Optimization: retrieve only 'name' to avoid system-wide I/O performance regression
-                    for p in psutil.process_iter(attrs=['name']):
-                        try:
-                            name = p.info['name']
-                            if name in client_procs:
-                                found_procs[name] = p
-                                # Optimization: Stop early if we found the best one
-                                if name == highest_priority:
-                                    break
-                        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, KeyError):
-                            continue
-
-                    scan_duration = time.time() - scan_start
-                    if scan_duration > 0.5:
-                        Logger.debug("LCU", f"Process scan took {scan_duration:.3f}s")
-
-                    # Select best match based on priority
-                    for p_name in client_procs:
-                        if p_name in found_procs:
-                            process = found_procs[p_name]
-                            break
-
-                    if process:
-                        self._client_pid = process.pid
-
-                if not process:
+                # Use unified client scanner
+                clients = scan_clients()
+                league_info = clients.get("league", {})
+                
+                if not league_info.get("connected"):
                     if not silent:
-                        Logger.debug("LCU", "Client not found. Ensure League of Legends is running.")
+                        Logger.debug("LCU", "League Client not found or not connected.")
                     if self.is_connected:
                         from core.events import EventBus
                         EventBus.emit("lcu_connected", False)
@@ -143,43 +100,9 @@ class LCUClient:
                     self._backoff = min(self._backoff * 1.5, 30.0)
                     return False
 
-                # Try to read lockfile from process info
-                try:
-                    cmdline = process.cmdline()
-                    for arg in cmdline:
-                        if arg.startswith("--app-port="):
-                            self.port = arg.split("=", 1)[1]
-                        elif arg.startswith("--remoting-auth-token="):
-                            self.auth_token = arg.split("=", 1)[1]
-                        if self.port and self.auth_token:
-                            break
-                except psutil.AccessDenied:
-                    # Access Denied on cmdline is common if running non-admin. Fallback to lockfile.
-                    Logger.warning("LCU", "Access denied reading process cmdline. Falling back to lockfile.")
-                except Exception as e:  # pylint: disable=broad-exception-caught
-                    Logger.debug("LCU", f"Could not read process cmdline: {e}. Falling back to lockfile.")
-
-                # Fallback: Check for 'lockfile' in the process directory if we miss port/token
-                if not self.port or not self.auth_token:
-                    try:
-                        exe_path = process.exe()
-                        proc_dir = os.path.dirname(exe_path)
-                        lockfile_path = os.path.join(proc_dir, "lockfile")
-
-                        if os.path.exists(lockfile_path):
-                            Logger.debug("LCU", f"Reading lockfile at {lockfile_path}")
-                            with open(lockfile_path, "r", encoding="utf-8") as f:
-                                data = f.read().split(":")
-                                if len(data) >= 4:
-                                    self.port = data[2]
-                                    self.auth_token = data[3]
-                                    Logger.debug(
-                                        "LCU", f"Extracted from lockfile: Port {self.port}"
-                                    )
-                    except psutil.AccessDenied:
-                        Logger.warning("LCU", "Access denied reading lockfile.")
-                    except Exception as e:  # pylint: disable=broad-exception-caught
-                        Logger.debug("LCU", f"Lockfile check failed: {e}")
+                self.port = league_info["port"]
+                self.auth_token = league_info["token"]
+                self._client_pid = league_info["pid"]
 
                 if self.port and self.auth_token:
                     auth_str = f"riot:{self.auth_token}"
@@ -198,15 +121,9 @@ class LCUClient:
                     Logger.debug("LCU", f"Connected to port {self.port}")
                     return True
 
-                Logger.debug("LCU", "Found process but could not extract credentials.")
+                Logger.debug("LCU", "Found League Client but credentials are missing.")
 
-            except psutil.AccessDenied as e:
-                Logger.warning("LCU", f"Access Denied during connection check (requires Admin?): {e}")
-                if self.is_connected:
-                    from core.events import EventBus
-                    EventBus.emit("lcu_connected", False)
-                self.is_connected = False
-            except Exception as e:  # pylint: disable=broad-exception-caught
+            except Exception as e:
                 Logger.error("LCU", f"Connection Error: {e}")
                 if self.is_connected:
                     from core.events import EventBus

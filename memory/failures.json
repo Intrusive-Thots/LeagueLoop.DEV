@@ -1,0 +1,7 @@
+[
+  {
+    "failure": "win32crypt DLL load failure",
+    "pattern": "ImportError: DLL load failed while importing win32crypt: The specified module could not be found.",
+    "fix": "Run python using the global 'py' launcher instead of '.venv\\Scripts\\python.exe', or add the virtual environment's site-packages/pywin32_system32 folder to the environment PATH so that the pywin32 DLLs can be located by python."
+  }
+]

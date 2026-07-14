@@ -195,6 +195,28 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         threading.Thread(target=self.connection_loop, daemon=True).start()
         threading.Thread(target=self.docking_loop, daemon=True).start()
         
+        # Auto-load default account on startup
+        self.after(2000, self._auto_load_default_account)
+        
+    def _auto_load_default_account(self):
+        """Auto-load default account if client is not connected on startup."""
+        if not self.lcu.is_connected:
+            default_idx = self.account_manager.get_default_account_index()
+            if default_idx >= 0:
+                Logger.info("SYS", "Auto-loading default account...")
+                if hasattr(self, "sidebar") and self.sidebar.winfo_exists():
+                    self.sidebar.update_action_log("Auto-loading default account...")
+                
+                # Check if Riot Client is already running; if not, launch it first!
+                if not self.account_manager.riot_client.is_riot_client_running():
+                    self._hotkey_launch_client()
+                    
+                # Schedule login_account after a brief pause to let client launch
+                self.after(3000, lambda: self.account_manager.login_account(
+                    default_idx,
+                    log_func=self.sidebar.update_action_log if hasattr(self, "sidebar") else None
+                ))
+
     def _on_close_request(self):
         """Intercept X button. Hide to tray if enabled, otherwise quit."""
         if self.config.get("run_in_tray", True):
@@ -352,13 +374,24 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
             if path_override and os.path.exists(path_override):
                 candidates = [path_override]
             else:
-                candidates = [
+                candidates = []
+                try:
+                    from utils.client_detector import resolve_installation_paths
+                    _, rc_install_dir = resolve_installation_paths()
+                    if rc_install_dir:
+                        rc_path = os.path.join(rc_install_dir, "RiotClientServices.exe")
+                        if os.path.exists(rc_path):
+                            candidates.append(rc_path)
+                except Exception as e:
+                    Logger.debug("SYS", f"Failed resolving installs: {e}")
+                
+                candidates.extend([
                     r"C:\Riot Games\Riot Client\RiotClientServices.exe",
                     r"D:\Riot Games\Riot Client\RiotClientServices.exe",
                     r"E:\Riot Games\Riot Client\RiotClientServices.exe",
                     r"C:\Program Files (x86)\Riot Games\Riot Client\RiotClientServices.exe",
                     os.path.join(os.environ.get("USERPROFILE", ""), r"Riot Games\Riot Client\RiotClientServices.exe")
-                ]
+                ])
                 
                 # Proactive Registry Lookup
                 try:
@@ -371,6 +404,8 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                             if val and "RiotClientServices.exe" in val:
                                 path = val.split('"')[1] if '"' in val else val.split(' ')[0]
                                 if os.path.exists(path): candidates.insert(0, path)
+                        except FileNotFoundError:
+                            pass
                         except Exception as e:
                             from utils.logger import Logger  # type: ignore
                             Logger.debug("SYS", f"Registry iteration failed: {e}")

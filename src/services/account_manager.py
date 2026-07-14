@@ -35,6 +35,7 @@ import win32crypt
 
 from utils.logger import Logger
 from utils.path_utils import get_data_dir
+from utils.client_detector import scan_clients
 
 # Storage location — intentionally separate from config.json
 _DATA_DIR = get_data_dir()
@@ -59,42 +60,14 @@ class RiotClientAPI:
 
     def connect(self) -> bool:
         """Find and connect to the Riot Client's local API."""
-        # Method 1: Read from process command-line args
         try:
-            for proc in psutil.process_iter(attrs=["name"]):
-                try:
-                    name = proc.info.get("name", "")
-                    if name == "RiotClientServices.exe":
-                        cmdline = proc.cmdline()
-                        port = None
-                        token = None
-                        for arg in cmdline:
-                            if arg.startswith("--app-port="):
-                                port = arg.split("=", 1)[1]
-                            elif arg.startswith("--remoting-auth-token="):
-                                token = arg.split("=", 1)[1]
-                        if port and token:
-                            self._set_credentials(port, token)
-                            return True
-                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                    continue
+            clients = scan_clients()
+            riot_info = clients.get("riot", {})
+            if riot_info.get("connected"):
+                self._set_credentials(riot_info["port"], riot_info["token"])
+                return True
         except Exception as e:
-            Logger.debug("RiotClientAPI", f"Process scan failed: {e}")
-
-        # Method 2: Read from lockfile
-        for lockfile_path in _RC_LOCKFILE_PATHS:
-            if os.path.exists(lockfile_path):
-                try:
-                    with open(lockfile_path, "r", encoding="utf-8") as f:
-                        data = f.read().strip().split(":")
-                    if len(data) >= 4:
-                        port = data[2]
-                        token = data[3]
-                        self._set_credentials(port, token)
-                        return True
-                except Exception as e:
-                    Logger.debug("RiotClientAPI", f"Lockfile read failed: {e}")
-
+            Logger.debug("RiotClientAPI", f"Connection scan failed: {e}")
         self.is_connected = False
         return False
 
@@ -248,10 +221,8 @@ class RiotClientAPI:
     def is_riot_client_running(self) -> bool:
         """Check if the Riot Client process is running."""
         try:
-            for proc in psutil.process_iter(attrs=["name"]):
-                name = proc.info.get("name", "")
-                if name in ("RiotClientServices.exe", "RiotClientUx.exe"):
-                    return True
+            clients = scan_clients()
+            return clients.get("riot", {}).get("pid") is not None
         except Exception as e:
             Logger.debug("RiotClientAPI", f"Process scan error: {e}")
         return False
@@ -279,6 +250,7 @@ class AccountManager:
             if "wallet" not in acct: acct["wallet"] = {"be": 0, "rp": 0}
             if "region" not in acct: acct["region"] = "NA1"
             if "last_used" not in acct: acct["last_used"] = None
+            if "is_default" not in acct: acct["is_default"] = False
             dirty = True
         if dirty:
             self._save()
@@ -371,6 +343,21 @@ class AccountManager:
     def get_active_index(self) -> int:
         return self._active_idx
 
+    def get_default_account_index(self) -> int:
+        """Return the index of the default account, or -1 if none is set."""
+        with self._lock:
+            for i, acct in enumerate(self._accounts):
+                if acct.get("is_default", False):
+                    return i
+        return -1
+
+    def set_default_account(self, idx: int):
+        """Set the account at the given index as default and clear default on others."""
+        with self._lock:
+            for i, acct in enumerate(self._accounts):
+                acct["is_default"] = (i == idx)
+            self._save()
+
     def add_account(self, label: str, username: str, password: str, tagline: str = "", region: str = "NA1") -> int:
         """Add a new account. Returns the index of the new account.
         
@@ -389,7 +376,8 @@ class AccountManager:
                 "tagline": tagline.strip(),
                 "region": region.strip(),
                 "last_used": None,
-                "wallet": {"be": 0, "rp": 0}
+                "wallet": {"be": 0, "rp": 0},
+                "is_default": False
             }
             self._accounts.append(account)
             idx = len(self._accounts) - 1
@@ -397,7 +385,7 @@ class AccountManager:
             return idx
 
     def edit_account(self, idx: int, label: str = None, username: str = None,
-                     password: str = None, tagline: str = None, region: str = None):
+                     password: str = None, tagline: str = None, region: str = None, is_default: bool = None):
         """Update fields of an existing account. Only non-None fields are changed."""
         with self._lock:
             if not (0 <= idx < len(self._accounts)):
@@ -413,6 +401,12 @@ class AccountManager:
                 acct["tagline"] = tagline.strip()
             if region is not None:
                 acct["region"] = region.strip()
+            if is_default is not None:
+                if is_default:
+                    for i, a in enumerate(self._accounts):
+                        a["is_default"] = (i == idx)
+                else:
+                    acct["is_default"] = False
             self._save()
 
     def delete_account(self, idx: int):
@@ -510,11 +504,35 @@ class AccountManager:
                     if riot_id and self._active_idx >= 0:
                         acct = self._accounts[self._active_idx]
                         if not acct.get("tagline"):
-                            gn = acct_info.get("game_name", "")
-                            tl = acct_info.get("tag_line", "")
-                            if gn and tl:
-                                acct["tagline"] = f"{gn}#{tl}"
-                                self._save()
+                             gn = acct_info.get("game_name", "")
+                             tl = acct_info.get("tag_line", "")
+                             if gn and tl:
+                                 acct["tagline"] = f"{gn}#{tl}"
+                                 self._save()
+
+                    # Auto-add previously logged-in account if not found in list
+                    if self._active_idx == -1 and riot_id:
+                        gn = acct_info.get("game_name", "")
+                        tl = acct_info.get("tag_line", "")
+                        label = f"{gn}#{tl}" if gn and tl else (gn or "Previously Logged In")
+                        
+                        exists = False
+                        for acct in self._accounts:
+                            if acct.get("tagline", "").lower() == label.lower():
+                                exists = True
+                                break
+                        
+                        if not exists:
+                            self.add_account(
+                                label=label,
+                                username=riot_login or "Update Username",
+                                password="",  # Placeholder empty password
+                                tagline=label,
+                                region="NA1"
+                            )
+                            self._active_idx = len(self._accounts) - 1
+                            self._save()
+                            Logger.info("AccountManager", f"Auto-populated previously logged-in account: {label}")
 
         except Exception as e:
             Logger.debug("AccountManager", f"Riot Client detection failed: {e}")
@@ -529,18 +547,46 @@ class AccountManager:
                     tag_line = (data.get("tagLine") or "").lower()
                     riot_id = f"{game_name}#{tag_line}" if game_name and tag_line else game_name
 
+                    found_idx = -1
                     for i, acct in enumerate(self._accounts):
                         acct_tag = acct.get("tagline", "").lower()
                         acct_label = acct.get("label", "").lower()
                         # Match Riot ID
                         if acct_tag and riot_id and acct_tag == riot_id:
-                            self._active_idx = i
-                            self._save()
-                            return i
+                            found_idx = i
+                            break
                         if acct_label and game_name and acct_label == game_name:
-                            self._active_idx = i
+                            found_idx = i
+                            break
+
+                    if found_idx >= 0:
+                        self._active_idx = found_idx
+                        self._save()
+                        return found_idx
+                    elif riot_id:
+                        # Discovered LCU account is not in our list — auto-populate
+                        gn = data.get("gameName", "")
+                        tl = data.get("tagLine", "")
+                        label = f"{gn}#{tl}" if gn and tl else (gn or "Previously Logged In")
+                        
+                        exists = False
+                        for acct in self._accounts:
+                            if acct.get("tagline", "").lower() == label.lower():
+                                exists = True
+                                break
+                        
+                        if not exists:
+                            self.add_account(
+                                label=label,
+                                username="Update Username",
+                                password="",
+                                tagline=label,
+                                region="NA1"
+                            )
+                            self._active_idx = len(self._accounts) - 1
                             self._save()
-                            return i
+                            Logger.info("AccountManager", f"Auto-populated previously logged-in LCU account: {label}")
+
             except Exception as e:
                 Logger.debug("AccountManager", f"LCU detection failed: {e}")
 

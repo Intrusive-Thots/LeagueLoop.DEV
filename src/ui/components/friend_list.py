@@ -143,6 +143,10 @@ class FriendPriorityList(ctk.CTkFrame):
         if self.lcu:
             self.after(500, self._initial_fetch)
 
+        # Periodic refresh to catch missed WebSocket events
+        self._refresh_interval_ms = 30000  # 30 seconds
+        self._start_periodic_refresh()
+
     # ─────────── Config Persistence ───────────
 
     def _save_priority_list(self):
@@ -222,13 +226,12 @@ class FriendPriorityList(ctk.CTkFrame):
         if isinstance(friends_data, list):
             self._process_friends(friends_data)
         elif isinstance(friends_data, dict):
-            # WAMP pushes delta updates as dicts. Refetch whole list for 100% accuracy.
-            self._friends_data = []
-            self._initial_fetch()
+            # WAMP delta update — merge into cached data instead of discarding
+            self._merge_friend_delta(friends_data)
 
-    def _initial_fetch(self):
-        """One-shot fallback fetch for initial load before WS pushes data."""
-        if self._friends_data:  # Already got data from WS
+    def _initial_fetch(self, force=False):
+        """Fetch full friends list. Called on init and periodically for reliability."""
+        if not force and self._friends_data:  # Already got data from WS on initial load
             return
         try:
             if not self.winfo_exists() or not self.lcu:
@@ -246,6 +249,43 @@ class FriendPriorityList(ctk.CTkFrame):
                 Logger.debug("FriendList", f"Initial fetch error: {e}")
 
         threading.Thread(target=task, daemon=True).start()
+
+    def _merge_friend_delta(self, delta):
+        """Merge a single friend delta update into cached data."""
+        if not isinstance(delta, dict):
+            return
+        puuid = delta.get("puuid") or delta.get("id")
+        if not puuid:
+            # Can't identify friend — fall back to full refresh
+            self._initial_fetch(force=True)
+            return
+        
+        # Find and update existing entry, or append
+        updated = False
+        for i, f in enumerate(self._friends_data):
+            if f.get("puuid") == puuid or f.get("id") == puuid:
+                self._friends_data[i].update(delta)
+                updated = True
+                break
+        
+        if not updated:
+            self._friends_data.append(delta)
+        
+        # Re-sort and re-render
+        self._process_friends(self._friends_data)
+
+    def _start_periodic_refresh(self):
+        """Periodically re-fetch the full friends list to stay accurate."""
+        def _tick():
+            try:
+                if not self.winfo_exists():
+                    return
+            except Exception:
+                return
+            self._initial_fetch(force=True)
+            self.after(self._refresh_interval_ms, _tick)
+        
+        self.after(self._refresh_interval_ms, _tick)
 
     def _process_friends(self, friends):
         """Sort + render friends data (callable from any thread)."""

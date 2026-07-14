@@ -488,8 +488,17 @@ class AssetManager:
         url = ""
         
         if type_ == "champion":
-            fname = f"champion_{key}.png"
-            url = f"https://ddragon.leagueoflegends.com/cdn/{self.ddragon_ver}/img/champion/{key}.png"
+            # DDragon uses champion name keys (e.g. "Yuumi"), not numeric IDs (e.g. "350")
+            # or display names with spaces (e.g. "Twisted Fate" -> "TwistedFate")
+            resolved_key = key
+            if key.isdigit() and hasattr(self, "id_to_key"):
+                resolved_key = self.id_to_key.get(int(key), key)
+            elif hasattr(self, "name_to_id") and hasattr(self, "id_to_key"):
+                cid = self.name_to_id.get(key.lower())
+                if cid is not None:
+                    resolved_key = self.id_to_key.get(cid, key)
+            fname = f"champion_{resolved_key}.png"
+            url = f"https://ddragon.leagueoflegends.com/cdn/{self.ddragon_ver}/img/champion/{resolved_key}.png"
         elif type_ == "item":
             fname = f"item_{key}.png"
             url = f"https://ddragon.leagueoflegends.com/cdn/{self.ddragon_ver}/img/item/{key}.png"

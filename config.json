@@ -50,7 +50,7 @@
     "hotkey_find_match": "menu",
     "hotkey_compact_mode": "ctrl+shift+m",
     "priority_picker": {
-        "enabled": true,
+        "enabled": false,
         "list": [
             "Fizz",
             "Singed",

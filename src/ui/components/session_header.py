@@ -98,14 +98,24 @@ class SessionHeader(ctk.CTkFrame):
         menu = tk.Menu(self, tearoff=0, bg="#1A2332", fg="#F0E6D2",
                        activebackground="#C8AA6E", activeforeground="#0A1428",
                        font=("Segoe UI", 9))
-        modes = [
-            "Quickplay", "Draft Pick", "Ranked Solo/Duo", "Ranked Flex",
-            "ARAM", "ARAM Mayhem", "Arena", "Arena 3v6", "Brawl", "URF", "ARURF",
-            "Nexus Blitz", "One For All", "Ultimate Spellbook",
-            "TFT Normal", "TFT Ranked"
+        
+        groups = [
+            ("Ranked", ["Ranked Solo/Duo", "Ranked Flex"]),
+            ("Casual", ["Quickplay", "Draft Pick"]),
+            ("ARAM", ["ARAM", "ARAM Mayhem"]),
+            ("Arena", ["Arena", "Arena 3v6"]),
+            ("Rotating", ["Brawl", "URF", "ARURF", "Nexus Blitz", "One For All", "Ultimate Spellbook"]),
+            ("TFT", ["TFT Normal", "TFT Ranked"]),
         ]
-        for mode in modes:
-            menu.add_command(label=mode, command=lambda m=mode: self.on_mode_change(m))
+        
+        for i, (group_name, modes) in enumerate(groups):
+            if i > 0:
+                menu.add_separator()
+            menu.add_command(label=f"── {group_name} ──", state="disabled",
+                             font=("Segoe UI", 8, "bold"), foreground="#785A28")
+            for mode in modes:
+                menu.add_command(label=f"   {mode}", command=lambda m=mode: self.on_mode_change(m))
+        
         menu.tk_popup(event.x_root, event.y_root)
 
     def update_power_state(self, is_active: bool):
