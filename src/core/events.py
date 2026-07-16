@@ -1,3 +1,9 @@
+"""
+Events Module
+Provides the central _EventBus singleton for decoupled, app-wide pub/sub communication
+between services, tasks, and CustomTkinter/PySide6 UI views.
+"""
+
 class _EventBus:
     """
     Central event bus for cross-component communication.

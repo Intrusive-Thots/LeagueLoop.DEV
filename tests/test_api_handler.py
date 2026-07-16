@@ -41,7 +41,7 @@ class TestLCUClient(unittest.TestCase):
         self.client.is_connected = True
         self.client.port = "1234"
         self.client.base_url = "https://127.0.0.1:1234"
-        self.client.headers = {"Authorization": "Basic xxx"}
+        self.client.headers = {"Authorization": "Basic token"}
 
         mock_response = MagicMock()
         mock_response.status_code = 200

@@ -1,3 +1,8 @@
+"""
+Settings Panel Component
+Provides the settings scrollable frame interface displaying configuration inputs for LeagueLoop.
+"""
+
 import customtkinter as ctk  # type: ignore
 from ui.components.factory import make_card, make_button, get_color, get_font, get_radius
 from ui.components.lol_toggle import LolToggle  # type: ignore

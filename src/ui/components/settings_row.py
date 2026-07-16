@@ -1,3 +1,8 @@
+"""
+Settings Row Widget
+Provides reusable composite rows representing settings options (e.g. switch toggles, sliders, lists).
+"""
+
 import customtkinter as ctk  # type: ignore
 from ui.components.factory import get_color, get_font
 from ui.components.lol_toggle import LolToggle  # type: ignore

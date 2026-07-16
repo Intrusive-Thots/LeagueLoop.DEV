@@ -1,10 +1,10 @@
 {
   "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
-  "scan_time_sec": 0.041,
-  "total_files": 156,
+  "scan_time_sec": 0.04,
+  "total_files": 162,
   "ext_counts": {
     ".json": 20,
-    ".py": 114,
+    ".py": 120,
     ".md": 16,
     ".html": 1,
     ".js": 3,
@@ -76,12 +76,12 @@
       "lines": 290
     },
     {
-      "path": "src\\ui\\components\\toast.py",
+      "path": "src\\ui\\components\\draggable_list.py",
       "lines": 268
     },
     {
-      "path": "src\\ui\\components\\draggable_list.py",
-      "lines": 263
+      "path": "src\\ui\\components\\toast.py",
+      "lines": 268
     },
     {
       "path": "src\\utils\\client_detector.py",
@@ -100,19 +100,19 @@
       "lines": 215
     },
     {
+      "path": "src\\ui\\components\\toggle_row.py",
+      "lines": 209
+    },
+    {
       "path": "src\\ui\\pages\\settings_page.py",
       "lines": 206
     },
     {
-      "path": "src\\ui\\components\\toggle_row.py",
-      "lines": 204
+      "path": "src\\ui\\components\\settings_panel.py",
+      "lines": 197
     },
     {
       "path": "src\\services\\theme_service.py",
-      "lines": 192
-    },
-    {
-      "path": "src\\ui\\components\\settings_panel.py",
       "lines": 192
     },
     {
@@ -128,6 +128,10 @@
       "lines": 152
     },
     {
+      "path": "src\\ui\\components\\settings_row.py",
+      "lines": 148
+    },
+    {
       "path": "src\\ui\\components\\game_tools\\draft_tool.py",
       "lines": 148
     },
@@ -137,10 +141,6 @@
     },
     {
       "path": "src\\ui\\components\\champion_input.py",
-      "lines": 143
-    },
-    {
-      "path": "src\\ui\\components\\settings_row.py",
       "lines": 143
     },
     {
@@ -240,6 +240,14 @@
       "lines": 68
     },
     {
+      "path": "tests\\test_champion_service.py",
+      "lines": 67
+    },
+    {
+      "path": "tests\\test_notification_service.py",
+      "lines": 66
+    },
+    {
       "path": "src\\core\\constants.py",
       "lines": 65
     },
@@ -284,12 +292,28 @@
       "lines": 59
     },
     {
+      "path": "tests\\test_draft_service.py",
+      "lines": 55
+    },
+    {
+      "path": "tests\\test_window_service.py",
+      "lines": 54
+    },
+    {
       "path": "scratch\\update_aram_picker.py",
+      "lines": 53
+    },
+    {
+      "path": "tests\\test_settings_service.py",
       "lines": 53
     },
     {
       "path": "src\\ui\\components\\feedback\\status_badge.py",
       "lines": 50
+    },
+    {
+      "path": "src\\core\\events.py",
+      "lines": 49
     },
     {
       "path": "src\\ui\\components\\base.py",
@@ -304,8 +328,8 @@
       "lines": 48
     },
     {
-      "path": "src\\core\\events.py",
-      "lines": 43
+      "path": "tests\\test_theme_service.py",
+      "lines": 42
     },
     {
       "path": "src\\ui\\components\\buttons\\icon_button.py",
@@ -468,14 +492,8 @@
       "lines": 0
     }
   ],
-  "total_py_lines": 18157,
+  "total_py_lines": 18520,
   "todos": [
-    {
-      "file": "tests\\test_api_handler.py",
-      "line": 44,
-      "marker": "XXX",
-      "text": "self.client.headers = {\"Authorization\": \"Basic xxx\"}"
-    },
     {
       "file": "tests\\test_poro_snacks.py",
       "line": 39,
@@ -501,7 +519,6 @@
     "scratch\\test_uia.py",
     "scratch\\test_wm_char.py",
     "scratch\\update_aram_picker.py",
-    "src\\core\\events.py",
     "src\\core\\state.py",
     "src\\core\\state_manager.py",
     "src\\services\\discord_rpc.py",
@@ -511,14 +528,10 @@
     "src\\ui\\components\\about_page.py",
     "src\\ui\\components\\champion_input.py",
     "src\\ui\\components\\color_utils.py",
-    "src\\ui\\components\\draggable_list.py",
     "src\\ui\\components\\hotkey_recorder.py",
     "src\\ui\\components\\lol_toggle.py",
     "src\\ui\\components\\mini_player.py",
     "src\\ui\\components\\session_header.py",
-    "src\\ui\\components\\settings_panel.py",
-    "src\\ui\\components\\settings_row.py",
-    "src\\ui\\components\\toggle_row.py",
     "src\\ui\\components\\tray_icon.py",
     "src\\ui\\components\\__init__.py",
     "src\\ui\\components\\buttons\\icon_button.py",
@@ -543,16 +556,22 @@
     "tests\\test_arena_3v6.py",
     "tests\\test_asset_manager.py",
     "tests\\test_automation.py",
+    "tests\\test_champion_service.py",
     "tests\\test_client_detector.py",
     "tests\\test_color_utils.py",
     "tests\\test_config_manager.py",
+    "tests\\test_draft_service.py",
     "tests\\test_friend_service.py",
     "tests\\test_league_service.py",
     "tests\\test_logger.py",
+    "tests\\test_notification_service.py",
     "tests\\test_path_utils.py",
     "tests\\test_poro_snacks.py",
+    "tests\\test_settings_service.py",
     "tests\\test_stats_scraper.py",
+    "tests\\test_theme_service.py",
     "tests\\test_token_loader.py",
-    "tests\\test_ui_kwargs.py"
+    "tests\\test_ui_kwargs.py",
+    "tests\\test_window_service.py"
   ]
 }

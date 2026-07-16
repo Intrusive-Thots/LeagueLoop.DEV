@@ -1,3 +1,8 @@
+"""
+Draggable List Component
+Provides a customtkinter-based scrollable frame list widget with drag-and-drop reordering functionality.
+"""
+
 import tkinter as tk
 import customtkinter as ctk
 from ui.components.factory import get_color, get_font

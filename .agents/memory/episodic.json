@@ -643,5 +643,99 @@
       "todos": 2
     },
     "timestamp": "2026-07-16T15:34:02.567445+00:00"
+  },
+  {
+    "task": "self_improving_loop",
+    "run_number": 7,
+    "duration_seconds": 1.503,
+    "test_results": {
+      "passed": 119,
+      "failed": 4,
+      "errors": 0,
+      "total": 123
+    },
+    "findings_count": {
+      "high": 6,
+      "medium": 61,
+      "low": 76
+    },
+    "regressions": [
+      "+4 new test failures (was 0, now 4)"
+    ],
+    "repo_stats": {
+      "total_files": 162,
+      "total_py_lines": 18492,
+      "todos": 2
+    },
+    "timestamp": "2026-07-16T19:58:27.557617+00:00"
+  },
+  {
+    "task": "self_improving_loop",
+    "run_number": 8,
+    "duration_seconds": 1.285,
+    "test_results": {
+      "passed": 123,
+      "failed": 0,
+      "errors": 0,
+      "total": 123
+    },
+    "findings_count": {
+      "high": 6,
+      "medium": 61,
+      "low": 76
+    },
+    "regressions": [],
+    "repo_stats": {
+      "total_files": 162,
+      "total_py_lines": 18494,
+      "todos": 2
+    },
+    "timestamp": "2026-07-16T19:59:18.266609+00:00"
+  },
+  {
+    "task": "self_improving_loop",
+    "run_number": 9,
+    "duration_seconds": 1.269,
+    "test_results": {
+      "passed": 123,
+      "failed": 0,
+      "errors": 0,
+      "total": 123
+    },
+    "findings_count": {
+      "high": 6,
+      "medium": 60,
+      "low": 75
+    },
+    "regressions": [],
+    "repo_stats": {
+      "total_files": 162,
+      "total_py_lines": 18500,
+      "todos": 1
+    },
+    "timestamp": "2026-07-16T19:59:59.551826+00:00"
+  },
+  {
+    "task": "self_improving_loop",
+    "run_number": 10,
+    "duration_seconds": 1.252,
+    "test_results": {
+      "passed": 123,
+      "failed": 0,
+      "errors": 0,
+      "total": 123
+    },
+    "findings_count": {
+      "high": 6,
+      "medium": 60,
+      "low": 71
+    },
+    "regressions": [],
+    "repo_stats": {
+      "total_files": 162,
+      "total_py_lines": 18520,
+      "todos": 1
+    },
+    "timestamp": "2026-07-16T20:01:08.874770+00:00"
   }
 ]

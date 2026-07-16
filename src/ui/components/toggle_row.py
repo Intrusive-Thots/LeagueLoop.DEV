@@ -1,3 +1,8 @@
+"""
+Toggle Row Component
+Provides reusable list and panel row components consisting of a label, toggle switch, and option icons.
+"""
+
 import customtkinter as ctk  # type: ignore
 from PIL import Image, ImageOps  # type: ignore
 from ui.components.factory import get_color, get_font
