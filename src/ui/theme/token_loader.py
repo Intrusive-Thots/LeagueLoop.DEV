@@ -94,4 +94,17 @@ class DesignTokens:
             return default
         return val
 
+    def get_shadow(self, name: str, default: str = "") -> str:
+        return self.get("shadows", name, default=default)
+
+    def get_animation(self, name: str, default: dict = None) -> dict:
+        return self.get("animations", name, default=default or {})
+
+    def get_gradient(self, name: str, default: list = None) -> list:
+        return self.get("gradients", name, default=default or [])
+
+    def spacing(self, multiplier: int = 1) -> int:
+        """Returns 8px based spacing value (e.g. spacing(2) -> 16px)."""
+        return 8 * multiplier
+
 TOKENS = DesignTokens()

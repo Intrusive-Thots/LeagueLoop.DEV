@@ -57,6 +57,14 @@
             "#00000000"
         ]
     },
+    "shadows": {
+        "small": "0 2px 4px rgba(0,0,0,0.4)",
+        "medium": "0 4px 8px rgba(0,0,0,0.45)",
+        "large": "0 8px 16px rgba(0,0,0,0.5)",
+        "floating_window": "0 12px 32px rgba(0,0,0,0.6)",
+        "popup": "0 6px 20px rgba(0,0,0,0.5)",
+        "context_menu": "0 4px 12px rgba(0,0,0,0.5)"
+    },
     "elevation": {
         "level0": {
             "shadow": "none",
@@ -80,11 +88,11 @@
         }
     },
     "radius": {
-        "xs": 2,
-        "sm": 3,
-        "md": 6,
-        "lg": 14,
-        "xl": 18,
+        "xs": 4,
+        "sm": 8,
+        "md": 12,
+        "lg": 16,
+        "xl": 16,
         "pill": 999
     },
     "spacing": {
@@ -93,7 +101,8 @@
         "md": 12,
         "lg": 16,
         "xl": 24,
-        "xxl": 32
+        "xxl": 32,
+        "xxxl": 48
     },
     "borders": {
         "subtle": "1px solid #1E2328",
@@ -129,30 +138,43 @@
         }
     },
     "animations": {
-        "hover": {
-            "scale": 1.02,
-            "duration": 120
-        },
-        "press": {
-            "scale": 0.97,
-            "duration": 80
-        },
-        "float": {
-            "offset": 4,
-            "duration": 200
-        },
         "fade": {
-            "duration": 160
-        },
-        "card_float": {
-            "lift_px": 2,
             "duration": 150,
-            "border_glow": "#C8A45D40"
+            "easing": "cubic-bezier(0.4, 0, 0.2, 1)"
         },
-        "focus_ring": {
-            "color": "#3FA9F5",
-            "width": 2,
-            "duration": 100
+        "slide": {
+            "duration": 200,
+            "offset_px": 20,
+            "easing": "cubic-bezier(0, 0, 0.2, 1)"
+        },
+        "scale": {
+            "duration": 150,
+            "start_scale": 0.95,
+            "easing": "cubic-bezier(0.34, 1.56, 0.64, 1)"
+        },
+        "hover_lift": {
+            "duration": 120,
+            "lift_px": 2,
+            "scale": 1.02,
+            "easing": "ease-out"
+        },
+        "button_press": {
+            "duration": 80,
+            "scale": 0.97,
+            "easing": "ease-in-out"
+        },
+        "window_open": {
+            "duration": 250,
+            "easing": "cubic-bezier(0.16, 1, 0.3, 1)"
+        },
+        "tooltip": {
+            "duration": 100,
+            "delay_ms": 300,
+            "easing": "ease-out"
+        },
+        "notification": {
+            "duration": 300,
+            "easing": "cubic-bezier(0.175, 0.885, 0.32, 1.275)"
         }
     },
     "icons": {
@@ -161,12 +183,47 @@
         "glow_intensity": 0.6
     },
     "typography": {
-        "font_primary": "Spiegel",
+        "font_primary": "Segoe UI",
         "font_secondary": "Beaufort for LoL",
         "weights": {
-            "regular": 400,
-            "medium": 500,
-            "bold": 700
+            "regular": "normal",
+            "medium": "normal",
+            "bold": "bold"
+        },
+        "h1": {
+            "family": "Beaufort for LoL",
+            "size": 24,
+            "weight": "bold"
+        },
+        "h2": {
+            "family": "Beaufort for LoL",
+            "size": 18,
+            "weight": "bold"
+        },
+        "h3": {
+            "family": "Beaufort for LoL",
+            "size": 14,
+            "weight": "bold"
+        },
+        "body": {
+            "family": "Segoe UI",
+            "size": 12,
+            "weight": "normal"
+        },
+        "caption": {
+            "family": "Segoe UI",
+            "size": 11,
+            "weight": "normal"
+        },
+        "small": {
+            "family": "Segoe UI",
+            "size": 10,
+            "weight": "normal"
+        },
+        "numeric": {
+            "family": "Segoe UI",
+            "size": 13,
+            "weight": "bold"
         }
     }
 }

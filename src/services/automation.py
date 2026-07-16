@@ -74,6 +74,8 @@ class AutomationEngine:
         self._runes_equipped: bool = False
         self._last_champ_id: int = 0
         self._cached_search_state: Optional[dict] = None
+        self._party_puuids = set()
+        self._honored_puuids = set()
         # Item #40: Consecutive error killswitch
         self._consecutive_errors: int = 0
         self._first_error_time: float = 0.0
@@ -316,6 +318,8 @@ class AutomationEngine:
                 if l_req and l_req.status_code == 200:
                     lobby_data = l_req.json()
                     self.current_queue_id = lobby_data.get("gameConfig", {}).get("queueId")
+                    members = lobby_data.get("members", [])
+                    self._party_puuids = {m.get("puuid") for m in members if m.get("puuid")}
                     # Emit so UI components stay in sync even on startup
                     try:
                         from core.events import EventBus
@@ -1027,9 +1031,17 @@ class AutomationEngine:
 
     # ── End Of Game ──
     def _handle_end_of_game(self, phase):
+        if not hasattr(self, "_party_puuids"):
+            self._party_puuids = set()
+        if not hasattr(self, "_honored_puuids"):
+            self._honored_puuids = set()
+        if not hasattr(self, "_honor_attempts"):
+            self._honor_attempts = 0
+
         if phase not in ["PreEndOfGame", "EndOfGame"]:
             self._honor_handled = False
             self._honor_attempts = 0
+            self._honored_puuids = set()
             return
 
         auto_honor = self.config.get("auto_honor_enabled", False)
@@ -1079,59 +1091,99 @@ class AutomationEngine:
                 self._honor_handled = True
                 return
 
-            friend_teammates = []
-            friends_res = self.lcu.request("GET", "/lol-chat/v1/friends")
-            if friends_res and friends_res.status_code == 200:
-                friend_puuids = {f.get("puuid", "") for f in friends_res.json()}
-                friend_teammates = [p for p in teammates if p.get("puuid", "") in friend_puuids]
-            
-            candidates = friend_teammates if friend_teammates else teammates
-
             if auto_honor:
                 strategy = self.config.get("honor_strategy", "random")
-                if strategy == "best_kda":
-                    def kda(p):
-                        """Calculates KDA."""
-                        k = p.get("stats", {}).get("CHAMPIONS_KILLED", 0)
-                        a = p.get("stats", {}).get("ASSISTS", 0)
-                        d = max(p.get("stats", {}).get("NUM_DEATHS", 1), 1)
-                        return (k + a) / d
-                    target = max(candidates, key=kda)
-                elif strategy == "mvp":
-                    def score(p):
-                        """Calculates score."""
-                        s = p.get("stats", {})
-                        return s.get("CHAMPIONS_KILLED", 0) + s.get("ASSISTS", 0)
-                    target = max(candidates, key=score)
-                else:
-                    target = random.choice(candidates)
+                honor_party_first = self.config.get("honor_party_first", False)
 
-                summoner_id = target.get("summonerId", 0)
-                puuid = target.get("puuid", "")
-                honor_body = {
-                    "gameId": game_id,
-                    "honorCategory": "HEART",
-                    "honorType": "HEART",
-                    "summonerId": summoner_id,
-                    "puuid": puuid
-                }
-                res = self.lcu.request("POST", "/lol-honor-v2/v1/honor-player", honor_body)
-                name = target.get("summonerName", "teammate")
-                if res and res.status_code in [200, 204]:
-                    self._log(f"Honored {name} ({strategy})")
-                    self._honor_handled = True
-                elif res and res.status_code == 409:
-                    self._log(f"Honor already submitted or invalid: {name}")
-                    self._honor_handled = True
-                elif res and res.status_code == 429:
-                    self._log(f"Honor rate limited (429). Retrying next tick...")
+                # Determine candidates based on party presence and setting
+                party_teammates = [p for p in teammates if p.get("puuid", "") in self._party_puuids]
+
+                def kda(p):
+                    k = p.get("stats", {}).get("CHAMPIONS_KILLED", 0)
+                    a = p.get("stats", {}).get("ASSISTS", 0)
+                    d = max(p.get("stats", {}).get("NUM_DEATHS", 1), 1)
+                    return (k + a) / d
+
+                def score(p):
+                    s = p.get("stats", {})
+                    return s.get("CHAMPIONS_KILLED", 0) + s.get("ASSISTS", 0)
+
+                # Helper to sort candidates
+                def sort_players(players_list):
+                    if strategy == "best_kda":
+                        return sorted(players_list, key=kda, reverse=True)
+                    elif strategy == "mvp":
+                        return sorted(players_list, key=score, reverse=True)
+                    else:
+                        lst = list(players_list)
+                        random.shuffle(lst)
+                        return lst
+
+                # Define targets to attempt to honor
+                if honor_party_first and party_teammates:
+                    # We want to honor all party teammates
+                    targets = sort_players(party_teammates)
                 else:
-                    Logger.debug("Auto", f"Honor request returned {res.status_code if res else 'None'}. Full target: {name}")
-                    self._honor_attempts = getattr(self, "_honor_attempts", 0) + 1
-                    if self._honor_attempts >= 3:
-                        self._log(f"Honor failed after 3 attempts. Giving up.")
+                    # Fallback to single candidate selection (friends first)
+                    friend_teammates = []
+                    friends_res = self.lcu.request("GET", "/lol-chat/v1/friends")
+                    if friends_res and friends_res.status_code == 200:
+                        friend_puuids = {f.get("puuid", "") for f in friends_res.json()}
+                        friend_teammates = [p for p in teammates if p.get("puuid", "") in friend_puuids]
+                    
+                    candidates = friend_teammates if friend_teammates else teammates
+                    if not candidates:
                         self._honor_handled = True
-                        self._honor_attempts = 0
+                        return
+                    
+                    sorted_cand = sort_players(candidates)
+                    targets = [sorted_cand[0]] # Just one teammate
+
+                # Iterate targets and submit honors
+                rate_limited = False
+                completed_all = True
+
+                for target in targets:
+                    puuid = target.get("puuid", "")
+                    if not puuid or puuid in self._honored_puuids:
+                        continue
+
+                    summoner_id = target.get("summonerId", 0)
+                    honor_body = {
+                        "gameId": game_id,
+                        "honorCategory": "HEART",
+                        "honorType": "HEART",
+                        "summonerId": summoner_id,
+                        "puuid": puuid
+                    }
+                    res = self.lcu.request("POST", "/lol-honor-v2/v1/honor-player", honor_body)
+                    name = target.get("summonerName", "teammate")
+
+                    if res and res.status_code in [200, 204]:
+                        self._log(f"Honored {name} ({strategy})")
+                        self._honored_puuids.add(puuid)
+                    elif res and res.status_code == 409:
+                        self._log(f"Honor already submitted or invalid: {name}")
+                        self._honored_puuids.add(puuid)
+                    elif res and res.status_code == 429:
+                        self._log(f"Honor rate limited (429). Retrying next tick...")
+                        rate_limited = True
+                        completed_all = False
+                        break
+                    else:
+                        Logger.debug("Auto", f"Honor request returned {res.status_code if res else 'None'}. Full target: {name}")
+                        self._honor_attempts = getattr(self, "_honor_attempts", 0) + 1
+                        if self._honor_attempts >= 3:
+                            self._log(f"Honor failed after 3 attempts. Giving up.")
+                            self._honor_attempts = 0
+                            self._honor_handled = True
+                        else:
+                            completed_all = False
+                            break
+
+                if completed_all or rate_limited:
+                    if not rate_limited:
+                        self._honor_handled = True
             else:
                 self._honor_handled = True
 

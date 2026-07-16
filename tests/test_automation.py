@@ -669,6 +669,90 @@ class TestAutomationEngineAutoHonor(unittest.TestCase):
         self.assertTrue(engine._honor_handled)
         self.assertEqual(engine._honor_attempts, 0)
 
+    def test_auto_honor_party_priority_multiple(self):
+        engine = self._make_engine()
+        engine.config.get.side_effect = lambda key, default=False: {
+            "auto_honor_enabled": True,
+            "honor_strategy": "mvp",
+            "honor_party_first": True
+        }.get(key, default)
+
+        # Let's say we have party members: player-2, player-3
+        engine._party_puuids = {"player-2", "player-3"}
+
+        def mock_request(method, endpoint, *args, **kwargs):
+            mock = MagicMock()
+            mock.status_code = 200
+            if endpoint == "/lol-end-of-game/v1/eog-stats-block":
+                mock.json.return_value = {
+                    "gameId": 1234,
+                    "localPlayer": {"puuid": "player-1"},
+                    "teams": [
+                        {"isPlayerTeam": True, "players": [
+                            {"puuid": "player-1"},
+                            {"puuid": "player-2", "summonerId": 2, "stats": {"CHAMPIONS_KILLED": 1, "ASSISTS": 2}}, # MVP score 3
+                            {"puuid": "player-3", "summonerId": 3, "stats": {"CHAMPIONS_KILLED": 5, "ASSISTS": 5}}, # MVP score 10 (Best)
+                            {"puuid": "player-4", "summonerId": 4, "stats": {"CHAMPIONS_KILLED": 12, "ASSISTS": 12}} # MVP score 24 (Not in party)
+                        ]}
+                    ]
+                }
+            elif endpoint == "/lol-chat/v1/friends":
+                mock.json.return_value = []
+            return mock
+
+        engine.lcu.request.side_effect = mock_request
+        engine._handle_end_of_game("EndOfGame")
+
+        # It should honor both party members in order of MVP score: first player-3, then player-2.
+        # It should NOT honor player-4 (the high score non-party member).
+        calls = engine.lcu.request.call_args_list
+        post_calls = [c for c in calls if c[0][0] == "POST" and c[0][1] == "/lol-honor-v2/v1/honor-player"]
+        self.assertEqual(len(post_calls), 2)
+        # 1st call should be player-3 (mvp score 10)
+        self.assertEqual(post_calls[0][0][2]["puuid"], "player-3")
+        # 2nd call should be player-2 (mvp score 3)
+        self.assertEqual(post_calls[1][0][2]["puuid"], "player-2")
+        self.assertTrue(engine._honor_handled)
+
+    def test_auto_honor_party_priority_fallback(self):
+        engine = self._make_engine()
+        engine.config.get.side_effect = lambda key, default=False: {
+            "auto_honor_enabled": True,
+            "honor_strategy": "best_kda",
+            "honor_party_first": True
+        }.get(key, default)
+
+        # No party members present or not match
+        engine._party_puuids = {"player-99"}
+
+        def mock_request(method, endpoint, *args, **kwargs):
+            mock = MagicMock()
+            mock.status_code = 200
+            if endpoint == "/lol-end-of-game/v1/eog-stats-block":
+                mock.json.return_value = {
+                    "gameId": 1234,
+                    "localPlayer": {"puuid": "player-1"},
+                    "teams": [
+                        {"isPlayerTeam": True, "players": [
+                            {"puuid": "player-1"},
+                            {"puuid": "player-2", "summonerId": 2, "stats": {"CHAMPIONS_KILLED": 1, "ASSISTS": 1, "NUM_DEATHS": 2}}, # KDA: 1.0
+                            {"puuid": "player-3", "summonerId": 3, "stats": {"CHAMPIONS_KILLED": 5, "ASSISTS": 5, "NUM_DEATHS": 1}}  # KDA: 10.0 (Best)
+                        ]}
+                    ]
+                }
+            elif endpoint == "/lol-chat/v1/friends":
+                mock.json.return_value = []
+            return mock
+
+        engine.lcu.request.side_effect = mock_request
+        engine._handle_end_of_game("EndOfGame")
+
+        # Fallback to single honor of player-3
+        calls = engine.lcu.request.call_args_list
+        post_calls = [c for c in calls if c[0][0] == "POST" and c[0][1] == "/lol-honor-v2/v1/honor-player"]
+        self.assertEqual(len(post_calls), 1)
+        self.assertEqual(post_calls[0][0][2]["puuid"], "player-3")
+        self.assertTrue(engine._honor_handled)
 
 
 class TestAutomationEngineDraftAssistantCoverage(unittest.TestCase):

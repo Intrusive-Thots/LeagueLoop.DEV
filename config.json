@@ -39,7 +39,7 @@
     "ban_BOTTOM_1": "",
     "ban_BOTTOM_2": "",
     "ban_BOTTOM_3": "",
-    "ban_UTILITY_1": "",
+    "ban_UTILITY_1": "MissFortune",
     "ban_UTILITY_2": "",
     "ban_UTILITY_3": "",
     "always_on_top": true,
@@ -50,28 +50,28 @@
     "hotkey_find_match": "menu",
     "hotkey_compact_mode": "ctrl+shift+m",
     "priority_picker": {
-        "enabled": false,
+        "enabled": true,
         "list": [
-            "Fizz",
+            "TwistedFate",
             "Singed",
             "Amumu",
-            "TwistedFate",
+            "Karthus",
             "Brand",
             "AurelionSol",
+            "Fizz",
             "Shaco",
-            "Karthus",
             "Fiddlesticks",
             "Sion",
             "Velkoz",
-            "Zyra",
+            "Draven",
             "Mordekaiser",
             "Tryndamere",
             "Malzahar",
             "Ziggs",
+            "Zyra",
             "Lillia",
             "Leona",
             "Swain",
-            "Draven",
             "Nautilus",
             "Taric",
             "Nunu",
@@ -135,7 +135,7 @@
     "aram_auto_add_played": true,
     "hotkey_omnibar": "alt+,",
     "aram_mode": "ARAM Mayhem",
-    "auto_join_enabled": true,
+    "auto_join_enabled": false,
     "auto_honor_enabled": true,
     "auto_join_list": [
         {
@@ -159,5 +159,8 @@
             "enabled": true
         }
     ],
-    "auto_join_vip_only": false
+    "auto_join_vip_only": false,
+    "auto_ban_enabled": false,
+    "honor_strategy": "random",
+    "vip_invites_only": false
 }

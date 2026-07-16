@@ -3,6 +3,7 @@ Holographic Toasts - Delightful Notification System
 Provides non-intrusive, animated feedback for background actions.
 """
 from utils.logger import Logger
+from core.events import EventBus
 import customtkinter as ctk
 from .factory import get_color, get_font, get_radius, parse_border
 from .color_utils import lighten_color
@@ -235,6 +236,7 @@ class ToastManager:
         self.container = ctk.CTkFrame(self.root, fg_color="transparent")
         # Position at bottom-right
         self.container.place(relx=0.98, rely=0.95, anchor="se")
+        EventBus.on("show_toast", self.show)
         
     def show(self, message, icon="✨", duration=3000, theme="primary", confetti=False):
         """Create and show a toast."""

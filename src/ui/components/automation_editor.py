@@ -178,6 +178,24 @@ class AutomationEditor(ctk.CTkToplevel):
             )
             radio.pack(anchor="w", pady=(SPACING_SM, 0))
 
+        # Checkbox for Honor Party Members First
+        self._add_section_label("Party Priority")
+        self._add_description("If enabled, honors players in your lobby party before choosing others.")
+        
+        party_first_val = self.config.get("honor_party_first", False)
+        self._party_first_var = ctk.BooleanVar(value=party_first_val)
+        
+        self.chk_party_first = ctk.CTkCheckBox(
+            self.body, text="Honor Party Members First",
+            variable=self._party_first_var,
+            font=get_font("body"),
+            text_color=get_color("colors.text.primary"),
+            fg_color=get_color("colors.accent.primary"),
+            hover_color=get_color("colors.state.hover"),
+            border_color=get_color("colors.text.muted"),
+        )
+        self.chk_party_first.pack(anchor="w", pady=(SPACING_MD, 0))
+
     def _build_auto_join(self):
         self._add_section_label("Auto-Join Settings")
         
@@ -267,6 +285,7 @@ class AutomationEditor(ctk.CTkToplevel):
 
         elif key == "auto_honor":
             self.config.set("honor_strategy", self._honor_var.get())
+            self.config.set("honor_party_first", self._party_first_var.get())
 
         elif key == "auto_join":
             self.config.set("vip_invites_only", self._vip_only_var.get())

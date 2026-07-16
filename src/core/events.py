@@ -26,6 +26,14 @@ class _EventBus:
     def invoke_thread_safe(self, widget, callback, *args):
         """Phase 5 Thread Safety: UI updates must run on the main thread."""
         # Using tk.after for now. During PySide6 migration, this will become QMetaObject.invokeMethod
+        if hasattr(widget, "winfo_toplevel"):
+            try:
+                root = widget.winfo_toplevel()
+                if root and hasattr(root, "after"):
+                    root.after(0, lambda: callback(*args))
+                    return
+            except Exception:
+                pass
         if hasattr(widget, "after"):
             widget.after(0, lambda: callback(*args))
         else:

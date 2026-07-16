@@ -30,6 +30,13 @@ from services.asset_manager import AssetManager, ConfigManager  # type: ignore
 from services.automation import AutomationEngine  # type: ignore
 from services.account_manager import AccountManager  # type: ignore
 from services.stats_scraper import StatsScraper  # type: ignore
+from services.settings_service import get_settings_service
+from services.league_service import get_league_service
+from services.friend_service import get_friend_service
+from services.champion_service import get_champion_service
+from services.draft_service import get_draft_service
+from services.window_service import get_window_service
+from services.notification_service import get_notification_service
 from utils.logger import Logger  # type: ignore
 from utils.path_utils import get_asset_path  # type: ignore
 from core.version import __version__  # type: ignore
@@ -40,7 +47,7 @@ from core.constants import (  # type: ignore
     GEOMETRY_THRESHOLD,
 )
 
-from ui.app_sidebar import SidebarWidget  # type: ignore
+from ui.sidebar.sidebar import SidebarWidget  # type: ignore
 from ui.components.factory import get_color, get_font, TOKENS  # type: ignore
 from ui.components.toast import ToastManager  # type: ignore
 from ui.ui_shared import CTkTooltip  # type: ignore
@@ -123,6 +130,16 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self.lcu = LCUClient()
         self.scraper = StatsScraper(mode=self.config.get("aram_mode", "ARAM"))
         
+        # Initialize Service Layer Singletons
+        self.settings_service = get_settings_service(self.config)
+        self.league_service = get_league_service(self.lcu)
+        self.friend_service = get_friend_service(self.settings_service, self.league_service)
+        self.champion_service = get_champion_service(self.assets, self.scraper)
+        self.draft_service = get_draft_service(self.league_service)
+        self.window_service = get_window_service(self.settings_service)
+        self.notification_service = get_notification_service()
+        self.window_service.start()
+        
         self.running = True
         self._manually_hidden = False
         self._stop_event = threading.Event()
@@ -193,7 +210,13 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self._local_ip, self._local_port = start_api_server(self, port=8337)
 
         threading.Thread(target=self.connection_loop, daemon=True).start()
-        threading.Thread(target=self.docking_loop, daemon=True).start()
+        
+        # Register CustomTkinter window with WindowService
+        self.window_service.register_window(
+            self.winfo_id(),
+            lambda x, y, w, h: self.after(0, lambda: self.geometry(f"{w}x{h}+{x}+{y}")),
+            self._handle_window_service_state
+        )
         
         # Auto-load default account on startup
         self.after(2000, self._auto_load_default_account)
@@ -216,6 +239,19 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                     default_idx,
                     log_func=self.sidebar.update_action_log if hasattr(self, "sidebar") else None
                 ))
+
+    def _handle_window_service_state(self, action):
+        """Callback from WindowService to change CTk window state."""
+        if action == "minimize":
+            self.after(0, lambda: self._handle_window_state("minimize"))
+            self._is_minimized_by_sync = True
+        elif action == "restore":
+            self.after(0, lambda: self._handle_window_state("restore"))
+            self._is_minimized_by_sync = False
+        elif action == "topmost_on":
+            self.after(0, lambda: self.attributes("-topmost", True))
+        elif action == "topmost_off":
+            self.after(0, lambda: self.attributes("-topmost", False))
 
     def _on_close_request(self):
         """Intercept X button. Hide to tray if enabled, otherwise quit."""
@@ -820,6 +856,14 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                 self.automation.stop()
         except Exception as e:
             Logger.debug("SYS", f"Engine stop error: {e}")
+
+        # 1.5 Stop WindowService
+        try:
+            if hasattr(self, 'window_service') and self.window_service:
+                self.window_service.unregister_window(self.winfo_id())
+                self.window_service.stop()
+        except Exception as e:
+            Logger.debug("SYS", f"WindowService stop error: {e}")
 
         # 2. Unhook keyboard hotkeys
         try:

@@ -23,6 +23,7 @@ class AccountsTool(ctk.CTkFrame):
         super().__init__(master, fg_color=get_color("colors.background.panel", "#0F1A24"), corner_radius=8, **kw)
         self.acct_mgr = account_manager
         self.lcu = lcu
+        self.root_app = self.winfo_toplevel()
 
         self._expanded = False
         self._adding = False
@@ -357,7 +358,7 @@ class AccountsTool(ctk.CTkFrame):
             try:
                 self.acct_mgr.detect_active_account()
                 if self.winfo_exists():
-                    self.after(0, self._render_accounts)
+                    self.root_app.after(0, self._render_accounts)
             finally:
                 self._detect_in_progress = False
         threading.Thread(target=_detect, daemon=True).start()

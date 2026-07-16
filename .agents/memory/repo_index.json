@@ -1,0 +1,548 @@
+{
+  "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
+  "scan_time_sec": 0.044,
+  "total_files": 154,
+  "ext_counts": {
+    ".json": 20,
+    ".py": 112,
+    ".md": 16,
+    ".html": 1,
+    ".js": 3,
+    ".css": 2
+  },
+  "python_modules": [
+    {
+      "path": "src\\services\\automation.py",
+      "lines": 1329
+    },
+    {
+      "path": "src\\ui\\components\\priority_grid.py",
+      "lines": 1204
+    },
+    {
+      "path": "src\\services\\account_manager.py",
+      "lines": 997
+    },
+    {
+      "path": "src\\core\\main.py",
+      "lines": 930
+    },
+    {
+      "path": "tests\\test_automation.py",
+      "lines": 887
+    },
+    {
+      "path": "src\\services\\local_api.py",
+      "lines": 837
+    },
+    {
+      "path": "src\\ui\\sidebar\\sidebar.py",
+      "lines": 714
+    },
+    {
+      "path": "src\\ui\\components\\game_tools\\accounts_tool.py",
+      "lines": 652
+    },
+    {
+      "path": "src\\services\\asset_manager.py",
+      "lines": 568
+    },
+    {
+      "path": "src\\ui\\components\\friend_list.py",
+      "lines": 490
+    },
+    {
+      "path": "src\\ui\\components\\factory.py",
+      "lines": 463
+    },
+    {
+      "path": "src\\ui\\components\\game_tools\\arena_tool.py",
+      "lines": 344
+    },
+    {
+      "path": "src\\services\\api_handler.py",
+      "lines": 340
+    },
+    {
+      "path": "src\\ui\\components\\automation_editor.py",
+      "lines": 316
+    },
+    {
+      "path": "src\\ui\\qt\\app_window.py",
+      "lines": 314
+    },
+    {
+      "path": "src\\services\\window_service.py",
+      "lines": 290
+    },
+    {
+      "path": "src\\ui\\components\\toast.py",
+      "lines": 268
+    },
+    {
+      "path": "src\\ui\\components\\draggable_list.py",
+      "lines": 263
+    },
+    {
+      "path": "src\\utils\\client_detector.py",
+      "lines": 230
+    },
+    {
+      "path": "src\\ui\\components\\hover.py",
+      "lines": 223
+    },
+    {
+      "path": "src\\services\\stats_scraper.py",
+      "lines": 219
+    },
+    {
+      "path": "src\\ui\\components\\hotkey_recorder.py",
+      "lines": 215
+    },
+    {
+      "path": "src\\ui\\pages\\settings_page.py",
+      "lines": 206
+    },
+    {
+      "path": "src\\ui\\components\\toggle_row.py",
+      "lines": 204
+    },
+    {
+      "path": "src\\services\\theme_service.py",
+      "lines": 192
+    },
+    {
+      "path": "src\\ui\\components\\settings_panel.py",
+      "lines": 192
+    },
+    {
+      "path": "src\\utils\\focus_states.py",
+      "lines": 169
+    },
+    {
+      "path": "src\\ui\\pages\\play_page.py",
+      "lines": 162
+    },
+    {
+      "path": "src\\tools\\kopied.py",
+      "lines": 152
+    },
+    {
+      "path": "src\\ui\\components\\game_tools\\draft_tool.py",
+      "lines": 148
+    },
+    {
+      "path": "src\\ui\\components\\about_page.py",
+      "lines": 145
+    },
+    {
+      "path": "src\\ui\\components\\champion_input.py",
+      "lines": 143
+    },
+    {
+      "path": "src\\ui\\components\\settings_row.py",
+      "lines": 143
+    },
+    {
+      "path": "src\\ui\\pages\\automations_page.py",
+      "lines": 140
+    },
+    {
+      "path": "src\\ui\\components\\session_header.py",
+      "lines": 138
+    },
+    {
+      "path": "src\\utils\\acrylic_blur.py",
+      "lines": 132
+    },
+    {
+      "path": "src\\services\\friend_service.py",
+      "lines": 129
+    },
+    {
+      "path": "src\\ui\\components\\tooltip.py",
+      "lines": 118
+    },
+    {
+      "path": "src\\utils\\logger.py",
+      "lines": 116
+    },
+    {
+      "path": "tests\\test_logger.py",
+      "lines": 116
+    },
+    {
+      "path": "src\\ui\\theme\\token_loader.py",
+      "lines": 110
+    },
+    {
+      "path": "src\\ui\\components\\cards\\card.py",
+      "lines": 106
+    },
+    {
+      "path": "src\\ui\\components\\tray_icon.py",
+      "lines": 100
+    },
+    {
+      "path": "src\\services\\league_service.py",
+      "lines": 98
+    },
+    {
+      "path": "tests\\test_account_manager.py",
+      "lines": 97
+    },
+    {
+      "path": "tests\\test_arena_3v6.py",
+      "lines": 95
+    },
+    {
+      "path": "tests\\test_client_detector.py",
+      "lines": 94
+    },
+    {
+      "path": "src\\services\\discord_rpc.py",
+      "lines": 93
+    },
+    {
+      "path": "src\\services\\draft_service.py",
+      "lines": 93
+    },
+    {
+      "path": "src\\ui\\components\\mini_player.py",
+      "lines": 91
+    },
+    {
+      "path": "src\\services\\champion_service.py",
+      "lines": 85
+    },
+    {
+      "path": "src\\utils\\smooth_scroll.py",
+      "lines": 81
+    },
+    {
+      "path": "run.py",
+      "lines": 76
+    },
+    {
+      "path": "src\\ui\\components\\color_utils.py",
+      "lines": 75
+    },
+    {
+      "path": "tests\\test_asset_manager.py",
+      "lines": 70
+    },
+    {
+      "path": "tests\\test_poro_snacks.py",
+      "lines": 68
+    },
+    {
+      "path": "src\\core\\constants.py",
+      "lines": 65
+    },
+    {
+      "path": "src\\ui\\components\\tab_bar.py",
+      "lines": 64
+    },
+    {
+      "path": "tests\\test_color_utils.py",
+      "lines": 64
+    },
+    {
+      "path": "tests\\test_api_handler.py",
+      "lines": 63
+    },
+    {
+      "path": "tests\\test_config_manager.py",
+      "lines": 63
+    },
+    {
+      "path": "src\\core\\state_manager.py",
+      "lines": 62
+    },
+    {
+      "path": "scratch\\test_tab_switch.py",
+      "lines": 61
+    },
+    {
+      "path": "src\\ui\\sidebar\\status_bar.py",
+      "lines": 61
+    },
+    {
+      "path": "scratch\\test_api_login.py",
+      "lines": 59
+    },
+    {
+      "path": "src\\services\\notification_service.py",
+      "lines": 59
+    },
+    {
+      "path": "scratch\\update_aram_picker.py",
+      "lines": 53
+    },
+    {
+      "path": "src\\ui\\components\\feedback\\status_badge.py",
+      "lines": 50
+    },
+    {
+      "path": "src\\ui\\components\\base.py",
+      "lines": 49
+    },
+    {
+      "path": "scratch\\capture_templates.py",
+      "lines": 48
+    },
+    {
+      "path": "src\\ui\\components\\navigation\\sidebar.py",
+      "lines": 48
+    },
+    {
+      "path": "src\\core\\events.py",
+      "lines": 43
+    },
+    {
+      "path": "src\\ui\\components\\buttons\\icon_button.py",
+      "lines": 41
+    },
+    {
+      "path": "src\\ui\\components\\feedback\\activity_log.py",
+      "lines": 41
+    },
+    {
+      "path": "src\\services\\settings_service.py",
+      "lines": 40
+    },
+    {
+      "path": "src\\ui\\components\\buttons\\primary_button.py",
+      "lines": 39
+    },
+    {
+      "path": "src\\ui\\pages\\config_page.py",
+      "lines": 38
+    },
+    {
+      "path": "src\\ui\\layout\\page_container.py",
+      "lines": 37
+    },
+    {
+      "path": "tests\\test_ui_kwargs.py",
+      "lines": 36
+    },
+    {
+      "path": "tests\\test_path_utils.py",
+      "lines": 34
+    },
+    {
+      "path": "tests\\test_stats_scraper.py",
+      "lines": 34
+    },
+    {
+      "path": "src\\ui\\components\\lol_toggle.py",
+      "lines": 33
+    },
+    {
+      "path": "test_launcher.py",
+      "lines": 30
+    },
+    {
+      "path": "tests\\test_token_loader.py",
+      "lines": 28
+    },
+    {
+      "path": "scratch\\test_wm_char.py",
+      "lines": 27
+    },
+    {
+      "path": "src\\ui\\sidebar\\navigation.py",
+      "lines": 27
+    },
+    {
+      "path": "test_hotkey.py",
+      "lines": 26
+    },
+    {
+      "path": "test_tokens.py",
+      "lines": 26
+    },
+    {
+      "path": "scratch\\extract_templates.py",
+      "lines": 26
+    },
+    {
+      "path": "src\\utils\\path_utils.py",
+      "lines": 26
+    },
+    {
+      "path": "src\\core\\state.py",
+      "lines": 24
+    },
+    {
+      "path": "scratch\\compile_check.py",
+      "lines": 23
+    },
+    {
+      "path": "scratch\\test_uia.py",
+      "lines": 23
+    },
+    {
+      "path": "scratch\\test_locate.py",
+      "lines": 22
+    },
+    {
+      "path": "test_hotkeys_config.py",
+      "lines": 20
+    },
+    {
+      "path": "src\\ui\\qt\\theme.py",
+      "lines": 20
+    },
+    {
+      "path": "scratch\\test_dpi.py",
+      "lines": 17
+    },
+    {
+      "path": "src\\core\\version.py",
+      "lines": 17
+    },
+    {
+      "path": "scratch\\extract_logo.py",
+      "lines": 16
+    },
+    {
+      "path": "src\\ui\\ui_shared.py",
+      "lines": 15
+    },
+    {
+      "path": "fix_import.py",
+      "lines": 11
+    },
+    {
+      "path": "src\\ui\\components\\__init__.py",
+      "lines": 11
+    },
+    {
+      "path": "src\\ui\\layout\\section_container.py",
+      "lines": 8
+    },
+    {
+      "path": "src\\ui\\app_sidebar.py",
+      "lines": 5
+    },
+    {
+      "path": "src\\ui\\components\\buttons\\__init__.py",
+      "lines": 4
+    },
+    {
+      "path": "src\\ui\\components\\feedback\\__init__.py",
+      "lines": 4
+    },
+    {
+      "path": "src\\ui\\layout\\__init__.py",
+      "lines": 4
+    },
+    {
+      "path": "src\\ui\\components\\cards\\__init__.py",
+      "lines": 3
+    },
+    {
+      "path": "src\\ui\\components\\navigation\\__init__.py",
+      "lines": 3
+    },
+    {
+      "path": "src\\ui\\theme\\__init__.py",
+      "lines": 0
+    },
+    {
+      "path": "src\\utils\\__init__.py",
+      "lines": 0
+    },
+    {
+      "path": "tests\\__init__.py",
+      "lines": 0
+    }
+  ],
+  "total_py_lines": 18021,
+  "todos": [
+    {
+      "file": "tests\\test_api_handler.py",
+      "line": 44,
+      "marker": "XXX",
+      "text": "self.client.headers = {\"Authorization\": \"Basic xxx\"}"
+    },
+    {
+      "file": "tests\\test_poro_snacks.py",
+      "line": 39,
+      "marker": "HACK",
+      "text": "# A bit hacky but it works to extract the function logic"
+    }
+  ],
+  "missing_docstrings": [
+    "fix_import.py",
+    "run.py",
+    "test_hotkey.py",
+    "test_hotkeys_config.py",
+    "test_launcher.py",
+    "test_tokens.py",
+    "scratch\\capture_templates.py",
+    "scratch\\compile_check.py",
+    "scratch\\extract_logo.py",
+    "scratch\\extract_templates.py",
+    "scratch\\test_api_login.py",
+    "scratch\\test_dpi.py",
+    "scratch\\test_locate.py",
+    "scratch\\test_tab_switch.py",
+    "scratch\\test_uia.py",
+    "scratch\\test_wm_char.py",
+    "scratch\\update_aram_picker.py",
+    "src\\core\\events.py",
+    "src\\core\\state.py",
+    "src\\core\\state_manager.py",
+    "src\\services\\discord_rpc.py",
+    "src\\services\\local_api.py",
+    "src\\tools\\kopied.py",
+    "src\\ui\\ui_shared.py",
+    "src\\ui\\components\\about_page.py",
+    "src\\ui\\components\\champion_input.py",
+    "src\\ui\\components\\color_utils.py",
+    "src\\ui\\components\\draggable_list.py",
+    "src\\ui\\components\\hotkey_recorder.py",
+    "src\\ui\\components\\lol_toggle.py",
+    "src\\ui\\components\\mini_player.py",
+    "src\\ui\\components\\session_header.py",
+    "src\\ui\\components\\settings_panel.py",
+    "src\\ui\\components\\settings_row.py",
+    "src\\ui\\components\\toggle_row.py",
+    "src\\ui\\components\\tray_icon.py",
+    "src\\ui\\components\\__init__.py",
+    "src\\ui\\components\\buttons\\icon_button.py",
+    "src\\ui\\components\\buttons\\primary_button.py",
+    "src\\ui\\components\\buttons\\__init__.py",
+    "src\\ui\\components\\cards\\card.py",
+    "src\\ui\\components\\cards\\__init__.py",
+    "src\\ui\\components\\feedback\\activity_log.py",
+    "src\\ui\\components\\feedback\\status_badge.py",
+    "src\\ui\\components\\feedback\\__init__.py",
+    "src\\ui\\components\\game_tools\\arena_tool.py",
+    "src\\ui\\components\\game_tools\\draft_tool.py",
+    "src\\ui\\components\\navigation\\sidebar.py",
+    "src\\ui\\components\\navigation\\__init__.py",
+    "src\\ui\\layout\\page_container.py",
+    "src\\ui\\layout\\section_container.py",
+    "src\\ui\\layout\\__init__.py",
+    "src\\ui\\theme\\token_loader.py",
+    "src\\utils\\path_utils.py",
+    "tests\\test_account_manager.py",
+    "tests\\test_api_handler.py",
+    "tests\\test_arena_3v6.py",
+    "tests\\test_asset_manager.py",
+    "tests\\test_automation.py",
+    "tests\\test_client_detector.py",
+    "tests\\test_color_utils.py",
+    "tests\\test_config_manager.py",
+    "tests\\test_logger.py",
+    "tests\\test_path_utils.py",
+    "tests\\test_poro_snacks.py",
+    "tests\\test_stats_scraper.py",
+    "tests\\test_token_loader.py",
+    "tests\\test_ui_kwargs.py"
+  ]
+}

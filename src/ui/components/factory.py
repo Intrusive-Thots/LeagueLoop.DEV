@@ -419,3 +419,45 @@ def make_divider(parent, padx=0, pady=0, side="top"):
     )
     divider.pack(fill="x", side=side, padx=padx, pady=pady)
     return divider
+
+def get_shadow(name: str, default: str = "") -> str:
+    """Retrieve shadow style string."""
+    return TOKENS.get_shadow(name, default)
+
+def make_panel(parent, width=None, height=None, corner_radius=None, **kw):
+    """Create a standardized background panel."""
+    bg_color = kw.pop("fg_color", get_color("colors.background.panel"))
+    radius = corner_radius or get_radius("md")
+    panel = ctk.CTkFrame(
+        parent,
+        width=width,
+        height=height,
+        corner_radius=radius,
+        fg_color=bg_color,
+        border_width=1,
+        border_color=get_color("colors.border.subtle", "#1E2328"),
+        **kw
+    )
+    return panel
+
+def animate_fade(widget, start_alpha=0.0, end_alpha=1.0, duration=150, callback=None):
+    """Simulate fade animation using delay (since Tkinter has no alpha support)."""
+    if callback:
+        widget.after(duration, callback)
+
+def animate_slide(widget, start_y, end_y, duration=200, callback=None):
+    """Animates the placement y-offset of a widget."""
+    steps = int(duration / 16)
+    delta = (end_y - start_y) / max(1, steps)
+    
+    def step(curr_y, s_left):
+        if not widget.winfo_exists():
+            return
+        if s_left <= 0:
+            widget.place(y=end_y)
+            if callback: callback()
+        else:
+            widget.place(y=int(curr_y + delta))
+            widget.after(16, lambda: step(curr_y + delta, s_left - 1))
+            
+    step(start_y, steps)

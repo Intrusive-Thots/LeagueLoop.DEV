@@ -169,7 +169,8 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                     "honor_strategy": cfg.get('honor_strategy', 'random'),
                     "auto_hover": cfg.get('auto_hover', False),
                     "arena_auto_lock": cfg.get('arena_auto_lock', False),
-                    "arena_synergy_enabled": cfg.get('arena_synergy_enabled', False)
+                    "arena_synergy_enabled": cfg.get('arena_synergy_enabled', False),
+                    "honor_party_first": cfg.get("honor_party_first", False)
                 }
             self.wfile.write(json.dumps(config_data).encode('utf-8'))
         elif self.path == '/aram-list':
@@ -438,7 +439,7 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                 'auto_join_enabled', 'skip_stats_enabled', 'auto_runes_enabled',
                 'discord_rpc_enabled', 'accept_delay', 'honor_strategy',
                 'auto_hover', 'arena_auto_lock', 'arena_synergy_enabled',
-                'aram_mode'
+                'aram_mode', 'honor_party_first'
             }
 
             if key not in writable_keys:

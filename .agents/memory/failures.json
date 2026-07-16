@@ -73,5 +73,15 @@
     "error_pattern": "StatsScraper background thread launches automatically on instantiation and causes SSL/network errors during unit testing in sandboxed/offline environments",
     "fix": "Add a fetch_live parameter to StatsScraper.__init__ (default True) and check it before submitting scraper tasks to the ThreadPoolExecutor. During tests, initialize StatsScraper with fetch_live=False to prevent background requests.",
     "context": "pytest returned exit code 1 because StatsScraper threads spawned in tests were raising SSLErrors trying to reach lolalytics.com and trying to write to closed log streams post-teardown."
+  },
+  {
+    "error_pattern": "Regression detected by self_improving loop run #2",
+    "fix": "Investigate the test failures reported above.",
+    "context": "+2 new test errors (was 0, now 2)"
+  },
+  {
+    "error_pattern": "Regression detected by self_improving loop run #3",
+    "fix": "Investigate the test failures reported above.",
+    "context": "+6 new test failures (was 0, now 6)"
   }
 ]
