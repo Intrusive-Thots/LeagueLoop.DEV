@@ -1,10 +1,10 @@
 {
   "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
-  "scan_time_sec": 0.044,
-  "total_files": 154,
+  "scan_time_sec": 0.041,
+  "total_files": 156,
   "ext_counts": {
     ".json": 20,
-    ".py": 112,
+    ".py": 114,
     ".md": 16,
     ".html": 1,
     ".js": 3,
@@ -228,6 +228,10 @@
       "lines": 75
     },
     {
+      "path": "tests\\test_friend_service.py",
+      "lines": 71
+    },
+    {
       "path": "tests\\test_asset_manager.py",
       "lines": 70
     },
@@ -237,6 +241,10 @@
     },
     {
       "path": "src\\core\\constants.py",
+      "lines": 65
+    },
+    {
+      "path": "tests\\test_league_service.py",
       "lines": 65
     },
     {
@@ -460,7 +468,7 @@
       "lines": 0
     }
   ],
-  "total_py_lines": 18021,
+  "total_py_lines": 18157,
   "todos": [
     {
       "file": "tests\\test_api_handler.py",
@@ -538,6 +546,8 @@
     "tests\\test_client_detector.py",
     "tests\\test_color_utils.py",
     "tests\\test_config_manager.py",
+    "tests\\test_friend_service.py",
+    "tests\\test_league_service.py",
     "tests\\test_logger.py",
     "tests\\test_path_utils.py",
     "tests\\test_poro_snacks.py",

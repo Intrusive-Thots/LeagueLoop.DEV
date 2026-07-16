@@ -595,5 +595,53 @@
       "todos": 2
     },
     "timestamp": "2026-07-16T14:02:18.001704+00:00"
+  },
+  {
+    "task": "self_improving_loop",
+    "run_number": 5,
+    "duration_seconds": 1.412,
+    "test_results": {
+      "passed": 89,
+      "failed": 1,
+      "errors": 0,
+      "total": 90
+    },
+    "findings_count": {
+      "high": 6,
+      "medium": 67,
+      "low": 70
+    },
+    "regressions": [
+      "+1 new test failures (was 0, now 1)"
+    ],
+    "repo_stats": {
+      "total_files": 156,
+      "total_py_lines": 18156,
+      "todos": 2
+    },
+    "timestamp": "2026-07-16T15:33:33.926826+00:00"
+  },
+  {
+    "task": "self_improving_loop",
+    "run_number": 6,
+    "duration_seconds": 1.214,
+    "test_results": {
+      "passed": 90,
+      "failed": 0,
+      "errors": 0,
+      "total": 90
+    },
+    "findings_count": {
+      "high": 6,
+      "medium": 67,
+      "low": 70
+    },
+    "regressions": [],
+    "repo_stats": {
+      "total_files": 156,
+      "total_py_lines": 18157,
+      "todos": 2
+    },
+    "timestamp": "2026-07-16T15:34:02.567445+00:00"
   }
 ]
