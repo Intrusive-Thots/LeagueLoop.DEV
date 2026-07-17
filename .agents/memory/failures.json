@@ -93,5 +93,10 @@
     "error_pattern": "Regression detected by self_improving loop run #7",
     "fix": "Investigate the test failures reported above.",
     "context": "+4 new test failures (was 0, now 4)"
+  },
+  {
+    "error_pattern": "Regression detected by self_improving loop run #11",
+    "fix": "Investigate the test failures reported above.",
+    "context": "+2 new test failures (was 0, now 2)"
   }
 ]

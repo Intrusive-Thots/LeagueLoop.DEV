@@ -40,6 +40,7 @@ from services.notification_service import get_notification_service
 from utils.logger import Logger  # type: ignore
 from utils.path_utils import get_asset_path  # type: ignore
 from core.version import __version__  # type: ignore
+from core.events import EventBus
 from services.local_api import start_api_server # type: ignore
 from core.constants import (  # type: ignore
     SIDEBAR_WIDTH, SIDEBAR_HEIGHT, DOCKING_POLL_INTERVAL, DOCKING_IDLE_INTERVAL,
@@ -147,15 +148,16 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
 
         # Initialize automation before UI to avoid NoneType in callbacks
         self.stop_func = lambda: self.after(0, lambda: self.sidebar._on_power_click()) if hasattr(self, "sidebar") else None
-        
-        def _window_func(state):
-            self.after(0, lambda: self._handle_window_state(state))
-            
-        def _queue_func(phase, state):
-            if hasattr(self, "sidebar"):
-                self.after(0, lambda: self.sidebar.update_queue_state(phase, state))
-            if hasattr(self, "mini_player"):
-                self.after(0, lambda: self.mini_player.update_state(phase))
+
+        # Subscribe to EventBus events from AutomationEngine (thread-safe via self.after)
+        EventBus.on("automation_window_state", lambda state: self.after(0, lambda: self._handle_window_state(state)))
+        EventBus.on("automation_queue_state", lambda phase, state: (
+            self.after(0, lambda: self.sidebar.update_queue_state(phase, state)) if hasattr(self, "sidebar") else None,
+            self.after(0, lambda: self.mini_player.update_state(phase)) if hasattr(self, "mini_player") else None
+        ))
+        EventBus.on("automation_lobby_stats", lambda team, bench, me=None: (
+            self.after(0, lambda: self.sidebar.update_lobby_stats(team, bench, me)) if hasattr(self, "sidebar") else None
+        ))
 
         self.automation: Optional[AutomationEngine] = AutomationEngine(
             self.lcu,
@@ -163,9 +165,6 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
             self.config,
             log_func=None,
             stop_func=self.stop_func,
-            stats_func=lambda team, bench, me=None: self.after(0, lambda: self.sidebar.update_lobby_stats(team, bench, me)) if hasattr(self, "sidebar") else None,
-            window_func=_window_func,
-            queue_func=_queue_func
         )
 
         self.setup_ui()

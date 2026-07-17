@@ -1,6 +1,6 @@
 {
   "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
-  "scan_time_sec": 0.04,
+  "scan_time_sec": 0.044,
   "total_files": 162,
   "ext_counts": {
     ".json": 20,
@@ -13,7 +13,7 @@
   "python_modules": [
     {
       "path": "src\\services\\automation.py",
-      "lines": 1329
+      "lines": 1303
     },
     {
       "path": "src\\ui\\components\\priority_grid.py",
@@ -25,11 +25,11 @@
     },
     {
       "path": "src\\core\\main.py",
-      "lines": 930
+      "lines": 929
     },
     {
       "path": "tests\\test_automation.py",
-      "lines": 887
+      "lines": 902
     },
     {
       "path": "src\\services\\local_api.py",
@@ -492,7 +492,7 @@
       "lines": 0
     }
   ],
-  "total_py_lines": 18520,
+  "total_py_lines": 18508,
   "todos": [
     {
       "file": "tests\\test_poro_snacks.py",

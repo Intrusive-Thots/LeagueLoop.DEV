@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 # AutomationLogic seems to be an old class name. The actual class is AutomationEngine.
 from services.automation import AutomationEngine
+from core.events import EventBus
 
 class TestAutomationEngineReadyCheck(unittest.TestCase):
     def setUp(self):
@@ -133,9 +134,13 @@ class TestAutomationEngineWindowState(unittest.TestCase):
         return engine
 
     def test_stealth_off_sends_restore(self):
-        """When stealth_mode is OFF, transitioning from InProgress → EndOfGame calls restore."""
+        """When stealth_mode is OFF, transitioning from InProgress → EndOfGame emits restore via EventBus."""
         engine = self._make_engine(stealth=False)
         engine.last_phase = "InProgress"
+
+        # Subscribe mock listener to EventBus
+        mock_listener = MagicMock()
+        EventBus.on("automation_window_state", mock_listener)
 
         # Simulate phase data
         mock_response = MagicMock()
@@ -149,12 +154,19 @@ class TestAutomationEngineWindowState(unittest.TestCase):
         engine._game_pid = None
         engine._tick()
 
-        engine.window_func.assert_called_with("restore")
+        mock_listener.assert_called_with("restore")
+
+        # Cleanup listener
+        EventBus._listeners.get("automation_window_state", []).remove(mock_listener)
 
     def test_stealth_on_sends_restore_quiet(self):
-        """When stealth_mode is ON, transitioning from InProgress → EndOfGame calls restore_quiet."""
+        """When stealth_mode is ON, transitioning from InProgress → EndOfGame emits restore_quiet via EventBus."""
         engine = self._make_engine(stealth=True)
         engine.last_phase = "InProgress"
+
+        # Subscribe mock listener to EventBus
+        mock_listener = MagicMock()
+        EventBus.on("automation_window_state", mock_listener)
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -167,7 +179,10 @@ class TestAutomationEngineWindowState(unittest.TestCase):
         engine._game_pid = None
         engine._tick()
 
-        engine.window_func.assert_called_with("restore_quiet")
+        mock_listener.assert_called_with("restore_quiet")
+
+        # Cleanup listener
+        EventBus._listeners.get("automation_window_state", []).remove(mock_listener)
 
     def test_inprogress_always_minimizes(self):
         """Regardless of stealth mode, entering InProgress does not auto-minimize."""

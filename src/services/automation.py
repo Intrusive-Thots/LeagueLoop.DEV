@@ -16,6 +16,7 @@ from .api_handler import LCUClient  # type: ignore
 from .asset_manager import AssetManager, ConfigManager  # type: ignore
 from .discord_rpc import DiscordPresenceManager  # type: ignore
 from utils.logger import Logger  # type: ignore
+from core.events import EventBus
 from core.constants import (
     QUEUE_ARENA, QUEUE_ARENA_3V6, QUEUE_DRAFT, QUEUE_RANKED_SOLO, QUEUE_RANKED_FLEX,
     TICK_SLEEP_DEFAULT, TICK_SLEEP_CHAMPSELECT,
@@ -40,6 +41,7 @@ class AutomationEngine:
         self.config = config
         self.log: Optional[Callable] = log_func
         self.stop_func: Optional[Callable] = stop_func
+        # Legacy callback aliases — now routed through EventBus
         self.stats_func: Optional[Callable] = kwargs.get("stats_func")
         self.window_func: Optional[Callable] = kwargs.get("window_func")
         self.toast_func: Optional[Callable] = kwargs.get("toast_func")
@@ -203,21 +205,15 @@ class AutomationEngine:
                     inferred_phase = "InProgress" if game_alive else "None"
 
                     # Fire callbacks so the UI / window state stay accurate
-                    wf = self.window_func
-                    if wf is not None and inferred_phase != self.last_phase:
+                    if inferred_phase != self.last_phase:
                         if inferred_phase == "InProgress":
-                            # Prevent auto-hiding during a game
                             Logger.info("AutoLoop", "Game detected (process). Keeping window visible.")
                         elif self.last_phase == "InProgress":
-                            if self.config.get("stealth_mode", False):
-                                wf("restore_quiet")
-                            else:
-                                wf("restore")
+                            state = "restore_quiet" if self.config.get("stealth_mode", False) else "restore"
+                            EventBus.emit("automation_window_state", state)
                             Logger.info("AutoLoop", "Game ended (process). Restoring.")
 
-                    qf = self.queue_func
-                    if qf is not None:
-                        qf(inferred_phase, None)
+                    EventBus.emit("automation_queue_state", inferred_phase, None)
 
                     self.last_phase = inferred_phase
                     if self._stop_event.wait(2.0):
@@ -289,22 +285,15 @@ class AutomationEngine:
             if search_req and search_req.status_code == 200:
                 search_state = search_req.json()
 
-        qf = self.queue_func
-        if qf is not None:
-            qf(phase, search_state)
+        EventBus.emit("automation_queue_state", phase, search_state)
 
         # Auto-minimize/restore based on InProgress state
-        wf = self.window_func
-        is_first = getattr(self, "_is_first_tick", True)
-        if wf is not None and phase != self.last_phase:
+        if phase != self.last_phase:
             if phase == "InProgress":
-                # Prevent auto-hiding during a game
                 Logger.info("AutoLoop", "Game phase transition to InProgress. Keeping window visible.")
             elif self.last_phase == "InProgress" and phase in ["EndOfGame", "Lobby", "None"]:
-                if self.config.get("stealth_mode", False):
-                    wf("restore_quiet")
-                else:
-                    wf("restore")
+                state = "restore_quiet" if self.config.get("stealth_mode", False) else "restore"
+                EventBus.emit("automation_window_state", state)
                 self._game_pid = None
 
         self.last_phase = phase
@@ -320,12 +309,7 @@ class AutomationEngine:
                     self.current_queue_id = lobby_data.get("gameConfig", {}).get("queueId")
                     members = lobby_data.get("members", [])
                     self._party_puuids = {m.get("puuid") for m in members if m.get("puuid")}
-                    # Emit so UI components stay in sync even on startup
-                    try:
-                        from core.events import EventBus
-                        EventBus.emit("lobby_event", lobby_data)
-                    except Exception as e:
-                        pass
+                    EventBus.emit("lobby_event", lobby_data)
             except Exception as e:
                 Logger.debug("AutoLoop", f"Lobby data fetch error: {e}")
 
@@ -419,15 +403,11 @@ class AutomationEngine:
             self._chat_warden_warned = False  # Item #166: Reset so toxicity is re-checked next game
             self._bravery_pick_id = 0
             self._last_champ_id = 0
-            sf = self.stats_func
-            if sf is not None:
-                sf([], [])
+            EventBus.emit("automation_lobby_stats", [], [], None)
             return
             
         if not session:
-            sf = self.stats_func
-            if sf is not None:
-                sf([], [])
+            EventBus.emit("automation_lobby_stats", [], [], None)
             return
 
         # Track champion changes to re-equip runes and skins
@@ -446,11 +426,9 @@ class AutomationEngine:
         my_team = session.get("myTeam", [])
         bench = session.get("benchChampions", [])
         
-        sf2 = self.stats_func
-        if sf2 is not None:
-            local_cell_id = session.get("localPlayerCellId")
-            me = next((p for p in my_team if p.get("cellId") == local_cell_id), None)
-            sf2(my_team, bench, me)
+        local_cell_id = session.get("localPlayerCellId")
+        me_player = next((p for p in my_team if p.get("cellId") == local_cell_id), None)
+        EventBus.emit("automation_lobby_stats", my_team, bench, me_player)
 
         has_bench = len(bench) > 0
         is_arena = self.current_queue_id in {QUEUE_ARENA, QUEUE_ARENA_3V6}
@@ -595,11 +573,7 @@ class AutomationEngine:
                 if kw in text:
                     self._chat_warden_warned = True
                     self._log(f"Toxicity detected in lobby: '{kw}'")
-                    try:
-                        from ui.components.toast import ToastManager
-                        ToastManager.get_instance().show(f"Toxicity Warning: A teammate typed '{kw}'", theme="error")
-                    except Exception as e:
-                        Logger.debug("Auto", f"Toast notification failed: {e}")
+                    EventBus.emit("show_toast", f"Toxicity Warning: A teammate typed '{kw}'", "⚠️", "error", False)
                     return
 
     def _perform_arena_synergy(self, session):

@@ -737,5 +737,54 @@
       "todos": 1
     },
     "timestamp": "2026-07-16T20:01:08.874770+00:00"
+  },
+  {
+    "task": "self_improving_loop",
+    "run_number": 11,
+    "duration_seconds": 3.751,
+    "test_results": {
+      "passed": 121,
+      "failed": 2,
+      "errors": 0,
+      "total": 123
+    },
+    "findings_count": {
+      "high": 6,
+      "medium": 60,
+      "low": 71
+    },
+    "regressions": [
+      "+2 new test failures (was 0, now 2)",
+      "-2 tests no longer passing (was 123, now 121)"
+    ],
+    "repo_stats": {
+      "total_files": 162,
+      "total_py_lines": 18493,
+      "todos": 1
+    },
+    "timestamp": "2026-07-17T23:48:06.668150+00:00"
+  },
+  {
+    "task": "self_improving_loop",
+    "run_number": 12,
+    "duration_seconds": 1.428,
+    "test_results": {
+      "passed": 123,
+      "failed": 0,
+      "errors": 0,
+      "total": 123
+    },
+    "findings_count": {
+      "high": 6,
+      "medium": 60,
+      "low": 71
+    },
+    "regressions": [],
+    "repo_stats": {
+      "total_files": 162,
+      "total_py_lines": 18508,
+      "todos": 1
+    },
+    "timestamp": "2026-07-17T23:48:52.029784+00:00"
   }
 ]
