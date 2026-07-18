@@ -162,7 +162,7 @@ class PriorityIconGrid(ctk.CTkFrame):
             self.body.pack(fill="x", pady=(SPACING_SM, SPACING_MD), padx=SPACING_MD)
 
         # ── Hovered Champion Display ──
-        self.hover_frame = ctk.CTkFrame(self.body, fg_color="#141E28", corner_radius=get_radius("sm"), height=48)
+        self.hover_frame = ctk.CTkFrame(self.body, fg_color=get_color("colors.background.card", "#141E28"), corner_radius=get_radius("sm"), height=48)
         self.hover_frame.pack_propagate(False)
 
         self.hover_icon = ctk.CTkLabel(self.hover_frame, text="", width=32, height=32, fg_color="transparent")

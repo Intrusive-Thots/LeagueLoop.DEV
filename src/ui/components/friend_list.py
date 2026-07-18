@@ -86,7 +86,7 @@ class FriendRow(ctk.CTkFrame):
         self.lbl_status.grid(row=1, column=2, sticky="ew", pady=(0, 4))
 
         # Col 3: Auto-Join Indicator
-        aj_color = "#00A2FF" if is_auto_join else get_color("colors.text.disabled")
+        aj_color = get_color("colors.accent.blue", "#00A2FF") if is_auto_join else get_color("colors.text.disabled")
         aj_tip = "Auto-Join Active — Click to toggle" if is_auto_join else "Auto-Join Inactive — Click to toggle"
         self.auto_join_lbl = ctk.CTkLabel(
             self, text="⚭", font=get_font("title", "bold"),
