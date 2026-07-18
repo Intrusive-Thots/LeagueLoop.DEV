@@ -45,5 +45,14 @@
       "Integrate default selection checkbox in accounts UI add/edit form",
       "Check connection state at application startup; if disconnected and a default account exists, trigger client launch and login macros automatically after a 2-second delay"
     ]
+  },
+  {
+    "pattern_name": "Collapsible Sidebar Width Animation",
+    "steps": [
+      "Define a PySide6 QWidget with a custom Property 'sidebar_width' using a setter calling setFixedWidth",
+      "Instantiate a QPropertyAnimation targeting this property, set duration and easing curves",
+      "On toggle click, stop the animation, configure start and end width values (e.g. 56px and 160px), and trigger start()",
+      "Hide or show labels and category headers immediately or upon animation state change to ensure clean visual flow"
+    ]
   }
 ]

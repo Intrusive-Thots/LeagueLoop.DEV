@@ -179,6 +179,11 @@ class ThemeService:
             font-size: 10px;
             padding: 1px 6px;
         }}
+
+        /* Keyboard Accessibility Focus Outline */
+        QPushButton:focus, QLineEdit:focus, QCheckBox:focus, QRadioButton:focus {{
+            border: 1px solid {accent_gold};
+        }}
         """
         return qss
 

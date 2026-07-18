@@ -1,10 +1,10 @@
 {
   "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
-  "scan_time_sec": 0.048,
-  "total_files": 190,
+  "scan_time_sec": 0.052,
+  "total_files": 191,
   "ext_counts": {
     ".json": 20,
-    ".py": 148,
+    ".py": 149,
     ".md": 16,
     ".html": 1,
     ".js": 3,
@@ -30,6 +30,10 @@
     {
       "path": "src\\ui\\components\\game_tools\\accounts_tool.py",
       "lines": 652
+    },
+    {
+      "path": "src\\ui\\qt\\app_window.py",
+      "lines": 609
     },
     {
       "path": "src\\services\\asset_manager.py",
@@ -68,10 +72,6 @@
       "lines": 379
     },
     {
-      "path": "src\\ui\\qt\\app_window.py",
-      "lines": 353
-    },
-    {
       "path": "src\\ui\\components\\game_tools\\arena_tool.py",
       "lines": 344
     },
@@ -82,6 +82,10 @@
     {
       "path": "src\\services\\automation\\draft_assistant.py",
       "lines": 337
+    },
+    {
+      "path": "src\\ui\\qt\\pages\\play_page.py",
+      "lines": 333
     },
     {
       "path": "src\\ui\\components\\automation_editor.py",
@@ -156,16 +160,16 @@
       "lines": 198
     },
     {
+      "path": "src\\services\\theme_service.py",
+      "lines": 197
+    },
+    {
       "path": "src\\ui\\components\\settings_panel.py",
       "lines": 197
     },
     {
       "path": "src\\services\\riot_client_api.py",
       "lines": 194
-    },
-    {
-      "path": "src\\services\\theme_service.py",
-      "lines": 192
     },
     {
       "path": "src\\services\\automation\\end_game.py",
@@ -545,7 +549,7 @@
     },
     {
       "path": "src\\ui\\qt\\pages\\__init__.py",
-      "lines": 9
+      "lines": 10
     },
     {
       "path": "src\\ui\\layout\\section_container.py",
@@ -604,7 +608,7 @@
       "lines": 0
     }
   ],
-  "total_py_lines": 21145,
+  "total_py_lines": 21740,
   "todos": [
     {
       "file": "tests\\test_poro_snacks.py",

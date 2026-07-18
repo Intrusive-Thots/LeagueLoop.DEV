@@ -6,5 +6,9 @@
   {
     "optimization": "Consolidated Riot & League process scan pass",
     "details": "Instead of LCUClient and RiotClientAPI scanning the active process list independently, they now fetch information from client_detector.py which runs a single pass and caches it with a 2-second TTL."
+  },
+  {
+    "optimization": "PySide6 Headless Coordinator & Page transitions",
+    "details": "Ported the CustomTkinter UI to PySide6 QMainWindow. Transitioned the old main app to a headless background service coordinator to eliminate redundant Tkinter widget overhead. Added smooth page fade opacity transitions, collapsible sidebars, and thread-safe EventBus status badges."
   }
 ]

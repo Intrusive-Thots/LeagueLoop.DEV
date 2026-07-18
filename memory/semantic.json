@@ -26,5 +26,9 @@
   {
     "concept": "Placeholder Account Auto-Population",
     "learned_knowledge": "When an active client session is detected, if the account's Riot ID or tagline is not found in the local database, a placeholder account entry is created with an empty password. In the UI, this displays as a warning button (⚠️ Update) which links directly to the credentials edit form."
+  },
+  {
+    "concept": "PySide6 Migration & Page Transitions",
+    "learned_knowledge": "Migrated the entire LeagueLoop user interface from CustomTkinter to PySide6. The main app is now a headless coordinator that communicates purely via EventBus. Layout pages (Dashboard, Friends, Champions, Settings, and Play) are stacked using QStackedWidget. Clean fade transitions are achieved using QGraphicsOpacityEffect with QPropertyAnimation, and status badges are updated thread-safely via QMetaObject.invokeMethod."
   }
 ]

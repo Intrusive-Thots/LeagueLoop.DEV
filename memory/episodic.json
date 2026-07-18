@@ -16,5 +16,11 @@
     "timestamp": "2026-07-11T00:21:00Z",
     "duration_seconds": 450,
     "outcome": "success"
+  },
+  {
+    "task": "pyside6 client migration and ux modernization (collapsible sidebar, opacity transitions, reactive badges, play page port)",
+    "timestamp": "2026-07-18T11:50:00Z",
+    "duration_seconds": 950,
+    "outcome": "success"
   }
 ]

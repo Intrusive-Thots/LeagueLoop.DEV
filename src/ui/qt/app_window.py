@@ -3,7 +3,7 @@ PySide6 Main Window Shell
 Implements custom Riot-inspired window chrome, sidebar layout, page navigation, and integrates with WindowService.
 """
 import sys
-from PySide6.QtCore import Qt, QSize, Signal, Slot
+from PySide6.QtCore import Qt, QSize, Signal, Slot, Property, QPropertyAnimation, QEasingCurve, QTimer, QMetaObject, Q_ARG
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QStackedWidget, QFrame, QSizePolicy
@@ -131,23 +131,103 @@ class StatusBar(QFrame):
         QMetaObject.invokeMethod(self, "_disconnected_async", Qt.QueuedConnection)
 
 
+class NavButton(QPushButton):
+    """Custom navigation button supporting text labels, icons, and reactive badges."""
+    
+    def __init__(self, name, icon_char, page_index, parent=None):
+        super().__init__(parent)
+        self.name = name
+        self.icon_char = icon_char
+        self.page_index = page_index
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFocusPolicy(Qt.StrongFocus)
+        self.setFixedHeight(36)
+        
+        self.btn_layout = QHBoxLayout(self)
+        self.btn_layout.setContentsMargins(0, 0, 0, 0)
+        self.btn_layout.setSpacing(10)
+        self.btn_layout.setAlignment(Qt.AlignCenter)
+        
+        self.icon_lbl = QLabel(icon_char, self)
+        self.icon_lbl.setStyleSheet("color: inherit; font-size: 16px; background: transparent; font-weight: normal;")
+        self.btn_layout.addWidget(self.icon_lbl)
+        
+        self.text_lbl = QLabel(name, self)
+        self.text_lbl.setStyleSheet("color: inherit; font-size: 12px; background: transparent;")
+        self.text_lbl.setVisible(False)
+        self.btn_layout.addWidget(self.text_lbl)
+        
+        self.btn_layout.addStretch()
+        
+        self.badge_lbl = QLabel("", self)
+        self.badge_lbl.setStyleSheet("""
+            background-color: #C8AA6E;
+            color: #0A1428;
+            font-size: 9px;
+            font-weight: bold;
+            border-radius: 6px;
+            padding-left: 4px;
+            padding-right: 4px;
+            min-width: 12px;
+            height: 12px;
+        """)
+        self.badge_lbl.setAlignment(Qt.AlignCenter)
+        self.badge_lbl.setVisible(False)
+        self.btn_layout.addWidget(self.badge_lbl)
+        
+        self.setProperty("active", "false")
+
+    def set_active(self, active):
+        self.setProperty("active", "true" if active else "false")
+        self.style().unpolish(self)
+        self.style().polish(self)
+
+    def set_badge_value(self, val):
+        if val:
+            self.badge_lbl.setText(str(val))
+            # Only show badge if expanded or if it's the ARAM priority Sniper or Friends list
+            # We can allow the badge to overlap or only show in expanded mode
+            self.badge_lbl.setVisible(self.text_lbl.isVisible())
+        else:
+            self.badge_lbl.setText("")
+            self.badge_lbl.setVisible(False)
+
+    def set_expanded_state(self, expanded):
+        self.text_lbl.setVisible(expanded)
+        self.badge_lbl.setVisible(expanded and bool(self.badge_lbl.text()))
+        if expanded:
+            self.btn_layout.setContentsMargins(12, 0, 12, 0)
+            self.btn_layout.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        else:
+            self.btn_layout.setContentsMargins(0, 0, 0, 0)
+            self.btn_layout.setAlignment(Qt.AlignCenter)
+
+
 class SidebarNavigation(QWidget):
-    """Icon-based navigation panel for switching screens."""
+    """Modern collapsible navigation sidebar with animated resizing, sections, and badges."""
+    
     def __init__(self, on_change_page, parent=None):
         super().__init__(parent)
+        self.setObjectName("sidebarNav")
         self.on_change = on_change_page
-        self.setFixedWidth(50)
+        self.is_expanded = False
+        
+        # Start collapsed: 56px (icon only)
+        self._width = 56
+        self.setFixedWidth(self._width)
         
         self.setStyleSheet(f"""
-            QWidget {{
+            QWidget#sidebarNav {{
                 background-color: #0A1428;
                 border-right: 1px solid #1A2332;
             }}
             QPushButton {{
                 border: none;
                 color: #6C757D;
-                font-size: 16px;
-                padding: 10px;
+                background-color: transparent;
+                margin-left: 6px;
+                margin-right: 6px;
+                border-radius: 4px;
             }}
             QPushButton:hover {{
                 color: #F0E6D2;
@@ -158,32 +238,96 @@ class SidebarNavigation(QWidget):
                 background-color: #0F1923;
                 border-left: 2px solid #C8AA6E;
             }}
+            QPushButton:focus {{
+                border: 1px solid #C8AA6E;
+            }}
         """)
         
         self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(0, 10, 0, 10)
-        self.layout.setSpacing(8)
+        self.layout.setContentsMargins(0, 5, 0, 10)
+        self.layout.setSpacing(6)
+        
+        # ── 1. COLLAPSE TOGGLE BUTTON ROW ──
+        self.toggle_row = QWidget(self)
+        self.toggle_row_layout = QHBoxLayout(self.toggle_row)
+        self.toggle_row_layout.setContentsMargins(10, 0, 10, 0)
+        self.toggle_row_layout.addStretch()
+        
+        self.btn_toggle_expand = QPushButton("▶", self)
+        self.btn_toggle_expand.setFixedSize(24, 24)
+        self.btn_toggle_expand.setCursor(Qt.PointingHandCursor)
+        self.btn_toggle_expand.setStyleSheet("""
+            QPushButton {
+                border: none;
+                color: #6C757D;
+                font-size: 12px;
+                background-color: transparent;
+            }
+            QPushButton:hover {
+                color: #F0E6D2;
+            }
+        """)
+        self.btn_toggle_expand.clicked.connect(self.toggle_expand)
+        self.toggle_row_layout.addWidget(self.btn_toggle_expand)
+        
+        self.layout.addWidget(self.toggle_row)
+        
+        # Organize navigation items in categories
+        self.CATEGORIES = {
+            "CORE": [
+                ("Dashboard", "🏠", 1),
+                ("Play", "🎮", 0),
+            ],
+            "AUTOMATION": [
+                ("Champions", "⚔️", 3),
+                ("Friends", "👥", 2),
+                ("AI Coach", "🧠", 4),
+            ],
+            "SYSTEM": [
+                ("Settings", "⚙️", 5),
+            ]
+        }
         
         self.buttons = []
-        self._add_nav_item("Play", "🎮", 0)
-        self._add_nav_item("Dashboard", "🏠", 1)
-        self._add_nav_item("Friends", "👥", 2)
-        self._add_nav_item("Champions", "⚔️", 3)
-        self._add_nav_item("AI Coach", "🧠", 4)
-        self._add_nav_item("Settings", "⚙️", 5)
+        self.headers = []
+        
+        # Create categories and nav buttons
+        for category_name, items in self.CATEGORIES.items():
+            # Category label (only visible when expanded)
+            lbl_header = QLabel(category_name, self)
+            lbl_header.setStyleSheet("""
+                color: #565C64;
+                font-size: 9px;
+                font-weight: bold;
+                margin-left: 12px;
+                margin-top: 8px;
+                margin-bottom: 2px;
+                background: transparent;
+            """)
+            lbl_header.setVisible(False)
+            self.layout.addWidget(lbl_header)
+            self.headers.append(lbl_header)
+            
+            for name, icon_char, page_index in items:
+                btn = NavButton(name, icon_char, page_index, self)
+                btn.setToolTip(name)
+                btn.clicked.connect(lambda checked=False, idx=page_index: self._on_btn_clicked(idx))
+                self.layout.addWidget(btn)
+                self.buttons.append(btn)
         
         self.layout.addStretch()
         
         # Add thin gold divider line
-        divider = QFrame(self)
-        divider.setFixedHeight(1)
-        divider.setStyleSheet("background-color: #1E2328; border: none; margin-left: 10px; margin-right: 10px;")
-        self.layout.addWidget(divider)
+        self.divider = QFrame(self)
+        self.divider.setFixedHeight(1)
+        self.divider.setStyleSheet("background-color: #1E2328; border: none; margin-left: 10px; margin-right: 10px;")
+        self.layout.addWidget(self.divider)
         
         # Power label
         self.lbl_power = QLabel("AUTO", self)
         self.lbl_power.setAlignment(Qt.AlignCenter)
         self.lbl_power.setStyleSheet("color: #6C757D; font-size: 8px; font-weight: bold; background: transparent;")
+        self.lbl_power.setVisible(False)
         self.layout.addWidget(self.lbl_power)
         
         # main power toggle
@@ -198,7 +342,61 @@ class SidebarNavigation(QWidget):
         self.toggle_power.clicked.connect(self._on_power_toggled)
         self.layout.addWidget(self.toggle_power, alignment=Qt.AlignCenter)
         
+        # Width Animation
+        self.anim = QPropertyAnimation(self, b"sidebar_width", self)
+        self.anim.setDuration(150)
+        self.anim.setEasingCurve(QEasingCurve.InOutQuad)
+        
+        # EventBus listeners
+        EventBus.on("friends_state_changed", self._on_friends_state_changed)
+        EventBus.on("setting_changed", self._on_setting_changed)
+        EventBus.on("automation_queue_state", self._on_queue_state)
+        
+        # Initial active page
         self.set_active(0)
+        
+        # Update badges after load
+        QTimer.singleShot(100, self.update_badges)
+
+    @Property(int)
+    def sidebar_width(self):
+        return self._width
+
+    @sidebar_width.setter
+    def sidebar_width(self, w):
+        self._width = w
+        self.setFixedWidth(w)
+
+    def toggle_expand(self):
+        self.is_expanded = not self.is_expanded
+        self.anim.stop()
+        
+        start_w = self.width()
+        target_w = 160 if self.is_expanded else 56
+        
+        # Chevron state
+        self.btn_toggle_expand.setText("◀" if self.is_expanded else "▶")
+        
+        # Hide/Show header/power elements immediately
+        for header in self.headers:
+            header.setVisible(self.is_expanded)
+        self.lbl_power.setVisible(self.is_expanded)
+        
+        # Update buttons
+        for btn in self.buttons:
+            btn.set_expanded_state(self.is_expanded)
+            
+        # Update tooltip visibility (disable tooltips when expanded to prevent clutter)
+        for btn in self.buttons:
+            btn.setToolTip("" if self.is_expanded else btn.name)
+            
+        # Animate width transition
+        self.anim.setStartValue(start_w)
+        self.anim.setEndValue(target_w)
+        self.anim.start()
+        
+        # Refresh badges to render correctly in expanded mode
+        self.update_badges()
 
     def _on_power_toggled(self):
         state = self.toggle_power.isChecked()
@@ -212,24 +410,66 @@ class SidebarNavigation(QWidget):
         else:
             ToastManager.get_instance().show("Automation Paused", icon="⏸", theme="error")
 
-    def _add_nav_item(self, name, icon_text, index):
-        btn = QPushButton(icon_text, self)
-        btn.setToolTip(name)
-        btn.setProperty("active", "false")
-        btn.setCursor(Qt.PointingHandCursor)
-        btn.clicked.connect(lambda: self._on_btn_clicked(index))
-        self.layout.addWidget(btn)
-        self.buttons.append(btn)
+    def _on_btn_clicked(self, page_index):
+        self.set_active(page_index)
+        self.on_change(page_index)
 
-    def _on_btn_clicked(self, index):
-        self.set_active(index)
-        self.on_change(index)
+    def set_active(self, page_index):
+        for btn in self.buttons:
+            btn.set_active(btn.page_index == page_index)
 
-    def set_active(self, index):
-        for i, btn in enumerate(self.buttons):
-            btn.setProperty("active", "true" if i == index else "false")
-            btn.style().unpolish(btn)
-            btn.style().polish(btn)
+    # ── Thread-Safe Reactive Badge Updates ──
+    def update_badges(self):
+        # 1. Update online friends count
+        try:
+            from services.friend_service import get_friend_service
+            friends = get_friend_service().get_friends()
+            online_count = sum(1 for f in friends if f.get("availability", "offline") != "offline")
+            for btn in self.buttons:
+                if btn.name == "Friends":
+                    btn.set_badge_value(online_count if online_count > 0 else "")
+        except Exception as e:
+            Logger.error("SidebarNavigation", f"Badge error (Friends): {e}")
+
+        # 2. Update priority grid size
+        try:
+            from services.settings_service import get_settings_service
+            champions = get_settings_service().get("priority_picker", {}).get("list", [])
+            for btn in self.buttons:
+                if btn.name == "Champions":
+                    btn.set_badge_value(len(champions) if len(champions) > 0 else "")
+        except Exception as e:
+            Logger.error("SidebarNavigation", f"Badge error (Champions): {e}")
+
+    def update_queue_badge(self, phase):
+        for btn in self.buttons:
+            if btn.name == "Play":
+                if phase == "Matchmaking":
+                    btn.set_badge_value("●")
+                else:
+                    btn.set_badge_value("")
+
+    def _on_friends_state_changed(self):
+        QMetaObject.invokeMethod(self, "_update_friends_badge_async", Qt.QueuedConnection)
+
+    @Slot()
+    def _update_friends_badge_async(self):
+        self.update_badges()
+
+    def _on_setting_changed(self, key, val):
+        if key == "priority_picker":
+            QMetaObject.invokeMethod(self, "_update_champions_badge_async", Qt.QueuedConnection)
+
+    @Slot()
+    def _update_champions_badge_async(self):
+        self.update_badges()
+
+    def _on_queue_state(self, phase, state):
+        QMetaObject.invokeMethod(self, "_update_queue_badge_async", Qt.QueuedConnection, Q_ARG(str, phase))
+
+    @Slot(str)
+    def _update_queue_badge_async(self, phase):
+        self.update_queue_badge(phase)
 
 
 class LeagueLoopQtWindow(QMainWindow):
@@ -297,9 +537,8 @@ class LeagueLoopQtWindow(QMainWindow):
 
     def setup_pages(self):
         # Create Page Shells
-        self.play_page = QWidget()
-        l = QVBoxLayout(self.play_page)
-        l.addWidget(QLabel("Play Area / Automation Controls"))
+        from ui.qt.pages import PlayPage
+        self.play_page = PlayPage(self)
         self.pages_stack.addWidget(self.play_page)
         
         from ui.qt.pages import DashboardPage
@@ -324,7 +563,24 @@ class LeagueLoopQtWindow(QMainWindow):
         self.pages_stack.addWidget(self.settings_page)
 
     def switch_page(self, index):
+        target_widget = self.pages_stack.widget(index)
+        if not target_widget:
+            return
+            
         self.pages_stack.setCurrentIndex(index)
+        
+        # Apply smooth fade transition
+        from PySide6.QtWidgets import QGraphicsOpacityEffect
+        target_widget.setGraphicsEffect(None)  # Reset any existing effect
+        
+        eff = QGraphicsOpacityEffect(target_widget)
+        target_widget.setGraphicsEffect(eff)
+        
+        anim = QPropertyAnimation(eff, b"opacity", target_widget)
+        anim.setDuration(180)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        anim.start()
 
     @Slot(int, int, int, int)
     def on_geometry_updated(self, x, y, w, h):
