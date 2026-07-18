@@ -1,10 +1,10 @@
 {
   "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
   "scan_time_sec": 0.043,
-  "total_files": 172,
+  "total_files": 173,
   "ext_counts": {
     ".json": 19,
-    ".py": 131,
+    ".py": 132,
     ".md": 16,
     ".html": 1,
     ".js": 3,
@@ -18,10 +18,6 @@
     {
       "path": "tests\\test_automation.py",
       "lines": 902
-    },
-    {
-      "path": "src\\services\\account_manager.py",
-      "lines": 828
     },
     {
       "path": "src\\ui\\components\\priority_grid\\view.py",
@@ -40,6 +36,10 @@
       "lines": 582
     },
     {
+      "path": "src\\services\\account_manager.py",
+      "lines": 503
+    },
+    {
       "path": "src\\services\\automation\\engine.py",
       "lines": 491
     },
@@ -50,6 +50,10 @@
     {
       "path": "src\\ui\\components\\friend_list.py",
       "lines": 388
+    },
+    {
+      "path": "src\\services\\login_automation.py",
+      "lines": 379
     },
     {
       "path": "src\\ui\\components\\game_tools\\arena_tool.py",
@@ -536,7 +540,7 @@
       "lines": 0
     }
   ],
-  "total_py_lines": 17955,
+  "total_py_lines": 18009,
   "todos": [
     {
       "file": "tests\\test_poro_snacks.py",
