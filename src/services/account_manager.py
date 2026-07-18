@@ -995,3 +995,12 @@ class AccountManager:
                 return True
             time.sleep(0.5)
         return False
+
+# Global singleton
+_instance = None
+
+def get_account_manager(lcu=None, launch_client_func=None) -> AccountManager:
+    global _instance
+    if _instance is None:
+        _instance = AccountManager(lcu, launch_client_func)
+    return _instance

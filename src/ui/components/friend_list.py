@@ -18,6 +18,7 @@ import threading
 from core.events import EventBus
 import tkinter as tk
 import customtkinter as ctk
+from services.friend_service import get_friend_service
 
 from ui.components.factory import get_color, get_font, get_radius
 from ui.ui_shared import CTkTooltip
@@ -127,31 +128,20 @@ class FriendPriorityList(ctk.CTkFrame):
 
         self._expanded = True
         self._friends_data = []
-        self._auto_join_names = {
-            f.get("name", "").lower(): f.get("enabled", True)
-            for f in self.config.get("auto_join_list", [])
-        }
         self._last_render_sig = None
         self._row_widgets = []  # Track FriendRow instances for cleanup
 
         self._build_ui()
 
-        # Subscribe to EventBus — WebSocket pushes friends data in real-time
-        EventBus.on("friends_event", self._on_friends_event)
+        # Subscribe to EventBus — FriendService sorts and updates in real-time
+        EventBus.on("friends_state_changed", self._on_friends_state_changed)
 
-        # One-shot initial fetch in case WS hasn't pushed data yet
-        if self.lcu:
-            self.after(500, self._initial_fetch)
-
-        # Periodic refresh to catch missed WebSocket events
-        self._refresh_interval_ms = 30000  # 30 seconds
-        self._start_periodic_refresh()
-
-    # ─────────── Config Persistence ───────────
-
-    def _save_priority_list(self):
-        lst = [{"name": name, "enabled": enabled} for name, enabled in self._auto_join_names.items()]
-        self.config.set("auto_join_list", lst)
+        # Initial fetch from cache or trigger refresh
+        self._friends_data = get_friend_service().get_friends()
+        if self._friends_data:
+            self._safe_render()
+        else:
+            get_friend_service().fetch_friends()
 
     # ─────────── UI Construction ───────────
 
@@ -219,90 +209,9 @@ class FriendPriorityList(ctk.CTkFrame):
 
     # ─────────── Data Fetching (EventBus-driven) ───────────
 
-    def _on_friends_event(self, friends_data):
-        """Called by EventBus when LCU WebSocket pushes friend updates."""
-        if not friends_data:
-            return
-        if isinstance(friends_data, list):
-            self._process_friends(friends_data)
-        elif isinstance(friends_data, dict):
-            # WAMP delta update — merge into cached data instead of discarding
-            self._merge_friend_delta(friends_data)
-
-    def _initial_fetch(self, force=False):
-        """Fetch full friends list. Called on init and periodically for reliability."""
-        if not force and self._friends_data:  # Already got data from WS on initial load
-            return
-        try:
-            if not self.winfo_exists() or not self.lcu:
-                return
-        except Exception:
-            return
-
-        def task():
-            """Background task."""
-            try:
-                res = self.lcu.request("GET", "/lol-chat/v1/friends", silent=True)
-                if res and res.status_code == 200:
-                    self._process_friends(res.json())
-            except Exception as e:
-                Logger.debug("FriendList", f"Initial fetch error: {e}")
-
-        threading.Thread(target=task, daemon=True).start()
-
-    def _merge_friend_delta(self, delta):
-        """Merge a single friend delta update into cached data."""
-        if not isinstance(delta, dict):
-            return
-        puuid = delta.get("puuid") or delta.get("id")
-        if not puuid:
-            # Can't identify friend — fall back to full refresh
-            self._initial_fetch(force=True)
-            return
-        
-        # Find and update existing entry, or append
-        updated = False
-        for i, f in enumerate(self._friends_data):
-            if f.get("puuid") == puuid or f.get("id") == puuid:
-                self._friends_data[i].update(delta)
-                updated = True
-                break
-        
-        if not updated:
-            self._friends_data.append(delta)
-        
-        # Re-sort and re-render
-        self._process_friends(self._friends_data)
-
-    def _start_periodic_refresh(self):
-        """Periodically re-fetch the full friends list to stay accurate."""
-        def _tick():
-            try:
-                if not self.winfo_exists():
-                    return
-            except Exception:
-                return
-            self._initial_fetch(force=True)
-            self.after(self._refresh_interval_ms, _tick)
-        
-        self.after(self._refresh_interval_ms, _tick)
-
-    def _process_friends(self, friends):
-        """Sort + render friends data (callable from any thread)."""
-        for f in friends:
-            f["_name_lower"] = (f.get("gameName", "") or f.get("name", "")).lower()
-
-        def sort_key(f):
-            """Sorting key function."""
-            avail = f.get("availability", "offline")
-            gn = f.get("_name_lower", (f.get("gameName", "") or f.get("name", "")).lower())
-            prio = 1 if avail == "offline" else 0
-            return (prio, gn)
-
-        friends.sort(key=sort_key)
-        self._friends_data = friends
-
-        # Marshal render to main thread
+    def _on_friends_state_changed(self):
+        """Called by EventBus when FriendService updates friend data."""
+        self._friends_data = get_friend_service().get_friends()
         try:
             EventBus.invoke_thread_safe(self, self._safe_render)
         except Exception:
@@ -319,9 +228,7 @@ class FriendPriorityList(ctk.CTkFrame):
     # ─────────── Auto-Join Toggle ───────────
 
     def _toggle_auto_join(self, name):
-        name_lower = name.lower()
-        self._auto_join_names[name_lower] = not self._auto_join_names.get(name_lower, False)
-        self._save_priority_list()
+        get_friend_service().toggle_auto_join(name)
         self._last_render_sig = None  # Force re-render
         self._render_list()
 
@@ -339,7 +246,7 @@ class FriendPriorityList(ctk.CTkFrame):
         )
 
         name_lower = friend_name.lower()
-        is_auto = self._auto_join_names.get(name_lower, False)
+        is_auto = get_friend_service().get_auto_join_status(name_lower)
         label = "✕ Disable Auto-Join" if is_auto else "✓ Enable Auto-Join"
         menu.add_command(label=label, command=lambda: self._toggle_auto_join(friend_name))
 
@@ -357,7 +264,7 @@ class FriendPriorityList(ctk.CTkFrame):
             avail = f.get("availability", "offline")
             msg = f.get("availabilityMessage", "Online")
             name_lower = f.get("_name_lower", name.lower())
-            is_auto = self._auto_join_names.get(name_lower, False)
+            is_auto = get_friend_service().get_auto_join_status(name_lower)
             sig.append(f"{name}|{avail}|{msg}|{is_auto}")
         return "|".join(sig)
 
@@ -418,7 +325,7 @@ class FriendPriorityList(ctk.CTkFrame):
                     status_msg = avail.capitalize()
 
             name_lower = item.get("_name_lower", name.lower())
-            is_auto = self._auto_join_names.get(name_lower, False)
+            is_auto = get_friend_service().get_auto_join_status(name_lower)
 
             # Build icon loading callback
             def make_icon_cb(asset_mgr, icon_id):
@@ -477,14 +384,5 @@ class FriendPriorityList(ctk.CTkFrame):
     # ─────────── Mass Invite ───────────
 
     def _on_mass_invite(self):
-        """Delegate mass invite to the automation engine via the widget tree."""
-        root = self.winfo_toplevel()
-        engine = getattr(root, "automation", None)
-        if engine:
-            threading.Thread(target=engine.mass_invite_friends, daemon=True).start()
-        else:
-            try:
-                from ui.components.toast import ToastManager
-                ToastManager.get_instance().show("Automation engine not available.", icon="⚠️", theme="error")
-            except Exception:
-                pass
+        """Delegate mass invite via EventBus."""
+        EventBus.emit("action:mass_invite")

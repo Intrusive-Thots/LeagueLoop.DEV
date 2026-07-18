@@ -14,6 +14,8 @@ from core.constants import SECTION_GAP, BTN_HEIGHT, INNER_GAP, CARD_PAD, SPACING
 from utils.logger import Logger
 from utils.smooth_scroll import apply_smooth_scroll
 from utils.path_utils import get_asset_path
+from core.events import EventBus
+from services.queue_service import get_queue_service
 
 from ui.sidebar.navigation import NavigationWidget
 from ui.sidebar.status_bar import StatusBarWidget
@@ -38,10 +40,14 @@ class SidebarWidget(ctk.CTkFrame):
         self._body_expanded = True
         self._last_ui_phase = None
         self._current_game_phase = None
-        self._queue_timer_job = None
         self._current_queue_time = 0
         self._estimated_queue_time = 120
         self._automation_saved_states = {}
+
+        # Subscribe to Queue events
+        EventBus.on("queue_timer_tick", self._on_queue_timer_tick)
+        EventBus.on("queue_search_started", self._on_queue_search_started)
+        EventBus.on("queue_search_cancelled", self._on_queue_search_cancelled)
 
         # ── 1. Sidebar Header Chrome ──
         self.header = ctk.CTkFrame(self, fg_color="transparent")
@@ -358,55 +364,7 @@ class SidebarWidget(ctk.CTkFrame):
         return 450
 
     def _find_match(self):
-        if not self.lcu: return
-        mode = self.config.get("aram_mode", "ARAM")
-        self.update_action_log(f"Initiating {mode}...")
-
-        def _execute_sync():
-            state_req = self.lcu.request("GET", "/lol-lobby/v2/lobby/matchmaking/search-state")
-            state_data = state_req.json() if state_req and state_req.status_code == 200 else {}
-            
-            if state_data.get("searchState") == "Searching":
-                self.lcu.request("DELETE", "/lol-lobby/v2/lobby/matchmaking/search")
-                self.root_app.after(0, lambda: self.update_action_log("Matchmaking Cancelled."))
-                if getattr(self, "power_state", False):
-                    self.root_app.after(0, self._on_power_click)
-                return
-
-            target_q_id = self._get_queue_id_for_mode(mode)
-            lobby_req = self.lcu.request("GET", "/lol-lobby/v2/lobby")
-            in_lobby = lobby_req and lobby_req.status_code == 200
-            should_create = True
-
-            if in_lobby:
-                try:
-                    data = lobby_req.json()
-                    current_q = data.get("gameConfig", {}).get("queueId")
-                    if current_q == target_q_id:
-                        should_create = False
-                    else:
-                        self.lcu.request("DELETE", "/lol-lobby/v2/lobby/matchmaking/search")
-                        time.sleep(0.5)
-                        self.lcu.request("DELETE", "/lol-lobby/v2/lobby")
-                        time.sleep(0.5)
-                except Exception:
-                    should_create = True
-
-            if should_create:
-                self.lcu.request("POST", "/lol-lobby/v2/lobby", {"queueId": target_q_id})
-                time.sleep(1)
-
-            res = self.lcu.request("POST", "/lol-lobby/v2/lobby/matchmaking/search")
-            
-            def _update_ui():
-                if res and res.status_code in [200, 204]:
-                    self.update_action_log(f"Searching ({mode})...")
-                    self.set_power_state(True)
-                else:
-                    self.update_action_log("Matchmaking failed — check client.")
-            self.root_app.after(0, _update_ui)
-
-        threading.Thread(target=_execute_sync, daemon=True).start()
+        threading.Thread(target=lambda: get_queue_service().find_match(), daemon=True).start()
 
     def _on_toggle_accept(self):
         self.config.set("auto_accept", self.var_accept.get())
@@ -489,39 +447,20 @@ class SidebarWidget(ctk.CTkFrame):
         self.status_bar._clear_action_log()
 
     def _force_requeue(self):
-        if self.lcu:
-            def _execute():
-                try:
-                    self.lcu.request("DELETE", "/lol-lobby/v2/lobby/matchmaking/search")
-                    self.lcu.request("POST", "/lol-lobby/v2/lobby/matchmaking/search")
-                    self.root_app.after(0, lambda: self.update_action_log("Re-queued Matchmaking."))
-                except Exception as e:
-                    self.root_app.after(0, lambda: self.update_action_log(f"Requeue error: {e}"))
-            threading.Thread(target=_execute, daemon=True).start()
+        def _execute():
+            qs = get_queue_service()
+            qs.cancel_matchmaking()
+            time.sleep(0.5)
+            qs.find_match()
+        threading.Thread(target=_execute, daemon=True).start()
 
     def _force_dodge(self):
-        if self.lcu:
-            self.update_action_log("Client exiting (Dodging)...")
-            def _execute():
-                try:
-                    self.lcu.request("POST", "/process-control/v1/process/quit")
-                except Exception as e:
-                    self.root_app.after(0, lambda: self.update_action_log(f"Dodge error: {e}"))
-            threading.Thread(target=_execute, daemon=True).start()
+        self.update_action_log("Client exiting (Dodging)...")
+        threading.Thread(target=get_queue_service().force_dodge, daemon=True).start()
 
     def _play_again(self):
-        if self.lcu:
-            self.update_action_log("Playing again...")
-            def _execute():
-                try:
-                    res = self.lcu.request("POST", "/lol-lobby/v2/play-again")
-                    if res and res.status_code in [200, 204]:
-                        self.root_app.after(0, lambda: self.update_action_log("Entered Lobby."))
-                    else:
-                        self.root_app.after(0, lambda: self.update_action_log("Play Again failed."))
-                except Exception as e:
-                    self.root_app.after(0, lambda: self.update_action_log(f"Play Again error: {e}"))
-            threading.Thread(target=_execute, daemon=True).start()
+        self.update_action_log("Playing again...")
+        threading.Thread(target=get_queue_service().play_again, daemon=True).start()
 
     def _show_play_again(self):
         self.play_page.btn_find_match.pack_forget()
@@ -546,16 +485,23 @@ class SidebarWidget(ctk.CTkFrame):
         else:
             self.play_page.btn_find_match.pack_forget()
 
-    def _start_local_queue_timer(self, time_in_queue, estimated_time):
-        self._estimated_queue_time = estimated_time if estimated_time > 0 else 120
-        if self._queue_timer_job is not None:
-            drift = abs(self._current_queue_time - time_in_queue)
-            if drift <= 5: return
-        self._stop_local_queue_timer()
-        self._current_queue_time = time_in_queue
-        self._tick_local_timer()
+    def _on_queue_timer_tick(self, current_time, estimated_time):
+        self._current_queue_time = current_time
+        self._estimated_queue_time = estimated_time
+        if not self.winfo_exists(): return
+        self.root_app.after(0, self._render_timer_ui)
 
-    def _tick_local_timer(self):
+    def _on_queue_search_started(self, mode):
+        if not self.winfo_exists(): return
+        self.root_app.after(0, lambda: self.update_action_log(f"Searching ({mode})..."))
+        self.root_app.after(0, lambda: self.set_power_state(True))
+
+    def _on_queue_search_cancelled(self):
+        if not self.winfo_exists(): return
+        self.root_app.after(0, lambda: self.update_action_log("Matchmaking Cancelled."))
+        self.root_app.after(0, lambda: self.set_power_state(False))
+
+    def _render_timer_ui(self):
         if not self.winfo_exists(): return
         mins, secs = int(self._current_queue_time // 60), int(self._current_queue_time % 60)
         time_str = f"Queue: {mins}:{secs:02d}"
@@ -577,13 +523,11 @@ class SidebarWidget(ctk.CTkFrame):
         else:
             self.progress_bar.set(0)
 
-        self._current_queue_time += 1
-        self._queue_timer_job = self.after(1000, self._tick_local_timer)
+    def _start_local_queue_timer(self, time_in_queue, estimated_time):
+        # Compatibility shim: now managed by EventBus
+        pass
 
     def _stop_local_queue_timer(self):
-        if self._queue_timer_job is not None:
-            self.after_cancel(self._queue_timer_job)
-            self._queue_timer_job = None
         if hasattr(self, "progress_bar"):
             self.progress_bar.set(0)
             self.progress_bar.configure(progress_color=get_color("colors.accent.gold", "#C8AA6E"))

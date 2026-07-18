@@ -57,23 +57,9 @@ class PriorityIconGrid(ctk.CTkFrame):
 
     # ───────────── helpers ─────────────
     def _scan_known_champions(self):
-        from utils.path_utils import get_data_dir
-        
         known = {}
-        dirs_to_check = [
-            get_asset_path("assets"),
-            os.path.join(get_data_dir(), "cache", "assets")
-        ]
-        
-        for d in dirs_to_check:
-            if os.path.isdir(d):
-                for f in os.listdir(d):
-                    if f.startswith("champion_") and f.endswith(".png"):
-                        real = f[len("champion_"):-len(".png")]
-                        known[real.lower()] = real
-
-        # ⚡ Bolt: Precompute and sort normalized names to eliminate .lower() and sorted()
-        # allocations from the hot-path _on_add_typing loop
+        if self.assets:
+            known = self.assets.get_known_champions()
         self._search_cache = sorted([(v.lower(), v) for v in known.values()], key=lambda x: x[1])
         return known
 

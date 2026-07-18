@@ -566,3 +566,14 @@ class AssetManager:
 
         return self._download_and_cache_image(url, path, cache_key, size=(width, None), opacity=opacity)
 
+    def get_known_champions(self) -> dict:
+        """Returns a dict mapping lowercase key/name to actual DDragon champion key string."""
+        known = {}
+        if hasattr(self, "champ_data") and self.champ_data:
+            for key_str, info in self.champ_data.items():
+                known[key_str.lower()] = key_str
+                name = info.get("name", "")
+                if name:
+                    known[name.lower()] = key_str
+        return known
+

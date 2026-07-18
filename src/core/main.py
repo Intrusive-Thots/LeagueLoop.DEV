@@ -28,7 +28,7 @@ from typing import Optional, TYPE_CHECKING
 from services.api_handler import LCUClient  # type: ignore
 from services.asset_manager import AssetManager, ConfigManager  # type: ignore
 from services.automation import AutomationEngine  # type: ignore
-from services.account_manager import AccountManager  # type: ignore
+from services.account_manager import get_account_manager  # type: ignore
 from services.stats_scraper import StatsScraper  # type: ignore
 from services.settings_service import get_settings_service
 from services.league_service import get_league_service
@@ -37,6 +37,7 @@ from services.champion_service import get_champion_service
 from services.draft_service import get_draft_service
 from services.window_service import get_window_service
 from services.notification_service import get_notification_service
+from services.queue_service import get_queue_service
 from utils.logger import Logger  # type: ignore
 from utils.path_utils import get_asset_path  # type: ignore
 from core.version import __version__  # type: ignore
@@ -139,6 +140,7 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self.draft_service = get_draft_service(self.league_service)
         self.window_service = get_window_service(self.settings_service)
         self.notification_service = get_notification_service()
+        self.queue_service = get_queue_service(self.settings_service, self.league_service)
         self.window_service.start()
         
         self.running = True
@@ -158,6 +160,13 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         EventBus.on("automation_lobby_stats", lambda team, bench, me=None: (
             self.after(0, lambda: self.sidebar.update_lobby_stats(team, bench, me)) if hasattr(self, "sidebar") else None
         ))
+        
+        # Subscribe to Remote API/Action Events
+        EventBus.on("action:find_match", lambda: self.after(0, self._hotkey_find_match))
+        EventBus.on("action:launch_client", lambda: self.after(0, self._hotkey_launch_client))
+        EventBus.on("action:toggle_automation", lambda: self.after(0, self._hotkey_toggle_automation))
+        EventBus.on("action:set_status", lambda msg: threading.Thread(target=lambda: self.automation.set_custom_status(msg), daemon=True).start() if self.automation else None)
+        EventBus.on("action:mass_invite", lambda: threading.Thread(target=lambda: self.automation.mass_invite_friends(), daemon=True).start() if self.automation else None)
 
         self.automation: Optional[AutomationEngine] = AutomationEngine(
             self.lcu,
@@ -175,7 +184,7 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
             auto.log = self.sidebar.update_action_log
 
         # Initialize account manager and inject into sidebar
-        self.account_manager = AccountManager(
+        self.account_manager = get_account_manager(
             lcu=self.lcu,
             launch_client_func=self._hotkey_launch_client
         )

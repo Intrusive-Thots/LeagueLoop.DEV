@@ -1,10 +1,10 @@
 {
   "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
-  "scan_time_sec": 0.044,
-  "total_files": 162,
+  "scan_time_sec": 0.043,
+  "total_files": 163,
   "ext_counts": {
     ".json": 20,
-    ".py": 120,
+    ".py": 121,
     ".md": 16,
     ".html": 1,
     ".js": 3,
@@ -17,15 +17,15 @@
     },
     {
       "path": "src\\ui\\components\\priority_grid.py",
-      "lines": 1204
+      "lines": 1190
     },
     {
       "path": "src\\services\\account_manager.py",
-      "lines": 997
+      "lines": 1006
     },
     {
       "path": "src\\core\\main.py",
-      "lines": 929
+      "lines": 938
     },
     {
       "path": "tests\\test_automation.py",
@@ -33,11 +33,11 @@
     },
     {
       "path": "src\\services\\local_api.py",
-      "lines": 837
+      "lines": 841
     },
     {
       "path": "src\\ui\\sidebar\\sidebar.py",
-      "lines": 714
+      "lines": 658
     },
     {
       "path": "src\\ui\\components\\game_tools\\accounts_tool.py",
@@ -45,15 +45,15 @@
     },
     {
       "path": "src\\services\\asset_manager.py",
-      "lines": 568
-    },
-    {
-      "path": "src\\ui\\components\\friend_list.py",
-      "lines": 490
+      "lines": 579
     },
     {
       "path": "src\\ui\\components\\factory.py",
       "lines": 463
+    },
+    {
+      "path": "src\\ui\\components\\friend_list.py",
+      "lines": 388
     },
     {
       "path": "src\\ui\\components\\game_tools\\arena_tool.py",
@@ -82,6 +82,10 @@
     {
       "path": "src\\ui\\components\\toast.py",
       "lines": 268
+    },
+    {
+      "path": "src\\services\\queue_service.py",
+      "lines": 231
     },
     {
       "path": "src\\utils\\client_detector.py",
@@ -492,7 +496,7 @@
       "lines": 0
     }
   ],
-  "total_py_lines": 18508,
+  "total_py_lines": 18600,
   "todos": [
     {
       "file": "tests\\test_poro_snacks.py",
