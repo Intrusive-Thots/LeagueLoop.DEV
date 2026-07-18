@@ -173,7 +173,44 @@ class SidebarNavigation(QWidget):
         self._add_nav_item("Settings", "⚙️", 5)
         
         self.layout.addStretch()
+        
+        # Add thin gold divider line
+        divider = QFrame(self)
+        divider.setFixedHeight(1)
+        divider.setStyleSheet("background-color: #1E2328; border: none; margin-left: 10px; margin-right: 10px;")
+        self.layout.addWidget(divider)
+        
+        # Power label
+        self.lbl_power = QLabel("AUTO", self)
+        self.lbl_power.setAlignment(Qt.AlignCenter)
+        self.lbl_power.setStyleSheet("color: #6C757D; font-size: 8px; font-weight: bold; background: transparent;")
+        self.layout.addWidget(self.lbl_power)
+        
+        # main power toggle
+        from ui.qt.pages.settings_page import QtLolToggle
+        self.toggle_power = QtLolToggle(
+            self,
+            active_color="#A88A4E",
+            inactive_color="#1E2328",
+            knob_color="#F0E6D2"
+        )
+        self.toggle_power.setChecked(True)
+        self.toggle_power.clicked.connect(self._on_power_toggled)
+        self.layout.addWidget(self.toggle_power, alignment=Qt.AlignCenter)
+        
         self.set_active(0)
+
+    def _on_power_toggled(self):
+        state = self.toggle_power.isChecked()
+        app_win = self.window()
+        if hasattr(app_win, "ctk_app") and app_win.ctk_app:
+            app_win.ctk_app.toggle_power(state)
+            
+        from ui.qt.widgets.toast import ToastManager
+        if state:
+            ToastManager.get_instance().show("Automation Activated", icon="▶", theme="success")
+        else:
+            ToastManager.get_instance().show("Automation Paused", icon="⏸", theme="error")
 
     def _add_nav_item(self, name, icon_text, index):
         btn = QPushButton(icon_text, self)

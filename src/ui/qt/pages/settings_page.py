@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider, QLineEdit,
     QPushButton, QFrame, QSizePolicy, QMessageBox, QDialog
 )
-from PySide6.QtCore import Qt, QTimer, Property, QPropertyAnimation, QEasingCurve, Slot
+from PySide6.QtCore import Qt, QTimer, Property, QPropertyAnimation, QEasingCurve, Slot, QPoint
 from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QKeySequence
 
 from ui.qt.widgets import ScrollableList, make_card, make_button
