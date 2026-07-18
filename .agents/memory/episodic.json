@@ -1574,5 +1574,74 @@
       "todos": 1
     },
     "timestamp": "2026-07-18T11:51:15.493683+00:00"
+  },
+  {
+    "task": "self_improving_loop",
+    "run_number": 47,
+    "duration_seconds": 1.388,
+    "test_results": {
+      "passed": 123,
+      "failed": 0,
+      "errors": 0,
+      "total": 123
+    },
+    "findings_count": {
+      "high": 2,
+      "medium": 101,
+      "low": 82
+    },
+    "regressions": [],
+    "repo_stats": {
+      "total_files": 191,
+      "total_py_lines": 21846,
+      "todos": 1
+    },
+    "timestamp": "2026-07-18T11:54:45.014290+00:00"
+  },
+  {
+    "task": "self_improving_loop",
+    "run_number": 48,
+    "duration_seconds": 1.376,
+    "test_results": {
+      "passed": 123,
+      "failed": 0,
+      "errors": 0,
+      "total": 123
+    },
+    "findings_count": {
+      "high": 2,
+      "medium": 101,
+      "low": 82
+    },
+    "regressions": [],
+    "repo_stats": {
+      "total_files": 191,
+      "total_py_lines": 22371,
+      "todos": 1
+    },
+    "timestamp": "2026-07-18T11:56:17.781826+00:00"
+  },
+  {
+    "task": "self_improving_loop",
+    "run_number": 49,
+    "duration_seconds": 1.471,
+    "test_results": {
+      "passed": 123,
+      "failed": 0,
+      "errors": 0,
+      "total": 123
+    },
+    "findings_count": {
+      "high": 2,
+      "medium": 101,
+      "low": 82
+    },
+    "regressions": [],
+    "repo_stats": {
+      "total_files": 191,
+      "total_py_lines": 22433,
+      "todos": 1
+    },
+    "timestamp": "2026-07-18T11:56:48.953927+00:00"
   }
 ]

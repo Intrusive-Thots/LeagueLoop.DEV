@@ -1,12 +1,13 @@
 """
 PySide6 Dashboard Page Component
-Displays modular diagnostic widgets (LCU Connection, Game State, Friends Summary, Automation).
+Displays modular diagnostic widgets (LCU Connection, Game State, Friends Summary, Automation)
+supporting custom drag-and-drop reordering.
 """
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QGridLayout, QSizePolicy
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QGridLayout, QSizePolicy, QApplication
 )
-from PySide6.QtCore import Qt, QMetaObject, Slot, Q_ARG
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtCore import Qt, QMetaObject, Slot, Q_ARG, Property, QPoint, QMimeData
+from PySide6.QtGui import QColor, QFont, QDrag, QPixmap
 
 from ui.qt.widgets import ScrollableList, make_card
 from ui.qt.theme import get_theme_color, get_theme_radius
@@ -14,14 +15,18 @@ from services.league_service import get_league_service
 from services.friend_service import get_friend_service
 from services.settings_service import get_settings_service
 from core.events import EventBus
+from utils.logger import Logger
 
 
 class DashboardWidget(QFrame):
-    """Base styled card panel for dashboard modules."""
+    """Base styled card panel for dashboard modules supporting drag-and-drop reordering."""
     
-    def __init__(self, parent=None, title="MODULE"):
-        super().__init__(parent)
+    def __init__(self, parent_page, parent_widget=None, title="MODULE"):
+        super().__init__(parent_widget)
+        self.parent_page = parent_page
         self.setObjectName("dashboardWidget")
+        self._drag_start_pos = None
+        self.title_text = title
         
         # Sleek dark blue card styling
         border = get_theme_color("colors.border.subtle", "#1E2328")
@@ -59,12 +64,50 @@ class DashboardWidget(QFrame):
         
         layout.addWidget(self.content_widget)
 
+    def set_drag_over(self, active: bool):
+        border = "#C8AA6E" if active else get_theme_color("colors.border.subtle", "#1E2328")
+        bg_card = get_theme_color("colors.background.card", "#141E28")
+        self.setStyleSheet(f"""
+            QFrame#dashboardWidget {{
+                background-color: {bg_card};
+                border: 1px solid {border};
+                border-radius: 6px;
+            }}
+        """)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._drag_start_pos = event.position().toPoint()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() & Qt.LeftButton and self._drag_start_pos:
+            if (event.position().toPoint() - self._drag_start_pos).manhattanLength() < QApplication.startDragDistance():
+                return
+            
+            # Initiate drag reorder
+            drag = QDrag(self)
+            mime_data = QMimeData()
+            mime_data.setData("application/x-dashboard-widget", self.title_text.encode("utf-8"))
+            drag.setMimeData(mime_data)
+            
+            # Take a snapshot of the widget for the drag thumbnail
+            pixmap = self.grab()
+            drag.setPixmap(pixmap)
+            drag.setHotSpot(event.position().toPoint())
+            
+            # Set target reference on page
+            self.parent_page.dragged_module = self
+            
+            # Execute drag operation
+            drag.exec(Qt.MoveAction)
+
 
 class LcuAccountModule(DashboardWidget):
     """Shows summoner profile, name, level, and client connection metrics."""
     
-    def __init__(self, parent=None):
-        super().__init__(parent, title="LCU ACCOUNT")
+    def __init__(self, parent_page, parent=None):
+        super().__init__(parent_page, parent, title="LCU ACCOUNT")
         
         self.lbl_name = QLabel(" Summoner: Loading...", self)
         self.lbl_name.setStyleSheet("color: #F0E6D2; font-weight: bold; font-size: 12px;")
@@ -112,8 +155,8 @@ class LcuAccountModule(DashboardWidget):
 class GameflowModule(DashboardWidget):
     """Tracks queue search states and active gameflow phases (e.g. Matchmaking)."""
     
-    def __init__(self, parent=None):
-        super().__init__(parent, title="GAME STATE")
+    def __init__(self, parent_page, parent=None):
+        super().__init__(parent_page, parent, title="GAME STATE")
         
         self.lbl_phase = QLabel("Phase: None", self)
         self.lbl_phase.setStyleSheet(f"color: {get_theme_color('colors.accent.primary', '#C8AA6E')}; font-weight: bold; font-size: 14px;")
@@ -150,15 +193,14 @@ class GameflowModule(DashboardWidget):
             self.lbl_phase.setStyleSheet(f"color: {get_theme_color('colors.accent.primary', '#C8AA6E')}; font-weight: bold; font-size: 14px;")
 
     def _on_queue_state(self, phase, state):
-        # Dispatch to main thread
         QMetaObject.invokeMethod(self, "update_state", Qt.QueuedConnection, Q_ARG(str, phase))
 
 
 class FriendsSummaryModule(DashboardWidget):
     """Summarizes online friends count and auto-join indicators."""
     
-    def __init__(self, parent=None):
-        super().__init__(parent, title="FRIENDS SUMMARY")
+    def __init__(self, parent_page, parent=None):
+        super().__init__(parent_page, parent, title="FRIENDS SUMMARY")
         
         self.lbl_count = QLabel("Online Friends: --", self)
         self.lbl_count.setStyleSheet("color: #F0E6D2; font-weight: bold; font-size: 12px;")
@@ -194,8 +236,8 @@ class FriendsSummaryModule(DashboardWidget):
 class AutomationModule(DashboardWidget):
     """Shows automation checklist options and ARAM priority list counts."""
     
-    def __init__(self, parent=None):
-        super().__init__(parent, title="AUTOMATION STATE")
+    def __init__(self, parent_page, parent=None):
+        super().__init__(parent_page, parent, title="AUTOMATION STATE")
         self.config = get_settings_service()
         
         self.lbl_status = QLabel("Automation: ACTIVE", self)
@@ -215,15 +257,12 @@ class AutomationModule(DashboardWidget):
         self.update_settings()
 
     def update_settings(self):
-        # Fetch current config states
         aram_list = self.config.get("priority_picker", {}).get("list", [])
         self.lbl_aram.setText(f"ARAM Priority List: {len(aram_list)} champs")
         
         delay = float(self.config.get("accept_delay", 2.0))
         self.lbl_delay.setText(f"Accept Delay: {delay:.1f}s")
         
-        # Visual power status
-        # We can check from ctk_app power toggle if we want, or default
         root = self.window()
         if hasattr(root, "navigation") and hasattr(root.navigation, "toggle_power"):
             is_active = root.navigation.toggle_power.isChecked()
@@ -239,10 +278,12 @@ class AutomationModule(DashboardWidget):
 
 
 class DashboardPage(QWidget):
-    """The main Dashboard Page displaying modular diagnostic cards."""
+    """The main Dashboard Page displaying modular diagnostic cards supporting reorderable drag drop."""
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setAcceptDrops(True)
+        self.dragged_module = None
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -257,21 +298,86 @@ class DashboardPage(QWidget):
         card_layout.setSpacing(10)
         
         # Grid layout for modular widgets
-        grid_widget = QWidget(self.card)
-        grid = QGridLayout(grid_widget)
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setSpacing(10)
+        self.grid_widget = QWidget(self.card)
+        self.grid = QGridLayout(self.grid_widget)
+        self.grid.setContentsMargins(0, 0, 0, 0)
+        self.grid.setSpacing(10)
         
-        self.account_module = LcuAccountModule(grid_widget)
-        grid.addWidget(self.account_module, 0, 0)
+        # Instantiate modules
+        self.account_module = LcuAccountModule(self, self.grid_widget)
+        self.gameflow_module = GameflowModule(self, self.grid_widget)
+        self.friends_module = FriendsSummaryModule(self, self.grid_widget)
+        self.auto_module = AutomationModule(self, self.grid_widget)
         
-        self.gameflow_module = GameflowModule(grid_widget)
-        grid.addWidget(self.gameflow_module, 0, 1)
+        self.modules = [
+            self.account_module,
+            self.gameflow_module,
+            self.friends_module,
+            self.auto_module
+        ]
         
-        self.friends_module = FriendsSummaryModule(grid_widget)
-        grid.addWidget(self.friends_module, 1, 0)
+        # Initial grid population
+        self.rebuild_grid()
+        card_layout.addWidget(self.grid_widget)
+
+    def rebuild_grid(self):
+        # Clear existing layout items
+        while self.grid.count() > 0:
+            self.grid.takeAt(0)
+            
+        # Place 4 modules in 2x2 layout
+        for i, module in enumerate(self.modules):
+            row = i // 2
+            col = i % 2
+            self.grid.addWidget(module, row, col)
+
+    def swap_modules(self, module_a, module_b):
+        if module_a not in self.modules or module_b not in self.modules:
+            return
+        idx_a = self.modules.index(module_a)
+        idx_b = self.modules.index(module_b)
         
-        self.auto_module = AutomationModule(grid_widget)
-        grid.addWidget(self.auto_module, 1, 1)
-        
-        card_layout.addWidget(grid_widget)
+        # Swap slots
+        self.modules[idx_a], self.modules[idx_b] = self.modules[idx_b], self.modules[idx_a]
+        self.rebuild_grid()
+
+    def find_module_at(self, local_pos):
+        # Map target coordinates from card spacing to grid widget bounds
+        grid_pos = self.grid_widget.mapFrom(self.card, local_pos)
+        for module in self.modules:
+            if module.geometry().contains(grid_pos):
+                return module
+        return None
+
+    # ── Drag & Drop Event Overrides ──
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat("application/x-dashboard-widget"):
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasFormat("application/x-dashboard-widget"):
+            local_pos = self.card.mapFrom(self, event.position().toPoint())
+            target = self.find_module_at(local_pos)
+            
+            # Render hover borders
+            for module in self.modules:
+                if module == target and module != self.dragged_module:
+                    module.set_drag_over(True)
+                else:
+                    module.set_drag_over(False)
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        if event.mimeData().hasFormat("application/x-dashboard-widget"):
+            local_pos = self.card.mapFrom(self, event.position().toPoint())
+            target = self.find_module_at(local_pos)
+            
+            # Reset borders
+            for module in self.modules:
+                module.set_drag_over(False)
+                
+            if target and target != self.dragged_module:
+                self.swap_modules(self.dragged_module, target)
+                
+            self.dragged_module = None
+            event.acceptProposedAction()

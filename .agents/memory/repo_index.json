@@ -1,6 +1,6 @@
 {
   "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
-  "scan_time_sec": 0.052,
+  "scan_time_sec": 0.059,
   "total_files": 191,
   "ext_counts": {
     ".json": 20,
@@ -12,12 +12,12 @@
   },
   "python_modules": [
     {
-      "path": "src\\ui\\components\\priority_grid\\view.py",
-      "lines": 1020
+      "path": "src\\ui\\qt\\pages\\champions_page.py",
+      "lines": 1326
     },
     {
-      "path": "src\\ui\\qt\\pages\\champions_page.py",
-      "lines": 816
+      "path": "src\\ui\\components\\priority_grid\\view.py",
+      "lines": 1020
     },
     {
       "path": "src\\ui\\qt\\pages\\settings_page.py",
@@ -40,6 +40,10 @@
       "lines": 582
     },
     {
+      "path": "src\\ui\\qt\\pages\\friends_page.py",
+      "lines": 531
+    },
+    {
       "path": "src\\services\\account_manager.py",
       "lines": 503
     },
@@ -52,10 +56,6 @@
       "lines": 473
     },
     {
-      "path": "src\\ui\\qt\\pages\\friends_page.py",
-      "lines": 469
-    },
-    {
       "path": "src\\core\\main.py",
       "lines": 409
     },
@@ -66,6 +66,10 @@
     {
       "path": "tests\\test_automation_features.py",
       "lines": 388
+    },
+    {
+      "path": "src\\ui\\qt\\pages\\dashboard_page.py",
+      "lines": 383
     },
     {
       "path": "src\\services\\login_automation.py",
@@ -102,10 +106,6 @@
     {
       "path": "src\\core\\window_manager.py",
       "lines": 280
-    },
-    {
-      "path": "src\\ui\\qt\\pages\\dashboard_page.py",
-      "lines": 277
     },
     {
       "path": "src\\utils\\client_detector.py",
@@ -244,6 +244,10 @@
       "lines": 116
     },
     {
+      "path": "src\\services\\league_service.py",
+      "lines": 113
+    },
+    {
       "path": "src\\ui\\theme\\token_loader.py",
       "lines": 110
     },
@@ -262,10 +266,6 @@
     {
       "path": "src\\ui\\components\\tray_icon.py",
       "lines": 100
-    },
-    {
-      "path": "src\\services\\league_service.py",
-      "lines": 98
     },
     {
       "path": "src\\ui\\components\\priority_grid\\drag_controller.py",
@@ -608,7 +608,7 @@
       "lines": 0
     }
   ],
-  "total_py_lines": 21740,
+  "total_py_lines": 22433,
   "todos": [
     {
       "file": "tests\\test_poro_snacks.py",

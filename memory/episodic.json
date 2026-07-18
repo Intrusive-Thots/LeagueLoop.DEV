@@ -22,5 +22,11 @@
     "timestamp": "2026-07-18T11:50:00Z",
     "duration_seconds": 950,
     "outcome": "success"
+  },
+  {
+    "task": "advanced features modernization (drag-reorderable dashboard modules, favorite champion star overlays, grid filter bar, hover stats cards, friends rank badges, context invite/spectate/message menus)",
+    "timestamp": "2026-07-18T11:56:00Z",
+    "duration_seconds": 720,
+    "outcome": "success"
   }
 ]

@@ -37,6 +37,21 @@ class LeagueService:
         """Perform REST request directly to the LCU API."""
         return self.lcu.request(method, endpoint, **kwargs)
 
+    def get_champion_masteries(self) -> list:
+        """Fetch summoner's champion mastery records from LCU collections."""
+        if not self.is_connected or not self._summoner_info:
+            return []
+        summoner_id = self._summoner_info.get("summonerId")
+        if not summoner_id:
+            return []
+        try:
+            resp = self.request("GET", f"/lol-collections/v1/inventories/{summoner_id}/champion-mastery")
+            if resp and resp.status_code == 200:
+                return resp.json()
+        except Exception as e:
+            Logger.error("LeagueService", f"Failed to fetch champion masteries: {e}")
+        return []
+
     def _on_lcu_connection_change(self, connected: bool):
         Logger.info("LeagueService", f"LCU Connection status changed: {connected}")
         if not connected:

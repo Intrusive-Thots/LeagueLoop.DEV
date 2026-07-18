@@ -10,5 +10,9 @@
   {
     "optimization": "PySide6 Headless Coordinator & Page transitions",
     "details": "Ported the CustomTkinter UI to PySide6 QMainWindow. Transitioned the old main app to a headless background service coordinator to eliminate redundant Tkinter widget overhead. Added smooth page fade opacity transitions, collapsible sidebars, and thread-safe EventBus status badges."
+  },
+  {
+    "optimization": "Dynamic Grid Layout & Filter Sorting",
+    "details": "Optimized grid redraws by filtering and sorting in-memory datasets before binding widgets, and disabled drag reordering when layouts are locked under sorting filters."
   }
 ]

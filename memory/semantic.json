@@ -30,5 +30,9 @@
   {
     "concept": "PySide6 Migration & Page Transitions",
     "learned_knowledge": "Migrated the entire LeagueLoop user interface from CustomTkinter to PySide6. The main app is now a headless coordinator that communicates purely via EventBus. Layout pages (Dashboard, Friends, Champions, Settings, and Play) are stacked using QStackedWidget. Clean fade transitions are achieved using QGraphicsOpacityEffect with QPropertyAnimation, and status badges are updated thread-safely via QMetaObject.invokeMethod."
+  },
+  {
+    "concept": "Reorderable Grid Drag & Dynamic Filters",
+    "learned_knowledge": "Dynamic drag-to-rearrange grids map global drag positions to local grid dimensions to calculate index target destinations. When role filters, search constraints, or custom sort orderings are active, drag reordering is disabled to prevent logical index collision with the underlying model list."
   }
 ]

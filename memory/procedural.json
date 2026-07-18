@@ -54,5 +54,15 @@
       "On toggle click, stop the animation, configure start and end width values (e.g. 56px and 160px), and trigger start()",
       "Hide or show labels and category headers immediately or upon animation state change to ensure clean visual flow"
     ]
+  },
+  {
+    "pattern_name": "Drag-to-Rearrange Swap Grid Flow",
+    "steps": [
+      "Define draggable widgets by capturing mousePressEvent start positions and initiating QDrag on mouseMoveEvent when distance exceeds drag threshold",
+      "Store a temporary dragged reference on the parent page instance during drag execution",
+      "Enable setAcceptDrops(True) on the parent page",
+      "In dropEvent, map drop coordinate to local page geometry and identify target widget bounds under drop position",
+      "If target matches valid grid cell and is not the original source, swap their indexes in the module data list and clear/re-add widgets to the QGridLayout"
+    ]
   }
 ]

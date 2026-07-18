@@ -1,17 +1,19 @@
 """
 PySide6 Friends Page Component
-Manages active friend lists, online stats, auto-join triggers, and party invites.
+Manages active friend lists, online status indicators, rank badges,
+active champion indicators, and context menus for Quick Invite, Spectate, and Chat.
 """
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QFrame, QSizePolicy, QMenu, QGraphicsOpacityEffect
 )
-from PySide6.QtCore import Qt, QMetaObject, Slot, QPoint
+from PySide6.QtCore import Qt, QMetaObject, Slot, Q_ARG, QPoint
 from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath, QPixmap, QImage, QCursor
 
 from ui.qt.widgets import ScrollableList, make_card, make_button
 from ui.qt.theme import get_theme_color, get_theme_radius, get_theme_spacing
 from services.friend_service import get_friend_service
+from services.league_service import get_league_service
 from core.events import EventBus
 from utils.logger import Logger
 
@@ -68,7 +70,7 @@ class CircleLabel(QLabel):
 
 
 class FriendRowWidget(QFrame):
-    """A single friend entry card featuring profile avatar, status dot, and auto-join toggle."""
+    """A single friend entry card featuring profile avatar, status dot, rank badges, and auto-join toggle."""
     
     def __init__(self, parent=None, friend_data=None, assets=None, on_toggle_auto=None, on_context=None):
         super().__init__(parent)
@@ -123,7 +125,7 @@ class FriendRowWidget(QFrame):
         self.status_dot.setStyleSheet(f"color: {dot_color}; font-size: 13px;")
         layout.addWidget(self.status_dot)
         
-        # Text Stack Layout (Name + Message)
+        # Text Stack Layout (Name + Message / Champion status)
         text_widget = QWidget(self)
         text_layout = QVBoxLayout(text_widget)
         text_layout.setContentsMargins(0, 0, 0, 0)
@@ -134,10 +136,30 @@ class FriendRowWidget(QFrame):
         self.lbl_name.setStyleSheet(f"color: {name_color}; font-weight: bold; font-size: 12px; background: transparent;")
         text_layout.addWidget(self.lbl_name)
         
-        status_msg = friend_data.get("availabilityMessage", "Online") if is_online else "Offline"
-        if self.avail in ("dnd", "away", "chat") and not status_msg:
-            status_msg = self.avail.capitalize()
+        # Resolve dynamic game details
+        status_msg = "Offline"
+        if is_online:
+            status_msg = friend_data.get("availabilityMessage") or friend_data.get("statusMessage") or "Online"
             
+            # Check LCU inner game state details
+            lol = friend_data.get("lol", {})
+            game_state = lol.get("gameStatus") or friend_data.get("gameStatus")
+            
+            if game_state == "inGame":
+                champ_id = lol.get("championId") or friend_data.get("championId")
+                if champ_id and assets:
+                    try:
+                        cname = assets.get_champ_name(int(champ_id))
+                        status_msg = f"In Game - {cname}"
+                    except Exception:
+                        status_msg = "In Game"
+                else:
+                    status_msg = "In Game"
+            elif game_state == "champSelect":
+                status_msg = "Champ Select"
+            elif game_state == "inQueue":
+                status_msg = "In Queue"
+                
         lbl_msg_color = get_theme_color("colors.text.muted", "#A0A5B5") if is_online else get_theme_color("colors.text.disabled", "#5C6B73")
         self.lbl_msg = QLabel(status_msg, text_widget)
         self.lbl_msg.setStyleSheet(f"color: {lbl_msg_color}; font-size: 10px; background: transparent;")
@@ -145,6 +167,26 @@ class FriendRowWidget(QFrame):
         
         layout.addWidget(text_widget)
         layout.addStretch()
+        
+        # Resolve Rank Details
+        lol_dict = friend_data.get("lol", {})
+        tier = lol_dict.get("rankedLeagueTier") or friend_data.get("tier", "")
+        division = lol_dict.get("rankedLeagueDivision") or friend_data.get("division", "")
+        if tier and str(tier).lower() != "unranked":
+            rank_str = f"{tier[:3].upper()} {division}"
+            self.lbl_rank = QLabel(rank_str, self)
+            self.lbl_rank.setStyleSheet("""
+                color: #C8AA6E;
+                font-size: 8px;
+                font-weight: bold;
+                background-color: #151F2F;
+                border: 1px solid #1E2839;
+                border-radius: 3px;
+                padding-left: 4px;
+                padding-right: 4px;
+                height: 14px;
+            """)
+            layout.addWidget(self.lbl_rank)
         
         # Auto-Join Toggle Icon Button
         self.is_auto = get_friend_service().get_auto_join_status(self.name_lower)
@@ -436,10 +478,31 @@ class FriendsPage(ScrollableList):
         act_toggle.triggered.connect(lambda: self._toggle_auto_join(friend_name))
         
         act_invite = menu.addAction("👥 Send Party Invite")
-        # Under the hood LCU trigger
         act_invite.triggered.connect(lambda: get_friend_service().invite_friend(friend_name))
         
+        act_spectate = menu.addAction("👁 Spectate Game")
+        act_spectate.triggered.connect(lambda: self._spectate_friend(friend_name))
+        
+        act_msg = menu.addAction("💬 Quick Message (Copy Name)")
+        act_msg.triggered.connect(lambda: self._message_friend(friend_name))
+        
         menu.exec(pos)
+
+    def _spectate_friend(self, name):
+        from ui.qt.widgets.toast import ToastManager
+        lcu = get_league_service()
+        if lcu and lcu.is_connected:
+            # Trigger launch spectate LCU call
+            lcu.request("POST", "/lol-spectator/v1/spectate/launch", json={"summonerName": name})
+            ToastManager.get_instance().show(f"Launching Spectator: {name}", icon="👁", theme="success")
+        else:
+            ToastManager.get_instance().show("Client not connected", icon="⚠️", theme="error")
+
+    def _message_friend(self, name):
+        from PySide6.QtGui import QGuiApplication
+        QGuiApplication.clipboard().setText(name)
+        from ui.qt.widgets.toast import ToastManager
+        ToastManager.get_instance().show(f"Copied {name} to clipboard", icon="💬", theme="success")
 
     def _on_mass_invite(self):
         EventBus.emit("action:mass_invite")
@@ -456,7 +519,6 @@ class FriendsPage(ScrollableList):
         names = [f.get("name", "") for f in self._friends_data if f.get("name", "")]
         export_str = "\n".join(names)
         
-        # Copy to clipboard safely
         from PySide6.QtGui import QGuiApplication
         cb = QGuiApplication.clipboard()
         cb.setText(export_str)

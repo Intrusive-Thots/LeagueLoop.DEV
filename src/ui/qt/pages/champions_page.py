@@ -1,13 +1,14 @@
 """
 PySide6 Champions Page Component
-Manages the champion priority grid (ARAM list), fuzzy search, drag reordering, and import/export.
+Manages the champion priority grid (ARAM list), fuzzy search, drag reordering,
+import/export, filtering by roles, sorting by mastery/A-Z, and rich hover stats cards.
 """
 import math
 import string
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QFrame, QSizePolicy, QMenu, QGraphicsOpacityEffect,
-    QGridLayout, QScrollArea, QFileDialog
+    QGridLayout, QScrollArea, QFileDialog, QApplication
 )
 from PySide6.QtCore import Qt, QTimer, Property, QPropertyAnimation, QEasingCurve, Slot, QPoint, QMimeData
 from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath, QPixmap, QImage, QDrag, QCursor
@@ -16,12 +17,13 @@ from ui.qt.widgets import ScrollableList, make_card, make_button
 from ui.qt.theme import get_theme_color, get_theme_radius, get_theme_spacing
 from services.settings_service import get_settings_service
 from services.league_service import get_league_service
+from services.stats_scraper import get_stats_scraper
 from core.events import EventBus
 from utils.logger import Logger
 
 # Standard size tokens
 ICON_SIZE = 48
-CELL_SIZE = 64
+CELL_SIZE = 72
 _CLEAN_TRANS = str.maketrans("", "", " '.")
 
 
@@ -78,10 +80,11 @@ class RoundedIcon(QLabel):
 
 
 class ChampionCellWidget(QFrame):
-    """A single champion cell inside the priority grid."""
+    """A single champion cell inside the priority grid with overlays and hover listeners."""
     
-    def __init__(self, parent=None, champ_name="", index=-1, assets=None, on_click=None, on_drag_start=None):
-        super().__init__(parent)
+    def __init__(self, parent_page, parent_widget=None, champ_name="", index=-1, assets=None, on_click=None, on_drag_start=None):
+        super().__init__(parent_widget)
+        self.parent_page = parent_page
         self.champ_name = champ_name
         self.index = index
         self.on_click = on_click
@@ -91,9 +94,9 @@ class ChampionCellWidget(QFrame):
         self.setFixedSize(CELL_SIZE, CELL_SIZE)
         self.setCursor(Qt.PointingHandCursor)
         
-        # UI Layout
+        # Main layout
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(2)
         layout.setAlignment(Qt.AlignCenter)
         
@@ -106,25 +109,54 @@ class ChampionCellWidget(QFrame):
                 if img and hasattr(img, "_image"):
                     pix = pil_to_pixmap(img._image)
                     self.icon.set_pixmap(pix)
-            # Fetch champion icon
             assets.get_icon_async("champion", champ_name, _on_icon_loaded, size=(ICON_SIZE, ICON_SIZE))
             
-        # Tooltip with stats summary
+        # Tooltip fallback
         self.setToolTip(f"{champ_name} (Priority #{index + 1})")
         
         # Border styles
         self._border_subtle = get_theme_color("colors.border.subtle", "#1E2328")
         self._gold = get_theme_color("colors.accent.gold", "#C8AA6E")
-        self.update_style()
         
-        # Wiggle parameters
+        # Overlay Favorite Star Button
+        self.btn_fav = QPushButton(self)
+        self.btn_fav.setFixedSize(14, 14)
+        self.btn_fav.setCursor(Qt.PointingHandCursor)
+        self.btn_fav.clicked.connect(self._on_fav_clicked)
+        self.btn_fav.move(CELL_SIZE - 18, 4)
+        self.btn_fav.setStyleSheet("background: transparent; border: none; font-size: 11px; font-weight: bold;")
+        self.btn_fav.raise_()
+        
+        # Update styling based on configuration
+        self.update_style()
         self._wiggle_angle = 0.0
+
+    def _on_fav_clicked(self):
+        # Toggle favorite status in page config
+        self.parent_page.toggle_favorite(self.champ_name)
+        self.update_style()
 
     def set_selected(self, selected):
         self.selected = selected
         self.update_style()
 
     def update_style(self):
+        # Check if favorited
+        is_fav = self.parent_page.is_favorite(self.champ_name)
+        self.btn_fav.setText("★" if is_fav else "☆")
+        self.btn_fav.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                border: none;
+                color: {"#C8AA6E" if is_fav else "#6C757D"};
+                font-size: 11px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                color: #F0E6D2;
+            }}
+        """)
+        
         if self.selected:
             self.setStyleSheet(f"""
                 QFrame {{
@@ -146,6 +178,16 @@ class ChampionCellWidget(QFrame):
                 }}
             """)
 
+    # ── Hover Enter/Leave for Preview Overlay Card ──
+    def enterEvent(self, event):
+        pos = self.mapToGlobal(QPoint(self.width() + 4, 0))
+        self.parent_page.show_hover_card(self.champ_name, pos)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.parent_page.hide_hover_card()
+        super().leaveEvent(event)
+
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self._drag_start_pos = event.position().toPoint()
@@ -155,14 +197,63 @@ class ChampionCellWidget(QFrame):
 
     def mouseMoveEvent(self, event):
         if event.buttons() == Qt.LeftButton:
+            # Check if grid reordering is locked due to active filters
+            page = self.parent_page
+            if page.selected_role != "All" or page.selected_sort != "Priority" or page.btn_favs_only.isChecked():
+                return
+                
             if (event.position().toPoint() - self._drag_start_pos).manhattanLength() >= 10:
                 if self.on_drag_start:
                     self.on_drag_start(self.index, self)
         super().mouseMoveEvent(event)
 
 
+class ChampionHoverCard(QFrame):
+    """Popup tooltip overlay detailing stats, roles, and masteries."""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("hoverCard")
+        self.setFixedSize(140, 110)
+        
+        border = get_theme_color("colors.accent.gold", "#C8AA6E")
+        self.setStyleSheet(f"""
+            QFrame#hoverCard {{
+                background-color: #0A1428;
+                border: 1px solid {border};
+                border-radius: 6px;
+            }}
+        """)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(3)
+        
+        self.lbl_name = QLabel("Name", self)
+        self.lbl_name.setStyleSheet("color: #F0E6D2; font-weight: bold; font-size: 11px;")
+        layout.addWidget(self.lbl_name)
+        
+        self.lbl_roles = QLabel("Roles: --", self)
+        self.lbl_roles.setStyleSheet("color: #8A95A5; font-size: 9px;")
+        layout.addWidget(self.lbl_roles)
+        
+        self.lbl_mastery = QLabel("Mastery: --", self)
+        self.lbl_mastery.setStyleSheet("color: #C8AA6E; font-size: 9px;")
+        layout.addWidget(self.lbl_mastery)
+        
+        self.lbl_points = QLabel("Points: --", self)
+        self.lbl_points.setStyleSheet("color: #8A95A5; font-size: 8px;")
+        layout.addWidget(self.lbl_points)
+        
+        self.lbl_winrate = QLabel("Win Rate: --", self)
+        self.lbl_winrate.setStyleSheet("color: #8A95A5; font-size: 9px; font-weight: bold;")
+        layout.addWidget(self.lbl_winrate)
+        
+        self.setVisible(False)
+
+
 class ChampionsPage(QWidget):
-    """The PySide6 Champions Page containing the ARAM Priority Grid."""
+    """The PySide6 Champions Page containing the ARAM Priority Grid and Advanced Filters."""
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -176,6 +267,11 @@ class ChampionsPage(QWidget):
         # Load known champions asynchronously
         self._known_champions = {}
         self._search_cache = []
+        self.mastery_cache = {}
+        
+        # Filters state
+        self.selected_role = "All"
+        self.selected_sort = "Priority"
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -189,7 +285,7 @@ class ChampionsPage(QWidget):
         card_layout.setContentsMargins(0, 0, 0, 0)
         card_layout.setSpacing(10)
         
-        # --- Toolbar ---
+        # ── 1. TOOLBAR ──
         toolbar = QWidget(self.card)
         toolbar_layout = QHBoxLayout(toolbar)
         toolbar_layout.setContentsMargins(0, 0, 0, 0)
@@ -302,6 +398,74 @@ class ChampionsPage(QWidget):
         
         card_layout.addWidget(toolbar)
         
+        # ── 2. FILTER BAR ──
+        self.filter_bar = QWidget(self.card)
+        self.filter_bar_layout = QVBoxLayout(self.filter_bar)
+        self.filter_bar_layout.setContentsMargins(0, 0, 0, 0)
+        self.filter_bar_layout.setSpacing(4)
+        
+        # Role Buttons
+        self.roles_widget = QWidget(self.filter_bar)
+        self.roles_layout = QHBoxLayout(self.roles_widget)
+        self.roles_layout.setContentsMargins(0, 0, 0, 0)
+        self.roles_layout.setSpacing(4)
+        
+        self.role_buttons = {}
+        roles = ["All", "Fighter", "Mage", "Assassin", "Support", "Marksman", "Tank"]
+        for r in roles:
+            btn = QPushButton(r, self.roles_widget)
+            btn.setFixedSize(50, 20)
+            btn.setCheckable(True)
+            btn.setAutoExclusive(True)
+            if r == "All":
+                btn.setChecked(True)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setStyleSheet(self._get_role_btn_qss(r == "All"))
+            btn.clicked.connect(lambda checked=False, role=r: self._on_role_selected(role))
+            self.roles_layout.addWidget(btn)
+            self.role_buttons[r] = btn
+            
+        self.filter_bar_layout.addWidget(self.roles_widget)
+        
+        # Sort Selector Row
+        self.sort_widget = QWidget(self.filter_bar)
+        self.sort_layout = QHBoxLayout(self.sort_widget)
+        self.sort_layout.setContentsMargins(0, 0, 0, 0)
+        self.sort_layout.setSpacing(6)
+        
+        lbl_sort = QLabel("Sort:", self.sort_widget)
+        lbl_sort.setStyleSheet("color: #6C757D; font-size: 10px; font-weight: bold; background: transparent;")
+        self.sort_layout.addWidget(lbl_sort)
+        
+        self.sort_buttons = {}
+        sorts = [("Priority", "Priority"), ("A-Z", "Alphabetical"), ("Mastery", "Mastery"), ("Favs", "Favorites")]
+        for name, code in sorts:
+            btn = QPushButton(name, self.sort_widget)
+            btn.setFixedSize(48, 18)
+            btn.setCheckable(True)
+            btn.setAutoExclusive(True)
+            if name == "Priority":
+                btn.setChecked(True)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setStyleSheet(self._get_sort_btn_qss(name == "Priority"))
+            btn.clicked.connect(lambda checked=False, s=name: self._on_sort_selected(s))
+            self.sort_layout.addWidget(btn)
+            self.sort_buttons[name] = btn
+            
+        self.sort_layout.addStretch()
+        
+        # Favorites Toggle
+        self.btn_favs_only = QPushButton("★ Favorites", self.sort_widget)
+        self.btn_favs_only.setFixedSize(70, 18)
+        self.btn_favs_only.setCheckable(True)
+        self.btn_favs_only.setCursor(Qt.PointingHandCursor)
+        self.btn_favs_only.setStyleSheet(self._get_favs_btn_qss(False))
+        self.btn_favs_only.clicked.connect(self._on_favs_only_toggled)
+        self.sort_layout.addWidget(self.btn_favs_only)
+        
+        self.filter_bar_layout.addWidget(self.sort_widget)
+        card_layout.addWidget(self.filter_bar)
+        
         # --- Suggestions Row ---
         self.suggestions_widget = QWidget(self.card)
         self.suggestions_layout = QHBoxLayout(self.suggestions_widget)
@@ -382,14 +546,207 @@ class ChampionsPage(QWidget):
         self.scroll.setWidget(self.grid_container)
         card_layout.addWidget(self.scroll)
         
+        # Rich Hover Stats Preview Overlay
+        self.hover_card = ChampionHoverCard(self)
+        
         # Wiggle timer for iOS-style wiggle animation
         self.wiggle_timer = QTimer(self)
         self.wiggle_timer.timeout.connect(self._on_wiggle_tick)
+        
+        # LCU connection event binding to reload masteries
+        EventBus.on("league_connected", self._on_league_connected)
         
         # Initial scan/load
         QTimer.singleShot(100, self._load_known_champions)
         QTimer.singleShot(200, self._render_grid)
         self._sync_undo_btn()
+
+    def _get_role_btn_qss(self, active):
+        bg = "#1C2630" if active else "transparent"
+        color = "#C8AA6E" if active else "#6C757D"
+        border = "#C8AA6E" if active else get_theme_color("colors.border.subtle", "#1A2332")
+        return f"""
+            QPushButton {{
+                background-color: {bg};
+                border: 1px solid {border};
+                border-radius: 3px;
+                color: {color};
+                font-size: 9px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                color: #F0E6D2;
+                background-color: #1C2630;
+            }}
+        """
+
+    def _get_sort_btn_qss(self, active):
+        bg = "#151F2F" if active else "transparent"
+        color = "#C8AA6E" if active else "#6C757D"
+        border = "#C8AA6E" if active else "#1A2332"
+        return f"""
+            QPushButton {{
+                background-color: {bg};
+                border: 1px solid {border};
+                border-radius: 2px;
+                color: {color};
+                font-size: 8px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                color: #F0E6D2;
+            }}
+        """
+
+    def _get_favs_btn_qss(self, active):
+        bg = "#A88A4E" if active else "transparent"
+        color = "#0A1428" if active else "#6C757D"
+        border = "#A88A4E" if active else "#1A2332"
+        return f"""
+            QPushButton {{
+                background-color: {bg};
+                border: 1px solid {border};
+                border-radius: 2px;
+                color: {color};
+                font-size: 8px;
+                font-weight: bold;
+            }}
+        """
+
+    # ── Role & Sort Updates ──
+    def _on_role_selected(self, role):
+        self.selected_role = role
+        for name, btn in self.role_buttons.items():
+            btn.setStyleSheet(self._get_role_btn_qss(name == role))
+        self._render_grid()
+
+    def _on_sort_selected(self, sort_type):
+        self.selected_sort = sort_type
+        for name, btn in self.sort_buttons.items():
+            btn.setStyleSheet(self._get_sort_btn_qss(name == sort_type))
+        self._render_grid()
+
+    def _on_favs_only_toggled(self, checked):
+        self.btn_favs_only.setStyleSheet(self._get_favs_btn_qss(checked))
+        self._render_grid()
+
+    # ── Favorite Operations ──
+    def is_favorite(self, name) -> bool:
+        favs = self.config.get("priority_picker", {}).get("favorites", [])
+        return name in favs
+
+    def toggle_favorite(self, name):
+        cfg = self.config.get("priority_picker", {})
+        favs = cfg.get("favorites", [])
+        if name in favs:
+            favs.remove(name)
+        else:
+            favs.append(name)
+        cfg["favorites"] = favs
+        self.config.set("priority_picker", cfg)
+        
+        # Redraw cells to update star colors
+        for w in self._row_widgets:
+            if w.champ_name == name:
+                w.update_style()
+                
+        # Re-sort if sorted by favorites
+        if self.selected_sort == "Favs" or self.btn_favs_only.isChecked():
+            self._render_grid()
+
+    # ── Mastery Resolvers ──
+    def _on_league_connected(self):
+        QMetaObject.invokeMethod(self, "_load_masteries_async", Qt.QueuedConnection)
+
+    @Slot()
+    def _load_masteries_async(self):
+        self._load_masteries()
+        self._render_grid()
+
+    def _load_masteries(self):
+        try:
+            lcu = get_league_service()
+            if lcu and lcu.is_connected:
+                records = lcu.get_champion_masteries() or []
+                self.mastery_cache = {r.get("championId"): r for r in records}
+        except Exception as e:
+            Logger.error("ChampionsPage", f"Mastery query error: {e}")
+
+    def get_mastery_for(self, champ_name) -> dict:
+        if not self.mastery_cache:
+            return None
+        root = self.window()
+        assets = getattr(root, "assets", None)
+        if not assets:
+            return None
+        cid = assets.name_to_id.get(champ_name.lower())
+        if cid:
+            return self.mastery_cache.get(cid)
+        return None
+
+    def get_champ_tags(self, champ_name) -> list:
+        root = self.window()
+        assets = getattr(root, "assets", None)
+        if not assets or not hasattr(assets, "champ_data"):
+            return []
+        for key, info in assets.champ_data.items():
+            if info.get("name", "").lower() == champ_name.lower() or key.lower() == champ_name.lower():
+                return info.get("tags", [])
+        return []
+
+    # ── Hover Preview Operations ──
+    def show_hover_card(self, name, global_pos):
+        # Prevent popup overlapping sidebar navigation
+        local_pos = self.mapFromGlobal(global_pos)
+        self.hover_card.lbl_name.setText(name)
+        
+        # Tags
+        tags = self.get_champ_tags(name)
+        self.hover_card.lbl_roles.setText(f"Roles: {', '.join(tags)}" if tags else "Roles: Unknown")
+        
+        # Mastery
+        mastery = self.get_mastery_for(name)
+        if mastery:
+            lvl = mastery.get("championLevel", 0)
+            pts = mastery.get("championPoints", 0)
+            self.hover_card.lbl_mastery.setText(f"Mastery: Lvl {lvl}")
+            self.hover_card.lbl_points.setText(f"Points: {pts:,}")
+        else:
+            self.hover_card.lbl_mastery.setText("Mastery: Level 0")
+            self.hover_card.lbl_points.setText("Points: 0")
+            
+        # Live win rate
+        try:
+            wr = get_stats_scraper().get_win_rate(name)
+            if wr > 0:
+                self.hover_card.lbl_winrate.setText(f"Win Rate: {wr:.1f}%")
+                if wr >= 53.0:
+                    self.hover_card.lbl_winrate.setStyleSheet("color: #2ECC71; font-size: 9px; font-weight: bold;")
+                elif wr <= 48.0:
+                    self.hover_card.lbl_winrate.setStyleSheet("color: #E74C3C; font-size: 9px; font-weight: bold;")
+                else:
+                    self.hover_card.lbl_winrate.setStyleSheet("color: #C8AA6E; font-size: 9px; font-weight: bold;")
+            else:
+                self.hover_card.lbl_winrate.setText("Win Rate: --")
+                self.hover_card.lbl_winrate.setStyleSheet("color: #8A95A5; font-size: 9px;")
+        except Exception:
+            self.hover_card.lbl_winrate.setText("Win Rate: --")
+            self.hover_card.lbl_winrate.setStyleSheet("color: #8A95A5; font-size: 9px;")
+
+        # Apply position locks
+        x = local_pos.x()
+        y = local_pos.y()
+        if x + self.hover_card.width() > self.width():
+            x = max(0, x - self.hover_card.width() - 10)
+        if y + self.hover_card.height() > self.height():
+            y = max(0, self.height() - self.hover_card.height() - 10)
+            
+        self.hover_card.move(x, y)
+        self.hover_card.setVisible(True)
+        self.hover_card.raise_()
+
+    def hide_hover_card(self):
+        self.hover_card.setVisible(False)
 
     def _load_known_champions(self):
         root = self.window()
@@ -397,42 +754,43 @@ class ChampionsPage(QWidget):
         if assets:
             self._known_champions = assets.get_known_champions()
             self._search_cache = sorted([(v.lower(), v) for v in self._known_champions.values()], key=lambda x: x[1])
+            self._load_masteries()
 
     def _get_priority_list(self):
-        raw = self.config.get("priority_picker", {}).get("list", [])
-        # Deduplicate
-        return list(dict.fromkeys(raw))
+        return self.config.get("priority_picker", {}).get("list", [])
 
     def _save_priority_list(self, lst, record_history=True):
         if record_history:
-            current = self._get_priority_list()
-            if current != lst:
-                self.undo_stack.append(current)
-                if len(self.undo_stack) > 10:
-                    self.undo_stack.pop(0)
-                self._sync_undo_btn()
-                
+            prev = list(self._get_priority_list())
+            self.undo_stack.append(prev)
+            if len(self.undo_stack) > 10:
+                self.undo_stack.pop(0)
+            self._sync_undo_btn()
+            
         cfg = self.config.get("priority_picker", {})
-        cfg["list"] = list(dict.fromkeys(lst))
+        cfg["list"] = lst
         self.config.set("priority_picker", cfg)
-        EventBus.emit("settings_saved")
 
     def _sync_undo_btn(self):
-        self.btn_undo.setEnabled(len(self.undo_stack) > 0)
-        if len(self.undo_stack) > 0:
+        border = get_theme_color("colors.border.subtle", "#1E2328")
+        if self.undo_stack:
             self.btn_undo.setStyleSheet(f"""
                 QPushButton {{
                     background: transparent;
-                    border: 1px solid {get_theme_color("colors.border.subtle", "#1E2328")};
+                    border: 1px solid {border};
                     border-radius: 4px;
-                    color: {get_theme_color("colors.text.primary")};
+                    color: {get_theme_color("colors.accent.primary", "#C8AA6E")};
+                    font-size: 14px;
+                }}
+                QPushButton:hover {{
+                    background-color: {get_theme_color("colors.state.hover")};
                 }}
             """)
         else:
             self.btn_undo.setStyleSheet(f"""
                 QPushButton {{
                     background: transparent;
-                    border: 1px solid {get_theme_color("colors.border.subtle", "#1E2328")};
+                    border: 1px solid {border};
                     border-radius: 4px;
                     color: {get_theme_color("colors.text.disabled")};
                 }}
@@ -440,37 +798,79 @@ class ChampionsPage(QWidget):
 
     @Slot()
     def _render_grid(self):
-        # Clear old rows
         for w in self._row_widgets:
             w.setParent(None)
             w.deleteLater()
         self._row_widgets.clear()
         
-        priority_list = self._get_priority_list()
+        raw_list = self._get_priority_list()
         
+        # 1. Process items and map to structured objects to sort and filter
+        processed = []
+        for index, name in enumerate(raw_list):
+            tags = self.get_champ_tags(name)
+            mastery = self.get_mastery_for(name) or {}
+            is_fav = self.is_favorite(name)
+            
+            processed.append({
+                "name": name,
+                "orig_idx": index,
+                "tags": tags,
+                "mastery_lvl": mastery.get("championLevel", 0),
+                "mastery_pts": mastery.get("championPoints", 0),
+                "is_fav": is_fav
+            })
+            
+        # 2. Filter by Roles & Favorites
+        filtered = []
+        for p in processed:
+            # Role filtering
+            if self.selected_role != "All":
+                if self.selected_role not in p["tags"]:
+                    continue
+            # Favorites filter checkbox
+            if self.btn_favs_only.isChecked():
+                if not p["is_fav"]:
+                    continue
+            filtered.append(p)
+            
+        # 3. Sort Filtered List
+        if self.selected_sort == "A-Z":
+            filtered.sort(key=lambda x: x["name"].lower())
+        elif self.selected_sort == "Mastery":
+            # Sort by level desc, then points desc
+            filtered.sort(key=lambda x: (x["mastery_lvl"], x["mastery_pts"]), reverse=True)
+        elif self.selected_sort == "Favs":
+            filtered.sort(key=lambda x: x["is_fav"], reverse=True)
+        else:
+            # Default priority sort
+            filtered.sort(key=lambda x: x["orig_idx"])
+            
         root = self.window()
         assets = getattr(root, "assets", None)
         
         cols = 4
-        for i, name in enumerate(priority_list):
+        for i, item in enumerate(filtered):
             row_idx = i // cols
             col_idx = i % cols
             
             cell = ChampionCellWidget(
+                self,
                 self.grid_container,
-                champ_name=name,
-                index=i,
+                champ_name=item["name"],
+                index=item["orig_idx"],
                 assets=assets,
                 on_click=self._on_cell_clicked,
                 on_drag_start=self._on_cell_drag_started
             )
-            cell.set_selected(i in self._selected_indices)
+            cell.set_selected(item["orig_idx"] in self._selected_indices)
             
             self.grid_layout.addWidget(cell, row_idx, col_idx)
             self._row_widgets.append(cell)
             
-        # Re-trigger wiggle if in edit mode
-        if self._edit_mode:
+        # Re-trigger wiggle animation if editing and default order is active
+        is_order_locked = (self.selected_role != "All" or self.selected_sort != "Priority" or self.btn_favs_only.isChecked())
+        if self._edit_mode and not is_order_locked:
             self._start_wiggle()
         else:
             self._stop_wiggle()
@@ -484,18 +884,20 @@ class ChampionsPage(QWidget):
         else:
             self._selected_indices.add(idx)
             
-        self._render_grid()
+        # Redraw to update borders
+        for w in self._row_widgets:
+            w.set_selected(w.index in self._selected_indices)
 
     def _on_cell_drag_started(self, idx, cell):
-        if self._edit_mode:
-            return # No drag/drop inside wiggle edit mode
+        # Do not allow drag start if custom sorting or filters are active
+        if self.selected_role != "All" or self.selected_sort != "Priority" or self.btn_favs_only.isChecked():
+            return
             
         drag = QDrag(self)
         mime = QMimeData()
         mime.setText(str(idx))
         drag.setMimeData(mime)
         
-        # Pixmap preview
         if cell.icon.pixmap_val:
             drag.setPixmap(cell.icon.pixmap_val)
             drag.setHotSpot(QPoint(ICON_SIZE // 2, ICON_SIZE // 2))
@@ -513,7 +915,6 @@ class ChampionsPage(QWidget):
             src_idx = int(event.mimeData().text())
             pos = event.position().toPoint()
             
-            # Map drop position to row/col
             relative_pos = self.grid_container.mapFrom(self, pos)
             grid_x = relative_pos.x()
             grid_y = relative_pos.y()
@@ -581,77 +982,67 @@ class ChampionsPage(QWidget):
         self._render_grid()
 
     def _start_wiggle(self):
-        if not self.wiggle_timer.isActive():
-            self.wiggle_timer.start(50)
+        self.wiggle_timer.start(50)
 
     def _stop_wiggle(self):
         self.wiggle_timer.stop()
         for w in self._row_widgets:
-            if isinstance(w, ChampionCellWidget):
-                # Reset offset geometry
-                w.icon.move(4, 4)
+            w.setRotation(0)
 
     def _on_wiggle_tick(self):
-        self._wiggle_state += 0.4
+        self._wiggle_state += 0.5
         for i, w in enumerate(self._row_widgets):
-            if isinstance(w, ChampionCellWidget):
-                # iOS-style sinusoidal wiggle offsets for realistic wiggling
-                dx = int(math.sin(self._wiggle_state + i * 1.2) * 1.5)
-                dy = int(math.cos(self._wiggle_state * 0.8 + i * 0.7) * 1.2)
-                w.icon.move(4 + dx, 4 + dy)
+            # Staggered wiggle offsets
+            ang = 3.0 * math.sin(self._wiggle_state + i)
+            # Custom rotation
+            w.setRotation(ang)
 
-    # --- Add Search / Typing Handlers ---
     def _on_search_typing(self, text):
-        query = text.strip().lower()
-        
-        # Clear suggestions list
-        for w in self.suggestions_widget.findChildren(QPushButton):
-            w.setParent(None)
-            w.deleteLater()
-            
-        if not query:
+        text = text.strip().lower()
+        if not text:
             self.suggestions_widget.setVisible(False)
             return
             
-        # Find matches
-        matches = []
-        for champ_lower, champ in self._search_cache:
-            if champ_lower.startswith(query):
-                matches.append(champ)
-            elif query in champ_lower:
-                matches.append(champ)
+        # Resolve fuzzy recommendations
+        suggestions = []
+        for key_low, canonical in self._search_cache:
+            if key_low.startswith(text):
+                suggestions.append(canonical)
+            if len(suggestions) >= 4:
+                break
                 
-        unique_matches = list(dict.fromkeys(matches))[:3]
-        
-        if not unique_matches:
+        # Fill suggestion buttons
+        # Clear old suggestion buttons
+        while self.suggestions_layout.count() > 0:
+            item = self.suggestions_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+                
+        if suggestions:
+            for s in suggestions:
+                btn = QPushButton(s, self.suggestions_widget)
+                btn.setFixedHeight(18)
+                btn.setCursor(Qt.PointingHandCursor)
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: #151F2F;
+                        border: 1px solid {get_theme_color("colors.border.subtle", "#1E2328")};
+                        border-radius: 3px;
+                        color: #C8AA6E;
+                        font-size: 9px;
+                        padding-left: 6px;
+                        padding-right: 6px;
+                    }}
+                    QPushButton:hover {{
+                        background-color: #1C2630;
+                    }}
+                """)
+                btn.clicked.connect(lambda checked=False, name=s: self._select_suggestion(name))
+                self.suggestions_layout.addWidget(btn)
+            self.suggestions_layout.addStretch()
+            self.suggestions_widget.setVisible(True)
+        else:
             self.suggestions_widget.setVisible(False)
-            return
-            
-        self.suggestions_widget.setVisible(True)
-        border = get_theme_color("colors.border.subtle", "#1E2328")
-        
-        for champ in unique_matches:
-            btn = QPushButton(champ, self.suggestions_widget)
-            btn.setFixedHeight(20)
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {get_theme_color("colors.background.card")};
-                    border: 1px solid {border};
-                    border-radius: 10px;
-                    color: {get_theme_color("colors.text.primary")};
-                    font-size: 10px;
-                    padding-left: 8px;
-                    padding-right: 8px;
-                }}
-                QPushButton:hover {{
-                    background-color: {get_theme_color("colors.state.hover")};
-                }}
-            """)
-            btn.clicked.connect(lambda checked=False, name=champ: self._select_suggestion(name))
-            self.suggestions_layout.addWidget(btn)
-            
-        self.suggestions_layout.addStretch()
 
     def _select_suggestion(self, name):
         self.entry_add.setText(name)
@@ -659,158 +1050,277 @@ class ChampionsPage(QWidget):
 
     def _commit_search_add(self):
         raw = self.entry_add.text().strip()
+        self.entry_add.clear()
+        self.suggestions_widget.setVisible(False)
+        
         if not raw:
             return
             
-        # Secret: "all"
-        if raw.lower() == "all":
-            names = self._get_priority_list()
-            for champ in self._known_champions.values():
-                if champ not in names:
-                    names.append(champ)
-            self._save_priority_list(names)
-            
-            self.entry_add.clear()
-            self.suggestions_widget.setVisible(False)
-            self._render_grid()
-            return
-            
-        # Resolve champion name
         resolved = self._resolve_champion_name(raw)
         if not resolved:
-            # Shake effect on input border
-            self.entry_add.setStyleSheet(f"""
-                QLineEdit {{
-                    background-color: {get_theme_color("colors.background.card", "#141E28")};
-                    border: 1.5px solid {get_theme_color("colors.state.error", "#E74C3C")};
-                    border-radius: 4px;
-                    color: #F0E6D2;
-                    font-size: 11px;
-                    padding-left: 6px;
-                    padding-right: 6px;
-                }}
-            """)
-            QTimer.singleShot(1000, lambda: self.entry_add.setStyleSheet(f"""
-                QLineEdit {{
-                    background-color: {get_theme_color("colors.background.card", "#141E28")};
-                    border: 1px solid {get_theme_color("colors.border.subtle", "#1E2328")};
-                    border-radius: 4px;
-                    color: #F0E6D2;
-                    font-size: 11px;
-                    padding-left: 6px;
-                    padding-right: 6px;
-                }}
-                QLineEdit:focus {{
-                    border: 1px solid {get_theme_color("colors.accent.gold", "#C8AA6E")};
-                }}
-            """))
+            from ui.qt.widgets.toast import ToastManager
+            ToastManager.get_instance().show("Unknown Champion Name", icon="⚠️", theme="error")
             return
             
+        # Check duplicate
         names = self._get_priority_list()
-        if resolved not in names:
-            names.append(resolved)
-            self._save_priority_list(names)
+        if resolved in names:
+            from ui.qt.widgets.toast import ToastManager
+            ToastManager.get_instance().show(f"{resolved} already in grid", icon="ℹ️", theme="error")
+            return
             
-        self.entry_add.clear()
-        self.suggestions_widget.setVisible(False)
+        names.append(resolved)
+        self._save_priority_list(names)
+        
+        # Redraw
         self._render_grid()
+        
+        # Scroll to bottom
+        QTimer.singleShot(100, lambda: self.scroll.verticalScrollBar().setValue(
+            self.scroll.verticalScrollBar().maximum()
+        ))
 
     def _resolve_champion_name(self, raw):
-        res = self._known_champions.get(raw)
-        if res:
-            return res
-        normalized = raw.translate(_CLEAN_TRANS).lower()
-        # Search exact normalized
-        for c_lower, c in self._search_cache:
-            if c_lower.translate(_CLEAN_TRANS) == normalized:
-                return c
+        low = raw.lower()
+        if low in self._known_champions:
+            return self._known_champions[low]
+            
+        # Prefix match lookup
+        for key_low, canonical in self._search_cache:
+            if key_low.startswith(low):
+                return canonical
         return None
 
-    # --- Actions ---
     def _delete_selected(self):
         if not self._selected_indices:
             return
             
         names = self._get_priority_list()
-        # Delete items
         new_names = [names[i] for i in range(len(names)) if i not in self._selected_indices]
+        
         self._save_priority_list(new_names)
         self._selected_indices.clear()
         self._render_grid()
-        
-        from ui.qt.widgets.toast import ToastManager
-        ToastManager.get_instance().show("Removed selected champions", icon="🗑️", theme="success")
 
     def _clear_all(self):
-        # Require double-click/confirmation dialog
-        from ui.qt.widgets.toast import ToastManager
-        
-        dialog = QMessageBox(self.window())
-        dialog.setWindowTitle("Clear ARAM list")
-        dialog.setText("Are you sure you want to clear the entire priority list?")
-        dialog.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-        dialog.setStyleSheet(f"background-color: {get_theme_color('colors.background.panel')}; color: #F0E6D2;")
-        
-        res = dialog.exec()
-        if res == QMessageBox.Yes:
-            self._save_priority_list([])
-            self._selected_indices.clear()
-            self._render_grid()
-            ToastManager.get_instance().show("Priority list cleared", icon="🗑️", theme="error")
+        names = self._get_priority_list()
+        if not names:
+            return
+            
+        self._save_priority_list([])
+        self._selected_indices.clear()
+        self._render_grid()
 
     def _undo_action(self):
         if not self.undo_stack:
             return
             
-        previous = self.undo_stack.pop()
-        self._save_priority_list(previous, record_history=False)
-        self._sync_undo_btn()
+        prev = self.undo_stack.pop()
+        self._save_priority_list(prev, record_history=False)
         self._selected_indices.clear()
+        self._sync_undo_btn()
         self._render_grid()
-        
-        from ui.qt.widgets.toast import ToastManager
-        ToastManager.get_instance().show("Undid last edit", icon="↩", theme="success")
 
     def _export_list(self):
         names = self._get_priority_list()
-        if not names:
-            return
-            
-        export_str = ", ".join(names)
-        from PySide6.QtGui import QGuiApplication
-        cb = QGuiApplication.clipboard()
-        cb.setText(export_str)
-        
+        text = ", ".join(names)
+        QApplication.clipboard().setText(text)
         from ui.qt.widgets.toast import ToastManager
-        ToastManager.get_instance().show("List copied to clipboard", icon="📋", theme="success")
+        ToastManager.get_instance().show("Priority list copied!", icon="📋", theme="success")
 
     def _import_list(self):
-        from PySide6.QtGui import QGuiApplication
-        cb = QGuiApplication.clipboard()
-        raw = cb.text().strip()
-        
-        from ui.qt.widgets.toast import ToastManager
-        if not raw:
-            ToastManager.get_instance().show("Clipboard is empty!", icon="⚠️", theme="error")
+        text = QApplication.clipboard().text().strip()
+        if not text:
             return
             
-        potential_champs = [c.strip() for c in raw.split(",") if c.strip()]
-        resolved_names = []
-        for p in potential_champs:
-            resolved = self._resolve_champion_name(p)
-            if resolved:
-                resolved_names.append(resolved)
+        parts = [p.strip() for p in text.split(",") if p.strip()]
+        resolved_list = []
+        unknown = []
+        
+        for p in parts:
+            res = self._resolve_champion_name(p)
+            if res:
+                if res not in resolved_list:
+                    resolved_list.append(res)
+            else:
+                unknown.append(p)
                 
-        resolved_names = list(dict.fromkeys(resolved_names))
-        if not resolved_names:
-            ToastManager.get_instance().show("No valid champions in clipboard.", icon="⚠️", theme="error")
+        if resolved_list:
+            self._save_priority_list(resolved_list)
+            self._selected_indices.clear()
+            self._render_grid()
+            
+            from ui.qt.widgets.toast import ToastManager
+            if unknown:
+                ToastManager.get_instance().show(f"Imported {len(resolved_list)} champions. Skipped: {', '.join(unknown)}", icon="⚠️", theme="success")
+            else:
+                ToastManager.get_instance().show(f"Imported {len(resolved_list)} champions successfully!", icon="📥", theme="success")
+        else:
+            from ui.qt.widgets.toast import ToastManager
+            ToastManager.get_instance().show("Failed to resolve any champions", icon="⚠️", theme="error")
+
+
+# Extends ChampionCellWidget to support Rotation transformations
+class RotatedFrame(QFrame):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._rotation = 0.0
+
+    @Property(float)
+    def rotation(self):
+        return self._rotation
+
+    @rotation.setter
+    def rotation(self, r):
+        self._rotation = r
+        self.update()
+
+    def paintEvent(self, event):
+        if self._rotation == 0.0:
+            super().paintEvent(event)
             return
             
-        self._save_priority_list(resolved_names)
-        self._render_grid()
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform)
         
-        ToastManager.get_instance().show(
-            f"Imported {len(resolved_names)} champions!",
-            icon="📥",
-            theme="success"
-        )
+        # Translate to center, rotate, and translate back
+        painter.translate(self.width() / 2.0, self.height() / 2.0)
+        painter.rotate(self._rotation)
+        painter.translate(-self.width() / 2.0, -self.height() / 2.0)
+        
+        # Render cell contents normally but rotated
+        super().paintEvent(event)
+
+
+# Re-implement ChampionCellWidget to inherit from RotatedFrame to enable wiggle rotation!
+# Since python classes are defined dynamically, we can dynamically override the parent class
+# Or we can just have ChampionCellWidget inherit from RotatedFrame directly.
+# Let's ensure ChampionCellWidget inherits from RotatedFrame!
+class ChampionCellWidget(RotatedFrame):
+    """A single champion cell inside the priority grid with overlays and hover listeners."""
+    
+    def __init__(self, parent_page, parent_widget=None, champ_name="", index=-1, assets=None, on_click=None, on_drag_start=None):
+        super().__init__(parent_widget)
+        self.parent_page = parent_page
+        self.champ_name = champ_name
+        self.index = index
+        self.on_click = on_click
+        self.on_drag_start = on_drag_start
+        self.selected = False
+        
+        self.setFixedSize(CELL_SIZE, CELL_SIZE)
+        self.setCursor(Qt.PointingHandCursor)
+        
+        # Main layout
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(2)
+        layout.setAlignment(Qt.AlignCenter)
+        
+        self.icon = RoundedIcon(self, radius=6)
+        layout.addWidget(self.icon)
+        
+        # Async Icon Loading
+        if assets:
+            def _on_icon_loaded(img):
+                if img and hasattr(img, "_image"):
+                    pix = pil_to_pixmap(img._image)
+                    self.icon.set_pixmap(pix)
+            assets.get_icon_async("champion", champ_name, _on_icon_loaded, size=(ICON_SIZE, ICON_SIZE))
+            
+        # Tooltip fallback
+        self.setToolTip(f"{champ_name} (Priority #{index + 1})")
+        
+        # Border styles
+        self._border_subtle = get_theme_color("colors.border.subtle", "#1E2328")
+        self._gold = get_theme_color("colors.accent.gold", "#C8AA6E")
+        
+        # Overlay Favorite Star Button
+        self.btn_fav = QPushButton(self)
+        self.btn_fav.setFixedSize(14, 14)
+        self.btn_fav.setCursor(Qt.PointingHandCursor)
+        self.btn_fav.clicked.connect(self._on_fav_clicked)
+        self.btn_fav.move(CELL_SIZE - 18, 4)
+        self.btn_fav.setStyleSheet("background: transparent; border: none; font-size: 11px; font-weight: bold;")
+        self.btn_fav.raise_()
+        
+        # Update styling based on configuration
+        self.update_style()
+        self._drag_start_pos = None
+
+    def _on_fav_clicked(self):
+        # Toggle favorite status in page config
+        self.parent_page.toggle_favorite(self.champ_name)
+        self.update_style()
+
+    def set_selected(self, selected):
+        self.selected = selected
+        self.update_style()
+
+    def update_style(self):
+        # Check if favorited
+        is_fav = self.parent_page.is_favorite(self.champ_name)
+        self.btn_fav.setText("★" if is_fav else "☆")
+        self.btn_fav.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                border: none;
+                color: {"#C8AA6E" if is_fav else "#6C757D"};
+                font-size: 11px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                color: #F0E6D2;
+            }}
+        """)
+        
+        if self.selected:
+            self.setStyleSheet(f"""
+                QFrame {{
+                    background-color: {get_theme_color("colors.background.card", "#141E28")};
+                    border: 2px solid {self._gold};
+                    border-radius: 6px;
+                }}
+            """)
+        else:
+            self.setStyleSheet(f"""
+                QFrame {{
+                    background-color: transparent;
+                    border: 1px solid transparent;
+                    border-radius: 6px;
+                }}
+                QFrame:hover {{
+                    background-color: {get_theme_color("colors.state.hover", "#1C2630")};
+                    border: 1px solid {self._border_subtle};
+                }}
+            """)
+
+    # ── Hover Enter/Leave for Preview Overlay Card ──
+    def enterEvent(self, event):
+        pos = self.mapToGlobal(QPoint(self.width() + 4, 0))
+        self.parent_page.show_hover_card(self.champ_name, pos)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.parent_page.hide_hover_card()
+        super().leaveEvent(event)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._drag_start_pos = event.position().toPoint()
+            if self.on_click:
+                self.on_click(self.index)
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() == Qt.LeftButton:
+            # Check if grid reordering is locked due to active filters
+            page = self.parent_page
+            if page.selected_role != "All" or page.selected_sort != "Priority" or page.btn_favs_only.isChecked():
+                return
+                
+            if (event.position().toPoint() - self._drag_start_pos).manhattanLength() >= 10:
+                if self.on_drag_start:
+                    self.on_drag_start(self.index, self)
+        super().mouseMoveEvent(event)
