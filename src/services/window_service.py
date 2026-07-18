@@ -145,14 +145,8 @@ class WindowService:
             return 0
 
     def _is_game_running(self) -> bool:
-        try:
-            import psutil
-            for p in psutil.process_iter(attrs=["name"]):
-                if p.info["name"] and p.info["name"].lower() == "league of legends.exe":
-                    return True
-        except Exception:
-            pass
-        return False
+        from utils.client_detector import is_game_running
+        return is_game_running()
 
     def _window_loop(self):
         last_hwnd = 0

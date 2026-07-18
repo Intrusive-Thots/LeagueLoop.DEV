@@ -10,7 +10,7 @@ import traceback
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Callable, List
 
-import psutil
+
 
 from ..api_handler import LCUClient  # type: ignore
 from ..asset_manager import AssetManager, ConfigManager  # type: ignore
@@ -150,36 +150,9 @@ class AutomationEngine:
         Logger.debug("Auto", msg)
 
     def _is_game_running(self) -> bool:
-        """Check if League of Legends.exe (the game) is running.
-
-        This is the actual game process — a different PID from LeagueClient.exe.
-        We cache the PID to avoid full process scans every tick.
-        """
-        now = time.time()
-
-        # Fast-path: reuse cached PID if still alive
-        if self._game_pid is not None:
-            try:
-                p = psutil.Process(self._game_pid)
-                if p.is_running() and p.name().lower() == "league of legends.exe":
-                    return True
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                pass
-            self._game_pid = None
-
-        # Throttle full scans to every 3 seconds
-        if now - self._last_game_scan < 3.0:
-            return False
-        self._last_game_scan = now
-
-        for p in psutil.process_iter(attrs=["name"]):
-            try:
-                if (p.info["name"] or "").lower() == "league of legends.exe":
-                    self._game_pid = p.pid
-                    return True
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, KeyError):
-                continue
-        return False
+        """Check if League of Legends.exe (the game) is running using client_detector helper."""
+        from utils.client_detector import is_game_running
+        return is_game_running()
 
     def _loop(self):
         while self.running:

@@ -228,3 +228,44 @@ def scan_clients(force: bool = False) -> Dict[str, Dict]:
         "riot": riot_data
     }
     return _cached_results
+
+_game_running_cache: Optional[bool] = None
+_last_game_check = 0.0
+_cached_game_pid: Optional[int] = None
+
+def is_game_running() -> bool:
+    """Unified check if League of Legends.exe (the game) is running with caching."""
+    global _game_running_cache, _last_game_check, _cached_game_pid
+    now = time.time()
+    
+    # 1. Fast-path: check cached PID
+    if _cached_game_pid is not None:
+        try:
+            p = psutil.Process(_cached_game_pid)
+            if p.is_running() and p.name().lower() == "league of legends.exe":
+                return True
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            pass
+        _cached_game_pid = None
+        
+    # 2. Throttle scan to once per 2 seconds
+    if _last_game_check > 0 and (now - _last_game_check < 2.0):
+        return bool(_game_running_cache)
+        
+    _last_game_check = now
+    _game_running_cache = False
+    
+    try:
+        for p in psutil.process_iter(attrs=["pid", "name"]):
+            try:
+                pname = p.info.get("name")
+                if pname and pname.lower() == "league of legends.exe":
+                    _cached_game_pid = p.info.get("pid")
+                    _game_running_cache = True
+                    break
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, KeyError):
+                continue
+    except Exception as e:
+        Logger.debug("Detector", f"Process scan for game failed: {e}")
+        
+    return _game_running_cache

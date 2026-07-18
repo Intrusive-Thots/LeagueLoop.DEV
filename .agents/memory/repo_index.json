@@ -1,10 +1,10 @@
 {
   "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
-  "scan_time_sec": 0.043,
-  "total_files": 184,
+  "scan_time_sec": 0.052,
+  "total_files": 173,
   "ext_counts": {
     ".json": 20,
-    ".py": 142,
+    ".py": 131,
     ".md": 16,
     ".html": 1,
     ".js": 3,
@@ -13,7 +13,7 @@
   "python_modules": [
     {
       "path": "src\\core\\main.py",
-      "lines": 938
+      "lines": 933
     },
     {
       "path": "tests\\test_automation.py",
@@ -41,7 +41,7 @@
     },
     {
       "path": "src\\services\\automation\\engine.py",
-      "lines": 518
+      "lines": 491
     },
     {
       "path": "src\\ui\\components\\factory.py",
@@ -72,12 +72,16 @@
       "lines": 314
     },
     {
-      "path": "src\\services\\window_service.py",
-      "lines": 290
-    },
-    {
       "path": "src\\services\\api\\routes\\champ_select.py",
       "lines": 285
+    },
+    {
+      "path": "src\\services\\window_service.py",
+      "lines": 284
+    },
+    {
+      "path": "src\\utils\\client_detector.py",
+      "lines": 271
     },
     {
       "path": "src\\ui\\components\\draggable_list.py",
@@ -90,10 +94,6 @@
     {
       "path": "src\\services\\queue_service.py",
       "lines": 231
-    },
-    {
-      "path": "src\\utils\\client_detector.py",
-      "lines": 230
     },
     {
       "path": "src\\ui\\components\\hover.py",
@@ -320,20 +320,12 @@
       "lines": 62
     },
     {
-      "path": "scratch\\test_tab_switch.py",
-      "lines": 61
-    },
-    {
       "path": "src\\ui\\sidebar\\status_bar.py",
       "lines": 61
     },
     {
       "path": "tests\\test_api_handler.py",
       "lines": 60
-    },
-    {
-      "path": "scratch\\test_api_login.py",
-      "lines": 59
     },
     {
       "path": "src\\services\\notification_service.py",
@@ -352,10 +344,6 @@
       "lines": 54
     },
     {
-      "path": "scratch\\update_aram_picker.py",
-      "lines": 53
-    },
-    {
       "path": "tests\\test_settings_service.py",
       "lines": 53
     },
@@ -370,10 +358,6 @@
     {
       "path": "src\\ui\\components\\base.py",
       "lines": 49
-    },
-    {
-      "path": "scratch\\capture_templates.py",
-      "lines": 48
     },
     {
       "path": "src\\ui\\components\\navigation\\sidebar.py",
@@ -444,10 +428,6 @@
       "lines": 28
     },
     {
-      "path": "scratch\\test_wm_char.py",
-      "lines": 27
-    },
-    {
       "path": "src\\ui\\sidebar\\navigation.py",
       "lines": 27
     },
@@ -460,28 +440,12 @@
       "lines": 26
     },
     {
-      "path": "scratch\\extract_templates.py",
-      "lines": 26
-    },
-    {
       "path": "src\\utils\\path_utils.py",
       "lines": 26
     },
     {
       "path": "src\\core\\state.py",
       "lines": 24
-    },
-    {
-      "path": "scratch\\compile_check.py",
-      "lines": 23
-    },
-    {
-      "path": "scratch\\test_uia.py",
-      "lines": 23
-    },
-    {
-      "path": "scratch\\test_locate.py",
-      "lines": 22
     },
     {
       "path": "src\\services\\automation\\chat_warden.py",
@@ -496,16 +460,8 @@
       "lines": 20
     },
     {
-      "path": "scratch\\test_dpi.py",
-      "lines": 17
-    },
-    {
       "path": "src\\core\\version.py",
       "lines": 17
-    },
-    {
-      "path": "scratch\\extract_logo.py",
-      "lines": 16
     },
     {
       "path": "src\\services\\api\\registry.py",
@@ -580,7 +536,7 @@
       "lines": 0
     }
   ],
-  "total_py_lines": 18291,
+  "total_py_lines": 17919,
   "todos": [
     {
       "file": "tests\\test_poro_snacks.py",
@@ -596,17 +552,6 @@
     "test_hotkeys_config.py",
     "test_launcher.py",
     "test_tokens.py",
-    "scratch\\capture_templates.py",
-    "scratch\\compile_check.py",
-    "scratch\\extract_logo.py",
-    "scratch\\extract_templates.py",
-    "scratch\\test_api_login.py",
-    "scratch\\test_dpi.py",
-    "scratch\\test_locate.py",
-    "scratch\\test_tab_switch.py",
-    "scratch\\test_uia.py",
-    "scratch\\test_wm_char.py",
-    "scratch\\update_aram_picker.py",
     "src\\core\\state.py",
     "src\\core\\state_manager.py",
     "src\\services\\discord_rpc.py",

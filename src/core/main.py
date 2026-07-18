@@ -739,13 +739,8 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                 return 0
 
         def is_game_process_running():
-            try:
-                for p in psutil.process_iter(attrs=["name"]):
-                    if p.info["name"] and p.info["name"].lower() == "league of legends.exe":
-                        return True
-            except Exception:
-                pass
-            return False
+            from utils.client_detector import is_game_running
+            return is_game_running()
 
         while self.running and not self._stop_event.is_set():  # type: ignore
             try:
