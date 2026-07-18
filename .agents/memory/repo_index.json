@@ -1,20 +1,16 @@
 {
   "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
-  "scan_time_sec": 0.042,
-  "total_files": 175,
+  "scan_time_sec": 0.047,
+  "total_files": 177,
   "ext_counts": {
     ".json": 19,
-    ".py": 134,
+    ".py": 136,
     ".md": 16,
     ".html": 1,
     ".js": 3,
     ".css": 2
   },
   "python_modules": [
-    {
-      "path": "tests\\test_automation.py",
-      "lines": 902
-    },
     {
       "path": "src\\ui\\components\\priority_grid\\view.py",
       "lines": 689
@@ -49,6 +45,10 @@
     },
     {
       "path": "src\\ui\\components\\friend_list.py",
+      "lines": 388
+    },
+    {
+      "path": "tests\\test_automation_features.py",
       "lines": 388
     },
     {
@@ -92,12 +92,20 @@
       "lines": 271
     },
     {
+      "path": "tests\\test_automation_draft.py",
+      "lines": 269
+    },
+    {
       "path": "src\\ui\\components\\draggable_list.py",
       "lines": 268
     },
     {
       "path": "src\\ui\\components\\toast.py",
       "lines": 268
+    },
+    {
+      "path": "tests\\test_automation_core.py",
+      "lines": 267
     },
     {
       "path": "src\\core\\hotkey_manager.py",
@@ -548,7 +556,7 @@
       "lines": 0
     }
   ],
-  "total_py_lines": 18010,
+  "total_py_lines": 18032,
   "todos": [
     {
       "file": "tests\\test_poro_snacks.py",
@@ -619,7 +627,9 @@
     "tests\\test_api_handler.py",
     "tests\\test_arena_3v6.py",
     "tests\\test_asset_manager.py",
-    "tests\\test_automation.py",
+    "tests\\test_automation_core.py",
+    "tests\\test_automation_draft.py",
+    "tests\\test_automation_features.py",
     "tests\\test_champion_service.py",
     "tests\\test_client_detector.py",
     "tests\\test_color_utils.py",
