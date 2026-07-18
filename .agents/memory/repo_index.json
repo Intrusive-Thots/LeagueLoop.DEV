@@ -1,10 +1,10 @@
 {
   "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
-  "scan_time_sec": 0.047,
-  "total_files": 177,
+  "scan_time_sec": 0.044,
+  "total_files": 184,
   "ext_counts": {
-    ".json": 19,
-    ".py": 136,
+    ".json": 20,
+    ".py": 142,
     ".md": 16,
     ".html": 1,
     ".js": 3,
@@ -248,6 +248,10 @@
       "lines": 97
     },
     {
+      "path": "src\\ui\\qt\\widgets\\cards.py",
+      "lines": 97
+    },
+    {
       "path": "tests\\test_account_manager.py",
       "lines": 97
     },
@@ -360,6 +364,10 @@
       "lines": 55
     },
     {
+      "path": "src\\ui\\qt\\widgets\\buttons.py",
+      "lines": 54
+    },
+    {
       "path": "tests\\test_window_service.py",
       "lines": 54
     },
@@ -404,6 +412,10 @@
       "lines": 41
     },
     {
+      "path": "src\\ui\\qt\\widgets\\scrollable_list.py",
+      "lines": 41
+    },
+    {
       "path": "src\\services\\settings_service.py",
       "lines": 40
     },
@@ -444,6 +456,14 @@
       "lines": 30
     },
     {
+      "path": "src\\ui\\qt\\widgets\\dividers.py",
+      "lines": 28
+    },
+    {
+      "path": "src\\ui\\qt\\widgets\\__init__.py",
+      "lines": 28
+    },
+    {
       "path": "tests\\test_token_loader.py",
       "lines": 28
     },
@@ -469,6 +489,10 @@
     },
     {
       "path": "src\\services\\automation\\chat_warden.py",
+      "lines": 21
+    },
+    {
+      "path": "src\\ui\\qt\\widgets\\inputs.py",
       "lines": 21
     },
     {
@@ -556,7 +580,7 @@
       "lines": 0
     }
   ],
-  "total_py_lines": 18032,
+  "total_py_lines": 18301,
   "todos": [
     {
       "file": "tests\\test_poro_snacks.py",
