@@ -302,9 +302,8 @@ class LeagueLoopQtWindow(QMainWindow):
         l.addWidget(QLabel("Play Area / Automation Controls"))
         self.pages_stack.addWidget(self.play_page)
         
-        self.dashboard_page = QWidget()
-        l = QVBoxLayout(self.dashboard_page)
-        l.addWidget(QLabel("Dashboard Screen"))
+        from ui.qt.pages import DashboardPage
+        self.dashboard_page = DashboardPage(self)
         self.pages_stack.addWidget(self.dashboard_page)
         
         from ui.qt.pages import FriendsPage
