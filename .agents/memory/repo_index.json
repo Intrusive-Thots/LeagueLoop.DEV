@@ -1,20 +1,16 @@
 {
   "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
-  "scan_time_sec": 0.043,
-  "total_files": 173,
+  "scan_time_sec": 0.042,
+  "total_files": 175,
   "ext_counts": {
     ".json": 19,
-    ".py": 132,
+    ".py": 134,
     ".md": 16,
     ".html": 1,
     ".js": 3,
     ".css": 2
   },
   "python_modules": [
-    {
-      "path": "src\\core\\main.py",
-      "lines": 933
-    },
     {
       "path": "tests\\test_automation.py",
       "lines": 902
@@ -46,6 +42,10 @@
     {
       "path": "src\\ui\\components\\factory.py",
       "lines": 473
+    },
+    {
+      "path": "src\\core\\main.py",
+      "lines": 409
     },
     {
       "path": "src\\ui\\components\\friend_list.py",
@@ -84,6 +84,10 @@
       "lines": 284
     },
     {
+      "path": "src\\core\\window_manager.py",
+      "lines": 278
+    },
+    {
       "path": "src\\utils\\client_detector.py",
       "lines": 271
     },
@@ -94,6 +98,10 @@
     {
       "path": "src\\ui\\components\\toast.py",
       "lines": 268
+    },
+    {
+      "path": "src\\core\\hotkey_manager.py",
+      "lines": 247
     },
     {
       "path": "src\\services\\queue_service.py",
@@ -540,7 +548,7 @@
       "lines": 0
     }
   ],
-  "total_py_lines": 18009,
+  "total_py_lines": 18010,
   "todos": [
     {
       "file": "tests\\test_poro_snacks.py",
