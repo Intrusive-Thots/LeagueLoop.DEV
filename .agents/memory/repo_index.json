@@ -1,20 +1,16 @@
 {
   "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
-  "scan_time_sec": 0.041,
-  "total_files": 164,
+  "scan_time_sec": 0.042,
+  "total_files": 174,
   "ext_counts": {
     ".json": 20,
-    ".py": 122,
+    ".py": 132,
     ".md": 16,
     ".html": 1,
     ".js": 3,
     ".css": 2
   },
   "python_modules": [
-    {
-      "path": "src\\services\\automation.py",
-      "lines": 1303
-    },
     {
       "path": "src\\ui\\components\\priority_grid.py",
       "lines": 1190
@@ -48,6 +44,10 @@
       "lines": 579
     },
     {
+      "path": "src\\services\\automation\\engine.py",
+      "lines": 518
+    },
+    {
       "path": "src\\ui\\components\\factory.py",
       "lines": 463
     },
@@ -62,6 +62,10 @@
     {
       "path": "src\\services\\api_handler.py",
       "lines": 340
+    },
+    {
+      "path": "src\\services\\automation\\draft_assistant.py",
+      "lines": 337
     },
     {
       "path": "src\\ui\\components\\automation_editor.py",
@@ -124,6 +128,10 @@
       "lines": 192
     },
     {
+      "path": "src\\services\\automation\\end_game.py",
+      "lines": 181
+    },
+    {
       "path": "src\\utils\\focus_states.py",
       "lines": 169
     },
@@ -162,6 +170,10 @@
     {
       "path": "src\\utils\\acrylic_blur.py",
       "lines": 132
+    },
+    {
+      "path": "src\\services\\automation\\champ_select.py",
+      "lines": 130
     },
     {
       "path": "src\\services\\friend_service.py",
@@ -232,6 +244,10 @@
       "lines": 76
     },
     {
+      "path": "src\\services\\split_engine.py",
+      "lines": 76
+    },
+    {
       "path": "src\\ui\\components\\color_utils.py",
       "lines": 75
     },
@@ -242,6 +258,10 @@
     {
       "path": "tests\\test_asset_manager.py",
       "lines": 70
+    },
+    {
+      "path": "src\\services\\automation\\friend_lobby.py",
+      "lines": 69
     },
     {
       "path": "tests\\test_poro_snacks.py",
@@ -336,6 +356,10 @@
       "lines": 48
     },
     {
+      "path": "src\\services\\automation\\dodge_requeue.py",
+      "lines": 43
+    },
+    {
       "path": "tests\\test_theme_service.py",
       "lines": 42
     },
@@ -378,6 +402,10 @@
     {
       "path": "src\\ui\\components\\lol_toggle.py",
       "lines": 33
+    },
+    {
+      "path": "src\\services\\automation\\ready_check.py",
+      "lines": 31
     },
     {
       "path": "test_launcher.py",
@@ -428,6 +456,10 @@
       "lines": 22
     },
     {
+      "path": "src\\services\\automation\\chat_warden.py",
+      "lines": 21
+    },
+    {
       "path": "test_hotkeys_config.py",
       "lines": 20
     },
@@ -464,6 +496,10 @@
       "lines": 8
     },
     {
+      "path": "src\\services\\split_engine2.py",
+      "lines": 7
+    },
+    {
       "path": "src\\ui\\app_sidebar.py",
       "lines": 5
     },
@@ -478,6 +514,10 @@
     {
       "path": "src\\ui\\layout\\__init__.py",
       "lines": 4
+    },
+    {
+      "path": "src\\services\\automation\\__init__.py",
+      "lines": 3
     },
     {
       "path": "src\\ui\\components\\cards\\__init__.py",
@@ -500,7 +540,7 @@
       "lines": 0
     }
   ],
-  "total_py_lines": 18613,
+  "total_py_lines": 18726,
   "todos": [
     {
       "file": "tests\\test_poro_snacks.py",
@@ -531,6 +571,16 @@
     "src\\core\\state_manager.py",
     "src\\services\\discord_rpc.py",
     "src\\services\\local_api.py",
+    "src\\services\\split_engine.py",
+    "src\\services\\split_engine2.py",
+    "src\\services\\automation\\champ_select.py",
+    "src\\services\\automation\\chat_warden.py",
+    "src\\services\\automation\\dodge_requeue.py",
+    "src\\services\\automation\\draft_assistant.py",
+    "src\\services\\automation\\end_game.py",
+    "src\\services\\automation\\friend_lobby.py",
+    "src\\services\\automation\\ready_check.py",
+    "src\\services\\automation\\__init__.py",
     "src\\tools\\kopied.py",
     "src\\ui\\ui_shared.py",
     "src\\ui\\components\\about_page.py",
