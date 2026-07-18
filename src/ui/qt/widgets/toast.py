@@ -5,7 +5,7 @@ Implements holographic, non-intrusive animated feedback overlay widgets.
 Fully thread-safe via Qt Signal/Slot communication.
 """
 from PySide6.QtWidgets import QFrame, QLabel, QHBoxLayout, QWidget, QVBoxLayout
-from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QPoint, QRect, QObject, Signal, Slot
+from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QPoint, QRect, QObject, Signal, Slot, QEvent
 from PySide6.QtGui import QCursor
 from ui.qt.theme import get_theme_color, get_theme_radius
 from core.events import EventBus
@@ -193,6 +193,6 @@ class ToastManager(QWidget):
 
     def eventFilter(self, watched, event):
         """Syncs positioning when main window is resized."""
-        if watched == self.root and event.type() in (event.Resize, event.Move):
+        if watched == self.root and event.type() in (QEvent.Resize, QEvent.Move):
             self.update_geometry()
         return super().eventFilter(watched, event)

@@ -16,6 +16,7 @@ from utils.smooth_scroll import apply_smooth_scroll
 from utils.path_utils import get_asset_path
 from core.events import EventBus
 from services.queue_service import get_queue_service
+from services.league_service import get_league_service
 
 from ui.sidebar.navigation import NavigationWidget
 from ui.sidebar.status_bar import StatusBarWidget

@@ -687,3 +687,334 @@ class PriorityIconGrid(ctk.CTkFrame):
 
     def _on_drag_release(self, event):
         self.drag_controller.on_drag_release(event)
+
+    # ───────────── add input and animation helpers ─────────────
+    def _show_add_input(self):
+        if self.add_container.winfo_manager():
+            self.add_container.pack_forget()
+            self.suggestions_frame.pack_forget()
+            self.add_entry.delete(0, "end")
+        else:
+            self.add_container.pack(fill="x", padx=4, pady=(4, 0))
+            self.add_entry.focus_set()
+
+    def _resolve_champion_name(self, raw):
+        return self.controller.resolve_champion_name(raw)
+
+    def _commit_add(self):
+        raw = self.add_entry.get().strip()
+        if not raw:
+            return
+
+        # Secret: "all"
+        if raw.lower() == "all":
+            names = self._get_priority_list()
+            for champ in self.controller.known_champions.values():
+                if champ not in names:
+                    names.append(champ)
+            self._save_priority_list(names)
+            
+            self.add_entry.delete(0, "end")
+            self.add_row.pack_forget()
+            self._render_grid()
+            return
+
+        real_name = self._resolve_champion_name(raw)
+        if real_name is None:
+            self.add_entry.configure(border_color="#e81123")
+            try:
+                orig = self.add_entry.pack_info().get("padx", (0, 4))
+                self._shake_widget(self.add_entry, orig)
+            except Exception:
+                pass
+            self.after(1200, lambda: self.add_entry.configure(
+                border_color=get_color("colors.border.subtle")))
+            return
+
+        names = self._get_priority_list()
+        if real_name not in names:
+            names.append(real_name)
+            self._save_priority_list(names)
+        self.add_entry.delete(0, "end")
+        self.suggestions_frame.pack_forget()
+        self.add_container.pack_forget()
+        self._render_grid()
+
+    def _shake_widget(self, widget, orig_padx, amplitude=6, steps=6):
+        """Horizontal shake animation for invalid input feedback."""
+        offsets = []
+        for s in range(steps):
+            direction = 1 if s % 2 == 0 else -1
+            mag = max(1, int(amplitude * (1 - s / steps)))
+            offsets.append(direction * mag)
+        offsets.append(0)  # return to rest
+
+        def _step(i):
+            try:
+                if not widget.winfo_exists():
+                    return
+                pad = offsets[i]
+                widget.pack_configure(padx=(pad, 4))
+                if i < len(offsets) - 1:
+                    self.after(40, lambda: _step(i + 1))
+                else:
+                    widget.pack_configure(padx=orig_padx if isinstance(orig_padx, tuple) else (orig_padx, 4))
+            except Exception:
+                pass
+
+        _step(0)
+
+    def _refresh_visuals(self):
+        self._sync_edit_bar_state()
+        for cell, lbl, idx in self._icon_widgets:
+            if idx in self._selected_indices:
+                cell.configure(fg_color=SEL_BG, border_width=2,
+                               border_color=DEL_BORDER if len(self._selected_indices) > 1 else SEL_BORDER, 
+                               corner_radius=6)
+            else:
+                cell.configure(fg_color="transparent", border_width=0, corner_radius=4)
+
+    def _delete_active(self):
+        self.controller.delete_active(self._selected_indices, on_change=self._render_grid)
+
+    def _request_clear_all(self):
+        """Require double-click confirmation to clear the entire list."""
+        if not self._clear_confirm:
+            self._clear_confirm = True
+            orig_text = self.btn_clear_all.cget("text")
+            orig_color = self.btn_clear_all.cget("text_color")
+
+            self.btn_clear_all.configure(text="Sure?", text_color="#e81123")
+
+            def reset():
+                if self.winfo_exists() and self._clear_confirm:
+                    self._clear_confirm = False
+                    self.btn_clear_all.configure(text=orig_text, text_color=orig_color)
+
+            self.after(2000, reset)
+        else:
+            self._commit_clear_all()
+
+    def _commit_clear_all(self):
+        """Execute the clear operation."""
+        self._clear_confirm = False
+        self.btn_clear_all.configure(text="🗑️", text_color=get_color("colors.state.danger", "#ff4444"))
+
+        names = self._get_priority_list()
+        if names:
+            self._save_priority_list([])
+            self._selected_indices.clear()
+            self._render_grid()
+
+            ToastManager.get_instance().show(
+                "ARAM List Cleared",
+                icon="🗑️",
+                theme="error",
+                confetti=True
+            )
+
+    def _undo_action(self):
+        success = self.controller.undo_action(on_change=self._sync_undo_btn)
+        if not success:
+            return
+
+        # Clear editing states
+        self._selected_indices.clear()
+        self._render_grid()
+
+        # Visual feedback
+        pulse_color = get_color("colors.accent.primary", "#C8AA6E")
+        orig_color = self.btn_undo.cget("text_color")
+        self.btn_undo.configure(text_color=pulse_color)
+        self.after(200, lambda: self.btn_undo.winfo_exists() and self.btn_undo.configure(text_color=orig_color))
+
+        ToastManager.get_instance().show(
+            "Undid last action",
+            icon="↩️",
+            theme="success"
+        )
+
+    def _export_list(self):
+        names = self._get_priority_list()
+        if not names:
+            ToastManager.get_instance().show("ARAM List is empty!", icon="⚠️", theme="error")
+            return
+
+        export_str = ", ".join(names)
+        self.clipboard_clear()
+        self.clipboard_append(export_str)
+        self.update() # necessary to keep clipboard after window closes
+
+        ToastManager.get_instance().show(
+            "ARAM List Copied!",
+            icon="📋",
+            theme="success",
+            confetti=True
+        )
+
+    def _show_import_preview(self):
+        try:
+            raw = self.clipboard_get()
+        except Exception:
+            ToastManager.get_instance().show("Clipboard is empty!", icon="⚠️", theme="error")
+            return
+
+        if not raw.strip():
+            ToastManager.get_instance().show("Clipboard is empty!", icon="⚠️", theme="error")
+            return
+
+        # Hide add container if open
+        self.add_container.pack_forget()
+
+        # Parse comma-separated list
+        potential_champs = [c.strip() for c in raw.split(",") if c.strip()]
+
+        # Fast-path optimization using dict keys for order-preserving deduplication
+        resolved_names = filter(None, (self._resolve_champion_name(p) for p in potential_champs))
+        self._parsed_import = list(dict.fromkeys(resolved_names))
+
+        if not self._parsed_import:
+            ToastManager.get_instance().show("No valid champions found in clipboard.", icon="⚠️", theme="error")
+            return
+
+        # Show container
+        self.import_container.pack(fill="x", padx=4, pady=(4, 0))
+        self.lbl_import_preview.configure(text=f"Import ({len(self._parsed_import)} champs)")
+
+        # Clear old pills
+        for w in self.import_scroll.winfo_children():
+            w.destroy()
+
+        import string
+
+        # Apply LICM to hoist static token resolution outside the UI render loop
+        _radius_sm = get_radius("sm")
+        _color_card = get_color("colors.background.card")
+        _color_gold = get_color("colors.accent.gold", "#C8AA6E")
+        _font_caption = get_font("caption")
+        _color_text_primary = get_color("colors.text.primary")
+
+        # Render pills
+        for i, champ in enumerate(self._parsed_import):
+            display_name = string.capwords(champ.replace("'", "' "), " ").replace("' ", "'")
+            pill = ctk.CTkFrame(
+                self.import_scroll,
+                corner_radius=_radius_sm,
+                fg_color=_color_card,
+                border_width=1,
+                border_color=_color_gold
+            )
+            pill.pack(side="left", padx=2, pady=2)
+
+            ctk.CTkLabel(
+                pill, text=display_name,
+                font=_font_caption,
+                text_color=_color_text_primary
+            ).pack(padx=8, pady=2)
+
+    def _commit_import(self):
+        if not self._parsed_import:
+            return
+
+        self._save_priority_list(self._parsed_import)
+        self.import_container.pack_forget()
+        self._render_grid()
+
+        ToastManager.get_instance().show(
+            f"Imported {len(self._parsed_import)} champions!",
+            icon="📥",
+            theme="success"
+        )
+
+    def _on_add_typing(self, event):
+        # Ignore navigation keys
+        if event.keysym in ("Return", "Escape", "Up", "Down", "Left", "Right", "Tab"):
+            return
+
+        # Debounce champion search input
+        if self._debounce_timer is not None:
+            self.after_cancel(self._debounce_timer)
+
+        self._debounce_timer = self.after(150, self._perform_add_search)
+
+    def _perform_add_search(self):
+        query = self.add_entry.get().strip().lower()
+
+        # Clear existing suggestions
+        for widget in self.suggestions_frame.winfo_children():
+            widget.destroy()
+
+        if not query:
+            self.suggestions_frame.pack_forget()
+            return
+
+        # Find matches (fuzzy search logic)
+        unique_matches = self.controller.perform_add_search(query)
+
+        if not unique_matches:
+            self.suggestions_frame.pack_forget()
+            return
+
+        # Display top 3 matches
+        self.suggestions_frame.pack(fill="x", pady=(4, 0))
+
+        for i, champ in enumerate(unique_matches):
+            display_name = champ
+
+            pill = ctk.CTkButton(
+                self.suggestions_frame, text=display_name, width=0, height=20,
+                corner_radius=10, font=get_font("caption"),
+                fg_color=get_color("colors.background.card"),
+                border_width=1, border_color=get_color("colors.accent.gold", "#C8AA6E"),
+                hover_color=get_color("colors.state.hover"),
+                text_color=get_color("colors.text.primary"),
+                command=lambda c=display_name, raw=champ: self._select_suggestion(c, raw), cursor="hand2",
+            )
+            pill.pack(side="left", padx=(0, 4))
+
+    def _select_suggestion(self, display_name, raw_name):
+        self.add_entry.delete(0, "end")
+        self.add_entry.insert(0, display_name)
+        self.add_entry.configure(border_color=get_color("colors.accent.primary"))
+
+    def _fade_widget(self, widget, fade_in=True, on_complete=None, steps=5):
+        """Smooth opacity transition for edit mode bar."""
+        try:
+            children = widget.winfo_children()
+            if not children:
+                if on_complete:
+                    on_complete()
+                return
+
+            if fade_in:
+                alphas = [i / steps for i in range(1, steps + 1)]
+            else:
+                alphas = [1 - i / steps for i in range(1, steps + 1)]
+
+            def _apply(step):
+                if step >= len(alphas):
+                    if on_complete:
+                        on_complete()
+                    return
+
+                if step == 0 and fade_in:
+                    for child in children:
+                        try:
+                            child.configure(text_color=get_color("colors.text.disabled"))
+                        except Exception:
+                            pass
+                elif step == len(alphas) - 1:
+                    for child in children:
+                        try:
+                            if fade_in:
+                                child.configure(text_color=child._text_color if hasattr(child, '_text_color') else get_color("colors.text.primary"))
+                        except Exception:
+                            pass
+                self.after(30, lambda: _apply(step + 1))
+
+            _apply(0)
+        except Exception:
+            if on_complete:
+                on_complete()
+
+
