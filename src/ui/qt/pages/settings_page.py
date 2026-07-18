@@ -23,8 +23,9 @@ class QtLolToggle(QPushButton):
         super().__init__(parent)
         self.setCheckable(True)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.setFixedSize(36, 18)
+        self.setFixedSize(34, 18)
         self.setCursor(Qt.PointingHandCursor)
+        self.setFocusPolicy(Qt.StrongFocus)
         
         self.active_color = QColor(active_color or "#A88A4E")
         self.inactive_color = QColor(inactive_color or "#1E2328")
@@ -49,16 +50,23 @@ class QtLolToggle(QPushButton):
     def setChecked(self, checked):
         super().setChecked(checked)
         self.anim.stop()
-        self._knob_position = 18.0 if checked else 2.0
+        self._knob_position = 16.0 if checked else 2.0
         self.update()
 
-    def mouseReleaseEvent(self, event):
-        super().mouseReleaseEvent(event)
-        target = 18.0 if self.isChecked() else 2.0
+    def nextCheckState(self):
+        super().nextCheckState()
+        target = 16.0 if self.isChecked() else 2.0
         self.anim.stop()
         self.anim.setStartValue(self._knob_position)
         self.anim.setEndValue(target)
         self.anim.start()
+
+    def keyPressEvent(self, event):
+        if event.key() in [Qt.Key_Space, Qt.Key_Enter, Qt.Key_Return]:
+            self.click()
+            event.accept()
+        else:
+            super().keyPressEvent(event)
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -72,7 +80,13 @@ class QtLolToggle(QPushButton):
         
         # Knob
         painter.setBrush(QBrush(self.knob_color))
-        painter.drawEllipse(QPoint(int(self._knob_position + 8), 9), 6, 6)
+        painter.drawEllipse(QPoint(int(self._knob_position + 9), 9), 6, 6)
+        
+        # Focus Ring
+        if self.hasFocus():
+            painter.setPen(QPen(QColor("#4A90E2"), 1.5))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawRoundedRect(0, 0, self.width(), self.height(), 9, 9)
 
 
 class SettingsToggleRow(QWidget):
@@ -80,12 +94,27 @@ class SettingsToggleRow(QWidget):
     
     def __init__(self, parent=None, label_text="", initial_state=False, on_toggle=None):
         super().__init__(parent)
+        self.on_toggle = on_toggle
+        self.setFocusPolicy(Qt.StrongFocus)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFixedHeight(32)
+        
+        self.setStyleSheet("""
+            QWidget {
+                background: transparent;
+            }
+            QWidget:hover {
+                background-color: rgba(200, 170, 110, 0.05);
+            }
+        """)
+        
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(8, 0, 8, 0)
+        layout.setSpacing(12)
         
         self.lbl_text = QLabel(label_text, self)
-        self.lbl_text.setStyleSheet(f"color: {get_theme_color('colors.text.primary', '#F0E6D2')}; font-size: 12px;")
-        layout.addWidget(self.lbl_text)
+        self.lbl_text.setStyleSheet(f"color: {get_theme_color('colors.text.primary', '#F0E6D2')}; font-size: 12px; font-weight: normal;")
+        layout.addWidget(self.lbl_text, alignment=Qt.AlignVCenter)
         
         layout.addStretch()
         
@@ -96,10 +125,32 @@ class SettingsToggleRow(QWidget):
             knob_color=get_theme_color("colors.text.primary", "#F0E6D2")
         )
         self.toggle.setChecked(initial_state)
-        if on_toggle:
-            self.toggle.clicked.connect(lambda: on_toggle(self.toggle.isChecked()))
-            
-        layout.addWidget(self.toggle)
+        self.toggle.clicked.connect(self._on_toggle_clicked)
+        layout.addWidget(self.toggle, alignment=Qt.AlignVCenter)
+        
+    def _on_toggle_clicked(self):
+        if self.on_toggle:
+            self.on_toggle(self.toggle.isChecked())
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.toggle.click()
+            event.accept()
+
+    def keyPressEvent(self, event):
+        if event.key() in [Qt.Key_Space, Qt.Key_Enter, Qt.Key_Return]:
+            self.toggle.click()
+            event.accept()
+        else:
+            super().keyPressEvent(event)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self.hasFocus():
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.setPen(QPen(QColor("#C8AA6E"), 1))
+            painter.drawRect(0, 0, self.width()-1, self.height()-1)
 
 
 class SettingsSliderRow(QWidget):
@@ -408,8 +459,8 @@ class SettingsPage(ScrollableList):
         self.config = get_settings_service()
         
         # Setup margins and spacing
-        self.container_layout.setContentsMargins(10, 10, 10, 10)
-        self.container_layout.setSpacing(10)
+        self.container_layout.setContentsMargins(16, 16, 16, 16)
+        self.container_layout.setSpacing(12)
         
         self.setup_ui()
 

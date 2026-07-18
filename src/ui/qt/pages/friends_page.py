@@ -234,8 +234,8 @@ class FriendsPage(ScrollableList):
         self._friends_data = []
         self._row_widgets = []
         
-        self.container_layout.setContentsMargins(10, 10, 10, 10)
-        self.container_layout.setSpacing(10)
+        self.container_layout.setContentsMargins(16, 16, 16, 16)
+        self.container_layout.setSpacing(12)
         
         # Setup UI frame card
         self.setup_ui()
@@ -425,6 +425,7 @@ class FriendsPage(ScrollableList):
         root = self.window()
         assets = getattr(root, "assets", None)
         
+        row_count = 0
         for friend in self._friends_data:
             name = friend.get("gameName", "") or friend.get("name", "")
             if not name:
@@ -443,6 +444,14 @@ class FriendsPage(ScrollableList):
             )
             self.list_layout.addWidget(row)
             self._row_widgets.append(row)
+            row_count += 1
+            
+        if row_count == 0:
+            lbl = QLabel("No friends match the active filter.", self.list_container)
+            lbl.setStyleSheet(f"color: {get_theme_color('colors.text.muted')}; font-size: 11px; padding: 12px;")
+            lbl.setAlignment(Qt.AlignCenter)
+            self.list_layout.addWidget(lbl)
+            self._row_widgets.append(lbl)
 
     def _toggle_auto_join(self, name):
         get_friend_service().toggle_auto_join(name)

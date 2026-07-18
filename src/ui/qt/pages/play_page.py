@@ -30,8 +30,8 @@ class PlayPage(QWidget):
         
         # Main layout
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(10, 10, 10, 10)
-        self.main_layout.setSpacing(10)
+        self.main_layout.setContentsMargins(16, 16, 16, 16)
+        self.main_layout.setSpacing(12)
         
         # Scroll area for compact height compatibility
         self.scroll = ScrollableList(self)

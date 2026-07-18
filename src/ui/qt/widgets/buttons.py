@@ -13,6 +13,7 @@ class RiotButton(QPushButton):
     def __init__(self, text, style="primary", parent=None, command=None, **kwargs):
         super().__init__(text, parent)
         self.setCursor(Qt.PointingHandCursor)
+        self.setFixedHeight(32)
 
         # Map style variant names to QSS objectNames
         if style == "primary":

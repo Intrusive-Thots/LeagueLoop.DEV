@@ -286,8 +286,8 @@ class DashboardPage(QWidget):
         self.dragged_module = None
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(10)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
         
         # Page Card Header
         self.card = make_card(self, title="LEAGUELOOP DASHBOARD")

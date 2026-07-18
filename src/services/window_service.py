@@ -224,8 +224,14 @@ class WindowService:
                         client_h = rect.bottom - rect.top
                         
                         if client_w > 100:
-                            # Width of docked panel (fixed at 300px)
+                            # Width of docked panel (defaults to 300, matches registered window width dynamically)
                             my_w = 300
+                            with self._lock:
+                                for h in self._registered_windows.keys():
+                                    rect_reg = ctypes.wintypes.RECT()
+                                    if user32.GetWindowRect(h, ctypes.byref(rect_reg)):
+                                        my_w = rect_reg.right - rect_reg.left
+                                        break
                             my_h = client_h
                             target_x = client_x + client_w
                             target_y = client_y

@@ -274,8 +274,8 @@ class ChampionsPage(QWidget):
         self.selected_sort = "Priority"
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(10)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
         
         # Main Grid Scroll Frame Card
         self.card = make_card(self, title="ARAM PRIORITY SNIPER")

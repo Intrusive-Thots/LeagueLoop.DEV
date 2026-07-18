@@ -17,8 +17,8 @@ class RiotCard(QFrame):
         
         # Base Card Layout
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(10, 10, 10, 10)
-        self.main_layout.setSpacing(6)
+        self.main_layout.setContentsMargins(12, 12, 12, 12)
+        self.main_layout.setSpacing(8)
         
         # Header setup
         self.header_widget = None
@@ -67,8 +67,8 @@ class RiotCard(QFrame):
         # Content frame
         self.content_frame = QFrame(self)
         self.content_layout = QVBoxLayout(self.content_frame)
-        self.content_layout.setContentsMargins(0, 4, 0, 0)
-        self.content_layout.setSpacing(6)
+        self.content_layout.setContentsMargins(0, 0, 0, 0)
+        self.content_layout.setSpacing(8)
         
         self.main_layout.addWidget(self.content_frame)
 

@@ -17,74 +17,157 @@ from ui.qt.theme import apply_theme, get_theme_color, get_theme_radius, get_them
 from core.events import EventBus
 from utils.logger import Logger
 
-class CustomTitleBar(QWidget):
-    """Custom title bar for dragging and basic controls."""
+class HeaderBar(QWidget):
+    """Custom premium title bar supporting dragging, status displays, and controls."""
     def __init__(self, parent):
         super().__init__(parent)
         self.parent = parent
-        self.setFixedHeight(32)
+        self.setFixedHeight(36)
+        self.setObjectName("headerBarFrame")
+        
+        self.setStyleSheet("""
+            QWidget#headerBarFrame {
+                background-color: #0A1428;
+                border-bottom: 1px solid #1A2332;
+            }
+            QLabel {
+                font-family: "Inter", sans-serif;
+                background: transparent;
+            }
+            QPushButton {
+                border: none;
+                background-color: transparent;
+                padding: 0px;
+                margin: 0px;
+            }
+        """)
         
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 0, 10, 0)
-        layout.setSpacing(8)
+        layout.setContentsMargins(12, 0, 12, 0)
+        layout.setSpacing(12)
         
-        # Logo / Title
-        self.title_label = QLabel("League Loop", self)
-        self.title_label.setStyleSheet("font-weight: bold; color: #F0E6D2;")
-        layout.addWidget(self.title_label)
+        # 1. Logo / Title
+        self.logo_lbl = QLabel("🎮 League Loop", self)
+        self.logo_lbl.setStyleSheet("font-weight: bold; color: #C8AA6E; font-size: 11px;")
+        layout.addWidget(self.logo_lbl)
+        
+        # 2. Active Page Title
+        self.page_title_lbl = QLabel("|  Play", self)
+        self.page_title_lbl.setStyleSheet("color: #F0E6D2; font-size: 11px; font-weight: normal;")
+        layout.addWidget(self.page_title_lbl)
+        
         layout.addStretch()
         
-        # Dock/Undock toggle
+        # 3. Hotkey Badge
+        self.hotkey_badge = QLabel("⌨️ F3 Queue", self)
+        self.hotkey_badge.setStyleSheet("color: #A0A5B5; font-size: 10px; padding: 2px 6px; border: 1px solid #1E2839; border-radius: 4px; background-color: #0F1923;")
+        layout.addWidget(self.hotkey_badge)
+        
+        # 4. Queue Timer
+        self.timer_lbl = QLabel("⏳ 0:00", self)
+        self.timer_lbl.setStyleSheet("color: #C8AA6E; font-size: 11px; font-weight: bold;")
+        self.timer_lbl.setVisible(False)
+        layout.addWidget(self.timer_lbl)
+        
+        # 5. Profile Badge
+        self.profile_lbl = QLabel("", self)
+        self.profile_lbl.setStyleSheet("color: #C8AA6E; font-size: 11px;")
+        layout.addWidget(self.profile_lbl)
+        
+        # 6. Settings Gear Button
+        self.btn_settings = QPushButton("⚙️", self)
+        self.btn_settings.setFixedSize(20, 20)
+        self.btn_settings.setCursor(Qt.PointingHandCursor)
+        self.btn_settings.setToolTip("Settings")
+        self.btn_settings.setStyleSheet("color: #A0A5B5; font-size: 13px;")
+        self.btn_settings.clicked.connect(lambda: self.parent.switch_page(5))
+        layout.addWidget(self.btn_settings)
+        
+        # 7. Dock Toggle
         self.btn_dock = QPushButton("🔗", self)
         self.btn_dock.setFixedSize(20, 20)
         self.btn_dock.setCursor(Qt.PointingHandCursor)
-        self.btn_dock.setStyleSheet("border: none; color: #C8AA6E;")
+        self.btn_dock.setStyleSheet("color: #C8AA6E; font-size: 12px;")
         self.btn_dock.clicked.connect(self._toggle_dock)
         layout.addWidget(self.btn_dock)
         
-        # Minimize button
+        # 8. Minimize Button
         self.btn_min = QPushButton("─", self)
         self.btn_min.setFixedSize(20, 20)
         self.btn_min.setCursor(Qt.PointingHandCursor)
-        self.btn_min.setStyleSheet("border: none; color: #C8AA6E;")
+        self.btn_min.setStyleSheet("color: #C8AA6E; font-weight: bold; font-size: 12px;")
         self.btn_min.clicked.connect(self.parent.showMinimized)
         layout.addWidget(self.btn_min)
         
-        # Close button
+        # 9. Close Button
         self.btn_close = QPushButton("✕", self)
         self.btn_close.setFixedSize(20, 20)
         self.btn_close.setCursor(Qt.PointingHandCursor)
-        self.btn_close.setStyleSheet("border: none; color: #E74C3C;")
+        self.btn_close.setStyleSheet("color: #E74C3C; font-weight: bold; font-size: 12px;")
         self.btn_close.clicked.connect(self.parent.close)
         layout.addWidget(self.btn_close)
         
         self._drag_position = None
         self._window_service = get_window_service()
         self._update_dock_icon()
-
+        
+        # Connect EventBus listeners
+        EventBus.on("queue_timer_tick", self._on_timer_tick)
+        EventBus.on("automation_queue_state", self._on_queue_state)
+        EventBus.on("summoner_changed", self._on_summoner_changed)
+        EventBus.on("league_disconnected", self._on_league_disconnected)
+        
+    def set_page_title(self, name):
+        self.page_title_lbl.setText(f"|  {name}")
+        
     def _toggle_dock(self):
         is_docked = self._window_service.is_docked
         self._window_service.set_docked_mode(not is_docked)
         self._update_dock_icon()
-
+        
     def _update_dock_icon(self):
         is_docked = self._window_service.is_docked
         self.btn_dock.setText("🔗" if is_docked else "🔓")
         self.btn_dock.setToolTip("Docked Mode (Snaps to League)" if is_docked else "Undocked Mode (Free Window)")
+        
+    def _on_timer_tick(self, current, estimated):
+        from PySide6.QtCore import QMetaObject, Qt
+        cur_min, cur_sec = divmod(int(current), 60)
+        est_min, est_sec = divmod(int(estimated), 60)
+        text = f"⏳ {cur_min}:{cur_sec:02d} / {est_min}:{est_sec:02d}"
+        QMetaObject.invokeMethod(self.timer_lbl, "setText", Qt.QueuedConnection, Q_ARG(str, text))
+        
+    def _on_queue_state(self, phase, search_state):
+        from PySide6.QtCore import QMetaObject, Qt
+        is_searching = phase in ["Matchmaking"] or (search_state and search_state.get("isSearching", False))
+        QMetaObject.invokeMethod(self.timer_lbl, "setVisible", Qt.QueuedConnection, Q_ARG(bool, bool(is_searching)))
+        
+    def _on_summoner_changed(self, info):
+        from PySide6.QtCore import QMetaObject, Qt
+        if info:
+            name = info.get("displayName", "")
+            level = info.get("summonerLevel", 0)
+            text = f"👤 {name} (Lv. {level})" if name else ""
+            QMetaObject.invokeMethod(self.profile_lbl, "setText", Qt.QueuedConnection, Q_ARG(str, text))
+            
+    def _on_league_disconnected(self):
+        from PySide6.QtCore import QMetaObject, Qt
+        QMetaObject.invokeMethod(self.profile_lbl, "setText", Qt.QueuedConnection, Q_ARG(str, ""))
+        QMetaObject.invokeMethod(self.timer_lbl, "setVisible", Qt.QueuedConnection, Q_ARG(bool, False))
 
-    def mousePressEvent(self, event: QMouseEvent):
+    def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self._drag_position = event.globalPosition().toPoint() - self.parent.frameGeometry().topLeft()
             event.accept()
 
-    def mouseMoveEvent(self, event: QMouseEvent):
+    def mouseMoveEvent(self, event):
         if self._drag_position and not self._window_service.is_docked:
             self.parent.move(event.globalPosition().toPoint() - self._drag_position)
             event.accept()
 
 
 class StatusBar(QFrame):
-    """Bottom status bar displaying LCU connection state and mode."""
+    """Bottom status bar displaying LCU connection state and mode, containing the power toggle."""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedHeight(32)
@@ -101,22 +184,38 @@ class StatusBar(QFrame):
         """)
         
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 0, 10, 0)
+        layout.setContentsMargins(12, 0, 12, 0)
+        layout.setSpacing(10)
         
         self.lbl_status = QLabel("Disconnected", self)
+        self.lbl_status.setStyleSheet("color: #E74C3C; font-weight: bold;")
         layout.addWidget(self.lbl_status)
         
         layout.addStretch()
         
         self.lbl_mode = QLabel("ARAM Mode", self)
+        self.lbl_mode.setStyleSheet("color: #A0A5B5; font-size: 11px;")
         layout.addWidget(self.lbl_mode)
+        
+        # Main power toggle in Footer
+        from ui.qt.pages.settings_page import QtLolToggle
+        self.toggle_power = QtLolToggle(
+            self,
+            active_color="#A88A4E",
+            inactive_color="#1E2328",
+            knob_color="#F0E6D2"
+        )
+        self.toggle_power.setChecked(True)
+        self.toggle_power.clicked.connect(self._on_power_toggled)
+        layout.addWidget(self.toggle_power)
         
         EventBus.on("league_connected", self._on_connected)
         EventBus.on("league_disconnected", self._on_disconnected)
+        EventBus.on("automation_queue_state", self._on_queue_state)
         
     def _connected_async(self):
         self.lbl_status.setText("Connected to LCU")
-        self.lbl_status.setStyleSheet("color: #2ECC71;")
+        self.lbl_status.setStyleSheet("color: #2ECC71; font-weight: bold;")
 
     def _on_connected(self):
         from PySide6.QtCore import QMetaObject, Qt
@@ -124,16 +223,42 @@ class StatusBar(QFrame):
         
     def _disconnected_async(self):
         self.lbl_status.setText("Disconnected")
-        self.lbl_status.setStyleSheet("color: #E74C3C;")
+        self.lbl_status.setStyleSheet("color: #E74C3C; font-weight: bold;")
 
     def _on_disconnected(self):
         from PySide6.QtCore import QMetaObject, Qt
         QMetaObject.invokeMethod(self, "_disconnected_async", Qt.QueuedConnection)
 
+    def _on_queue_state(self, phase, search_state):
+        from PySide6.QtCore import QMetaObject, Qt
+        app_win = self.window()
+        mode_str = "Auto Mode"
+        if app_win and hasattr(app_win, "ctk_app") and app_win.ctk_app:
+            q_id = app_win.ctk_app.automation.current_queue_id
+            if q_id == 450: mode_str = "ARAM Mode"
+            elif q_id == 1900: mode_str = "Classic Mode"
+            elif q_id == 420: mode_str = "Solo/Duo Mode"
+            elif q_id == 440: mode_str = "Flex Mode"
+            elif q_id == 400: mode_str = "Draft Mode"
+            else:
+                mode_str = f"{app_win.config.get('aram_mode', 'ARAM')} Mode"
+        QMetaObject.invokeMethod(self.lbl_mode, "setText", Qt.QueuedConnection, Q_ARG(str, mode_str))
+
+    def _on_power_toggled(self):
+        state = self.toggle_power.isChecked()
+        app_win = self.window()
+        if app_win and hasattr(app_win, "ctk_app") and app_win.ctk_app:
+            app_win.ctk_app.toggle_power(state)
+            
+        from ui.qt.widgets.toast import ToastManager
+        if state:
+            ToastManager.get_instance().show("Automation Activated", icon="▶", theme="success")
+        else:
+            ToastManager.get_instance().show("Automation Paused", icon="⏸", theme="error")
+
 
 class NavButton(QPushButton):
-    """Custom navigation button supporting text labels, icons, and reactive badges."""
-    
+    """Custom navigation button supporting text labels, centered icons, and active indicator line."""
     def __init__(self, name, icon_char, page_index, parent=None):
         super().__init__(parent)
         self.name = name
@@ -141,7 +266,8 @@ class NavButton(QPushButton):
         self.page_index = page_index
         self.setCursor(Qt.PointingHandCursor)
         self.setFocusPolicy(Qt.StrongFocus)
-        self.setFixedHeight(36)
+        self.setFixedHeight(48)
+        self.setFixedWidth(48) # Starts collapsed (48x48 box)
         
         self.btn_layout = QHBoxLayout(self)
         self.btn_layout.setContentsMargins(0, 0, 0, 0)
@@ -150,10 +276,11 @@ class NavButton(QPushButton):
         
         self.icon_lbl = QLabel(icon_char, self)
         self.icon_lbl.setStyleSheet("color: inherit; font-size: 16px; background: transparent; font-weight: normal;")
+        self.icon_lbl.setAlignment(Qt.AlignCenter)
         self.btn_layout.addWidget(self.icon_lbl)
         
         self.text_lbl = QLabel(name, self)
-        self.text_lbl.setStyleSheet("color: inherit; font-size: 12px; background: transparent;")
+        self.text_lbl.setStyleSheet("color: inherit; font-size: 11px; background: transparent; font-weight: bold;")
         self.text_lbl.setVisible(False)
         self.btn_layout.addWidget(self.text_lbl)
         
@@ -185,8 +312,6 @@ class NavButton(QPushButton):
     def set_badge_value(self, val):
         if val:
             self.badge_lbl.setText(str(val))
-            # Only show badge if expanded or if it's the ARAM priority Sniper or Friends list
-            # We can allow the badge to overlap or only show in expanded mode
             self.badge_lbl.setVisible(self.text_lbl.isVisible())
         else:
             self.badge_lbl.setText("")
@@ -196,23 +321,23 @@ class NavButton(QPushButton):
         self.text_lbl.setVisible(expanded)
         self.badge_lbl.setVisible(expanded and bool(self.badge_lbl.text()))
         if expanded:
+            self.setFixedWidth(152) # 160px width - 8px margin
             self.btn_layout.setContentsMargins(12, 0, 12, 0)
             self.btn_layout.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         else:
+            self.setFixedWidth(48)
             self.btn_layout.setContentsMargins(0, 0, 0, 0)
             self.btn_layout.setAlignment(Qt.AlignCenter)
 
 
 class SidebarNavigation(QWidget):
     """Modern collapsible navigation sidebar with animated resizing, sections, and badges."""
-    
     def __init__(self, on_change_page, parent=None):
         super().__init__(parent)
         self.setObjectName("sidebarNav")
         self.on_change = on_change_page
         self.is_expanded = False
         
-        # Start collapsed: 56px (icon only)
         self._width = 56
         self.setFixedWidth(self._width)
         
@@ -225,8 +350,8 @@ class SidebarNavigation(QWidget):
                 border: none;
                 color: #6C757D;
                 background-color: transparent;
-                margin-left: 6px;
-                margin-right: 6px;
+                margin-left: 4px;
+                margin-right: 4px;
                 border-radius: 4px;
             }}
             QPushButton:hover {{
@@ -236,7 +361,9 @@ class SidebarNavigation(QWidget):
             QPushButton[active="true"] {{
                 color: #C8AA6E;
                 background-color: #0F1923;
-                border-left: 2px solid #C8AA6E;
+                border-left: 3px solid #C8AA6E;
+                border-top-left-radius: 0px;
+                border-bottom-left-radius: 0px;
             }}
             QPushButton:focus {{
                 border: 1px solid #C8AA6E;
@@ -244,13 +371,13 @@ class SidebarNavigation(QWidget):
         """)
         
         self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(0, 5, 0, 10)
-        self.layout.setSpacing(6)
+        self.layout.setContentsMargins(0, 12, 0, 12)
+        self.layout.setSpacing(12)
         
-        # ── 1. COLLAPSE TOGGLE BUTTON ROW ──
+        # Collapsible expansion toggle
         self.toggle_row = QWidget(self)
         self.toggle_row_layout = QHBoxLayout(self.toggle_row)
-        self.toggle_row_layout.setContentsMargins(10, 0, 10, 0)
+        self.toggle_row_layout.setContentsMargins(12, 0, 12, 0)
         self.toggle_row_layout.addStretch()
         
         self.btn_toggle_expand = QPushButton("▶", self)
@@ -269,10 +396,8 @@ class SidebarNavigation(QWidget):
         """)
         self.btn_toggle_expand.clicked.connect(self.toggle_expand)
         self.toggle_row_layout.addWidget(self.btn_toggle_expand)
-        
         self.layout.addWidget(self.toggle_row)
         
-        # Organize navigation items in categories
         self.CATEGORIES = {
             "CORE": [
                 ("Dashboard", "🏠", 1),
@@ -291,9 +416,7 @@ class SidebarNavigation(QWidget):
         self.buttons = []
         self.headers = []
         
-        # Create categories and nav buttons
         for category_name, items in self.CATEGORIES.items():
-            # Category label (only visible when expanded)
             lbl_header = QLabel(category_name, self)
             lbl_header.setStyleSheet("""
                 color: #565C64;
@@ -317,45 +440,15 @@ class SidebarNavigation(QWidget):
         
         self.layout.addStretch()
         
-        # Add thin gold divider line
-        self.divider = QFrame(self)
-        self.divider.setFixedHeight(1)
-        self.divider.setStyleSheet("background-color: #1E2328; border: none; margin-left: 10px; margin-right: 10px;")
-        self.layout.addWidget(self.divider)
-        
-        # Power label
-        self.lbl_power = QLabel("AUTO", self)
-        self.lbl_power.setAlignment(Qt.AlignCenter)
-        self.lbl_power.setStyleSheet("color: #6C757D; font-size: 8px; font-weight: bold; background: transparent;")
-        self.lbl_power.setVisible(False)
-        self.layout.addWidget(self.lbl_power)
-        
-        # main power toggle
-        from ui.qt.pages.settings_page import QtLolToggle
-        self.toggle_power = QtLolToggle(
-            self,
-            active_color="#A88A4E",
-            inactive_color="#1E2328",
-            knob_color="#F0E6D2"
-        )
-        self.toggle_power.setChecked(True)
-        self.toggle_power.clicked.connect(self._on_power_toggled)
-        self.layout.addWidget(self.toggle_power, alignment=Qt.AlignCenter)
-        
-        # Width Animation
         self.anim = QPropertyAnimation(self, b"sidebar_width", self)
         self.anim.setDuration(150)
         self.anim.setEasingCurve(QEasingCurve.InOutQuad)
         
-        # EventBus listeners
         EventBus.on("friends_state_changed", self._on_friends_state_changed)
         EventBus.on("setting_changed", self._on_setting_changed)
         EventBus.on("automation_queue_state", self._on_queue_state)
         
-        # Initial active page
         self.set_active(0)
-        
-        # Update badges after load
         QTimer.singleShot(100, self.update_badges)
 
     @Property(int)
@@ -371,44 +464,34 @@ class SidebarNavigation(QWidget):
         self.is_expanded = not self.is_expanded
         self.anim.stop()
         
+        app_win = self.window()
+        if app_win and hasattr(app_win, "anim_win"):
+            app_win.anim_win.stop()
+            
         start_w = self.width()
         target_w = 160 if self.is_expanded else 56
         
-        # Chevron state
         self.btn_toggle_expand.setText("◀" if self.is_expanded else "▶")
         
-        # Hide/Show header/power elements immediately
         for header in self.headers:
             header.setVisible(self.is_expanded)
-        self.lbl_power.setVisible(self.is_expanded)
         
-        # Update buttons
         for btn in self.buttons:
             btn.set_expanded_state(self.is_expanded)
-            
-        # Update tooltip visibility (disable tooltips when expanded to prevent clutter)
-        for btn in self.buttons:
             btn.setToolTip("" if self.is_expanded else btn.name)
             
-        # Animate width transition
         self.anim.setStartValue(start_w)
         self.anim.setEndValue(target_w)
         self.anim.start()
         
-        # Refresh badges to render correctly in expanded mode
-        self.update_badges()
-
-    def _on_power_toggled(self):
-        state = self.toggle_power.isChecked()
-        app_win = self.window()
-        if hasattr(app_win, "ctk_app") and app_win.ctk_app:
-            app_win.ctk_app.toggle_power(state)
+        if app_win and hasattr(app_win, "anim_win"):
+            win_start_w = app_win.width()
+            win_target_w = 404 if self.is_expanded else 300
+            app_win.anim_win.setStartValue(win_start_w)
+            app_win.anim_win.setEndValue(win_target_w)
+            app_win.anim_win.start()
             
-        from ui.qt.widgets.toast import ToastManager
-        if state:
-            ToastManager.get_instance().show("Automation Activated", icon="▶", theme="success")
-        else:
-            ToastManager.get_instance().show("Automation Paused", icon="⏸", theme="error")
+        self.update_badges()
 
     def _on_btn_clicked(self, page_index):
         self.set_active(page_index)
@@ -418,9 +501,7 @@ class SidebarNavigation(QWidget):
         for btn in self.buttons:
             btn.set_active(btn.page_index == page_index)
 
-    # ── Thread-Safe Reactive Badge Updates ──
     def update_badges(self):
-        # 1. Update online friends count
         try:
             from services.friend_service import get_friend_service
             friends = get_friend_service().get_friends()
@@ -431,7 +512,6 @@ class SidebarNavigation(QWidget):
         except Exception as e:
             Logger.error("SidebarNavigation", f"Badge error (Friends): {e}")
 
-        # 2. Update priority grid size
         try:
             from services.settings_service import get_settings_service
             champions = get_settings_service().get("priority_picker", {}).get("list", [])
@@ -450,6 +530,7 @@ class SidebarNavigation(QWidget):
                     btn.set_badge_value("")
 
     def _on_friends_state_changed(self):
+        from PySide6.QtCore import QMetaObject, Qt
         QMetaObject.invokeMethod(self, "_update_friends_badge_async", Qt.QueuedConnection)
 
     @Slot()
@@ -457,6 +538,7 @@ class SidebarNavigation(QWidget):
         self.update_badges()
 
     def _on_setting_changed(self, key, val):
+        from PySide6.QtCore import QMetaObject, Qt
         if key == "priority_picker":
             QMetaObject.invokeMethod(self, "_update_champions_badge_async", Qt.QueuedConnection)
 
@@ -465,6 +547,7 @@ class SidebarNavigation(QWidget):
         self.update_badges()
 
     def _on_queue_state(self, phase, state):
+        from PySide6.QtCore import QMetaObject, Qt
         QMetaObject.invokeMethod(self, "_update_queue_badge_async", Qt.QueuedConnection, Q_ARG(str, phase))
 
     @Slot(str)
@@ -494,8 +577,13 @@ class LeagueLoopQtWindow(QMainWindow):
         self.outer_layout.setSpacing(0)
         
         # Add Custom Title Bar
-        self.title_bar = CustomTitleBar(self)
-        self.outer_layout.addWidget(self.title_bar)
+        self.header_bar = HeaderBar(self)
+        self.outer_layout.addWidget(self.header_bar)
+        
+        # Window Resize Animation
+        self.anim_win = QPropertyAnimation(self, b"window_width", self)
+        self.anim_win.setDuration(150)
+        self.anim_win.setEasingCurve(QEasingCurve.InOutQuad)
         
         # Main Body (Sidebar + Content Stack)
         self.body_widget = QWidget(self)
@@ -609,6 +697,17 @@ class LeagueLoopQtWindow(QMainWindow):
             return
             
         self.pages_stack.setCurrentIndex(index)
+        
+        # Keep sidebar navigation selection in sync
+        if hasattr(self, "navigation") and self.navigation:
+            self.navigation.set_active(index)
+            
+        # Update header page title
+        if hasattr(self, "header_bar") and self.header_bar:
+            page_name = self.page_classes[index].__name__.replace("Page", "")
+            if page_name == "Coach":
+                page_name = "AI Coach"
+            self.header_bar.set_page_title(page_name)
         
         # Apply smooth fade transition
         from PySide6.QtWidgets import QGraphicsOpacityEffect
@@ -778,3 +877,11 @@ class LeagueLoopQtWindow(QMainWindow):
             if self._tray_icon:
                 self._tray_icon.hide()
             event.accept()
+
+    @Property(int)
+    def window_width(self):
+        return self.width()
+
+    @window_width.setter
+    def window_width(self, w):
+        self.resize(w, self.height())

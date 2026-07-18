@@ -66,12 +66,13 @@ class ThemeService:
         /* Card Frame */
         QFrame#cardFrame {{
             background-color: {bg_card};
-            border: 1px solid #1A2332;
+            border: 1px solid #1E2839;
             border-radius: {radius_md}px;
         }}
         
         QFrame#cardFrame:hover {{
             background-color: {bg_card_hover};
+            border-color: {accent_gold};
         }}
         
         /* Standard Buttons */
@@ -79,12 +80,14 @@ class ThemeService:
             border-radius: {radius_sm}px;
             font-weight: bold;
             padding: 6px 16px;
+            outline: none;
         }}
         
         QPushButton#primaryBtn {{
             background-color: {accent_gold};
             color: {bg_app};
             border: 1px solid {accent_gold};
+            min-height: 28px;
         }}
         
         QPushButton#primaryBtn:hover {{
@@ -92,24 +95,51 @@ class ThemeService:
             border-color: #D3B679;
         }}
         
+        QPushButton#primaryBtn:pressed {{
+            background-color: #9C824E;
+            border-color: #9C824E;
+        }}
+        
+        QPushButton#primaryBtn:focus {{
+            border: 1px solid {accent_blue};
+        }}
+        
         QPushButton#secondaryBtn {{
             background-color: transparent;
             color: {accent_gold};
             border: 1px solid {accent_gold};
+            min-height: 28px;
         }}
         
         QPushButton#secondaryBtn:hover {{
             background-color: {state_hover};
         }}
         
+        QPushButton#secondaryBtn:pressed {{
+            background-color: rgba(200, 170, 110, 0.2);
+        }}
+        
+        QPushButton#secondaryBtn:focus {{
+            border: 1px solid {accent_blue};
+        }}
+        
         QPushButton#dangerBtn {{
             background-color: transparent;
             color: {state_danger};
             border: 1px solid {state_danger};
+            min-height: 28px;
         }}
         
         QPushButton#dangerBtn:hover {{
             background-color: rgba(231, 76, 60, 0.15);
+        }}
+        
+        QPushButton#dangerBtn:pressed {{
+            background-color: rgba(231, 76, 60, 0.3);
+        }}
+        
+        QPushButton#dangerBtn:focus {{
+            border: 1px solid {accent_blue};
         }}
         
         QPushButton:disabled {{
