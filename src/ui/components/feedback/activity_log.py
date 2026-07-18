@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from ui.components.factory import get_color, get_font
+from ui.components.factory import get_color, get_font, ScrollableList
 from ui.components.cards import Card, CardHeader, CardContent
 
 class ActivityLogPanel(Card):
@@ -12,8 +12,8 @@ class ActivityLogPanel(Card):
         self.content = CardContent(self)
         self.content.pack(fill="both", expand=True)
 
-        self.scroll = ctk.CTkScrollableFrame(
-            self.content, fg_color="transparent",
+        self.scroll = ScrollableList(
+            self.content,
             scrollbar_button_color=get_color("colors.background.card", "#1E2328"),
             scrollbar_button_hover_color=get_color("colors.text.disabled", "#3A4654")
         )

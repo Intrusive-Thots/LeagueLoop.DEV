@@ -1,6 +1,6 @@
 {
   "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
-  "scan_time_sec": 0.049,
+  "scan_time_sec": 0.046,
   "total_files": 172,
   "ext_counts": {
     ".json": 19,
@@ -45,7 +45,7 @@
     },
     {
       "path": "src\\ui\\components\\factory.py",
-      "lines": 463
+      "lines": 473
     },
     {
       "path": "src\\ui\\components\\friend_list.py",
@@ -536,7 +536,7 @@
       "lines": 0
     }
   ],
-  "total_py_lines": 17922,
+  "total_py_lines": 17932,
   "todos": [
     {
       "file": "tests\\test_poro_snacks.py",

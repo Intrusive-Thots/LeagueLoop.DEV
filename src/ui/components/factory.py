@@ -461,3 +461,13 @@ def animate_slide(widget, start_y, end_y, duration=200, callback=None):
             widget.after(16, lambda: step(curr_y + delta, s_left - 1))
             
     step(start_y, steps)
+
+class ScrollableList(ctk.CTkScrollableFrame):
+    """A standardized scrollable list frame using Design Tokens, equipped with smooth scroll support."""
+    def __init__(self, master, fg_color="transparent", corner_radius=0, **kwargs):
+        super().__init__(master, fg_color=fg_color, corner_radius=corner_radius, **kwargs)
+        try:
+            from utils.smooth_scroll import apply_smooth_scroll
+            apply_smooth_scroll(self)
+        except Exception as e:
+            Logger.debug("factory.py", f"Failed applying smooth scroll: {e}")
