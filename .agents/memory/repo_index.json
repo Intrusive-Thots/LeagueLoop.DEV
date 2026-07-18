@@ -1,6 +1,6 @@
 {
   "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
-  "scan_time_sec": 0.046,
+  "scan_time_sec": 0.042,
   "total_files": 172,
   "ext_counts": {
     ".json": 19,
@@ -188,6 +188,10 @@
       "lines": 117
     },
     {
+      "path": "src\\services\\draft_service.py",
+      "lines": 116
+    },
+    {
       "path": "src\\utils\\logger.py",
       "lines": 116
     },
@@ -237,10 +241,6 @@
     },
     {
       "path": "src\\services\\discord_rpc.py",
-      "lines": 93
-    },
-    {
-      "path": "src\\services\\draft_service.py",
       "lines": 93
     },
     {
@@ -536,7 +536,7 @@
       "lines": 0
     }
   ],
-  "total_py_lines": 17932,
+  "total_py_lines": 17955,
   "todos": [
     {
       "file": "tests\\test_poro_snacks.py",
