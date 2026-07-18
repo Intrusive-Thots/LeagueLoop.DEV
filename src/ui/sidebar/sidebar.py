@@ -195,7 +195,7 @@ class SidebarWidget(ctk.CTkFrame):
             self.play_page.pack(fill="both", expand=True)
             # Make sure play page sub-components are showing properly
             self.play_page.friend_list.pack(fill="x", pady=(0, SECTION_GAP))
-            self.play_page.update_accounts_tool_visibility(self.lcu.is_connected)
+            self.play_page.update_accounts_tool_visibility(get_league_service().is_connected)
         elif tab_name == "Automations":
             self.automations_page.pack(fill="both", expand=True)
         elif tab_name == "Config":
@@ -331,10 +331,10 @@ class SidebarWidget(ctk.CTkFrame):
 
         if self.toggle_callback:
             def _check_and_cancel():
-                state_req = self.lcu.request("GET", "/lol-lobby/v2/lobby/matchmaking/search-state")
-                state_data = state_req.json() if state_req and state_req.status_code == 200 else {}
-                if state_data.get("searchState") == "Searching":
-                    self.lcu.request("DELETE", "/lol-lobby/v2/lobby/matchmaking/search")
+                # Let QueueService cancel search if it's running
+                queue_service = get_queue_service()
+                if queue_service and queue_service.is_searching:
+                    queue_service.cancel_matchmaking()
                     self.root_app.after(0, lambda: self.update_action_log("Matchmaking Cancelled."))
                     if getattr(self, "power_state", False):
                         self.root_app.after(0, lambda: self.set_power_state(False))
