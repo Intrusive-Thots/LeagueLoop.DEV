@@ -1,10 +1,10 @@
 {
   "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
-  "scan_time_sec": 0.043,
-  "total_files": 163,
+  "scan_time_sec": 0.041,
+  "total_files": 164,
   "ext_counts": {
     ".json": 20,
-    ".py": 121,
+    ".py": 122,
     ".md": 16,
     ".html": 1,
     ".js": 3,
@@ -20,10 +20,6 @@
       "lines": 1190
     },
     {
-      "path": "src\\services\\account_manager.py",
-      "lines": 1006
-    },
-    {
       "path": "src\\core\\main.py",
       "lines": 938
     },
@@ -34,6 +30,10 @@
     {
       "path": "src\\services\\local_api.py",
       "lines": 841
+    },
+    {
+      "path": "src\\services\\account_manager.py",
+      "lines": 828
     },
     {
       "path": "src\\ui\\sidebar\\sidebar.py",
@@ -114,6 +114,10 @@
     {
       "path": "src\\ui\\components\\settings_panel.py",
       "lines": 197
+    },
+    {
+      "path": "src\\services\\riot_client_api.py",
+      "lines": 194
     },
     {
       "path": "src\\services\\theme_service.py",
@@ -268,10 +272,6 @@
       "lines": 64
     },
     {
-      "path": "tests\\test_api_handler.py",
-      "lines": 63
-    },
-    {
       "path": "tests\\test_config_manager.py",
       "lines": 63
     },
@@ -286,6 +286,10 @@
     {
       "path": "src\\ui\\sidebar\\status_bar.py",
       "lines": 61
+    },
+    {
+      "path": "tests\\test_api_handler.py",
+      "lines": 60
     },
     {
       "path": "scratch\\test_api_login.py",
@@ -496,7 +500,7 @@
       "lines": 0
     }
   ],
-  "total_py_lines": 18600,
+  "total_py_lines": 18613,
   "todos": [
     {
       "file": "tests\\test_poro_snacks.py",

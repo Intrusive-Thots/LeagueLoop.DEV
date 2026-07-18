@@ -12,20 +12,17 @@ class TestLCUClient(unittest.TestCase):
         self.assertIsNone(self.client.port)
         self.assertIsNone(self.client.auth_token)
 
-    @patch('services.api_handler.psutil.process_iter')
-    def test_connect_success(self, mock_process_iter):
+    @patch('services.api_handler.scan_clients')
+    def test_connect_success(self, mock_scan_clients):
         """Test connect via cmdline extraction (primary path)."""
-        mock_proc = MagicMock()
-        mock_proc.info = {'name': 'LeagueClientUx.exe'}
-        mock_proc.pid = 12345
-        mock_proc.is_running.return_value = True
-        mock_proc.name.return_value = 'LeagueClientUx.exe'
-        mock_proc.cmdline.return_value = [
-            "LeagueClientUx.exe",
-            "--app-port=54321",
-            "--remoting-auth-token=password",
-        ]
-        mock_process_iter.return_value = [mock_proc]
+        mock_scan_clients.return_value = {
+            "league": {
+                "connected": True,
+                "port": "54321",
+                "token": "password",
+                "pid": 12345
+            }
+        }
 
         # Override cooldown
         self.client._last_scan_time = 0
