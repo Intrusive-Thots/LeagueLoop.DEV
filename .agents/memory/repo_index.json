@@ -1,20 +1,16 @@
 {
   "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
   "scan_time_sec": 0.048,
-  "total_files": 181,
+  "total_files": 184,
   "ext_counts": {
     ".json": 20,
-    ".py": 139,
+    ".py": 142,
     ".md": 16,
     ".html": 1,
     ".js": 3,
     ".css": 2
   },
   "python_modules": [
-    {
-      "path": "src\\ui\\components\\priority_grid.py",
-      "lines": 1190
-    },
     {
       "path": "src\\core\\main.py",
       "lines": 938
@@ -26,6 +22,10 @@
     {
       "path": "src\\services\\account_manager.py",
       "lines": 828
+    },
+    {
+      "path": "src\\ui\\components\\priority_grid\\view.py",
+      "lines": 689
     },
     {
       "path": "src\\ui\\sidebar\\sidebar.py",
@@ -220,6 +220,10 @@
       "lines": 98
     },
     {
+      "path": "src\\ui\\components\\priority_grid\\drag_controller.py",
+      "lines": 97
+    },
+    {
       "path": "tests\\test_account_manager.py",
       "lines": 97
     },
@@ -246,6 +250,10 @@
     {
       "path": "src\\services\\champion_service.py",
       "lines": 85
+    },
+    {
+      "path": "src\\ui\\components\\priority_grid\\controller.py",
+      "lines": 82
     },
     {
       "path": "src\\utils\\smooth_scroll.py",
@@ -556,6 +564,10 @@
       "lines": 3
     },
     {
+      "path": "src\\ui\\components\\priority_grid\\__init__.py",
+      "lines": 3
+    },
+    {
       "path": "src\\ui\\theme\\__init__.py",
       "lines": 0
     },
@@ -568,7 +580,7 @@
       "lines": 0
     }
   ],
-  "total_py_lines": 18610,
+  "total_py_lines": 18291,
   "todos": [
     {
       "file": "tests\\test_poro_snacks.py",
@@ -639,6 +651,9 @@
     "src\\ui\\components\\game_tools\\draft_tool.py",
     "src\\ui\\components\\navigation\\sidebar.py",
     "src\\ui\\components\\navigation\\__init__.py",
+    "src\\ui\\components\\priority_grid\\controller.py",
+    "src\\ui\\components\\priority_grid\\drag_controller.py",
+    "src\\ui\\components\\priority_grid\\__init__.py",
     "src\\ui\\layout\\page_container.py",
     "src\\ui\\layout\\section_container.py",
     "src\\ui\\layout\\__init__.py",
