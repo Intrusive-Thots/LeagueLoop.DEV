@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 from services.stats_scraper import StatsScraper
 from services.automation import AutomationEngine
-from services.local_api import LeagueLoopAPIHandler
+from services.api import LeagueLoopAPIHandler
 from core.constants import QUEUE_ARENA, QUEUE_ARENA_3V6
 
 class TestArena3v6(unittest.TestCase):

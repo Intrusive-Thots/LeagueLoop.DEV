@@ -42,7 +42,7 @@ from utils.logger import Logger  # type: ignore
 from utils.path_utils import get_asset_path  # type: ignore
 from core.version import __version__  # type: ignore
 from core.events import EventBus
-from services.local_api import start_api_server # type: ignore
+from services.api import start_api_server # type: ignore
 from core.constants import (  # type: ignore
     SIDEBAR_WIDTH, SIDEBAR_HEIGHT, DOCKING_POLL_INTERVAL, DOCKING_IDLE_INTERVAL,
     CONNECTION_POLL_INTERVAL, CONNECTION_ERROR_INTERVAL,

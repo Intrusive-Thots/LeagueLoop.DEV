@@ -1,10 +1,10 @@
 {
   "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
-  "scan_time_sec": 0.042,
-  "total_files": 172,
+  "scan_time_sec": 0.048,
+  "total_files": 181,
   "ext_counts": {
     ".json": 20,
-    ".py": 130,
+    ".py": 139,
     ".md": 16,
     ".html": 1,
     ".js": 3,
@@ -22,10 +22,6 @@
     {
       "path": "tests\\test_automation.py",
       "lines": 902
-    },
-    {
-      "path": "src\\services\\local_api.py",
-      "lines": 841
     },
     {
       "path": "src\\services\\account_manager.py",
@@ -78,6 +74,10 @@
     {
       "path": "src\\services\\window_service.py",
       "lines": 290
+    },
+    {
+      "path": "src\\services\\api\\routes\\champ_select.py",
+      "lines": 285
     },
     {
       "path": "src\\ui\\components\\draggable_list.py",
@@ -184,6 +184,10 @@
       "lines": 118
     },
     {
+      "path": "src\\services\\api\\server.py",
+      "lines": 117
+    },
+    {
       "path": "src\\utils\\logger.py",
       "lines": 116
     },
@@ -196,8 +200,16 @@
       "lines": 110
     },
     {
+      "path": "src\\services\\api\\routes\\status.py",
+      "lines": 106
+    },
+    {
       "path": "src\\ui\\components\\cards\\card.py",
       "lines": 106
+    },
+    {
+      "path": "src\\services\\api\\routes\\matchmaking.py",
+      "lines": 100
     },
     {
       "path": "src\\ui\\components\\tray_icon.py",
@@ -260,6 +272,10 @@
       "lines": 69
     },
     {
+      "path": "src\\services\\api\\routes\\config.py",
+      "lines": 68
+    },
+    {
       "path": "tests\\test_poro_snacks.py",
       "lines": 68
     },
@@ -316,6 +332,10 @@
       "lines": 59
     },
     {
+      "path": "src\\services\\api\\routes\\misc.py",
+      "lines": 59
+    },
+    {
       "path": "tests\\test_draft_service.py",
       "lines": 55
     },
@@ -350,6 +370,10 @@
     {
       "path": "src\\ui\\components\\navigation\\sidebar.py",
       "lines": 48
+    },
+    {
+      "path": "src\\services\\api\\routes\\accounts.py",
+      "lines": 47
     },
     {
       "path": "src\\services\\automation\\dodge_requeue.py",
@@ -476,6 +500,10 @@
       "lines": 16
     },
     {
+      "path": "src\\services\\api\\registry.py",
+      "lines": 16
+    },
+    {
       "path": "src\\ui\\ui_shared.py",
       "lines": 15
     },
@@ -492,8 +520,16 @@
       "lines": 8
     },
     {
+      "path": "src\\services\\api\\routes\\__init__.py",
+      "lines": 6
+    },
+    {
       "path": "src\\ui\\app_sidebar.py",
       "lines": 5
+    },
+    {
+      "path": "src\\services\\api\\__init__.py",
+      "lines": 4
     },
     {
       "path": "src\\ui\\components\\buttons\\__init__.py",
@@ -532,7 +568,7 @@
       "lines": 0
     }
   ],
-  "total_py_lines": 18643,
+  "total_py_lines": 18610,
   "todos": [
     {
       "file": "tests\\test_poro_snacks.py",
@@ -562,7 +598,16 @@
     "src\\core\\state.py",
     "src\\core\\state_manager.py",
     "src\\services\\discord_rpc.py",
-    "src\\services\\local_api.py",
+    "src\\services\\api\\registry.py",
+    "src\\services\\api\\server.py",
+    "src\\services\\api\\__init__.py",
+    "src\\services\\api\\routes\\accounts.py",
+    "src\\services\\api\\routes\\champ_select.py",
+    "src\\services\\api\\routes\\config.py",
+    "src\\services\\api\\routes\\matchmaking.py",
+    "src\\services\\api\\routes\\misc.py",
+    "src\\services\\api\\routes\\status.py",
+    "src\\services\\api\\routes\\__init__.py",
     "src\\services\\automation\\champ_select.py",
     "src\\services\\automation\\chat_warden.py",
     "src\\services\\automation\\dodge_requeue.py",
