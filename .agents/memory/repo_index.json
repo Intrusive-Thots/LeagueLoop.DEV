@@ -1,10 +1,10 @@
 {
   "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
-  "scan_time_sec": 0.044,
-  "total_files": 184,
+  "scan_time_sec": 0.053,
+  "total_files": 185,
   "ext_counts": {
     ".json": 20,
-    ".py": 142,
+    ".py": 143,
     ".md": 16,
     ".html": 1,
     ".js": 3,
@@ -68,12 +68,12 @@
       "lines": 337
     },
     {
-      "path": "src\\ui\\components\\automation_editor.py",
-      "lines": 316
+      "path": "src\\ui\\qt\\app_window.py",
+      "lines": 318
     },
     {
-      "path": "src\\ui\\qt\\app_window.py",
-      "lines": 314
+      "path": "src\\ui\\components\\automation_editor.py",
+      "lines": 316
     },
     {
       "path": "src\\services\\api\\routes\\champ_select.py",
@@ -134,6 +134,10 @@
     {
       "path": "src\\ui\\pages\\settings_page.py",
       "lines": 206
+    },
+    {
+      "path": "src\\ui\\qt\\widgets\\toast.py",
+      "lines": 198
     },
     {
       "path": "src\\ui\\components\\settings_panel.py",
@@ -452,15 +456,15 @@
       "lines": 31
     },
     {
+      "path": "src\\ui\\qt\\widgets\\__init__.py",
+      "lines": 31
+    },
+    {
       "path": "test_launcher.py",
       "lines": 30
     },
     {
       "path": "src\\ui\\qt\\widgets\\dividers.py",
-      "lines": 28
-    },
-    {
-      "path": "src\\ui\\qt\\widgets\\__init__.py",
       "lines": 28
     },
     {
@@ -580,7 +584,7 @@
       "lines": 0
     }
   ],
-  "total_py_lines": 18301,
+  "total_py_lines": 18506,
   "todos": [
     {
       "file": "tests\\test_poro_snacks.py",

@@ -249,6 +249,10 @@ class LeagueLoopQtWindow(QMainWindow):
             self.on_state_updated
         )
         
+        # Initialize Toast Manager overlay
+        from ui.qt.widgets.toast import ToastManager
+        self._toast_manager = ToastManager.get_instance(self)
+        
         # Handle custom window focus styling
         self.setFocusPolicy(Qt.StrongFocus)
 
