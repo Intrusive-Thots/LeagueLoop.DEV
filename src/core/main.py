@@ -163,6 +163,7 @@ class LeagueLoopApp(WindowManagerMixin, HotkeyManagerMixin, ctk.CTk, TkinterDnD.
         EventBus.on("action:toggle_automation", lambda: self.after(0, self._hotkey_toggle_automation))
         EventBus.on("action:set_status", lambda msg: threading.Thread(target=lambda: self.automation.set_custom_status(msg), daemon=True).start() if self.automation else None)
         EventBus.on("action:mass_invite", lambda: threading.Thread(target=lambda: self.automation.mass_invite_friends(), daemon=True).start() if self.automation else None)
+        EventBus.on("settings_saved", lambda: self.after(0, self.on_settings_saved))
 
         self.automation: Optional[AutomationEngine] = AutomationEngine(
             self.lcu,

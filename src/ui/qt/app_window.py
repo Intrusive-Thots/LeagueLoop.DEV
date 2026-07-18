@@ -283,9 +283,8 @@ class LeagueLoopQtWindow(QMainWindow):
         l.addWidget(QLabel("AI Coach Screen"))
         self.pages_stack.addWidget(self.coach_page)
         
-        self.settings_page = QWidget()
-        l = QVBoxLayout(self.settings_page)
-        l.addWidget(QLabel("Advanced Configuration Tabs"))
+        from ui.qt.pages import SettingsPage
+        self.settings_page = SettingsPage(self)
         self.pages_stack.addWidget(self.settings_page)
 
     def switch_page(self, index):

@@ -1,10 +1,10 @@
 {
   "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
-  "scan_time_sec": 0.05,
-  "total_files": 185,
+  "scan_time_sec": 0.051,
+  "total_files": 187,
   "ext_counts": {
     ".json": 20,
-    ".py": 143,
+    ".py": 145,
     ".md": 16,
     ".html": 1,
     ".js": 3,
@@ -14,6 +14,10 @@
     {
       "path": "src\\ui\\components\\priority_grid\\view.py",
       "lines": 1020
+    },
+    {
+      "path": "src\\ui\\qt\\pages\\settings_page.py",
+      "lines": 699
     },
     {
       "path": "src\\ui\\sidebar\\sidebar.py",
@@ -41,7 +45,7 @@
     },
     {
       "path": "src\\core\\main.py",
-      "lines": 409
+      "lines": 410
     },
     {
       "path": "src\\ui\\components\\friend_list.py",
@@ -69,7 +73,7 @@
     },
     {
       "path": "src\\ui\\qt\\app_window.py",
-      "lines": 318
+      "lines": 317
     },
     {
       "path": "src\\ui\\components\\automation_editor.py",
@@ -536,6 +540,10 @@
       "lines": 6
     },
     {
+      "path": "src\\ui\\qt\\pages\\__init__.py",
+      "lines": 6
+    },
+    {
       "path": "src\\ui\\app_sidebar.py",
       "lines": 5
     },
@@ -584,7 +592,7 @@
       "lines": 0
     }
   ],
-  "total_py_lines": 18838,
+  "total_py_lines": 19543,
   "todos": [
     {
       "file": "tests\\test_poro_snacks.py",
