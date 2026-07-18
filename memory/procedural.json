@@ -64,5 +64,13 @@
       "In dropEvent, map drop coordinate to local page geometry and identify target widget bounds under drop position",
       "If target matches valid grid cell and is not the original source, swap their indexes in the module data list and clear/re-add widgets to the QGridLayout"
     ]
+  },
+  {
+    "pattern_name": "Lazy-loading widgets on QStackedWidget with QWidget placeholder replacement",
+    "steps": [
+      "Populate a list of class types for the pages to load, and fill the QStackedWidget with empty QWidget placeholders",
+      "On switch_page(index), if the page is not loaded, instantiate the class type and save the reference",
+      "Insert the instantiated page widget at the current stack index using insertWidget, remove the placeholder, and call deleteLater() on the placeholder to purge memory footprint"
+    ]
   }
 ]

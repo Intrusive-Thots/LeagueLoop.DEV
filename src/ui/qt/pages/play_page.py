@@ -17,6 +17,7 @@ from services.settings_service import get_settings_service
 from services.window_service import get_window_service
 from core.events import EventBus
 from utils.logger import Logger
+from utils.thread_utils import run_in_background
 
 class PlayPage(QWidget):
     """Modern dashboard for active matchmaking and core engine automation toggles."""
@@ -259,40 +260,34 @@ class PlayPage(QWidget):
     def _on_find_match_clicked(self):
         if not self.league_service.is_connected:
             return
-        # Run matchmaking search toggling in background thread
-        import threading
-        threading.Thread(target=self.queue_service.find_match, daemon=True).start()
+        run_in_background(self.queue_service.find_match)
 
     def _on_requeue_clicked(self):
         if not self.league_service.is_connected:
             return
-        import threading
         def requeue_task():
             self.queue_service.cancel_matchmaking()
             import time
             time.sleep(0.5)
             self.queue_service.find_match()
-        threading.Thread(target=requeue_task, daemon=True).start()
+        run_in_background(requeue_task)
 
     def _on_dodge_clicked(self):
         if not self.league_service.is_connected:
             return
-        import threading
-        threading.Thread(target=self.queue_service.force_dodge, daemon=True).start()
+        run_in_background(self.queue_service.force_dodge)
 
     def _on_play_again_clicked(self):
         if not self.league_service.is_connected:
             return
-        import threading
-        threading.Thread(target=self.queue_service.play_again, daemon=True).start()
+        run_in_background(self.queue_service.play_again)
 
     def _on_launch_client_clicked(self):
         # Trigger client launch command on main coordinator window
         win = self.window()
         if hasattr(win, "ctk_app") and win.ctk_app:
             if hasattr(win.ctk_app, "_hotkey_launch_client"):
-                import threading
-                threading.Thread(target=win.ctk_app._hotkey_launch_client, daemon=True).start()
+                run_in_background(win.ctk_app._hotkey_launch_client)
 
     # ── Queue State Listeners ──
     def _on_queue_state(self, phase, state):

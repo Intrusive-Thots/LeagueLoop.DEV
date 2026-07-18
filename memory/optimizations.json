@@ -14,5 +14,9 @@
   {
     "optimization": "Dynamic Grid Layout & Filter Sorting",
     "details": "Optimized grid redraws by filtering and sorting in-memory datasets before binding widgets, and disabled drag reordering when layouts are locked under sorting filters."
+  },
+  {
+    "optimization": "Lazy page loading and thread pool tasks",
+    "details": "Speeds up initial layout draw and cuts background thread footprint by using QThreadPool/QRunnable to run matchmaking calls and lazy-instantiating subpages on first switch. Handles instantiation crashes cleanly using centralized error QWidget boundaries."
   }
 ]

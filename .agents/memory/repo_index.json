@@ -1,10 +1,10 @@
 {
   "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
-  "scan_time_sec": 0.059,
-  "total_files": 191,
+  "scan_time_sec": 0.052,
+  "total_files": 193,
   "ext_counts": {
     ".json": 20,
-    ".py": 149,
+    ".py": 151,
     ".md": 16,
     ".html": 1,
     ".js": 3,
@@ -33,7 +33,7 @@
     },
     {
       "path": "src\\ui\\qt\\app_window.py",
-      "lines": 609
+      "lines": 645
     },
     {
       "path": "src\\services\\asset_manager.py",
@@ -58,6 +58,10 @@
     {
       "path": "src\\core\\main.py",
       "lines": 409
+    },
+    {
+      "path": "src\\ui\\qt\\pages\\coach_page.py",
+      "lines": 395
     },
     {
       "path": "src\\ui\\components\\friend_list.py",
@@ -89,7 +93,7 @@
     },
     {
       "path": "src\\ui\\qt\\pages\\play_page.py",
-      "lines": 333
+      "lines": 328
     },
     {
       "path": "src\\ui\\components\\automation_editor.py",
@@ -496,6 +500,10 @@
       "lines": 27
     },
     {
+      "path": "src\\utils\\thread_utils.py",
+      "lines": 27
+    },
+    {
       "path": "test_hotkey.py",
       "lines": 26
     },
@@ -549,7 +557,7 @@
     },
     {
       "path": "src\\ui\\qt\\pages\\__init__.py",
-      "lines": 10
+      "lines": 11
     },
     {
       "path": "src\\ui\\layout\\section_container.py",
@@ -608,7 +616,7 @@
       "lines": 0
     }
   ],
-  "total_py_lines": 22433,
+  "total_py_lines": 22887,
   "todos": [
     {
       "file": "tests\\test_poro_snacks.py",

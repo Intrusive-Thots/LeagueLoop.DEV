@@ -30,12 +30,14 @@ a = Analysis(
         'tkinterdnd2',
         'customtkinter',
         'packaging',
-        'darkdetect'
+        'darkdetect',
+        'PySide6',
+        *collect_submodules('PySide6')
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['PyQt5', 'PyQt6'],
     noarchive=False,
     optimize=0,
 )

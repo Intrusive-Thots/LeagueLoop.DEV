@@ -536,33 +536,69 @@ class LeagueLoopQtWindow(QMainWindow):
         self.setFocusPolicy(Qt.StrongFocus)
 
     def setup_pages(self):
-        # Create Page Shells
-        from ui.qt.pages import PlayPage
-        self.play_page = PlayPage(self)
-        self.pages_stack.addWidget(self.play_page)
+        # Define page creators
+        from ui.qt.pages import PlayPage, DashboardPage, FriendsPage, ChampionsPage, CoachPage, SettingsPage
+        self.page_classes = [
+            PlayPage,       # Index 0
+            DashboardPage,  # Index 1
+            FriendsPage,    # Index 2
+            ChampionsPage,  # Index 3
+            CoachPage,      # Index 4
+            SettingsPage,   # Index 5
+        ]
+        self.page_instances = [None] * len(self.page_classes)
         
-        from ui.qt.pages import DashboardPage
-        self.dashboard_page = DashboardPage(self)
-        self.pages_stack.addWidget(self.dashboard_page)
-        
-        from ui.qt.pages import FriendsPage
-        self.friends_page = FriendsPage(self)
-        self.pages_stack.addWidget(self.friends_page)
-        
-        from ui.qt.pages import ChampionsPage
-        self.champions_page = ChampionsPage(self)
-        self.pages_stack.addWidget(self.champions_page)
-        
-        self.coach_page = QWidget()
-        l = QVBoxLayout(self.coach_page)
-        l.addWidget(QLabel("AI Coach Screen"))
-        self.pages_stack.addWidget(self.coach_page)
-        
-        from ui.qt.pages import SettingsPage
-        self.settings_page = SettingsPage(self)
-        self.pages_stack.addWidget(self.settings_page)
+        # Populate stack with blank placeholder widgets initially
+        for _ in self.page_classes:
+            self.pages_stack.addWidget(QWidget())
+
+    @property
+    def play_page(self):
+        return self.page_instances[0]
+
+    @property
+    def dashboard_page(self):
+        return self.page_instances[1]
+
+    @property
+    def friends_page(self):
+        return self.page_instances[2]
+
+    @property
+    def champions_page(self):
+        return self.page_instances[3]
+
+    @property
+    def coach_page(self):
+        return self.page_instances[4]
+
+    @property
+    def settings_page(self):
+        return self.page_instances[5]
 
     def switch_page(self, index):
+        # Lazy load page instance if not already loaded
+        if self.page_instances[index] is None:
+            try:
+                creator = self.page_classes[index]
+                instance = creator(self)
+                self.page_instances[index] = instance
+                
+                # Replace placeholder widget in the stacked widget
+                placeholder = self.pages_stack.widget(index)
+                self.pages_stack.insertWidget(index, instance)
+                self.pages_stack.removeWidget(placeholder)
+                placeholder.deleteLater()
+            except Exception as e:
+                Logger.error("WindowShell", f"Error lazy loading page index {index}: {e}")
+                error_widget = QWidget()
+                l = QVBoxLayout(error_widget)
+                lbl = QLabel(f"⚠️ Failed to load page: {e}\nPlease check logs.")
+                lbl.setStyleSheet("color: #E74C3C; font-weight: bold; font-size: 11px;")
+                l.addWidget(lbl)
+                self.pages_stack.insertWidget(index, error_widget)
+                return
+                
         target_widget = self.pages_stack.widget(index)
         if not target_widget:
             return
