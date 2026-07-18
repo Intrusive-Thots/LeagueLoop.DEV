@@ -5,7 +5,12 @@ import os
 sys.path.insert(0, os.path.join(os.path.abspath(os.path.dirname(__file__)), "src"))
 
 import traceback
+import warnings
+import urllib3
 from utils.logger import Logger
+
+# The League Client uses a self-signed cert on localhost — suppress the noise.
+warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
 
 def global_exception_handler(exc_type, exc_value, exc_traceback):
     """Global exception handler."""
@@ -28,6 +33,10 @@ def global_thread_exception_handler(args):
 threading.excepthook = global_thread_exception_handler
 
 if __name__ == "__main__":
+    # Enable faulthandler to capture C-level crashes (segfaults) to stderr
+    import faulthandler
+    faulthandler.enable()
+
     import ctypes
     try:
         ctypes.windll.user32.SetProcessDPIAware()
@@ -48,23 +57,7 @@ if __name__ == "__main__":
     qt_window = LeagueLoopQtWindow(app)
     qt_window.show()
     
-    # Setup QTimer to pump the Tkinter event loop on the main thread
-    from PySide6.QtCore import QTimer
-    timer = QTimer()
-    
-    def pump_tkinter():
-        try:
-            if app.winfo_exists():
-                app.update()
-        except Exception as e:
-            import traceback
-            err_str = traceback.format_exc()
-            Logger.error("SYS", f"Exception in Tkinter event pump:\n{err_str}")
-
-    timer.timeout.connect(pump_tkinter)
-    timer.start(16)  # ~60 FPS
-    
-    # Handle clean termination of CTk app when Qt app exits
+    # Handle clean termination: stop core app on quit
     def on_qt_quit():
         try:
             app._on_close()
@@ -73,4 +66,11 @@ if __name__ == "__main__":
     qt_app.aboutToQuit.connect(on_qt_quit)
     
     # Run the PySide6 event loop (main thread driver)
-    sys.exit(qt_app.exec())
+    try:
+        exit_code = qt_app.exec()
+    except Exception as e:
+        Logger.error("SYS", f"Qt event loop crashed: {e}")
+        exit_code = 1
+    
+    sys.exit(exit_code)
+

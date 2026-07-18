@@ -10,6 +10,7 @@ QUEUE_RANKED_FLEX = 440
 QUEUE_ARAM = 450
 QUEUE_ARENA = 1700
 QUEUE_ARENA_3V6 = 1710
+QUEUE_CLASSIC = 1900
 
 # --- Polling & Timing ---
 DOCKING_POLL_INTERVAL = 0.05       # seconds between docking geometry checks

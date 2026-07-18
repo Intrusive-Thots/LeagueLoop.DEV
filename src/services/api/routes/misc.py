@@ -44,7 +44,7 @@ def handle_get_queue_modes(handler):
         'Draft Pick': 400, 'Quickplay': 490, 'Arena': 1700, 'Arena 3v6': 1710,
         'ARAM Mayhem': 2400, 'Brawl': 2300, 'URF': 900, 'ARURF': 1010,
         'Nexus Blitz': 1300, 'One For All': 1020, 'Ultimate Spellbook': 1400,
-        'TFT Normal': 1090, 'TFT Ranked': 1100
+        'TFT Normal': 1090, 'TFT Ranked': 1100, 'League Classic': 1900
     }
     handler.send_json({'modes': modes})
 

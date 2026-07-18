@@ -10,9 +10,14 @@ import time
 from typing import Any, Dict, Optional
 from collections import OrderedDict
 
-import customtkinter as ctk
 import requests
 from PIL import Image
+
+class HeadlessImage:
+    """Mock class that mimics ctk.CTkImage for PySide6 compatibility without Tkinter."""
+    def __init__(self, pil_img, size=None):
+        self._image = pil_img
+        self.size = size or pil_img.size
 
 from utils.path_utils import get_asset_path, get_data_dir
 
@@ -183,7 +188,7 @@ class AssetManager:
         self.id_to_tags: Dict[int, list] = {}  # ID (int) -> List[Tags]
         self.name_to_id: Dict[str, int] = {}  # Name/Key (lower) -> ID (int)
         self.champ_roles: Dict[int, list] = {}  # ID -> List[Positions]
-        self.icons: OrderedDict[str, ctk.CTkImage] = OrderedDict()
+        self.icons: OrderedDict[str, HeadlessImage] = OrderedDict()
 
         self._pending_downloads = set()
         self._lock = threading.Lock()
@@ -432,7 +437,7 @@ class AssetManager:
                 pil_img = Image.open(processed_path).convert("RGBA")
                 # CTkImage size requires integer tuple, fallback to original if size contains None
                 disp_size = size if size and size[1] is not None else pil_img.size
-                img = ctk.CTkImage(pil_img, size=disp_size)
+                img = HeadlessImage(pil_img, size=disp_size)
                 self.icons[cache_key] = img
                 if len(self.icons) > 300:
                     self.icons.popitem(last=False)
@@ -471,7 +476,7 @@ class AssetManager:
                     Logger.debug("Assets", f"Failed to cache processed icon: {e}")
 
                 img_size = size if size and size[1] is not None else pil_img.size
-                img = ctk.CTkImage(pil_img, size=img_size)
+                img = HeadlessImage(pil_img, size=img_size)
                 self.icons[cache_key] = img
                 with self._lock:
                     if len(self.icons) > 300:
@@ -484,7 +489,7 @@ class AssetManager:
         self._start_download(url, path)
         return None
 
-    def get_icon(self, type_, key, size=(40, 40)) -> Optional[ctk.CTkImage]:
+    def get_icon(self, type_, key, size=(40, 40)) -> Optional[HeadlessImage]:
         """Synchronously get an icon if cached on disk, otherwise trigger a download and return None."""
         cache_key = f"{type_}_{key}_{size[0]}x{size[1]}"
         fname = ""
@@ -544,7 +549,7 @@ class AssetManager:
 
     def get_splash_art(
         self, skin_id: int, width=1280, opacity=1.0
-    ) -> Optional[ctk.CTkImage]:
+    ) -> Optional[HeadlessImage]:
         """Get a CTkImage for the specified skin splash art."""
         cache_key = f"splash_{skin_id}_{width}_{opacity}"
         

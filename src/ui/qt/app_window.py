@@ -477,6 +477,7 @@ class LeagueLoopQtWindow(QMainWindow):
     def __init__(self, ctk_app=None):
         super().__init__()
         self.ctk_app = ctk_app
+        self.config = ctk_app.config if ctk_app else None
         self.assets = ctk_app.assets if ctk_app else None
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground, False)
@@ -534,6 +535,10 @@ class LeagueLoopQtWindow(QMainWindow):
         
         # Handle custom window focus styling
         self.setFocusPolicy(Qt.StrongFocus)
+        
+        # Native QSystemTrayIcon setup
+        self._tray_icon = None
+        self._setup_tray_icon()
 
     def setup_pages(self):
         # Define page creators
@@ -639,7 +644,137 @@ class LeagueLoopQtWindow(QMainWindow):
             self.setWindowFlag(Qt.WindowStaysOnTopHint, False)
             self.show()
 
+    def _setup_tray_icon(self):
+        import os
+        from PySide6.QtWidgets import QSystemTrayIcon, QMenu
+        from PySide6.QtGui import QAction
+        from utils.path_utils import get_asset_path
+        
+        self._tray_icon = QSystemTrayIcon(self)
+        
+        icon_path = get_asset_path("assets/app.ico")
+        if os.path.exists(icon_path):
+            self._tray_icon.setIcon(QIcon(icon_path))
+        else:
+            self._tray_icon.setIcon(self.style().standardIcon(self.style().SP_ComputerIcon))
+            
+        tray_menu = QMenu(self)
+        
+        act_show = QAction("Show LeagueLoop", self)
+        act_show.triggered.connect(self._restore_from_tray)
+        tray_menu.addAction(act_show)
+        
+        act_settings = QAction("Settings", self)
+        act_settings.triggered.connect(self._show_settings_from_tray)
+        tray_menu.addAction(act_settings)
+        
+        tray_menu.addSeparator()
+        
+        act_quit = QAction("Quit", self)
+        act_quit.triggered.connect(QApplication.instance().quit)
+        tray_menu.addAction(act_quit)
+        
+        self._tray_icon.setContextMenu(tray_menu)
+        self._tray_icon.activated.connect(self._on_tray_activated)
+        
+        if self.config.get("run_in_tray", True):
+            self._tray_icon.show()
+
+    def _on_tray_activated(self, reason):
+        from PySide6.QtWidgets import QSystemTrayIcon
+        if reason == QSystemTrayIcon.Trigger:
+            self._restore_from_tray()
+
+    def _restore_from_tray(self):
+        self.showNormal()
+        self.activateWindow()
+        self.raise_()
+
+    def _show_settings_from_tray(self):
+        self._restore_from_tray()
+        self.switch_page(5)  # Index 5 is SettingsPage
+
+    def _show_mobile_qr(self):
+        import os
+        import urllib.request
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel
+        from PySide6.QtGui import QPixmap
+        from PySide6.QtCore import Qt, QObject, Signal
+        import threading
+        
+        if not self.ctk_app or not getattr(self.ctk_app, "_local_ip", None):
+            self._toast_manager.show("API Server not running.", theme="error")
+            return
+            
+        local_ip = self.ctk_app._local_ip
+        local_port = self.ctk_app._local_port
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Link Mobile Device")
+        dialog.setFixedSize(300, 350)
+        dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
+        
+        dialog.setStyleSheet("""
+            QDialog {
+                background-color: #0A1428;
+                border: 1px solid #C8AA6E;
+            }
+            QLabel {
+                color: #F0E6D2;
+            }
+        """)
+        
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        layout.setAlignment(Qt.AlignCenter)
+        
+        lbl_info = QLabel("Connect your phone to:", dialog)
+        lbl_info.setStyleSheet("font-size: 13px;")
+        layout.addWidget(lbl_info)
+        
+        lbl_ip = QLabel(f"{local_ip}:{local_port}", dialog)
+        lbl_ip.setStyleSheet("font-size: 18px; font-weight: bold; color: #C8AA6E;")
+        layout.addWidget(lbl_ip)
+        
+        lbl_status = QLabel("Loading QR Code...", dialog)
+        lbl_status.setAlignment(Qt.AlignCenter)
+        layout.addWidget(lbl_status)
+        
+        class QRFetcher(QObject):
+            qr_loaded = Signal(bytes)
+            qr_failed = Signal()
+            
+        fetcher = QRFetcher(dialog)
+        pixmap = QPixmap()
+        
+        fetcher.qr_loaded.connect(lambda data: (
+            pixmap.loadFromData(data),
+            lbl_status.setPixmap(pixmap),
+            lbl_status.setText("")
+        ))
+        fetcher.qr_failed.connect(lambda: lbl_status.setText("Failed to load QR.\nPlease connect manually via IP."))
+        
+        def run():
+            qr_url = f"http://api.qrserver.com/v1/create-qr-code/?data=http://{local_ip}:{local_port}&size=200x200"
+            try:
+                with urllib.request.urlopen(qr_url, timeout=5) as u:
+                    raw_data = u.read()
+                fetcher.qr_loaded.emit(raw_data)
+            except Exception:
+                fetcher.qr_failed.emit()
+                
+        threading.Thread(target=run, daemon=True).start()
+        dialog.exec()
+
     def closeEvent(self, event):
-        # Unregister window on close
-        self._win_service.unregister_window(int(self.winId()))
-        event.accept()
+        if self.config.get("run_in_tray", True):
+            self.hide()
+            if self._tray_icon:
+                self._tray_icon.show()
+            event.ignore()
+        else:
+            self._win_service.unregister_window(int(self.winId()))
+            if self._tray_icon:
+                self._tray_icon.hide()
+            event.accept()

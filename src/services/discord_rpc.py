@@ -10,12 +10,16 @@ DISCORD_CLIENT_ID = "1214041178652250162"  # Mock Discord App ID for LeagueLoop 
 class DiscordPresenceManager:
     """Manages the connection and states for Discord Rich Presence safely in the background."""
 
+    _RECONNECT_COOLDOWN = 300  # 5 minutes between reconnect attempts
+
     def __init__(self, config):
         self.config = config
         self.rpc = None
         self._connected = False
         self._thread = None
         self._last_update = 0
+        self._last_connect_attempt = 0.0
+        self._connect_failures = 0
         self._current_state = {}
 
     @property
@@ -24,24 +28,34 @@ class DiscordPresenceManager:
         return self._connected
 
     def connect(self):
-        """Attempts to connect to Discord IPC locally."""
+        """Attempts to connect to Discord IPC locally with exponential backoff."""
         if not self.config.get("discord_rpc_enabled", True):
             return
 
         if self._connected:
             return
 
+        # Backoff: skip if we recently failed
+        now = time.time()
+        if self._connect_failures > 0 and (now - self._last_connect_attempt) < self._RECONNECT_COOLDOWN:
+            return
+
+        self._last_connect_attempt = now
+
         def _connect_worker():
             try:
                 self.rpc = Presence(DISCORD_CLIENT_ID)
                 self.rpc.connect()
                 self._connected = True
+                self._connect_failures = 0
                 Logger.info("DiscordRPC", "Connected to Discord.")
                 self.update_presence("Idle", "Watching the client")
             except Exception as e:
-                # User doesn't have discord running or ID is wrong
-                Logger.debug("DiscordRPC", f"Failed to connect: {e}")
+                self._connect_failures += 1
                 self._connected = False
+                # Only log the first failure to avoid spamming the console
+                if self._connect_failures == 1:
+                    Logger.debug("DiscordRPC", f"Discord not running — will retry in {self._RECONNECT_COOLDOWN}s.")
 
         self._thread = threading.Thread(target=_connect_worker, daemon=True)
         self._thread.start()

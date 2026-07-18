@@ -8,7 +8,7 @@ def handle_dodge_requeue(engine, phase):
         if engine._cached_search_state and (now - engine._last_search_state_time < 3.0):
             state = engine._cached_search_state
         else:
-            search_state = engine.lcu.request("GET", "/lol-lobby/v2/lobby/matchmaking/search-state")
+            search_state = engine.lcu.request("GET", "/lol-lobby/v2/lobby/matchmaking/search-state", silent=True)
             state = search_state.json() if search_state and search_state.status_code == 200 else None
             engine._cached_search_state = state
             engine._last_search_state_time = now

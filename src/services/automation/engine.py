@@ -254,7 +254,7 @@ class AutomationEngine:
 
         search_state = None
         if phase == "Matchmaking":
-            search_req = self.lcu.request("GET", "/lol-lobby/v2/lobby/matchmaking/search-state")
+            search_req = self.lcu.request("GET", "/lol-lobby/v2/lobby/matchmaking/search-state", silent=True)
             if search_req and search_req.status_code == 200:
                 search_state = search_req.json()
 
@@ -423,7 +423,7 @@ class AutomationEngine:
         if phase == "None":
             self.discord_rpc.update_presence("Idle", custom_status)
         elif phase == "Lobby":
-            lobby = self.lcu.request("GET", "/lol-lobby/v2/lobby")
+            lobby = self.lcu.request("GET", "/lol-lobby/v2/lobby", silent=True)
             details = "In Lobby"
             party_size = None
             if lobby and hasattr(lobby, "json"):

@@ -1,11 +1,29 @@
 """
 PySide6 Pages Package
-"""
-from ui.qt.pages.settings_page import SettingsPage
-from ui.qt.pages.friends_page import FriendsPage
-from ui.qt.pages.champions_page import ChampionsPage
-from ui.qt.pages.dashboard_page import DashboardPage
-from ui.qt.pages.play_page import PlayPage
-from ui.qt.pages.coach_page import CoachPage
 
-__all__ = ["SettingsPage", "FriendsPage", "ChampionsPage", "DashboardPage", "PlayPage", "CoachPage"]
+Pages are imported lazily to avoid import-time dependency chains.
+Use direct imports (e.g. from ui.qt.pages.settings_page import SettingsPage)
+instead of importing from this package.
+"""
+# Lazy attribute access — only import a page class when explicitly requested
+# from the package namespace.
+_PAGE_MAP = {
+    "SettingsPage":  "ui.qt.pages.settings_page",
+    "FriendsPage":   "ui.qt.pages.friends_page",
+    "ChampionsPage": "ui.qt.pages.champions_page",
+    "DashboardPage": "ui.qt.pages.dashboard_page",
+    "PlayPage":      "ui.qt.pages.play_page",
+    "CoachPage":     "ui.qt.pages.coach_page",
+}
+
+__all__ = list(_PAGE_MAP.keys())
+
+
+def __getattr__(name):
+    if name in _PAGE_MAP:
+        import importlib
+        module = importlib.import_module(_PAGE_MAP[name])
+        cls = getattr(module, name)
+        globals()[name] = cls  # cache for subsequent access
+        return cls
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

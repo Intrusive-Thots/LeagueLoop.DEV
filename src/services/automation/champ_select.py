@@ -1,7 +1,7 @@
 import random
 from utils.logger import Logger
 from core.events import EventBus
-from core.constants import QUEUE_ARENA, QUEUE_ARENA_3V6, QUEUE_DRAFT, QUEUE_RANKED_SOLO, QUEUE_RANKED_FLEX
+from core.constants import QUEUE_ARENA, QUEUE_ARENA_3V6, QUEUE_DRAFT, QUEUE_RANKED_SOLO, QUEUE_RANKED_FLEX, QUEUE_CLASSIC
 
 def get_local_player(engine, session):
     local_cell_id = session.get("localPlayerCellId")
@@ -17,7 +17,7 @@ def equip_random_skin(engine, session):
         if not champ_id:
             return
 
-        skins_req = engine.lcu.request("GET", f"/lol-champ-select/v1/skin-carousel-skins")
+        skins_req = engine.lcu.request("GET", f"/lol-champ-select/v1/skin-carousel-skins", silent=True)
         if not skins_req or skins_req.status_code != 200:
             return
 
@@ -31,6 +31,7 @@ def equip_random_skin(engine, session):
         ]
 
         if not owned_skins:
+            engine._skin_equipped = True  # No skins available — stop polling
             return
 
         chosen = random.choice(owned_skins)
@@ -111,7 +112,7 @@ def handle_champ_select(engine, phase, session):
 
     has_bench = len(bench) > 0
     is_arena = engine.current_queue_id in {QUEUE_ARENA, QUEUE_ARENA_3V6}
-    is_draft = engine.current_queue_id in {QUEUE_DRAFT, QUEUE_RANKED_SOLO, QUEUE_RANKED_FLEX}
+    is_draft = engine.current_queue_id in {QUEUE_DRAFT, QUEUE_RANKED_SOLO, QUEUE_RANKED_FLEX, QUEUE_CLASSIC}
 
     if has_bench and not is_arena:
         priority_cfg = engine.config.get("priority_picker", {})

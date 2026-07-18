@@ -83,6 +83,7 @@ _QUEUE_DATASET_MAP = {
     1300: BASELINE_QUICKPLAY_WINRATES,  # Nexus Blitz
     1020: BASELINE_QUICKPLAY_WINRATES,  # One For All
     1400: BASELINE_QUICKPLAY_WINRATES,  # Ultimate Spellbook
+    1900: BASELINE_RANKED_WINRATES,     # League Classic
 }
 
 
@@ -199,6 +200,7 @@ class StatsScraper:
             440: "Ranked Flex", 400: "Draft Pick", 1700: "Arena", 1710: "Arena 3v6",
             490: "Quickplay", 900: "URF", 1010: "ARURF",
             1300: "Nexus Blitz", 1020: "One For All", 1400: "Ultimate Spellbook",
+            1900: "League Classic",
         }
         self.mode = _QUEUE_MODE_NAMES.get(queue_id, self.mode)
         self._fetch_live_data_background(self.mode)
