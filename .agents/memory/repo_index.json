@@ -1,6 +1,6 @@
 {
   "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
-  "scan_time_sec": 0.052,
+  "scan_time_sec": 0.049,
   "total_files": 193,
   "ext_counts": {
     ".json": 20,
@@ -617,14 +617,7 @@
     }
   ],
   "total_py_lines": 22887,
-  "todos": [
-    {
-      "file": "tests\\test_poro_snacks.py",
-      "line": 39,
-      "marker": "HACK",
-      "text": "# A bit hacky but it works to extract the function logic"
-    }
-  ],
+  "todos": [],
   "missing_docstrings": [
     "fix_import.py",
     "run.py",

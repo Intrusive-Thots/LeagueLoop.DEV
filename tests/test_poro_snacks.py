@@ -36,7 +36,7 @@ class TestPoroSnacks(unittest.TestCase):
             with open(filepath, "r", encoding="utf-8") as f:
                 code = f.read()
 
-            # A bit hacky but it works to extract the function logic
+            # Extract the function logic to run isolation testing
             sidebar = MockSidebar()
 
             # Recreate the logic we added
