@@ -1,6 +1,6 @@
 {
   "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
-  "scan_time_sec": 0.049,
+  "scan_time_sec": 0.054,
   "total_files": 193,
   "ext_counts": {
     ".json": 20,
@@ -140,12 +140,12 @@
       "lines": 231
     },
     {
-      "path": "src\\ui\\components\\hover.py",
-      "lines": 223
+      "path": "src\\services\\stats_scraper.py",
+      "lines": 228
     },
     {
-      "path": "src\\services\\stats_scraper.py",
-      "lines": 219
+      "path": "src\\ui\\components\\hover.py",
+      "lines": 223
     },
     {
       "path": "src\\ui\\components\\hotkey_recorder.py",
@@ -616,7 +616,7 @@
       "lines": 0
     }
   ],
-  "total_py_lines": 22887,
+  "total_py_lines": 22896,
   "todos": [],
   "missing_docstrings": [
     "fix_import.py",

@@ -27,7 +27,7 @@ from services.api_handler import LCUClient  # type: ignore
 from services.asset_manager import AssetManager, ConfigManager  # type: ignore
 from services.automation import AutomationEngine  # type: ignore
 from services.account_manager import get_account_manager  # type: ignore
-from services.stats_scraper import StatsScraper  # type: ignore
+from services.stats_scraper import StatsScraper, get_stats_scraper  # type: ignore
 from services.settings_service import get_settings_service
 from services.league_service import get_league_service
 from services.friend_service import get_friend_service
@@ -126,7 +126,7 @@ class LeagueLoopApp(WindowManagerMixin, HotkeyManagerMixin, ctk.CTk, TkinterDnD.
         from core.state import State
         State.assets = self.assets
         self.lcu = LCUClient()
-        self.scraper = StatsScraper(mode=self.config.get("aram_mode", "ARAM"))
+        self.scraper = get_stats_scraper(mode=self.config.get("aram_mode", "ARAM"))
         
         # Initialize Service Layer Singletons
         self.settings_service = get_settings_service(self.config)

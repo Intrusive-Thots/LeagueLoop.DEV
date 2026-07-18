@@ -217,3 +217,12 @@ class StatsScraper:
     def is_offline(self) -> bool:
         """Dynamically returns True if operating on local fallback data."""
         return self.mode not in self.live_winrates
+
+
+_instance = None
+
+def get_stats_scraper(mode="ARAM") -> StatsScraper:
+    global _instance
+    if _instance is None:
+        _instance = StatsScraper(mode)
+    return _instance
