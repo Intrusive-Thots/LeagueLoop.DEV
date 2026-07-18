@@ -57,6 +57,8 @@ class WindowManagerMixin:
 
     def _setup_window_dragging(self):
         """Binds drag mouse events to enable moving the borderless window."""
+        if not hasattr(self, "sidebar") or not self.sidebar:
+            return
         for widget in self.sidebar.drag_widgets:
             widget.bind("<ButtonPress-1>", self.on_drag_start)
             widget.bind("<B1-Motion>", self.on_drag_motion)

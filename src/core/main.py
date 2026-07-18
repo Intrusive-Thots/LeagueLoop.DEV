@@ -150,11 +150,11 @@ class LeagueLoopApp(WindowManagerMixin, HotkeyManagerMixin, ctk.CTk, TkinterDnD.
         # Subscribe to EventBus events from AutomationEngine (thread-safe via self.after)
         EventBus.on("automation_window_state", lambda state: self.after(0, lambda: self._handle_window_state(state)))
         EventBus.on("automation_queue_state", lambda phase, state: (
-            self.after(0, lambda: self.sidebar.update_queue_state(phase, state)) if hasattr(self, "sidebar") else None,
-            self.after(0, lambda: self.mini_player.update_state(phase)) if hasattr(self, "mini_player") else None
+            self.after(0, lambda: self.sidebar.update_queue_state(phase, state)) if hasattr(self, "sidebar") and self.sidebar else None,
+            self.after(0, lambda: self.mini_player.update_state(phase)) if hasattr(self, "mini_player") and self.mini_player else None
         ))
         EventBus.on("automation_lobby_stats", lambda team, bench, me=None: (
-            self.after(0, lambda: self.sidebar.update_lobby_stats(team, bench, me)) if hasattr(self, "sidebar") else None
+            self.after(0, lambda: self.sidebar.update_lobby_stats(team, bench, me)) if hasattr(self, "sidebar") and self.sidebar else None
         ))
         
         # Subscribe to Remote API/Action Events
@@ -177,7 +177,7 @@ class LeagueLoopApp(WindowManagerMixin, HotkeyManagerMixin, ctk.CTk, TkinterDnD.
         
         # Link automation to sidebar log
         auto = self.automation
-        if auto is not None and hasattr(self, "sidebar"):
+        if auto is not None and hasattr(self, "sidebar") and self.sidebar:
             auto.log = self.sidebar.update_action_log
 
         # Initialize account manager and inject into sidebar
@@ -185,13 +185,14 @@ class LeagueLoopApp(WindowManagerMixin, HotkeyManagerMixin, ctk.CTk, TkinterDnD.
             lcu=self.lcu,
             launch_client_func=self._hotkey_launch_client
         )
-        if hasattr(self, "sidebar"):
+        if hasattr(self, "sidebar") and self.sidebar:
             self.sidebar.set_account_manager(self.account_manager)
 
         self._setup_window_dragging()
 
         # Apply keyboard focus rings to all interactive elements (deferred to ensure all children exist)
-        self.after(500, lambda: apply_focus_states_recursive(self.sidebar))
+        if hasattr(self, "sidebar") and self.sidebar:
+            self.after(500, lambda: apply_focus_states_recursive(self.sidebar))
 
         # Keyboard shortcuts
         self._launch_hotkey = None
@@ -279,13 +280,9 @@ class LeagueLoopApp(WindowManagerMixin, HotkeyManagerMixin, ctk.CTk, TkinterDnD.
             return "queued"
 
     def setup_ui(self):
-        """Sets up the user interface."""
-        self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=1)
-        self.sidebar = SidebarWidget(self, self.toggle_power, self.config, lcu=self.lcu, assets=self.assets, scraper=self.scraper)
-        self.sidebar.grid(row=0, column=0, sticky="nsew")
-        
-        self.mini_player = MiniPlayer(self, self.config)
+        """Sets up a headless service state (no Tkinter widgets)."""
+        self.sidebar = None
+        self.mini_player = None
 
     def on_settings_saved(self):
         """Handles settings saved event."""
@@ -309,16 +306,18 @@ class LeagueLoopApp(WindowManagerMixin, HotkeyManagerMixin, ctk.CTk, TkinterDnD.
                 current_state = self.lcu.is_connected
                 if current_state != last_state:
                     last_state = current_state
-                    if hasattr(self, "sidebar") and hasattr(self.sidebar, "on_lcu_connection_changed"):
+                    if hasattr(self, "sidebar") and self.sidebar and hasattr(self.sidebar, "on_lcu_connection_changed"):
                         self.after(0, lambda s=current_state: getattr(self, "sidebar").on_lcu_connection_changed(s))
 
                 if not current_state:
                     connected = self.lcu.connect()
                     if connected:
                         Logger.info("LCU", "Connected to League Client")
-                        self.after(0, lambda: self.sidebar.lbl_action.configure(text="Connected!"))
+                        if hasattr(self, "sidebar") and self.sidebar:
+                            self.after(0, lambda: self.sidebar.lbl_action.configure(text="Connected!"))
                     else:
-                        self.after(0, lambda: self.sidebar.lbl_action.configure(text="Waiting for Client..."))
+                        if hasattr(self, "sidebar") and self.sidebar:
+                            self.after(0, lambda: self.sidebar.lbl_action.configure(text="Waiting for Client..."))
                 time.sleep(CONNECTION_POLL_INTERVAL)
             except Exception as e:
                 Logger.error("SYS", f"Connection loop error: {e}")
