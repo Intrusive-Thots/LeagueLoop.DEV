@@ -1,9 +1,9 @@
 {
   "root": "C:\\Users\\Administrator\\Documents\\antigravity\\beautiful-faraday",
-  "scan_time_sec": 0.052,
-  "total_files": 173,
+  "scan_time_sec": 0.049,
+  "total_files": 172,
   "ext_counts": {
-    ".json": 20,
+    ".json": 19,
     ".py": 131,
     ".md": 16,
     ".html": 1,
@@ -37,7 +37,7 @@
     },
     {
       "path": "src\\services\\asset_manager.py",
-      "lines": 579
+      "lines": 582
     },
     {
       "path": "src\\services\\automation\\engine.py",
@@ -536,7 +536,7 @@
       "lines": 0
     }
   ],
-  "total_py_lines": 17919,
+  "total_py_lines": 17922,
   "todos": [
     {
       "file": "tests\\test_poro_snacks.py",

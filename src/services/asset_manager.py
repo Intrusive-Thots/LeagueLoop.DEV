@@ -138,6 +138,9 @@ class ConfigManager:
                     self.cfg.update(json.load(f))
             except Exception as e:
                 Logger.error("asset_manager.py", f"Handled exception: {type(e).__name__}: {e}")
+        else:
+            # Generate config.json with defaults on first run
+            self.save()
 
     def get(self, key, default=None):
         """Get a configuration value."""
