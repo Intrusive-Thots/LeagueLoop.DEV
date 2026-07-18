@@ -274,9 +274,8 @@ class LeagueLoopQtWindow(QMainWindow):
         self.friends_page = FriendsPage(self)
         self.pages_stack.addWidget(self.friends_page)
         
-        self.champions_page = QWidget()
-        l = QVBoxLayout(self.champions_page)
-        l.addWidget(QLabel("Champions Overview & Win Rates"))
+        from ui.qt.pages import ChampionsPage
+        self.champions_page = ChampionsPage(self)
         self.pages_stack.addWidget(self.champions_page)
         
         self.coach_page = QWidget()
