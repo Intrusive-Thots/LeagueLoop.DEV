@@ -45,7 +45,7 @@ if __name__ == "__main__":
     from ui.qt.app_window import LeagueLoopQtWindow
     
     qt_app = QApplication.instance() or QApplication(sys.argv)
-    qt_window = LeagueLoopQtWindow()
+    qt_window = LeagueLoopQtWindow(app)
     qt_window.show()
     
     # Setup QTimer to pump the Tkinter event loop on the main thread

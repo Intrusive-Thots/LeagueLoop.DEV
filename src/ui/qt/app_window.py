@@ -197,8 +197,10 @@ class SidebarNavigation(QWidget):
 
 class LeagueLoopQtWindow(QMainWindow):
     """The primary PySide6 application window container."""
-    def __init__(self):
+    def __init__(self, ctk_app=None):
         super().__init__()
+        self.ctk_app = ctk_app
+        self.assets = ctk_app.assets if ctk_app else None
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground, False)
         
@@ -268,9 +270,8 @@ class LeagueLoopQtWindow(QMainWindow):
         l.addWidget(QLabel("Dashboard Screen"))
         self.pages_stack.addWidget(self.dashboard_page)
         
-        self.friends_page = QWidget()
-        l = QVBoxLayout(self.friends_page)
-        l.addWidget(QLabel("Friends Activity & Auto-Join"))
+        from ui.qt.pages import FriendsPage
+        self.friends_page = FriendsPage(self)
         self.pages_stack.addWidget(self.friends_page)
         
         self.champions_page = QWidget()
