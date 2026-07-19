@@ -247,12 +247,8 @@ class FriendsPage(ScrollableList):
         self.refresh_list_data()
 
     def setup_ui(self):
-        self.card = make_card(self.container, title="FRIEND LIST")
-        self.add_widget(self.card.parentWidget())
-        
-        card_layout = QVBoxLayout(self.card)
-        card_layout.setContentsMargins(0, 0, 0, 0)
-        card_layout.setSpacing(10)
+        self.card = make_card(title="FRIEND LIST")
+        self.add_widget(self.card)
         
         # Header Toolbar Layout
         toolbar = QWidget(self.card)

@@ -278,12 +278,8 @@ class ChampionsPage(QWidget):
         layout.setSpacing(12)
         
         # Main Grid Scroll Frame Card
-        self.card = make_card(self, title="ARAM PRIORITY SNIPER")
-        layout.addWidget(self.card.parentWidget())
-        
-        card_layout = QVBoxLayout(self.card)
-        card_layout.setContentsMargins(0, 0, 0, 0)
-        card_layout.setSpacing(10)
+        self.card = make_card(title="ARAM PRIORITY SNIPER")
+        layout.addWidget(self.card)
         
         # ── 1. TOOLBAR ──
         toolbar = QWidget(self.card)
