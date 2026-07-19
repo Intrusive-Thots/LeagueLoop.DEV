@@ -342,51 +342,100 @@ class SettingsPage(ScrollableList):
         self.setup_ui()
 
     def setup_ui(self):
-        # ─── LOBBY & QUEUE ───
-        card_lobby = make_card(title="LOBBY & QUEUE")
+        # ─── 1. LOBBY & MATCHMAKING ───
+        card_lobby = make_card(title="LOBBY & MATCHMAKING")
+        
+        row_accept = SettingsToggleRow(
+            self,
+            label_text="Auto-Accept Ready Check",
+            initial_state=self.config.get("auto_accept", True),
+            on_toggle=lambda v: self._save_setting("auto_accept", v)
+        )
+        card_lobby.add_widget(row_accept)
         
         accept_delay = float(self.config.get("accept_delay", 2.0))
         row_delay = SettingsSliderRow(
             self,
-            label_text="Accept Delay",
+            label_text="Accept Delay (Seconds)",
             initial_value=accept_delay,
-            on_change=self._save_accept_delay
+            on_change=lambda v: self._save_setting("accept_delay", float(v))
         )
         card_lobby.add_widget(row_delay)
+        
+        row_requeue = SettingsToggleRow(
+            self,
+            label_text="Auto-Requeue After Dodge",
+            initial_state=self.config.get("auto_requeue_after_dodge", True),
+            on_toggle=lambda v: self._save_setting("auto_requeue_after_dodge", v)
+        )
+        card_lobby.add_widget(row_requeue)
+        
         self.add_widget(card_lobby)
         
-        # ─── AUTOMATION & BEHAVIOR ───
-        card_auto = make_card(title="AUTOMATION & BEHAVIOR")
+        # ─── 2. CHAMPION SELECT AUTOMATION ───
+        card_champ = make_card(title="CHAMPION SELECT")
         
-        run_in_tray = bool(self.config.get("run_in_tray", True))
+        row_pick = SettingsToggleRow(
+            self,
+            label_text="Auto-Pick Priority Champion",
+            initial_state=self.config.get("auto_pick", True),
+            on_toggle=lambda v: self._save_setting("auto_pick", v)
+        )
+        card_champ.add_widget(row_pick)
+        
+        row_ban = SettingsToggleRow(
+            self,
+            label_text="Auto-Ban Blacklist Champion",
+            initial_state=self.config.get("auto_ban", False),
+            on_toggle=lambda v: self._save_setting("auto_ban", v)
+        )
+        card_champ.add_widget(row_ban)
+        
+        row_runes = SettingsToggleRow(
+            self,
+            label_text="Auto-Import Optimal Runes",
+            initial_state=self.config.get("auto_runes", True),
+            on_toggle=lambda v: self._save_setting("auto_runes", v)
+        )
+        card_champ.add_widget(row_runes)
+        
+        row_skin = SettingsToggleRow(
+            self,
+            label_text="Auto-Equip Favorite Skin",
+            initial_state=self.config.get("auto_skin", True),
+            on_toggle=lambda v: self._save_setting("auto_skin", v)
+        )
+        card_champ.add_widget(row_skin)
+        
+        self.add_widget(card_champ)
+        
+        # ─── 3. APP & BEHAVIOR ───
+        card_auto = make_card(title="APP PREFERENCES")
+        
         row_tray = SettingsToggleRow(
             self,
-            label_text="Run in Tray",
-            initial_state=run_in_tray,
-            on_toggle=self._save_run_in_tray
+            label_text="Minimize to System Tray",
+            initial_state=self.config.get("run_in_tray", True),
+            on_toggle=lambda v: self._save_setting("run_in_tray", v)
         )
         card_auto.add_widget(row_tray)
-        self.add_widget(card_auto)
         
-        # ─── SOCIAL & IDENTITY ───
-        card_social = make_card(title="SOCIAL & IDENTITY")
-        
-        discord_rpc = bool(self.config.get("discord_rpc_enabled", True))
         row_discord = SettingsToggleRow(
             self,
-            label_text="Discord RPC",
-            initial_state=discord_rpc,
-            on_toggle=self._save_discord_rpc
+            label_text="Discord Rich Presence",
+            initial_state=self.config.get("discord_rpc_enabled", True),
+            on_toggle=lambda v: self._save_setting("discord_rpc_enabled", v)
         )
-        card_social.add_widget(row_discord)
-        self.add_widget(card_social)
+        card_auto.add_widget(row_discord)
+        
+        self.add_widget(card_auto)
 
-        # ─── HOTKEYS ───
-        card_hotkeys = make_card(title="HOTKEYS")
+        # ─── 4. GLOBAL HOTKEYS ───
+        card_hotkeys = make_card(title="GLOBAL HOTKEYS")
         
         hotkeys = [
-            ("Toggle Auto", "hotkey_toggle_automation", "f3"),
-            ("Find Match", "hotkey_find_match", "f4"),
+            ("Toggle Automation", "hotkey_toggle_automation", "f3"),
+            ("Trigger Matchmaking", "hotkey_find_match", "f4"),
         ]
         
         for label_text, config_key, default_val in hotkeys:
@@ -396,20 +445,13 @@ class SettingsPage(ScrollableList):
                 label_text=label_text,
                 config_key=config_key,
                 default_val=current_val,
-                on_change=lambda val, k=config_key: self._save_hotkey(k, val)
+                on_change=lambda val, k=config_key: self._save_setting(k, val)
             )
             card_hotkeys.add_widget(row_hk)
             
         self.add_widget(card_hotkeys)
 
-    def _save_accept_delay(self, val):
-        self.config.set("accept_delay", float(val))
-
-    def _save_run_in_tray(self, val):
-        self.config.set("run_in_tray", bool(val))
-
-    def _save_discord_rpc(self, val):
-        self.config.set("discord_rpc_enabled", bool(val))
-
-    def _save_hotkey(self, key, val):
+    def _save_setting(self, key, val):
         self.config.set(key, val)
+        from ui.qt.widgets.toast import ToastManager
+        ToastManager.get_instance().show(f"Setting saved: {key}", icon="⚙️", theme="info")

@@ -11,9 +11,13 @@ class SettingsService:
         self._config = config_manager
 
     def get(self, key, default=None):
+        if self._config is None:
+            return default
         return self._config.get(key, default)
 
     def set(self, key, val, save=True):
+        if self._config is None:
+            return
         old_val = self._config.get(key)
         if old_val != val:
             self._config.set(key, val, save=save)
@@ -24,17 +28,19 @@ class SettingsService:
     def set_batch(self, updates: dict, save=True):
         for key, val in updates.items():
             self.set(key, val, save=False)
-        if save:
+        if save and self._config:
             self._config.save()
             
     def save(self):
-        self._config.save()
+        if self._config:
+            self._config.save()
 
-# Global singleton will be instantiated with the app config manager
 _instance = None
 
 def get_settings_service(config_manager: ConfigManager = None) -> SettingsService:
     global _instance
-    if _instance is None and config_manager is not None:
+    if _instance is None:
+        if config_manager is None:
+            config_manager = ConfigManager()
         _instance = SettingsService(config_manager)
     return _instance
