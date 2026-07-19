@@ -47,9 +47,10 @@ class QtLolToggle(QPushButton):
         self.update()
 
     def setChecked(self, checked):
-        super().setChecked(checked)
+        b_checked = str(checked).lower() in ("true", "1", "yes") if isinstance(checked, str) else bool(checked)
+        super().setChecked(b_checked)
         self.anim.stop()
-        self._knob_position = 16.0 if checked else 2.0
+        self._knob_position = 16.0 if b_checked else 2.0
         self.update()
 
     def nextCheckState(self):

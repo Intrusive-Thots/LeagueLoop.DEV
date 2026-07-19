@@ -602,8 +602,7 @@ class LeagueLoopQtWindow(QMainWindow):
     def _setup_toast_overlay(self):
         try:
             from ui.qt.widgets.toast import ToastManager
-            tm = ToastManager.get_instance()
-            tm.set_parent(self)
+            ToastManager.get_instance(self)
         except Exception as e:
             Logger.error("WindowShell", f"Failed to attach ToastManager: {e}")
 
