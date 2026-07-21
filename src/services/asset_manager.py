@@ -27,13 +27,18 @@ USER_CONFIG_FILE = os.path.join(USER_DATA_DIR, "config.json")
 BUNDLED_CONFIG_FILE = get_asset_path("config.json")
 
 CACHE_DIR = os.path.join(USER_DATA_DIR, "cache")
+CHAMPIONS_CACHE_DIR = os.path.join(CACHE_DIR, "champions")
+ITEMS_CACHE_DIR = os.path.join(CACHE_DIR, "items")
+SKINS_CACHE_DIR = os.path.join(CACHE_DIR, "skins")
+METADATA_CACHE_DIR = os.path.join(CACHE_DIR, "metadata")
 BUNDLED_ASSETS_DIR = get_asset_path("assets")
 
 # Ensure user directories exist
-try:
-    os.makedirs(CACHE_DIR, exist_ok=True)
-except OSError:
-    pass
+for sub_dir in [CACHE_DIR, CHAMPIONS_CACHE_DIR, ITEMS_CACHE_DIR, SKINS_CACHE_DIR, METADATA_CACHE_DIR]:
+    try:
+        os.makedirs(sub_dir, exist_ok=True)
+    except OSError:
+        pass
 
 DEFAULT_CONFIG = {
     "auto_accept": False,
