@@ -43,7 +43,7 @@ class PlayPage(QWidget):
         self.header_card.add_widget(self.lbl_game_mode)
         
         self.lbl_phase = QLabel("Phase: Disconnected", self)
-        self.lbl_phase.setStyleSheet("color: #6C757D; font-size: 11px;")
+        self.lbl_phase.setStyleSheet("color: #A8B8CC; font-size: 11px; font-weight: bold;")
         self.header_card.add_widget(self.lbl_phase)
         
         self.progress_bar = QProgressBar(self)
@@ -177,7 +177,7 @@ class PlayPage(QWidget):
             self.lbl_phase.setStyleSheet("color: #C8AA6E; font-weight: bold;")
             self.btn_find_match.setText("IN GAME")
         else:
-            self.lbl_phase.setStyleSheet("color: #6C757D;")
+            self.lbl_phase.setStyleSheet("color: #A8B8CC; font-weight: bold;")
             self.btn_find_match.setText("START MATCHMAKING")
 
     def _on_timer_tick(self, current, estimated):

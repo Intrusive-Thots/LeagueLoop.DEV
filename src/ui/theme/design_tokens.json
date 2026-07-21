@@ -14,10 +14,10 @@
             "overlay": "rgba(0,0,0,0.6)"
         },
         "text": {
-            "primary": "#F0E6D2",
-            "secondary": "#C8AA6E",
-            "muted": "#6C757D",
-            "disabled": "#3A4654"
+            "primary": "#F8F6F0",
+            "secondary": "#F0C674",
+            "muted": "#A8B8CC",
+            "disabled": "#708090"
         },
         "accent": {
             "primary": "#C8AA6E",

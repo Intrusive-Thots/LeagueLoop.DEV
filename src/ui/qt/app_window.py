@@ -406,6 +406,7 @@ class SidebarNavigation(QWidget):
                 ("AI Coach", "coach", 4),
             ],
             "SYSTEM": [
+                ("Accounts", "gear", 6),
                 ("Settings", "settings", 5),
             ]
         }
@@ -648,6 +649,7 @@ class LeagueLoopQtWindow(QMainWindow):
         from ui.qt.pages.champions_page import ChampionsPage
         from ui.qt.pages.coach_page import CoachPage
         from ui.qt.pages.settings_page import SettingsPage
+        from ui.qt.pages.accounts_page import AccountsPage
 
         self.page_classes = [
             PlayPage,       # Index 0
@@ -656,6 +658,7 @@ class LeagueLoopQtWindow(QMainWindow):
             ChampionsPage,  # Index 3
             CoachPage,      # Index 4
             SettingsPage,   # Index 5
+            AccountsPage,   # Index 6
         ]
         
         self.page_instances = [None] * len(self.page_classes)
@@ -688,6 +691,10 @@ class LeagueLoopQtWindow(QMainWindow):
     @property
     def settings_page(self):
         return self.page_instances[5]
+
+    @property
+    def accounts_page(self):
+        return self.page_instances[6]
 
     def switch_page(self, index):
         if self.page_instances[index] is None:

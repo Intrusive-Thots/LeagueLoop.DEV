@@ -26,10 +26,10 @@ class ThemeService:
         bg_card_hover = self.get_color("colors.background.card_hover", "#142236")
         bg_input = self.get_color("colors.background.input", "#0A1220")
         
-        text_primary = self.get_color("colors.text.primary", "#F0E6D2")
-        text_secondary = self.get_color("colors.text.secondary", "#C8AA6E")
-        text_muted = self.get_color("colors.text.muted", "#6C757D")
-        text_disabled = self.get_color("colors.text.disabled", "#3A4654")
+        text_primary = self.get_color("colors.text.primary", "#F8F6F0")
+        text_secondary = self.get_color("colors.text.secondary", "#F0C674")
+        text_muted = self.get_color("colors.text.muted", "#A8B8CC")
+        text_disabled = self.get_color("colors.text.disabled", "#708090")
         
         accent_gold = self.get_color("colors.accent.gold", "#C8AA6E")
         accent_blue = self.get_color("colors.accent.blue", "#0BC6E3")

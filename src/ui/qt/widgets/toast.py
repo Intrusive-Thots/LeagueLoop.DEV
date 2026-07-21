@@ -141,7 +141,12 @@ class ToastManager(QWidget):
         # Monitor size / moves of parent to align correctly
         self.root.installEventFilter(self)
         self.update_geometry()
-        self.show()
+    def show(self, message=None, icon="✨", duration=3000, theme="primary", confetti=False):
+        """Show toast message or call QWidget.show()."""
+        if message is None or not isinstance(message, str):
+            super().show()
+            return
+        self.trigger_toast(message, icon=icon, duration=duration, theme=theme, confetti=confetti)
 
     def trigger_toast(self, message, icon="✨", duration=3000, theme="primary", confetti=False):
         """EventBus thread-safe entry point."""

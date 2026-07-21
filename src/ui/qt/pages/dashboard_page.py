@@ -44,7 +44,7 @@ class DashboardPage(QWidget):
         self.row_metrics_layout.addStretch()
         
         self.lbl_queue_mode = QLabel("Queue: ARAM 5v5", self)
-        self.lbl_queue_mode.setStyleSheet("color: #A0A5B5; font-size: 11px;")
+        self.lbl_queue_mode.setStyleSheet("color: #A8B8CC; font-size: 11px; font-weight: bold;")
         self.row_metrics_layout.addWidget(self.lbl_queue_mode)
         
         self.health_card.add_widget(self.row_metrics)
@@ -54,7 +54,7 @@ class DashboardPage(QWidget):
         self.stats_card = make_card(title="PERFORMANCE METRICS")
         
         self.lbl_stats_title = QLabel("Matches Automated: 0", self)
-        self.lbl_stats_title.setStyleSheet("color: #F0E6D2; font-weight: bold; font-size: 12px;")
+        self.lbl_stats_title.setStyleSheet("color: #F8F6F0; font-weight: bold; font-size: 12px;")
         self.stats_card.add_widget(self.lbl_stats_title)
         
         self.progress_winrate = QProgressBar(self)
@@ -76,7 +76,7 @@ class DashboardPage(QWidget):
         self.stats_card.add_widget(self.progress_winrate)
         
         self.lbl_winrate_caption = QLabel("Target Winrate Confidence: 68%", self)
-        self.lbl_winrate_caption.setStyleSheet("color: #6C757D; font-size: 10px;")
+        self.lbl_winrate_caption.setStyleSheet("color: #A8B8CC; font-size: 10px; font-weight: bold;")
         self.stats_card.add_widget(self.lbl_winrate_caption)
         
         self.scroll.add_widget(self.stats_card)
@@ -85,11 +85,11 @@ class DashboardPage(QWidget):
         self.log_card = make_card(title="RECENT SYSTEM EVENTS")
         
         self.lbl_log1 = QLabel("[SYSTEM] LeagueLoop initialized cleanly.", self)
-        self.lbl_log1.setStyleSheet("color: #A0A5B5; font-size: 11px;")
+        self.lbl_log1.setStyleSheet("color: #F8F6F0; font-size: 11px;")
         self.log_card.add_widget(self.lbl_log1)
         
         self.lbl_log2 = QLabel("[NETWORK] Remote Link API running on port 8337.", self)
-        self.lbl_log2.setStyleSheet("color: #6C757D; font-size: 11px;")
+        self.lbl_log2.setStyleSheet("color: #A8B8CC; font-size: 11px;")
         self.log_card.add_widget(self.lbl_log2)
         
         self.scroll.add_widget(self.log_card)
