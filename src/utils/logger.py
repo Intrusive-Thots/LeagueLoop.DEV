@@ -144,6 +144,11 @@ def _handle_uncaught_python_exception(exc_type, exc_value, exc_traceback):
         return
     tb = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
     Logger.error("CRASH_HOOK", f"Uncaught Main Thread Exception: {exc_value}\n{tb}")
+    try:
+        from utils.crash_reporter import CrashReporter
+        CrashReporter.generate_report(exc_type, exc_value, exc_traceback, thread_name="MainThread")
+    except Exception:
+        pass
 
 
 def _handle_uncaught_thread_exception(args):
@@ -151,6 +156,11 @@ def _handle_uncaught_thread_exception(args):
     tb = "".join(traceback.format_exception(args.exc_type, args.exc_value, args.exc_traceback))
     thread_name = args.thread.name if args.thread else "UnknownThread"
     Logger.error("THREAD_CRASH", f"Uncaught Exception in [{thread_name}]: {args.exc_value}\n{tb}")
+    try:
+        from utils.crash_reporter import CrashReporter
+        CrashReporter.generate_report(args.exc_type, args.exc_value, args.exc_traceback, thread_name=thread_name)
+    except Exception:
+        pass
 
 
 def setup_exception_hooks():
