@@ -412,6 +412,14 @@ class SettingsPage(ScrollableList):
         # ─── 3. APP & BEHAVIOR ───
         card_auto = make_card(title="APP PREFERENCES")
         
+        row_autolaunch = SettingsToggleRow(
+            self,
+            label_text="Auto-Launch Client on Disconnect",
+            initial_state=self.config.get("auto_launch_client", False),
+            on_toggle=lambda v: self._save_setting("auto_launch_client", v)
+        )
+        card_auto.add_widget(row_autolaunch)
+        
         row_tray = SettingsToggleRow(
             self,
             label_text="Minimize to System Tray",

@@ -269,3 +269,56 @@ def is_game_running() -> bool:
         Logger.debug("Detector", f"Process scan for game failed: {e}")
         
     return _game_running_cache
+
+
+def launch_league_client() -> Tuple[bool, str]:
+    """
+    Launches the League of Legends Client / Riot Client if not already running.
+    Returns: (success: bool, message: str)
+    """
+    import subprocess
+    scan = scan_clients(force=True)
+    if scan.get("league", {}).get("connected"):
+        return True, "League Client is already running!"
+
+    league_path, riot_path = resolve_installation_paths()
+    
+    # 1. Try launching Riot Client with League launch command
+    if riot_path:
+        rc_exe = os.path.join(riot_path, "RiotClientServices.exe")
+        if os.path.exists(rc_exe):
+            try:
+                subprocess.Popen([rc_exe, "--launch-product=league_of_legends", "--launch-patchline=live"])
+                Logger.info("Detector", f"Launched League via RiotClientServices.exe at {rc_exe}")
+                return True, "Launching League of Legends via Riot Client..."
+            except Exception as e:
+                Logger.error("Detector", f"Failed to launch via Riot Client: {e}")
+
+    # 2. Try launching LeagueClient.exe directly
+    if league_path:
+        league_exe = os.path.join(league_path, "LeagueClient.exe")
+        if os.path.exists(league_exe):
+            try:
+                subprocess.Popen([league_exe])
+                Logger.info("Detector", f"Launched LeagueClient.exe directly at {league_exe}")
+                return True, "Launching LeagueClient.exe..."
+            except Exception as e:
+                Logger.error("Detector", f"Failed to launch LeagueClient.exe: {e}")
+
+    # 3. Fallback standard default paths
+    fallback_paths = [
+        "C:\\Riot Games\\Riot Client\\RiotClientServices.exe",
+        "C:\\Riot Games\\League of Legends\\LeagueClient.exe",
+    ]
+    for p in fallback_paths:
+        if os.path.exists(p):
+            try:
+                if "RiotClientServices" in p:
+                    subprocess.Popen([p, "--launch-product=league_of_legends", "--launch-patchline=live"])
+                else:
+                    subprocess.Popen([p])
+                return True, f"Launched client from fallback path: {p}"
+            except Exception as e:
+                Logger.error("Detector", f"Fallback launch failed at {p}: {e}")
+
+    return False, "Could not find Riot Client or League of Legends installation path."

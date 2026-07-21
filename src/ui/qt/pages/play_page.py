@@ -90,11 +90,22 @@ class PlayPage(QWidget):
         self.btn_dodge.clicked.connect(self._on_dodge_clicked)
         self.row_quick_layout.addWidget(self.btn_dodge)
         
-        self.actions_card.add_widget(self.row_quick)
+        self.btn_launch_client = make_button(self, text="🚀 LAUNCH LEAGUE CLIENT", style="secondary")
+        self.btn_launch_client.clicked.connect(self._on_launch_client_clicked)
+        self.actions_card.add_widget(self.btn_launch_client)
+        
         self.scroll.add_widget(self.actions_card)
         
         # ── 3. AUTOMATION QUICK TOGGLES CARD ──
         self.toggles_card = make_card(title="AUTOMATION ENGINES")
+        
+        self.row_autolaunch = SettingsToggleRow(
+            self,
+            label_text="Auto-Launch Client on Disconnect",
+            initial_state=self.config.get("auto_launch_client", False),
+            on_toggle=lambda v: self.config.set("auto_launch_client", v)
+        )
+        self.toggles_card.add_widget(self.row_autolaunch)
         
         self.row_accept = SettingsToggleRow(
             self,
@@ -162,6 +173,17 @@ class PlayPage(QWidget):
                 ToastManager.get_instance().show("Dodged Lobby", icon="🚪", theme="warning")
             else:
                 ToastManager.get_instance().show(f"Dodge Failed: {msg}", icon="⚠️", theme="error")
+        run_in_background(task)
+
+    def _on_launch_client_clicked(self):
+        def task():
+            from utils.client_detector import launch_league_client
+            from ui.qt.widgets.toast import ToastManager
+            success, msg = launch_league_client()
+            if success:
+                ToastManager.get_instance().show(msg, icon="🚀", theme="info")
+            else:
+                ToastManager.get_instance().show(f"Launch Failed: {msg}", icon="⚠️", theme="error")
         run_in_background(task)
 
     def _on_queue_state_changed(self, phase, state):

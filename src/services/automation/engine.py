@@ -165,6 +165,16 @@ class AutomationEngine:
                     Logger.debug("AutoLoop", "LCU Disconnected. Attempting Self-Heal...")
                     self._last_disconnect_log = time.time()
 
+                # ── Auto-Launcher Option ──
+                if not self._is_game_running() and (self.config.get("auto_launch_client", False) or self.config.get("auto_launch_league", False)):
+                    now = time.time()
+                    if now - getattr(self, "_last_autolaunch_time", 0.0) > 30.0:
+                        self._last_autolaunch_time = now
+                        from utils.client_detector import launch_league_client
+                        success, msg = launch_league_client()
+                        if success:
+                            self._log(f"Auto-Launcher: {msg}")
+
                 if self.lcu.connect(silent=True):
                     Logger.debug("AutoLoop", "Self-Heal Successful: Reconnected to LCU.")
                     default_status = self.config.get("custom_status", "").strip()
