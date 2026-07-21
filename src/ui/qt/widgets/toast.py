@@ -111,8 +111,15 @@ class ToastManager(QWidget):
         """Gets or creates the singleton ToastManager instance."""
         if cls._instance is None:
             if root is None:
-                raise ValueError("ToastManager requires a parent QWidget for initialization.")
-            cls._instance = cls(root)
+                from PySide6.QtWidgets import QApplication
+                app = QApplication.instance()
+                active_win = app.activeWindow() if app else None
+                if active_win:
+                    cls._instance = cls(active_win)
+                else:
+                    return None
+            else:
+                cls._instance = cls(root)
         return cls._instance
 
     def __init__(self, root):

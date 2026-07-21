@@ -541,7 +541,7 @@ class ChampionsPage(QWidget):
         self.grid_container.setStyleSheet("background-color: transparent;")
         self.grid_layout = QGridLayout(self.grid_container)
         self.grid_layout.setContentsMargins(0, 0, 0, 0)
-        self.grid_layout.setSpacing(6)
+        self.grid_layout.setSpacing(4)
         self.grid_layout.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         
         self.scroll.setWidget(self.grid_container)
@@ -861,7 +861,7 @@ class ChampionsPage(QWidget):
         root = self.window()
         assets = getattr(root, "assets", None)
         
-        cols = 4
+        cols = 5
         for i, item in enumerate(filtered):
             row_idx = i // cols
             col_idx = i % cols
@@ -1071,6 +1071,26 @@ class ChampionsPage(QWidget):
         if not raw:
             return
             
+        if raw.lower() == "#all":
+            from ui.qt.widgets.toast import ToastManager
+            all_champs = [canonical for _, canonical in self._search_cache]
+            if not all_champs:
+                all_champs = ["Aatrox", "Ahri", "Akali", "Akshan", "Alistar", "Amumu", "Anivia", "Annie", "Aphelios", "Ashe", "Aurelion Sol", "Azir", "Bard", "BelVeth", "Blitzcrank", "Brand", "Braum", "Briar", "Caitlyn", "Camille", "Cassiopeia", "ChoGath", "Corki", "Darius", "Diana", "Dr. Mundo", "Draven", "Ekko", "Elise", "Evelynn", "Ezreal", "Fiddlesticks", "Fiora", "Fizz", "Galio", "Gangplank", "Garen", "Gnar", "Gragas", "Graves", "Gwen", "Hecarim", "Heimerdinger", "Hwei", "Illaoi", "Irelia", "Ivern", "Janna", "Jarvan IV", "Jax", "Jayce", "Jhin", "Jinx", "KSante", "Kaisa", "Kalista", "Karma", "Karthus", "Kassadin", "Katarina", "Kayle", "Kayn", "Kennen", "KhaZix", "Kindred", "Kled", "KogMaw", "LeBlanc", "Lee Sin", "Leona", "Lillia", "Lissandra", "Lucian", "Lulu", "Lux", "Malphite", "Malzahar", "Maokai", "Master Yi", "Milio", "Miss Fortune", "Mordekaiser", "Morgana", "Naafiri", "Nami", "Nasus", "Nautilus", "Neeko", "Nidalee", "Nilah", "Nocturne", "Nunu & Willump", "Olaf", "Orianna", "Ornn", "Pantheon", "Poppy", "Pyke", "Qiyana", "Quinn", "Rakan", "Rammus", "RekSai", "Rell", "Renata Glasc", "Renekton", "Rengar", "Riven", "Rumble", "Ryze", "Samira", "Sejuani", "Senna", "Seraphine", "Sett", "Shaco", "Shen", "Shyvana", "Singed", "Sion", "Sivir", "Skarner", "Smolder", "Sona", "Soraka", "Swain", "Sylas", "Syndra", "Tahm Kench", "Taliyah", "Talon", "Taric", "Teemo", "Thresh", "Tristana", "Trundle", "Tryndamere", "Twisted Fate", "Twitch", "Udyr", "Urgot", "Varus", "Vayne", "Veigar", "VelKoz", "Vex", "Vi", "Viego", "Viktor", "Vladimir", "Volibear", "Warwick", "Wukong", "Xayah", "Xerath", "Xin Zhao", "Yasuo", "Yone", "Yorick", "Yuumi", "Zac", "Zed", "Zeri", "Ziggs", "Zilean", "Zoe", "Zyra"]
+            
+            names = self._get_priority_list()
+            added_count = 0
+            for name in all_champs:
+                if name not in names:
+                    names.append(name)
+                    added_count += 1
+                    
+            self._save_priority_list(names)
+            self._render_grid()
+            toast = ToastManager.get_instance()
+            if toast:
+                toast.show(f"Added {added_count} champions (#all)", icon="✨", theme="info")
+            return
+
         resolved = self._resolve_champion_name(raw)
         if not resolved:
             from ui.qt.widgets.toast import ToastManager

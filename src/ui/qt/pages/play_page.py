@@ -74,6 +74,31 @@ class PlayPage(QWidget):
         self.actions_card = make_card(title="QUEUE CONTROLS")
         
         self.btn_find_match = make_button(self, text="START MATCHMAKING", style="primary")
+        self.btn_find_match.setFixedHeight(36)
+        self.btn_find_match.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #F0E6D2, stop:0.5 #C8AA6E, stop:1 #A88A4E);
+                color: #080E18;
+                font-weight: bold;
+                font-size: 13px;
+                border: 1px solid #FFF2D6;
+                border-radius: 6px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #FFFFFF, stop:0.5 #DCC186, stop:1 #C8AA6E);
+                border-color: #FFFFFF;
+                color: #000000;
+            }
+            QPushButton:pressed {
+                background: #8A6F3B;
+                border-color: #A88A4E;
+            }
+            QPushButton:disabled {
+                color: #8C99A8;
+                background-color: #121E2E;
+                border: 1px solid #1E2D42;
+            }
+        """)
         self.btn_find_match.clicked.connect(self._on_find_match_clicked)
         self.actions_card.add_widget(self.btn_find_match)
         

@@ -149,8 +149,19 @@ class ConfigManager:
             except Exception as e:
                 Logger.error("asset_manager.py", f"Handled exception: {type(e).__name__}: {e}")
         else:
-            # Generate config.json with defaults on first run
             self.save()
+
+        # 3. Restore any persisted settings from SQLite Database
+        try:
+            from database.db_manager import DatabaseManager
+            db = DatabaseManager.get_instance()
+            for k, val_str in db.get_all_settings().items():
+                try:
+                    self.cfg[k] = json.loads(val_str)
+                except Exception:
+                    self.cfg[k] = val_str
+        except Exception:
+            pass
 
     def get(self, key, default=None):
         """Get a configuration value."""
@@ -169,7 +180,7 @@ class ConfigManager:
             self.save()
 
     def save(self):
-        """Save configuration to file securely in AppData using atomic write."""
+        """Save configuration securely to AppData config.json and SQLite database."""
         try:
             target_dir = os.path.dirname(USER_CONFIG_FILE)
             if target_dir:
@@ -185,6 +196,15 @@ class ConfigManager:
             os.replace(tmp_path, USER_CONFIG_FILE)
         except Exception as e:
             Logger.error("asset_manager.py", f"Failed saving config: {e}")
+
+        # Sync to SQLite Database
+        try:
+            from database.db_manager import DatabaseManager
+            db = DatabaseManager.get_instance()
+            for k, v in self.cfg.items():
+                db.set_setting(k, json.dumps(v))
+        except Exception:
+            pass
 
 
 
