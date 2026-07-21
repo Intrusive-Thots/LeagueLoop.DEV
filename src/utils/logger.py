@@ -72,6 +72,19 @@ class Logger:
         return _log_dir
 
     @classmethod
+    def clear_logs(cls):
+        """Clears in-memory logs and truncates error.log and debug.log disk files."""
+        cls._logs.clear()
+        for filename in ("error.log", "debug.log"):
+            filepath = os.path.join(_log_dir, filename)
+            if os.path.exists(filepath):
+                try:
+                    with open(filepath, "w", encoding="utf-8") as f:
+                        f.write("")
+                except Exception:
+                    pass
+
+    @classmethod
     def _prune(cls):
         """Prunes the in-memory logs list if it exceeds MAX_LOGS."""
         if len(cls._logs) > cls.MAX_LOGS:
