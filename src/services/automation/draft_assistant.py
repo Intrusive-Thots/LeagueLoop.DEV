@@ -228,12 +228,16 @@ def perform_draft_assistant(engine, session):
             if ban_str:
                 ban_candidates.append(ban_str)
         
-        if not ban_candidates and engine.config.get("auto_ban_enabled", False):
+        if not ban_candidates:
+            global_ban = engine.config.get("auto_ban", "")
+            if isinstance(global_ban, str) and global_ban.strip():
+                ban_candidates.append(global_ban.strip())
             for i in range(1, 4):
                 ban_str = engine.config.get(f"auto_ban_{i}", "")
                 if ban_str:
                     ban_candidates.append(ban_str)
         
+        auto_lock_ban = engine.config.get("auto_lock_in", False) or engine.config.get("auto_ban", False)
         for ban_str in ban_candidates:
             ban_id = engine.assets.name_to_id.get(ban_str.lower(), 0)
             if not ban_id: continue
@@ -247,7 +251,7 @@ def perform_draft_assistant(engine, session):
                 engine._log(f"Draft: Hovering Ban {ban_str}")
                 engine.lcu.request("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}", data={"championId": ban_id})
                 engine._last_draft_action_time = now
-            elif my_action.get("championId") == ban_id and engine.config.get("auto_lock_in", False):
+            elif my_action.get("championId") == ban_id and auto_lock_ban:
                 if now - getattr(engine, "_last_draft_action_time", 0) > 0.5:
                     engine._log(f"Draft: Locking Ban {ban_str}")
                     engine.lcu.request("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}", data={"championId": ban_id, "completed": True})
@@ -268,9 +272,28 @@ def perform_draft_assistant(engine, session):
             if champ_id > 0
         }
                 
+        pick_candidates = []
         for i in range(1, 4):
             pick_str = engine.config.get(f"pick_{assigned}_{i}", "")
-            if not pick_str: continue
+            if pick_str:
+                pick_candidates.append(pick_str)
+                
+        if not pick_candidates:
+            global_pick = engine.config.get("auto_pick", "")
+            if isinstance(global_pick, str) and global_pick.strip():
+                pick_candidates.append(global_pick.strip())
+            priority_list = engine.config.get("priority_picker", {}).get("list", [])
+            if priority_list:
+                pick_candidates.extend(priority_list)
+
+        auto_lock_pick = (
+            engine.config.get("auto_lock_in", False)
+            or engine.config.get("auto_pick", False) is True
+            or engine.config.get("auto_lockin", False)
+        )
+
+        for pick_str in pick_candidates:
+            if not isinstance(pick_str, str) or not pick_str.strip(): continue
             pick_id = engine.assets.name_to_id.get(pick_str.lower(), 0)
             if not pick_id: continue
             
@@ -283,7 +306,7 @@ def perform_draft_assistant(engine, session):
                 engine._log(f"Draft: Hovering Pick {pick_str}")
                 engine.lcu.request("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}", data={"championId": pick_id})
                 engine._last_draft_action_time = now
-            elif my_action.get("championId") == pick_id and engine.config.get("auto_lock_in", False):
+            elif my_action.get("championId") == pick_id and auto_lock_pick:
                 if now - getattr(engine, "_last_draft_action_time", 0) > 0.5:
                     engine._log(f"Draft: Locking Pick {pick_str}")
                     engine.lcu.request("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}", data={"championId": pick_id, "completed": True})

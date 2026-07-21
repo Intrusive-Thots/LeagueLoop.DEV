@@ -50,7 +50,7 @@ def equip_random_skin(engine, session):
         Logger.error("Auto", f"Skin equip error: {e}")
 
 def auto_equip_runes(engine, session):
-    if not engine.config.get("auto_runes_enabled", False):
+    if not (engine.config.get("auto_runes_enabled", False) or engine.config.get("auto_runes", False)):
         engine._runes_equipped = True
         return
 

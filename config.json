@@ -1,7 +1,7 @@
 {
-    "auto_accept": true,
+    "auto_accept": false,
     "auto_requeue": false,
-    "auto_pick": true,
+    "auto_pick": "",
     "auto_pick_backup": "",
     "auto_ban": "",
     "custom_status": "\ud83c\udfae LeagueLoop \u2699\ufe0f https://github.com/Intrusive-Thots/LeagueLoop-Installer",
@@ -71,7 +71,5 @@
     "discord_rpc_enabled": true,
     "skip_stats_enabled": true,
     "auto_runes_enabled": false,
-    "aram_auto_add_played": false,
-    "docked_mode": false,
-    "auto_honor": true
+    "aram_auto_add_played": false
 }
