@@ -40,7 +40,7 @@ def resolve_installation_paths() -> Tuple[Optional[str], Optional[str]]:
     ]
 
     for p in paths_to_try:
-        if os.path.exists(p):
+        if os.path.exists(p) and os.path.getsize(p) > 2:
             try:
                 with open(p, "r", encoding="utf-8") as f:
                     data = json.load(f)
@@ -64,7 +64,7 @@ def resolve_installation_paths() -> Tuple[Optional[str], Optional[str]]:
                 _paths_resolved = True
                 return _league_install_path, _riot_install_path
             except Exception as e:
-                Logger.error("Detector", f"Failed to parse installs JSON at {p}: {e}")
+                Logger.debug("Detector", f"Failed to parse installs JSON at {p}: {e}")
 
     # Fallback to defaults if parsing fails
     _paths_resolved = True

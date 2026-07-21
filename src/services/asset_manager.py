@@ -173,7 +173,10 @@ class ConfigManager:
             with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(self.cfg, f, indent=4)
                 f.flush()
-                os.fsync(f.fileno())
+                try:
+                    os.fsync(f.fileno())
+                except Exception:
+                    pass
             os.replace(tmp_path, USER_CONFIG_FILE)
         except Exception as e:
             Logger.error("asset_manager.py", f"Failed saving config: {e}")
