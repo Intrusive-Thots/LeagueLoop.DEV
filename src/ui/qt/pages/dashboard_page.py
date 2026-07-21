@@ -90,7 +90,9 @@ class DashboardPage(QWidget):
         
         self.lbl_log2 = QLabel("[NETWORK] Remote Link API running on port 8337.", self)
         self.lbl_log2.setStyleSheet("color: #A8B8CC; font-size: 11px;")
-        self.log_card.add_widget(self.lbl_log2)
+        self.btn_open_logs = make_button(self, text="📁 OPEN LOGS FOLDER", style="secondary")
+        self.btn_open_logs.clicked.connect(self._on_open_logs_clicked)
+        self.log_card.add_widget(self.btn_open_logs)
         
         self.scroll.add_widget(self.log_card)
         
@@ -102,3 +104,12 @@ class DashboardPage(QWidget):
 
     def _on_disconnected(self):
         QMetaObject.invokeMethod(self.lbl_lcu_state, "setText", Qt.QueuedConnection, Slot(str)("LCU: Disconnected"))
+
+    def _on_open_logs_clicked(self):
+        import os
+        from utils.logger import Logger
+        log_dir = Logger.get_log_dir()
+        if os.path.exists(log_dir):
+            os.startfile(log_dir)
+            from ui.qt.widgets.toast import ToastManager
+            ToastManager.get_instance().show("Opened log directory", icon="📁", theme="info")
