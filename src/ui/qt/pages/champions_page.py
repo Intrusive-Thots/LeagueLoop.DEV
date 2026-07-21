@@ -983,15 +983,15 @@ class ChampionsPage(QWidget):
     def _stop_wiggle(self):
         self.wiggle_timer.stop()
         for w in self._row_widgets:
-            w.setRotation(0)
+            if hasattr(w, "setRotation"):
+                w.setRotation(0)
 
     def _on_wiggle_tick(self):
         self._wiggle_state += 0.5
         for i, w in enumerate(self._row_widgets):
-            # Staggered wiggle offsets
-            ang = 3.0 * math.sin(self._wiggle_state + i)
-            # Custom rotation
-            w.setRotation(ang)
+            if hasattr(w, "setRotation"):
+                ang = 3.0 * math.sin(self._wiggle_state + i)
+                w.setRotation(ang)
 
     def _on_search_typing(self, text):
         text = text.strip().lower()
