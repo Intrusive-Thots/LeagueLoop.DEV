@@ -147,12 +147,12 @@ class PlayPage(QWidget):
 
     def _on_find_match_clicked(self):
         def task():
-            success, msg = self.queue_service.find_match()
+            success = self.queue_service.find_match()
             from ui.qt.widgets.toast import ToastManager
             if success:
                 ToastManager.get_instance().show("Searching for Match...", icon="🎮", theme="info")
             else:
-                ToastManager.get_instance().show(f"Queue Failed: {msg}", icon="⚠️", theme="error")
+                ToastManager.get_instance().show("Queue Search Failed", icon="⚠️", theme="error")
         run_in_background(task)
 
     def _on_requeue_clicked(self):
