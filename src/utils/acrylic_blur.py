@@ -40,19 +40,25 @@ _ACCENT_ENABLE_ACRYLICBLURBEHIND = 4   # Acrylic blur  (Win10 1803+)
 _WCA_ACCENT_POLICY = 19
 
 
-def _get_hwnd(tk_window) -> int:
-    """Extract the Win32 HWND from a tkinter window."""
-    return ctypes.windll.user32.GetParent(tk_window.winfo_id())
+def _get_hwnd(window) -> int:
+    """Extract the Win32 HWND from a PySide6 QWidget/QWindow or integer HWND."""
+    if isinstance(window, int):
+        return window
+    if hasattr(window, "winId"):
+        return int(window.winId())
+    if hasattr(window, "winfo_id"):
+        return ctypes.windll.user32.GetParent(window.winfo_id())
+    return int(window)
 
 
-def apply_acrylic_blur(tk_window, tint_color: int = 0x30000000, fallback_blur: bool = True) -> bool:
+def apply_acrylic_blur(window, tint_color: int = 0x30000000, fallback_blur: bool = True) -> bool:
     """
-    Apply acrylic blur to a tkinter/CTk window.
+    Apply acrylic blur to a PySide6 QWidget window or HWND handle.
 
     Parameters
     ----------
-    tk_window : tkinter.Tk or customtkinter.CTk
-        The window to apply the effect to.
+    window : QWidget, QWindow, or int
+        The window widget or Win32 HWND to apply the effect to.
     tint_color : int
         ARGB tint color overlaid on the blur. Format: 0xAARRGGBB.
         Default: 0x30000000 (very subtle dark tint, mostly transparent).
