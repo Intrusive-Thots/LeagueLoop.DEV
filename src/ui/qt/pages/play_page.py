@@ -3,7 +3,7 @@ PySide6 Play Page Component
 Handles play controls, matchmaking queue states, and quick automation toggles.
 """
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QProgressBar, QSizePolicy
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QProgressBar, QSizePolicy, QComboBox
 )
 from PySide6.QtCore import Qt, QMetaObject, Slot, Q_ARG
 from PySide6.QtGui import QColor
@@ -38,9 +38,58 @@ class PlayPage(QWidget):
         # ── 1. SESSION HERO CARD ──
         self.header_card = make_card(title="MATCHMAKING DASHBOARD")
         
-        self.lbl_game_mode = QLabel("ARAM 5v5", self)
-        self.lbl_game_mode.setStyleSheet("font-weight: bold; color: #F0E6D2; font-size: 15px;")
-        self.header_card.add_widget(self.lbl_game_mode)
+        # Game Mode Selector Row
+        self.mode_row = QWidget(self)
+        self.mode_layout = QHBoxLayout(self.mode_row)
+        self.mode_layout.setContentsMargins(0, 0, 0, 0)
+        self.mode_layout.setSpacing(8)
+
+        self.lbl_mode_title = QLabel("Game Mode:", self.mode_row)
+        self.lbl_mode_title.setStyleSheet("font-weight: bold; color: #F0E6D2; font-size: 13px;")
+        self.mode_layout.addWidget(self.lbl_mode_title)
+
+        self.combo_mode = QComboBox(self.mode_row)
+        self.combo_mode.setFixedHeight(28)
+        self.combo_mode.setStyleSheet("""
+            QComboBox {
+                background-color: #0E1826;
+                border: 1px solid #C8AA6E;
+                border-radius: 4px;
+                color: #F0E6D2;
+                font-weight: bold;
+                font-size: 11px;
+                padding-left: 8px;
+                padding-right: 20px;
+            }
+            QComboBox::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 20px;
+                border-left: 1px solid #1E2D42;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #0E1826;
+                color: #F0E6D2;
+                selection-background-color: #1E2D42;
+                border: 1px solid #C8AA6E;
+            }
+        """)
+
+        supported_modes = [
+            "ARAM", "Ranked Solo/Duo", "Ranked Flex", "Draft Pick", "Quickplay",
+            "Arena", "URF", "One For All", "Ultimate Spellbook", "TFT Normal", "TFT Ranked"
+        ]
+        self.combo_mode.addItems(supported_modes)
+        
+        current_mode = self.config.get("aram_mode", "ARAM")
+        idx = self.combo_mode.findText(current_mode)
+        if idx >= 0:
+            self.combo_mode.setCurrentIndex(idx)
+
+        self.combo_mode.currentTextChanged.connect(self._on_game_mode_changed)
+        self.mode_layout.addWidget(self.combo_mode, stretch=1)
+
+        self.header_card.add_widget(self.mode_row)
         
         self.lbl_phase = QLabel("Phase: Disconnected", self)
         self.lbl_phase.setStyleSheet("color: #A8B8CC; font-size: 11px; font-weight: bold;")
@@ -171,6 +220,13 @@ class PlayPage(QWidget):
         EventBus.on("automation_queue_state", self._on_queue_state_changed)
         EventBus.on("queue_timer_tick", self._on_timer_tick)
         EventBus.on("setting_changed", self._on_setting_changed)
+
+    def _on_game_mode_changed(self, new_mode):
+        self.config.set("aram_mode", new_mode)
+        from ui.qt.widgets.toast import ToastManager
+        toast = ToastManager.get_instance()
+        if toast:
+            toast.show(f"Game Mode set to {new_mode}", icon="🎮", theme="info")
 
     def _on_find_match_clicked(self):
         def task():

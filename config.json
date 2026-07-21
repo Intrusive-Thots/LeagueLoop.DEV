@@ -1,5 +1,5 @@
 {
-    "auto_accept": true,
+    "auto_accept": false,
     "auto_requeue": false,
     "auto_pick": "",
     "auto_pick_backup": "",
@@ -47,11 +47,22 @@
     "stealth_mode": false,
     "hotkey_launch_client": "ctrl+shift+l",
     "hotkey_toggle_automation": "ctrl+shift+a",
-    "hotkey_find_match": "alt+j",
+    "hotkey_find_match": "ctrl+shift+f",
     "hotkey_compact_mode": "ctrl+shift+m",
     "priority_picker": {
         "enabled": true,
-        "list": []
+        "list": [
+            "Nautilus",
+            "Xerath",
+            "Nunu & Willump",
+            "Master Yi",
+            "Veigar",
+            "Lux",
+            "Heimerdinger",
+            "Nidalee",
+            "Pyke",
+            "Jhin"
+        ]
     },
     "arena_pairs": [],
     "arena_auto_lock": false,
@@ -61,5 +72,5 @@
     "skip_stats_enabled": true,
     "auto_runes_enabled": false,
     "aram_auto_add_played": false,
-    "docked_mode": false
+    "aram_mode": "Ranked Solo/Duo"
 }
