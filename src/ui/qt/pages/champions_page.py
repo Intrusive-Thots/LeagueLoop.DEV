@@ -410,7 +410,7 @@ class ChampionsPage(QWidget):
         roles = ["All", "Fighter", "Mage", "Assassin", "Support", "Marksman", "Tank"]
         for r in roles:
             btn = QPushButton(r, self.roles_widget)
-            btn.setFixedSize(50, 20)
+            btn.setFixedHeight(24)
             btn.setCheckable(True)
             btn.setAutoExclusive(True)
             if r == "All":
@@ -421,6 +421,7 @@ class ChampionsPage(QWidget):
             self.roles_layout.addWidget(btn)
             self.role_buttons[r] = btn
             
+        self.roles_layout.addStretch()
         self.filter_bar_layout.addWidget(self.roles_widget)
         
         # Sort Selector Row
@@ -437,7 +438,7 @@ class ChampionsPage(QWidget):
         sorts = [("Priority", "Priority"), ("A-Z", "Alphabetical"), ("Mastery", "Mastery"), ("Favs", "Favorites")]
         for name, code in sorts:
             btn = QPushButton(name, self.sort_widget)
-            btn.setFixedSize(48, 18)
+            btn.setFixedHeight(22)
             btn.setCheckable(True)
             btn.setAutoExclusive(True)
             if name == "Priority":
@@ -452,7 +453,7 @@ class ChampionsPage(QWidget):
         
         # Favorites Toggle
         self.btn_favs_only = QPushButton("★ Favorites", self.sort_widget)
-        self.btn_favs_only.setFixedSize(70, 18)
+        self.btn_favs_only.setFixedHeight(22)
         self.btn_favs_only.setCheckable(True)
         self.btn_favs_only.setCursor(Qt.PointingHandCursor)
         self.btn_favs_only.setStyleSheet(self._get_favs_btn_qss(False))
@@ -538,6 +539,7 @@ class ChampionsPage(QWidget):
         self.grid_layout = QGridLayout(self.grid_container)
         self.grid_layout.setContentsMargins(0, 0, 0, 0)
         self.grid_layout.setSpacing(6)
+        self.grid_layout.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         
         self.scroll.setWidget(self.grid_container)
         self.card.add_widget(self.scroll)
@@ -565,10 +567,11 @@ class ChampionsPage(QWidget):
             QPushButton {{
                 background-color: {bg};
                 border: 1px solid {border};
-                border-radius: 3px;
+                border-radius: 4px;
                 color: {color};
-                font-size: 9px;
+                font-size: 10px;
                 font-weight: bold;
+                padding: 2px 8px;
             }}
             QPushButton:hover {{
                 color: #F0E6D2;
@@ -584,10 +587,11 @@ class ChampionsPage(QWidget):
             QPushButton {{
                 background-color: {bg};
                 border: 1px solid {border};
-                border-radius: 2px;
+                border-radius: 4px;
                 color: {color};
-                font-size: 8px;
+                font-size: 10px;
                 font-weight: bold;
+                padding: 2px 6px;
             }}
             QPushButton:hover {{
                 color: #F0E6D2;
@@ -602,10 +606,11 @@ class ChampionsPage(QWidget):
             QPushButton {{
                 background-color: {bg};
                 border: 1px solid {border};
-                border-radius: 2px;
+                border-radius: 4px;
                 color: {color};
-                font-size: 8px;
+                font-size: 10px;
                 font-weight: bold;
+                padding: 2px 8px;
             }}
         """
 
