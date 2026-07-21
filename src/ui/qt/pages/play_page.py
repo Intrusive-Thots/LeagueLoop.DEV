@@ -77,20 +77,22 @@ class PlayPage(QWidget):
         self.btn_find_match.clicked.connect(self._on_find_match_clicked)
         self.actions_card.add_widget(self.btn_find_match)
         
-        self.row_quick = QWidget(self)
+        self.row_quick = QWidget(self.actions_card)
         self.row_quick_layout = QHBoxLayout(self.row_quick)
         self.row_quick_layout.setContentsMargins(0, 0, 0, 0)
         self.row_quick_layout.setSpacing(8)
         
-        self.btn_requeue = make_button(self, text="Requeue", style="secondary")
+        self.btn_requeue = make_button(self.row_quick, text="Requeue", style="secondary")
         self.btn_requeue.clicked.connect(self._on_requeue_clicked)
         self.row_quick_layout.addWidget(self.btn_requeue)
         
-        self.btn_dodge = make_button(self, text="Dodge Lobby", style="danger")
+        self.btn_dodge = make_button(self.row_quick, text="Dodge Lobby", style="danger")
         self.btn_dodge.clicked.connect(self._on_dodge_clicked)
         self.row_quick_layout.addWidget(self.btn_dodge)
         
-        self.btn_launch_client = make_button(self, text="🚀 LAUNCH LEAGUE CLIENT", style="secondary")
+        self.actions_card.add_widget(self.row_quick)
+        
+        self.btn_launch_client = make_button(self.actions_card, text="🚀 LAUNCH LEAGUE CLIENT", style="secondary")
         self.btn_launch_client.clicked.connect(self._on_launch_client_clicked)
         self.actions_card.add_widget(self.btn_launch_client)
         

@@ -130,9 +130,9 @@ class ThemeService:
         }}
         
         QPushButton:disabled {{
-            color: {text_disabled};
-            background-color: transparent;
-            border-color: {text_disabled};
+            color: #6C788A;
+            background-color: #0E1624;
+            border: 1px solid #1E2B3E;
         }}
         
         /* Inputs & Entries */
