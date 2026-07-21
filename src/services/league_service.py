@@ -33,9 +33,9 @@ class LeagueService:
     def get_summoner_info(self) -> dict:
         return self._summoner_info
 
-    def request(self, method, endpoint, **kwargs):
+    def request(self, method: str, endpoint: str, *args, **kwargs):
         """Perform REST request directly to the LCU API."""
-        return self.lcu.request(method, endpoint, **kwargs)
+        return self.lcu.request(method, endpoint, *args, **kwargs)
 
     def get_champion_masteries(self) -> list:
         """Fetch summoner's champion mastery records from LCU collections."""

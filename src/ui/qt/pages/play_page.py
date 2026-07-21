@@ -167,7 +167,7 @@ class PlayPage(QWidget):
 
     def _on_dodge_clicked(self):
         def task():
-            success, msg = self.league_service.force_dodge()
+            success, msg = self.queue_service.force_dodge()
             from ui.qt.widgets.toast import ToastManager
             if success:
                 ToastManager.get_instance().show("Dodged Lobby", icon="🚪", theme="warning")

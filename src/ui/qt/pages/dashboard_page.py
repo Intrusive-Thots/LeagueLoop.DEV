@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QProgressBar
 )
 from PySide6.QtCore import Qt, QMetaObject, Slot
-from ui.qt.widgets import ScrollableList, make_card
+from ui.qt.widgets import ScrollableList, make_card, make_button
 from services.settings_service import get_settings_service
 from services.league_service import get_league_service
 from core.events import EventBus

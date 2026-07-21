@@ -170,19 +170,19 @@ class QueueService:
             Logger.error("QueueService", f"Error cancelling matchmaking: {e}")
             return False
 
-    def force_dodge(self) -> bool:
+    def force_dodge(self):
         """Dodges queue by quitting LCU process control."""
         if not self._league or not self._league.is_connected:
-            return False
+            return False, "League Client disconnected."
         try:
             res = self._league.request("POST", "/process-control/v1/process/quit")
             if res and res.status_code in [200, 204]:
                 Logger.info("QueueService", "Force quit sent to LCU.")
-                return True
-            return False
+                return True, "Dodged Lobby cleanly."
+            return False, f"LCU returned status {res.status_code if res else 'No response'}"
         except Exception as e:
             Logger.error("QueueService", f"Error force dodging: {e}")
-            return False
+            return False, str(e)
 
     def play_again(self) -> bool:
         """Requests play again lobby recreation."""
@@ -197,6 +197,21 @@ class QueueService:
         except Exception as e:
             Logger.error("QueueService", f"Error on play again: {e}")
             return False
+
+    def requeue(self):
+        """Triggers play again and restarts matchmaking search."""
+        if not self._league or not self._league.is_connected:
+            return False, "League Client disconnected."
+        try:
+            self.play_again()
+            time.sleep(0.5)
+            success = self.find_match()
+            if success:
+                return True, "Requeued match successfully."
+            return False, "Failed to start matchmaking search."
+        except Exception as e:
+            Logger.error("QueueService", f"Error on requeue: {e}")
+            return False, str(e)
 
     def create_lobby(self, mode: str) -> bool:
         """Creates a lobby with the specified mode/queue ID."""

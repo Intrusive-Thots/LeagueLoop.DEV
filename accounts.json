@@ -12,6 +12,19 @@
                 "rp": 0
             },
             "is_default": false
+        },
+        {
+            "label": "Yanaervis",
+            "username": "Yanaervis",
+            "password_enc": "AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAAFAQMDTX/n02qnpQJamOcFQAAAAAmAAAATABlAGEAZwB1AGUATABvAG8AcAAgAEEAYwBjAG8AdQBuAHQAAAAQZgAAAAEAACAAAABtFb4Fs4aWlDU+k+dPVMRnh/+rDtUM7hpkVUin6m4bMAAAAAAOgAAAAAIAACAAAAB/B0srS4EEi91Ss8mGZwlDDxf2UKBax8f/9X+mWnYJ3xAAAACRLONXZyHjh/GyPGcq2Y1bQAAAAINiSGqVYQ+o1Q1FVtwpfkUNoxg6YhGhHLQ/8CP55jQHM+BkbEVeVGm8ROPFnNVrvcw6mdqpAQjknPSWEkhxGR0=",
+            "tagline": "",
+            "region": "NA1",
+            "last_used": null,
+            "wallet": {
+                "be": 0,
+                "rp": 0
+            },
+            "is_default": false
         }
     ],
     "active_account_idx": 0

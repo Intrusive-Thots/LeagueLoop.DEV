@@ -350,7 +350,7 @@ class FriendsPage(ScrollableList):
         self.btn_refresh.setToolTip("Refresh Friend List")
         toolbar_layout.addWidget(self.btn_refresh)
         
-        card_layout.addWidget(toolbar)
+        self.card.add_widget(toolbar)
         
         # Content frame containing friend rows list
         self.list_container = QFrame(self.card)
@@ -359,7 +359,7 @@ class FriendsPage(ScrollableList):
         self.list_layout.setContentsMargins(0, 0, 0, 0)
         self.list_layout.setSpacing(2)
         
-        card_layout.addWidget(self.list_container)
+        self.card.add_widget(self.list_container)
 
     def refresh_list_data(self):
         """Initializes state from FriendService."""

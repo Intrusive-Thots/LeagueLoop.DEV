@@ -392,7 +392,7 @@ class ChampionsPage(QWidget):
         self.btn_import.setToolTip("Import List from Clipboard")
         toolbar_layout.addWidget(self.btn_import)
         
-        card_layout.addWidget(toolbar)
+        self.card.add_widget(toolbar)
         
         # ── 2. FILTER BAR ──
         self.filter_bar = QWidget(self.card)
@@ -460,7 +460,7 @@ class ChampionsPage(QWidget):
         self.sort_layout.addWidget(self.btn_favs_only)
         
         self.filter_bar_layout.addWidget(self.sort_widget)
-        card_layout.addWidget(self.filter_bar)
+        self.card.add_widget(self.filter_bar)
         
         # --- Suggestions Row ---
         self.suggestions_widget = QWidget(self.card)
@@ -468,7 +468,7 @@ class ChampionsPage(QWidget):
         self.suggestions_layout.setContentsMargins(0, 0, 0, 0)
         self.suggestions_layout.setSpacing(4)
         self.suggestions_widget.setVisible(False)
-        card_layout.addWidget(self.suggestions_widget)
+        self.card.add_widget(self.suggestions_widget)
         
         # --- Edit Mode Bar (Hidden by default) ---
         self.edit_bar = QWidget(self.card)
@@ -520,7 +520,7 @@ class ChampionsPage(QWidget):
         self.edit_bar_layout.addWidget(self.btn_clear_all)
         
         self.edit_bar_layout.addStretch()
-        card_layout.addWidget(self.edit_bar)
+        self.card.add_widget(self.edit_bar)
         
         # --- Grid Scroll Area ---
         self.scroll = QScrollArea(self.card)
@@ -540,7 +540,7 @@ class ChampionsPage(QWidget):
         self.grid_layout.setSpacing(6)
         
         self.scroll.setWidget(self.grid_container)
-        card_layout.addWidget(self.scroll)
+        self.card.add_widget(self.scroll)
         
         # Rich Hover Stats Preview Overlay
         self.hover_card = ChampionHoverCard(self)
