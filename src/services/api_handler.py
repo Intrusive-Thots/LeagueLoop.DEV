@@ -21,6 +21,7 @@ from websockets.exceptions import ConnectionClosed
 
 from utils.logger import Logger
 from utils.client_detector import scan_clients
+from services.lcu_transport import LCUTransport
 
 
 class LCUClient:
@@ -32,19 +33,14 @@ class LCUClient:
     def __init__(self):
         """Initializes the LCUClient with default values."""
         self._lock = threading.Lock()
+        self.transport = LCUTransport()
         self.port: Optional[str] = None
         self.auth_token: Optional[str] = None
         self.protocol: str = "https"
         self.base_url: Optional[str] = None
         self.is_connected: bool = False
         self.headers: Dict[str, str] = {}
-        self.session = requests.Session()
-        self.session.verify = False
-        
-        # 3.2 Connection pooling
-        adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=10, max_retries=1)
-        self.session.mount("https://", adapter)
-        self.session.mount("http://", adapter)
+        self.session = self.transport.session
         
         self._client_pid: Optional[int] = None
         
@@ -73,64 +69,20 @@ class LCUClient:
         # Connection is handled by the background loop in main.py.
 
     def connect(self, silent=False) -> bool:
-        """Attempts to read the lockfile and establish connection details."""
+        """Attempts to read the lockfile and establish connection details via LCUTransport."""
         with self._lock:
-            # Atomic check: If we connected while waiting for lock, return success
-            if self.is_connected:
+            if self.is_connected and self.transport.is_connected:
                 return True
 
-            try:
-                # Check connection throttling
-                now = time.time()
-                if now - self._last_scan_time < self._backoff:
-                    return False
-                self._last_scan_time = now
-
-                # Use unified client scanner
-                clients = scan_clients()
-                league_info = clients.get("league", {})
-                
-                if not league_info.get("connected"):
-                    if not silent:
-                        Logger.debug("LCU", "League Client not found or not connected.")
-                    if self.is_connected:
-                        from core.events import EventBus
-                        EventBus.emit("lcu_connected", False)
-                    self.is_connected = False
-                    self._backoff = min(self._backoff * 1.5, 30.0)
-                    return False
-
-                self.port = league_info["port"]
-                self.auth_token = league_info["token"]
-                self._client_pid = league_info["pid"]
-
-                if self.port and self.auth_token:
-                    auth_str = f"riot:{self.auth_token}"
-                    b64_auth = base64.b64encode(auth_str.encode()).decode()
-                    self.headers = {
-                        "Authorization": f"Basic {b64_auth}",
-                        "Content-Type": "application/json",
-                        "Accept": "application/json",
-                    }
-                    self.session.headers.update(self.headers)
-                    self.base_url = f"https://127.0.0.1:{self.port}"
-                    self.is_connected = True
-                    self._backoff = 1.0  # Reset backoff on success
-                    from core.events import EventBus
-                    EventBus.emit("lcu_connected", True)
-                    Logger.debug("LCU", f"Connected to port {self.port}")
-                    return True
-
-                Logger.debug("LCU", "Found League Client but credentials are missing.")
-
-            except Exception as e:
-                Logger.error("LCU", f"Connection Error: {e}")
-                if self.is_connected:
-                    from core.events import EventBus
-                    EventBus.emit("lcu_connected", False)
-                self.is_connected = False
-
-            return False
+            connected = self.transport.connect(silent=silent)
+            self.is_connected = connected
+            if connected:
+                self.port = self.transport.port
+                self.auth_token = self.transport.auth_token
+                self.base_url = self.transport.base_url
+                self.headers = self.transport.headers
+                self.session = self.transport.session
+            return connected
 
     def request(
         self,
@@ -138,6 +90,8 @@ class LCUClient:
         endpoint: str,
         data: Optional[Dict] = None,
         silent: bool = False,
+        *args,
+        **kwargs,
     ) -> Optional[requests.Response]:
         """Generic wrapper for LCU requests."""
         if not self.is_connected:
@@ -174,45 +128,17 @@ class LCUClient:
         if sleep_time > 0:
             time.sleep(sleep_time)
 
-        url = f"{self.base_url}{endpoint}"
         t_start = time.time()
-        try:
-            if not silent:
-                Logger.debug("LCU", f"REQ -> {method} {endpoint}")
-            
-            # TRACE payload format
-            if endpoint == "/lol-lobby/v2/lobby" and method == "POST":
-                Logger.debug("LCU_TRACE", f"DATA TYPE: {type(data)} | RAW: {data}")
-                
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
-                response = self.session.request(
-                    method=method,
-                    url=url,
-                    json=data,
-                    verify=False,
-                    timeout=2,  # Prevent blocking UI
-                )
+        response = self.transport.request(method=method, endpoint=endpoint, data=data, silent=silent, *args, **kwargs)
+        dur = time.time() - t_start
 
-            dur = time.time() - t_start
-            if not silent:
-                Logger.debug(
-                    "LCU", f"RES <- {response.status_code} [{dur:.3f}s] {endpoint}"
-                )
-            return response
-        except requests.exceptions.ConnectionError:
-            # Expected when the game is closed or restarting
-            self.is_connected = False
+        if response is None:
+            self.is_connected = self.transport.is_connected
             return None
-        except requests.exceptions.ReadTimeout:
-            # Expected for long-polling endpoints
-            return None
-        except requests.RequestException as e:
-            dur = time.time() - t_start
-            Logger.error("LCU", f"FAIL [{dur:.3f}s] {endpoint} : {e}")
-            # Connection lost?
-            self.is_connected = False
-            return None
+
+        if not silent:
+            Logger.debug("LCU", f"RES <- {response.status_code} [{dur:.3f}s] {endpoint}")
+        return response
 
     # ─────────── WEBSOCKET PUBLISH / SUBSCRIBE ───────────
 
