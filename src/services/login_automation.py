@@ -129,11 +129,16 @@ class LoginAutomation:
 
     def _keyboard_login(self, username, password, label, log_func,
                         completion_func, idx, on_success=None):
-        """Type credentials into the Riot Client login form via pyautogui."""
+        """Type credentials into the Riot Client login form via keyboard macros."""
         try:
-            import pyautogui
+            import keyboard
 
-            user32 = ctypes.windll.user32
+            # Ensure Riot Client is running and launched
+            if not self.riot_client.is_riot_client_running():
+                if log_func:
+                    log_func("Launching Riot Client...")
+                self.launch_riot_client()
+                time.sleep(3.0)
 
             hwnd = self._find_riot_client_window(timeout=30)
             if not hwnd:
@@ -144,38 +149,55 @@ class LoginAutomation:
                 return
 
             if log_func:
-                log_func("Waiting for login form...")
-            time.sleep(0.5)
+                log_func("Focusing Riot Client window...")
 
+            user32 = ctypes.windll.user32
+            # Use Alt-key press trick to ensure SetForegroundWindow acquires focus
+            user32.keybd_event(0x12, 0, 0, 0)
+            user32.keybd_event(0x12, 0, 2, 0)
             user32.ShowWindow(hwnd, 9)  # SW_RESTORE
             user32.SetForegroundWindow(hwnd)
-            time.sleep(0.5)
+            time.sleep(0.6)
 
             if log_func:
-                log_func(f"Typing credentials for {label}...")
+                log_func(f"Typing login credentials for {label}...")
 
-            pyautogui.hotkey('ctrl', 'a')
-            time.sleep(0.1)
-            pyautogui.write(username, interval=0.03)
+            # Select all existing text in username field & clear it
+            keyboard.send("ctrl+a")
+            time.sleep(0.08)
+            keyboard.send("backspace")
+            time.sleep(0.08)
+
+            # Type username
+            keyboard.write(username, delay=0.02)
             time.sleep(0.2)
 
-            pyautogui.press('tab')
+            # Move to password field
+            keyboard.send("tab")
             time.sleep(0.2)
 
-            pyautogui.write(password, interval=0.03)
+            # Select all existing text in password field & clear it
+            keyboard.send("ctrl+a")
+            time.sleep(0.08)
+            keyboard.send("backspace")
+            time.sleep(0.08)
+
+            # Type password
+            keyboard.write(password, delay=0.02)
             time.sleep(0.2)
 
-            pyautogui.press('enter')
+            # Submit form
+            keyboard.send("enter")
 
             if log_func:
-                log_func("Waiting for authentication...")
+                log_func("Waiting for Riot authentication...")
             self._wait_for_auth_result(idx, label, log_func, completion_func,
                                        on_success, timeout=15)
 
         except Exception as e:
-            Logger.error("LoginAutomation", f"Keyboard login failed: {e}")
+            Logger.error("LoginAutomation", f"Keystroke login failed: {e}")
             if log_func:
-                log_func(f"Keyboard login failed: {e}")
+                log_func(f"Keystroke login failed: {e}")
             if completion_func:
                 completion_func(False)
 
@@ -258,7 +280,8 @@ class LoginAutomation:
                 if length > 0:
                     buff = ctypes.create_unicode_buffer(length + 1)
                     user32.GetWindowTextW(hwnd, buff, length + 1)
-                    if buff.value == "Riot Client":
+                    title = buff.value
+                    if "Riot Client" in title or "Riot" in title:
                         found_hwnd.append(hwnd)
                         return False
                 return True
