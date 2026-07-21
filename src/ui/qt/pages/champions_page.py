@@ -404,13 +404,14 @@ class ChampionsPage(QWidget):
         self.roles_widget = QWidget(self.filter_bar)
         self.roles_layout = QHBoxLayout(self.roles_widget)
         self.roles_layout.setContentsMargins(0, 0, 0, 0)
-        self.roles_layout.setSpacing(4)
+        self.roles_layout.setSpacing(3)
         
         self.role_buttons = {}
         roles = ["All", "Fighter", "Mage", "Assassin", "Support", "Marksman", "Tank"]
         for r in roles:
             btn = QPushButton(r, self.roles_widget)
             btn.setFixedHeight(24)
+            btn.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
             btn.setCheckable(True)
             btn.setAutoExclusive(True)
             if r == "All":
@@ -428,10 +429,10 @@ class ChampionsPage(QWidget):
         self.sort_widget = QWidget(self.filter_bar)
         self.sort_layout = QHBoxLayout(self.sort_widget)
         self.sort_layout.setContentsMargins(0, 0, 0, 0)
-        self.sort_layout.setSpacing(6)
+        self.sort_layout.setSpacing(4)
         
         lbl_sort = QLabel("Sort:", self.sort_widget)
-        lbl_sort.setStyleSheet("color: #6C757D; font-size: 10px; font-weight: bold; background: transparent;")
+        lbl_sort.setStyleSheet("color: #A0A5B5; font-size: 10px; font-weight: bold; background: transparent;")
         self.sort_layout.addWidget(lbl_sort)
         
         self.sort_buttons = {}
@@ -439,6 +440,7 @@ class ChampionsPage(QWidget):
         for name, code in sorts:
             btn = QPushButton(name, self.sort_widget)
             btn.setFixedHeight(22)
+            btn.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
             btn.setCheckable(True)
             btn.setAutoExclusive(True)
             if name == "Priority":
@@ -454,6 +456,7 @@ class ChampionsPage(QWidget):
         # Favorites Toggle
         self.btn_favs_only = QPushButton("★ Favorites", self.sort_widget)
         self.btn_favs_only.setFixedHeight(22)
+        self.btn_favs_only.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         self.btn_favs_only.setCheckable(True)
         self.btn_favs_only.setCursor(Qt.PointingHandCursor)
         self.btn_favs_only.setStyleSheet(self._get_favs_btn_qss(False))
@@ -560,9 +563,9 @@ class ChampionsPage(QWidget):
         self._sync_undo_btn()
 
     def _get_role_btn_qss(self, active):
-        bg = "#1C2630" if active else "transparent"
-        color = "#C8AA6E" if active else "#6C757D"
-        border = "#C8AA6E" if active else get_theme_color("colors.border.subtle", "#1A2332")
+        bg = "#1E2D42" if active else "#0E1826"
+        color = "#F0E6D2" if active else "#A0A5B5"
+        border = "#C8AA6E" if active else "#1B2A3E"
         return f"""
             QPushButton {{
                 background-color: {bg};
@@ -571,18 +574,19 @@ class ChampionsPage(QWidget):
                 color: {color};
                 font-size: 10px;
                 font-weight: bold;
-                padding: 2px 8px;
+                padding: 3px 6px;
             }}
             QPushButton:hover {{
                 color: #F0E6D2;
-                background-color: #1C2630;
+                background-color: #1E2D42;
+                border: 1px solid #C8AA6E;
             }}
         """
 
     def _get_sort_btn_qss(self, active):
-        bg = "#151F2F" if active else "transparent"
-        color = "#C8AA6E" if active else "#6C757D"
-        border = "#C8AA6E" if active else "#1A2332"
+        bg = "#1E2D42" if active else "#0E1826"
+        color = "#F0E6D2" if active else "#A0A5B5"
+        border = "#C8AA6E" if active else "#1B2A3E"
         return f"""
             QPushButton {{
                 background-color: {bg};
@@ -591,17 +595,19 @@ class ChampionsPage(QWidget):
                 color: {color};
                 font-size: 10px;
                 font-weight: bold;
-                padding: 2px 6px;
+                padding: 3px 6px;
             }}
             QPushButton:hover {{
                 color: #F0E6D2;
+                background-color: #1E2D42;
+                border: 1px solid #C8AA6E;
             }}
         """
 
     def _get_favs_btn_qss(self, active):
-        bg = "#A88A4E" if active else "transparent"
-        color = "#0A1428" if active else "#6C757D"
-        border = "#A88A4E" if active else "#1A2332"
+        bg = "#A88A4E" if active else "#0E1826"
+        color = "#0A1428" if active else "#A0A5B5"
+        border = "#C8AA6E" if active else "#1B2A3E"
         return f"""
             QPushButton {{
                 background-color: {bg};
@@ -610,7 +616,12 @@ class ChampionsPage(QWidget):
                 color: {color};
                 font-size: 10px;
                 font-weight: bold;
-                padding: 2px 8px;
+                padding: 3px 8px;
+            }}
+            QPushButton:hover {{
+                color: #F0E6D2;
+                background-color: #1E2D42;
+                border: 1px solid #C8AA6E;
             }}
         """
 
@@ -1022,20 +1033,23 @@ class ChampionsPage(QWidget):
         if suggestions:
             for s in suggestions:
                 btn = QPushButton(s, self.suggestions_widget)
-                btn.setFixedHeight(18)
+                btn.setFixedHeight(24)
+                btn.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
                 btn.setCursor(Qt.PointingHandCursor)
                 btn.setStyleSheet(f"""
                     QPushButton {{
-                        background-color: #151F2F;
-                        border: 1px solid {get_theme_color("colors.border.subtle", "#1E2328")};
-                        border-radius: 3px;
-                        color: #C8AA6E;
-                        font-size: 9px;
-                        padding-left: 6px;
-                        padding-right: 6px;
+                        background-color: #1E2D42;
+                        border: 1px solid #C8AA6E;
+                        border-radius: 4px;
+                        color: #F0E6D2;
+                        font-size: 11px;
+                        font-weight: bold;
+                        padding-left: 8px;
+                        padding-right: 8px;
                     }}
                     QPushButton:hover {{
-                        background-color: #1C2630;
+                        background-color: #283C57;
+                        color: #FFFFFF;
                     }}
                 """)
                 btn.clicked.connect(lambda checked=False, name=s: self._select_suggestion(name))

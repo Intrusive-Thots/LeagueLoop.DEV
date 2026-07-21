@@ -281,6 +281,9 @@ class QtHotkeyRecorderButton(QPushButton):
         if key == Qt.Key_Escape:
             self.stop_recording(cancel=True)
             return
+
+        if key in (Qt.Key_Control, Qt.Key_Shift, Qt.Key_Alt, Qt.Key_Meta):
+            return
             
         modifiers = event.modifiers()
         parts = []
@@ -301,7 +304,32 @@ class QtHotkeyRecorderButton(QPushButton):
             return chr(key)
         if Qt.Key_F1 <= key <= Qt.Key_F12:
             return f"f{key - Qt.Key_F1 + 1}"
-        return ""
+            
+        key_map = {
+            Qt.Key_Space: "space",
+            Qt.Key_Tab: "tab",
+            Qt.Key_Return: "enter",
+            Qt.Key_Enter: "enter",
+            Qt.Key_Backspace: "backspace",
+            Qt.Key_Delete: "delete",
+            Qt.Key_Up: "up",
+            Qt.Key_Down: "down",
+            Qt.Key_Left: "left",
+            Qt.Key_Right: "right",
+            Qt.Key_Minus: "-",
+            Qt.Key_Plus: "+",
+            Qt.Key_Equal: "=",
+            Qt.Key_BracketLeft: "[",
+            Qt.Key_BracketRight: "]",
+            Qt.Key_Backslash: "\\",
+            Qt.Key_Semicolon: ";",
+            Qt.Key_Apostrophe: "'",
+            Qt.Key_Comma: ",",
+            Qt.Key_Period: ".",
+            Qt.Key_Slash: "/",
+            Qt.Key_Grave: "`",
+        }
+        return key_map.get(key, "")
 
 
 class SettingsHotkeyRow(QWidget):

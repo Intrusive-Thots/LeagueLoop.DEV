@@ -32,6 +32,7 @@ class HotkeyManagerMixin:
             keyboard.add_hotkey(self._launch_hotkey, self._hotkey_launch_client, suppress=False)
             keyboard.add_hotkey(self._automation_hotkey, self._hotkey_toggle_automation, suppress=False)
             keyboard.add_hotkey(self._queue_hotkey, self._hotkey_find_match, suppress=False)
+            Logger.info("SYS", f"Hotkeys registered: launch={self._launch_hotkey}, auto={self._automation_hotkey}, queue={self._queue_hotkey}")
         except Exception as e:
             Logger.error("SYS", f"Failed to register hotkeys: {e}")
 
