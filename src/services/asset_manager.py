@@ -226,9 +226,12 @@ class ConfigManager:
 class AssetManager:
     """Manages application assets (images, data)."""
 
-    def __init__(self, log_func=None):
+    def __init__(self, log_func=None, cache_dir=None):
         """Initializes the AssetManager."""
         self._log_func = log_func
+        self.cache_dir = cache_dir or CACHE_DIR
+        if cache_dir:
+            os.makedirs(cache_dir, exist_ok=True)
 
         self.champ_data: Dict[str, Any] = {}
         self.id_to_key: Dict[int, str] = {}  # ID (int) -> Key/DDragonID (str)
@@ -665,6 +668,22 @@ class AssetManager:
         url = f"https://ddragon.leagueoflegends.com/cdn/img/champion/splash/{ddragon_id}_{skin_num}.jpg"
 
         return self._download_and_cache_image(url, path, cache_key, size=(width, None), opacity=opacity)
+
+    def get_champion_icon_path(self, champion_key: str) -> str:
+        """Return absolute path to cached champion icon image file."""
+        resolved = champion_key
+        if hasattr(self, "id_to_key") and champion_key.isdigit():
+            resolved = self.id_to_key.get(int(champion_key), champion_key)
+        elif hasattr(self, "name_to_id") and hasattr(self, "id_to_key"):
+            cid = self.name_to_id.get(champion_key.lower())
+            if cid is not None:
+                resolved = self.id_to_key.get(cid, champion_key)
+        fname = f"champion_{resolved}.png"
+        return os.path.join(CACHE_DIR, fname)
+
+    def get_default_icon_path(self) -> str:
+        """Return default fallback icon path."""
+        return os.path.join(CACHE_DIR, "default.png")
 
     def get_known_champions(self) -> dict:
         """Returns a dict mapping lowercase key/name to actual DDragon champion key string."""

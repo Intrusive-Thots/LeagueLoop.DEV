@@ -199,12 +199,22 @@ class AccountManager:
                     return i
         return -1
 
-    def set_default_account(self, idx: int):
+    def get_default_account(self) -> Optional[Dict[str, Any]]:
+        """Return the default account dictionary, or None if none set."""
+        idx = self.get_default_account_index()
+        if idx >= 0:
+            return self.get_account(idx)
+        return None
+
+    def set_default_account(self, idx: int) -> bool:
         """Set the account at the given index as default and clear default on others."""
         with self._lock:
+            if not (0 <= idx < len(self._accounts)):
+                return False
             for i, acct in enumerate(self._accounts):
                 acct["is_default"] = (i == idx)
             self._save()
+            return True
 
     def add_account(self, label: str, username: str, password: str, tagline: str = "", region: str = "NA1") -> int:
         """Add a new account. Returns the index of the new account.
