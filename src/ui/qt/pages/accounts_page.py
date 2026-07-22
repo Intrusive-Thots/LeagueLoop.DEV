@@ -84,6 +84,26 @@ class QtAccountCard(QFrame):
         self.btn_switch.clicked.connect(self._handle_login)
         layout.addWidget(self.btn_switch)
         
+        self.btn_copy = QPushButton("📋", self)
+        self.btn_copy.setToolTip("Copy Username")
+        self.btn_copy.setFixedSize(26, 26)
+        self.btn_copy.setCursor(Qt.PointingHandCursor)
+        self.btn_copy.setStyleSheet("""
+            QPushButton {
+                background: #0E1826;
+                color: #C8AA6E;
+                font-size: 11px;
+                border: 1px solid #1E2D42;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                border-color: #C8AA6E;
+                background: #142236;
+            }
+        """)
+        self.btn_copy.clicked.connect(self._handle_copy)
+        layout.addWidget(self.btn_copy)
+
         self.btn_del = QPushButton("✕", self)
         self.btn_del.setFixedSize(26, 26)
         self.btn_del.setCursor(Qt.PointingHandCursor)
@@ -103,6 +123,15 @@ class QtAccountCard(QFrame):
         """)
         self.btn_del.clicked.connect(self._handle_delete)
         layout.addWidget(self.btn_del)
+
+    def _handle_copy(self):
+        from PySide6.QtWidgets import QApplication
+        username = self.account_data.get("username", "")
+        if username:
+            QApplication.clipboard().setText(username)
+            toast = ToastManager.get_instance()
+            if toast:
+                toast.show(f"Copied username '{username}'", icon="📋", theme="info")
 
     def _handle_login(self):
         if self.on_login:
@@ -134,6 +163,10 @@ class AccountsPage(QWidget):
         # ── 1. ACTIVE SESSION CARD ──
         self.card_active = make_card(title="CURRENT ACTIVE ACCOUNT")
         
+        self.lbl_sec_badge = QLabel("🔒 DPAPI ENCRYPTED  |  Secured locally at %LOCALAPPDATA%\\LeagueLoop\\accounts.json", self)
+        self.lbl_sec_badge.setStyleSheet("color: #2ECC71; font-size: 10px; font-weight: bold; margin-bottom: 2px;")
+        self.card_active.add_widget(self.lbl_sec_badge)
+
         self.lbl_active_name = QLabel("Detecting active League Client session...", self)
         self.lbl_active_name.setStyleSheet("color: #F8F6F0; font-weight: bold; font-size: 13px;")
         self.card_active.add_widget(self.lbl_active_name)
