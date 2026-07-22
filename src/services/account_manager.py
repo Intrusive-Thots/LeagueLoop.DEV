@@ -463,6 +463,21 @@ class AccountManager:
 
     # ─────────── Login / Logout Delegation ───────────
 
+    def switch_account(self, idx: int, lcu=None, log_func=None, completion_func=None) -> bool:
+        """Switch account by signing out current session and logging in target account."""
+        if not (0 <= idx < len(self._accounts)):
+            if log_func:
+                log_func("Invalid account index.")
+            if completion_func:
+                completion_func(False)
+            return False
+
+        if lcu:
+            self.lcu = lcu
+
+        self.login_account(idx, log_func=log_func, completion_func=completion_func)
+        return True
+
     def login_account(self, idx: int, log_func=None, completion_func=None):
         """Log into a specific account via LoginAutomation."""
         if not (0 <= idx < len(self._accounts)):

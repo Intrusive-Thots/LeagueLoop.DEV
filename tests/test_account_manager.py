@@ -93,5 +93,21 @@ class TestAccountManager(unittest.TestCase):
         # Password should be empty (placeholder)
         self.assertEqual(mgr.get_password(0), "")
 
+    @patch.object(AccountManager, "login_account")
+    @patch.object(AccountManager, "_load")
+    def test_switch_account(self, mock_load, mock_login):
+        mgr = AccountManager()
+        mgr._accounts = [{"label": "Acc1", "username": "user1", "password_enc": "enc"}]
+        
+        # Test invalid index
+        res_invalid = mgr.switch_account(99)
+        self.assertFalse(res_invalid)
+        mock_login.assert_not_called()
+
+        # Test valid index
+        res_valid = mgr.switch_account(0)
+        self.assertTrue(res_valid)
+        mock_login.assert_called_once_with(0, log_func=None, completion_func=None)
+
 if __name__ == "__main__":
     unittest.main()
