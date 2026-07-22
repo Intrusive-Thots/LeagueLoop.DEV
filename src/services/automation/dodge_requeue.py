@@ -1,3 +1,9 @@
+"""
+Dodge and Requeue Automation Handler for LeagueLoop.
+
+Manages automatic re-queueing and client restart when a dodge or lobby reset is detected.
+"""
+
 import sys
 import time
 import subprocess

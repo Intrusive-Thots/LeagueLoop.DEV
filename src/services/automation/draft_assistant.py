@@ -1,3 +1,9 @@
+"""
+Draft Assistant Automation Handler for LeagueLoop.
+
+Provides Arena synergy picking, teammate respect draft algorithm, and role enforcement.
+"""
+
 import time
 import random
 from utils.logger import Logger

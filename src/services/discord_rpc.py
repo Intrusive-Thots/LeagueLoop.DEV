@@ -1,3 +1,9 @@
+"""
+Discord Rich Presence Manager Module for LeagueLoop.
+
+Provides background IPC connection management and status updates for Discord Rich Presence.
+"""
+
 import time
 import threading
 from typing import Optional

@@ -1,3 +1,9 @@
+"""
+Champion Select API Routes Module for LeagueLoop local HTTP server.
+
+Handles endpoints for inspecting champion select session state, intent, bans, and picks.
+"""
+
 import json
 from services.api.registry import register_get, register_post
 

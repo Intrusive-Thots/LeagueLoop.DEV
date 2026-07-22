@@ -1,3 +1,9 @@
+"""
+Path Resolution Utilities Module for LeagueLoop.
+
+Resolves absolute asset paths for both local development and PyInstaller bundled environments.
+"""
+
 import os
 import sys
 

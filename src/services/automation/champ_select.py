@@ -1,3 +1,9 @@
+"""
+Champion Select Automation Phase Handler for LeagueLoop.
+
+Manages champion intent, bans, picks, and role selection during champion select.
+"""
+
 import random
 from utils.logger import Logger
 from core.events import EventBus

@@ -1,3 +1,9 @@
+"""
+Ready Check Automation Handler for LeagueLoop.
+
+Handles automatic ready check acceptance with configurable reaction delay.
+"""
+
 import time
 import random
 import threading

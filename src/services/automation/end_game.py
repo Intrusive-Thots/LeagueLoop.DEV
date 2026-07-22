@@ -1,3 +1,9 @@
+"""
+End of Game Automation Handler for LeagueLoop.
+
+Manages post-match screen dismissal, auto-honoring, and returning to lobby.
+"""
+
 import random
 from utils.logger import Logger
 

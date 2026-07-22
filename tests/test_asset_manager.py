@@ -66,5 +66,23 @@ class TestAssetManager(unittest.TestCase):
         # Should NOT have called session.get since cache exists
         self.assets.session.get.assert_not_called()
 
+    def test_preload_champion_icons(self):
+        """Test preloading champion icons queues background downloads."""
+        self.assets.id_to_key = {266: "Aatrox", 103: "Ahri"}
+        with patch.object(self.assets, '_start_download') as mock_start:
+            with patch('os.path.exists', return_value=False):
+                self.assets.preload_champion_icons()
+                # Give daemon thread a brief tick to run
+                import time
+                time.sleep(0.05)
+                self.assertTrue(mock_start.called)
+
+    def test_get_icon_async_with_callback(self):
+        """Test async icon fetching invokes callback when image is ready."""
+        mock_callback = MagicMock()
+        with patch.object(self.assets, 'get_icon', return_value="mock_headless_img"):
+            self.assets.get_icon_async("champion", "Aatrox", mock_callback)
+            mock_callback.assert_called_once_with("mock_headless_img")
+
 if __name__ == '__main__':
     unittest.main()

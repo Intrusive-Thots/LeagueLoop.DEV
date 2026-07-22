@@ -1,3 +1,9 @@
+"""
+Friend Lobby Automation Handler for LeagueLoop.
+
+Manages automatic lobby joining and invite acceptance for friends.
+"""
+
 import time
 import json
 from utils.logger import Logger

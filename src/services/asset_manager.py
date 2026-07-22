@@ -331,6 +331,7 @@ class AssetManager:
 
         self._load_champion_data()
         self._load_meraki_data()
+        self.preload_champion_icons()
         self.log("Assets Loaded.")
 
     def _load_champion_data(self):
@@ -566,8 +567,27 @@ class AssetManager:
         path = os.path.join(CACHE_DIR, fname)
         return self._download_and_cache_image(url, path, cache_key, size=size)
 
+    def preload_champion_icons(self, size=(48, 48)):
+        """Background preloader for all champion icons to maximize UI responsiveness."""
+        if not self.id_to_key:
+            return
+
+        def _preload_job():
+            count = 0
+            for key_str in list(self.id_to_key.values()):
+                fname = f"champion_{key_str}.png"
+                path = os.path.join(CACHE_DIR, fname)
+                if not os.path.exists(path):
+                    url = f"https://ddragon.leagueoflegends.com/cdn/{self.ddragon_ver}/img/champion/{key_str}.png"
+                    self._start_download(url, path)
+                    count += 1
+            if count > 0:
+                self.log(f"Queued {count} champion icons for background caching.")
+
+        threading.Thread(target=_preload_job, daemon=True).start()
+
     def get_icon_async(self, type_, key, callback, size=(40, 40), widget=None):
-        """Helper to get an icon and call the callback when it's ready."""
+        """Helper to get an icon asynchronously and call the callback when ready."""
         img = self.get_icon(type_, key, size=size)
         if img:
             callback(img)
@@ -575,15 +595,40 @@ class AssetManager:
 
         if widget is not None:
             def _poll(attempts=50):
-                if not widget.winfo_exists():
-                    return
+                if hasattr(widget, "winfo_exists"):
+                    try:
+                        if not widget.winfo_exists():
+                            return
+                    except Exception:
+                        return
+                elif hasattr(widget, "isWidgetType"):
+                    try:
+                        if not widget.isVisible() and attempts < 45:
+                            pass
+                    except Exception:
+                        return
+
                 poll_img = self.get_icon(type_, key, size=size)
                 if poll_img:
                     callback(poll_img)
                     return
+
                 if attempts > 0:
-                    widget.after(100, lambda: _poll(attempts - 1))
-            widget.after(0, _poll)
+                    if hasattr(widget, "after"):
+                        widget.after(100, lambda: _poll(attempts - 1))
+                    else:
+                        def _qt_poll():
+                            _poll(attempts - 1)
+                        try:
+                            from PySide6.QtCore import QTimer
+                            QTimer.singleShot(100, _qt_poll)
+                        except Exception:
+                            threading.Thread(target=lambda: (time.sleep(0.1), _poll(attempts - 1)), daemon=True).start()
+
+            if hasattr(widget, "after"):
+                widget.after(0, _poll)
+            else:
+                _poll()
         else:
             def _wait():
                 for _ in range(50):  # Wait up to 5 seconds
