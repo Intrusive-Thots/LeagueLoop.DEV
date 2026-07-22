@@ -20,3 +20,8 @@
 
 ### 6. Hybrid UI Engine
 - Full support for both CustomTkinter legacy mode and PySide6 Qt modern application shell.
+
+### 7. Expanded REST API Test Suite & CI Sync
+- Added comprehensive unit test coverage for champion select, matchmaking actions, and system status API endpoints.
+- Synchronized local master branch commits with remote `main` repository (`Intrusive-Thots/LeagueLoop.DEV`).
+

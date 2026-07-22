@@ -20,4 +20,7 @@
 - **Context**: Champion Select and Champion Grid UI renders experienced fetch latency when entering champion pages for uncached DDragon icon assets.
 - **Decision**: Added `preload_champion_icons` background worker thread to `AssetManager` to pre-download champion icon assets asynchronously upon initialization, and upgraded `get_icon_async` to support PySide6 `QTimer` single-shot polling.
 
-
+## ADR-006: Comprehensive REST API Testing & Remote Sync Standards
+- **Status**: Accepted
+- **Context**: REST API endpoints for companion tools required validated testing without running a live League Client.
+- **Decision**: Added pytest mock handlers for LCU Transport and AppInstance in `tests/test_api_routes.py`, bringing test suite to 190 tests, and enforced remote `git push` synchronization on every completed evolution cycle.
