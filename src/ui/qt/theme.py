@@ -22,6 +22,9 @@ def apply_theme(app_or_widget):
 def get_theme_color(dot_path: str, default: str = "#000000") -> str:
     return get_theme_service().get_color(dot_path, default)
 
+get_color = get_theme_color
+
+
 
 def get_theme_radius(size: str = "md", default: int = 8) -> int:
     return get_theme_service().get_radius(size, default)

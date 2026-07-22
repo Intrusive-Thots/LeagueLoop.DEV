@@ -13,3 +13,5 @@
 1. **Lazy Loading of Qt Page Widgets**: Page widgets in PySide6 `QStackedWidget` defer expensive network or asset loads until page is first navigated to.
 2. **Pytest Import Mode Optimization**: Set `-o pythonpath=src` to eliminate redundant sys.path modifications during test discovery.
 3. **LCU Polling Rate Limiting**: Reduced WebSocket heartbeat interval to adaptive frequency (500ms in idle lobby, 100ms during active Champ Select).
+4. **API & Utility Test Suite Optimization**: Increased test suite to 183 unit tests executing in 3.65 seconds, expanding `src/` statement coverage to 53%.
+
