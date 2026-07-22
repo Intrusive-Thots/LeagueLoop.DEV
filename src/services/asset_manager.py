@@ -114,7 +114,8 @@ DEFAULT_CONFIG = {
     "run_in_tray": True,
     "discord_rpc_enabled": True,
     "skip_stats_enabled": True,
-    "auto_runes_enabled": False,
+    "auto_runes_enabled": True,
+    "auto_runes": True,
     "aram_auto_add_played": False,
     "league_client_path": "",
     "riot_client_path": ""

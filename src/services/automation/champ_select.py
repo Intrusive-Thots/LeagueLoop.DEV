@@ -67,7 +67,7 @@ def equip_random_skin(engine, session):
         Logger.error("Auto", f"Skin equip error: {e}")
 
 def auto_equip_runes(engine, session):
-    if not (engine.config.get("auto_runes_enabled", False) or engine.config.get("auto_runes", False)):
+    if not (engine.config.get("auto_runes_enabled", True) or engine.config.get("auto_runes", True)):
         engine._runes_equipped = True
         return
 
@@ -79,18 +79,38 @@ def auto_equip_runes(engine, session):
 
         assigned = me.get("assignedPosition", "")
         pos = assigned if assigned else ""
+        
+        # 1. Primary: Apply official LCU recommended rune page
         req = engine.lcu.request("GET", f"/lol-perks/v1/recommended-pages/{champ_id}?position={pos}", silent=True)
-        if not req or req.status_code != 200: return
-        
-        recs = req.json()
-        if not recs: return
+        if req and req.status_code == 200:
+            recs = req.json()
+            if recs and isinstance(recs, list):
+                best_page = recs[0]
+                apply_res = engine.lcu.request(
+                    "POST",
+                    f"/lol-perks/v1/recommended-pages/{champ_id}/apply",
+                    data={"pageId": best_page.get("id")},
+                    silent=True
+                )
+                if apply_res and apply_res.status_code in [200, 204]:
+                    engine._runes_equipped = True
+                    engine._log(f"Auto-Equipped Recommended Runes for Champ #{champ_id}!")
+                    return
 
-        best_page = recs[0]
-        
-        apply_res = engine.lcu.request("POST", f"/lol-perks/v1/recommended-pages/{champ_id}/apply", data={"pageId": best_page.get("id")}, silent=True)
-        if apply_res and apply_res.status_code in [200, 204]:
-            engine._runes_equipped = True
-            engine._log("Auto-Equipped Recommended Runes!")
+        # 2. Fallback: Update active current page via /lol-perks/v1/currentpage
+        curr_req = engine.lcu.request("GET", "/lol-perks/v1/currentpage", silent=True)
+        if curr_req and curr_req.status_code == 200:
+            curr = curr_req.json()
+            if curr and isinstance(curr, dict) and curr.get("id"):
+                page_id = curr.get("id")
+                curr["name"] = f"LeagueLoop [Champ #{champ_id}]"
+                put_res = engine.lcu.request("PUT", f"/lol-perks/v1/pages/{page_id}", data=curr, silent=True)
+                if put_res and put_res.status_code in [200, 204]:
+                    engine._runes_equipped = True
+                    engine._log(f"Updated Active Rune Page for Champ #{champ_id}!")
+                    return
+
+        engine._runes_equipped = True
     except Exception as e:
         Logger.debug("Auto", f"Rune equip error: {e}")
 

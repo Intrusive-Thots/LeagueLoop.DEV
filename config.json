@@ -71,6 +71,7 @@
     "discord_rpc_enabled": true,
     "skip_stats_enabled": true,
     "auto_runes_enabled": false,
+    "auto_runes": true,
     "aram_auto_add_played": false,
     "league_client_path": "C:\\Users\\Administrator\\Riot Games\\League of Legends (PBE)\\LeagueClient.exe",
     "riot_client_path": "C:\\Users\\Administrator\\Riot Games\\Riot Client\\RiotClientServices.exe",
@@ -245,5 +246,6 @@
             "Zoe",
             "Zyra"
         ]
-    }
+    },
+    "auto_launch_client": true
 }
