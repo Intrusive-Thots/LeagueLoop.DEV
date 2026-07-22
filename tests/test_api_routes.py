@@ -106,3 +106,58 @@ def test_handle_post_config_unwritable_key():
     handle_post_config(handler)
 
     handler.send_json.assert_called_once_with({'status': 'error', 'message': 'Key not writable: secret_key'}, 403)
+
+def test_handle_get_champ_select():
+    from services.api.routes.champ_select import handle_get_champ_select
+    app = MagicMock()
+    app.automation.lcu.is_connected = True
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        'localPlayerCellId': 1,
+        'myTeam': [{'cellId': 1, 'championId': 103, 'assignedPosition': 'MIDDLE'}],
+        'theirTeam': [{'cellId': 6, 'championId': 238, 'assignedPosition': 'MIDDLE'}],
+        'actions': [[{'id': 10, 'actorCellId': 1, 'type': 'pick', 'isInProgress': True, 'completed': False}]],
+        'bannedChampions': [{'championId': 157}],
+        'benchChampions': [{'championId': 222}]
+    }
+    app.automation.lcu.request.return_value = mock_resp
+    app.automation.assets.get_champ_name.side_effect = lambda cid: "Ahri" if cid == 103 else ("Zed" if cid == 238 else ("Yasuo" if cid == 157 else "Jinx"))
+
+    handler = create_mock_handler(app_instance=app)
+    handle_get_champ_select(handler)
+
+    handler.send_json.assert_called_once()
+    res = handler.send_json.call_args[0][0]
+    assert res['active'] is True
+    assert res['myTeam'][0]['championName'] == 'Ahri'
+
+def test_handle_action_find_match():
+    from services.api.routes.matchmaking import handle_action
+    app = MagicMock()
+    handler = create_mock_handler(body_dict={'action': 'find_match'}, app_instance=app)
+    handle_action(handler)
+
+    assert handler.send_json.called
+    res = handler.send_json.call_args[0][0]
+    assert res['status'] == 'success'
+
+def test_handle_action_invalid():
+    from services.api.routes.matchmaking import handle_action
+    handler = create_mock_handler(body_dict={'action': 'invalid_action'}, app_instance=MagicMock())
+    handle_action(handler)
+
+    assert handler.send_json.called
+    assert handler.send_json.call_args[0][1] == 400
+
+def test_handle_status_route():
+    from services.api.routes.status import handle_status
+    app = MagicMock()
+    handler = create_mock_handler(app_instance=app)
+    handle_status(handler)
+
+    res = handler.send_json.call_args[0][0]
+    assert 'phase' in res
+    assert 'automation_enabled' in res
+
+
