@@ -25,6 +25,19 @@
                 "rp": 0
             },
             "is_default": false
+        },
+        {
+            "label": "Smurf Account",
+            "username": "TestUser",
+            "password_enc": "DPAPI:AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAAFAQMDTX/n02qnpQJamOcFQAAAAAmAAAATABlAGEAZwB1AGUATABvAG8AcAAgAEEAYwBjAG8AdQBuAHQAAAAQZgAAAAEAACAAAAC6fU1zy3/+52CeMaajqkHw6KtNOAwCiKjLD3PEsWrfMwAAAAAOgAAAAAIAACAAAAA8zzj+NTuPjRqWKfgEfiAhSsegO/G6HaOu3vzzfG5E7xAAAABdvlNsfPul077rtrLeINxqQAAAAMnBjnLBuF+5rHX308xhKLop9ipFsQ+9CVE66gn6WmISG0a10qNXBjtLPbjbUKpfNUUq71VX6e2qziKdubT9ono=",
+            "tagline": "",
+            "region": "NA1",
+            "last_used": null,
+            "wallet": {
+                "be": 0,
+                "rp": 0
+            },
+            "is_default": false
         }
     ],
     "active_account_idx": 0

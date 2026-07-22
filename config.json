@@ -72,5 +72,6 @@
     "skip_stats_enabled": true,
     "auto_runes_enabled": false,
     "aram_auto_add_played": false,
-    "aram_mode": "Ranked Solo/Duo"
+    "league_client_path": "",
+    "riot_client_path": ""
 }

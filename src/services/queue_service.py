@@ -85,22 +85,18 @@ class QueueService:
 
     def _get_queue_id_for_mode(self, mode: str) -> int:
         mode_map = {
-            "Quickplay": 490,
-            "Draft Pick": 400,
-            "Ranked Solo/Duo": 420,
-            "Ranked Flex": 440,
             "ARAM": 450,
             "ARAM Mayhem": 2400,
+            "Ranked Solo/Duo": 420,
+            "Ranked Flex": 440,
+            "Draft Pick": 400,
+            "Quickplay": 490,
             "Arena": 1700,
-            "Arena 3v6": 1710,
-            "Brawl": 2300,
-            "URF": 900,
-            "ARURF": 1010,
-            "Nexus Blitz": 1300,
-            "One For All": 1020,
-            "Ultimate Spellbook": 1400,
             "TFT Normal": 1090,
             "TFT Ranked": 1100,
+            "TFT Hyper Roll": 1130,
+            "TFT Double Up": 1160,
+            "Co-op vs. AI": 850,
         }
         return mode_map.get(mode, 450)
 

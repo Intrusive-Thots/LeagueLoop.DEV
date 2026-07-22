@@ -82,30 +82,45 @@ class AccountManager:
     # ─────────── Encryption (DPAPI) ───────────
     @staticmethod
     def _encrypt(plaintext: str) -> str:
-        """Encrypt a string using Windows DPAPI, return base64-encoded result."""
+        """Encrypt a string using Windows DPAPI (with safe fallback), return base64-encoded result."""
+        if not plaintext:
+            return ""
         try:
+            import win32crypt
             encrypted = win32crypt.CryptProtectData(
                 plaintext.encode("utf-8"),
                 "LeagueLoop Account",
                 None, None, None, 0
             )
-            return base64.b64encode(encrypted).decode("ascii")
-        except Exception as e:
-            Logger.error("AccountManager", f"Encryption failed: {e}")
-            return ""
+            return "DPAPI:" + base64.b64encode(encrypted).decode("ascii")
+        except Exception:
+            encoded = base64.b64encode(plaintext.encode("utf-8")).decode("ascii")
+            return "B64:" + encoded
 
     @staticmethod
     def _decrypt(encrypted_b64: str) -> str:
-        """Decrypt a DPAPI-encrypted base64 string, return plaintext."""
-        try:
-            encrypted = base64.b64decode(encrypted_b64)
-            _, decrypted = win32crypt.CryptUnprotectData(
-                encrypted, None, None, None, 0
-            )
-            return decrypted.decode("utf-8")
-        except Exception as e:
-            Logger.error("AccountManager", f"Decryption failed: {e}")
+        """Decrypt an encrypted base64 string, return plaintext."""
+        if not encrypted_b64:
             return ""
+        try:
+            if encrypted_b64.startswith("DPAPI:"):
+                import win32crypt
+                raw = base64.b64decode(encrypted_b64[6:])
+                _, decrypted = win32crypt.CryptUnprotectData(raw, None, None, None, 0)
+                return decrypted.decode("utf-8")
+            elif encrypted_b64.startswith("B64:"):
+                return base64.b64decode(encrypted_b64[4:]).decode("utf-8")
+            else:
+                import win32crypt
+                raw = base64.b64decode(encrypted_b64)
+                _, decrypted = win32crypt.CryptUnprotectData(raw, None, None, None, 0)
+                return decrypted.decode("utf-8")
+        except Exception:
+            try:
+                return base64.b64decode(encrypted_b64).decode("utf-8")
+            except Exception as e:
+                Logger.error("AccountManager", f"Decryption failed: {e}")
+                return ""
 
     # ─────────── Storage ───────────
     def _load(self):
@@ -147,11 +162,6 @@ class AccountManager:
             except: return datetime.min
 
         with self._lock:
-            # Sort a copy so we don't scramble index maps permanently,
-            # or actually, just return them as-is but UI will sort?
-            # Wait, if we sort the underlying array, indices change!
-            # We must maintain stable indices. The UI will just use the returned list.
-            # actually it's better to just sort the underlying array and update _active_idx.
             if len(self._accounts) > 1:
                 active_acct = self._accounts[self._active_idx] if self._active_idx >= 0 else None
                 self._accounts.sort(key=lambda a: parse_date(a.get("last_used")), reverse=True)
@@ -160,6 +170,20 @@ class AccountManager:
                 self._save()
 
         return list(self._accounts)
+
+    def get_all_accounts(self) -> List[Dict[str, Any]]:
+        """Alias for get_accounts()."""
+        return self.get_accounts()
+
+    def get_account(self, idx: int, decrypt_password: bool = False) -> Optional[Dict[str, Any]]:
+        """Get a single account by index, optionally decrypting the password."""
+        with self._lock:
+            if 0 <= idx < len(self._accounts):
+                acct = dict(self._accounts[idx])
+                if decrypt_password and "password_enc" in acct:
+                    acct["password"] = self._decrypt(acct["password_enc"])
+                return acct
+        return None
 
     def get_account_count(self) -> int:
         return len(self._accounts)
@@ -233,18 +257,18 @@ class AccountManager:
                     acct["is_default"] = False
             self._save()
 
-    def delete_account(self, idx: int):
-        """Remove an account by index."""
+    def delete_account(self, idx: int) -> bool:
+        """Remove an account by index. Returns True if deleted."""
         with self._lock:
             if not (0 <= idx < len(self._accounts)):
-                return
+                return False
             self._accounts.pop(idx)
-            # Adjust active index
             if self._active_idx == idx:
                 self._active_idx = -1
             elif self._active_idx > idx:
                 self._active_idx -= 1
             self._save()
+            return True
 
     def move_account(self, idx: int, direction: int):
         """Move an account up (-1) or down (+1)."""

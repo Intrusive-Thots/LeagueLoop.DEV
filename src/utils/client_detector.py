@@ -26,14 +26,15 @@ _paths_resolved = False
 
 def resolve_installation_paths() -> Tuple[Optional[str], Optional[str]]:
     """
-    Parses RiotClientInstalls.json to resolve installation directories.
+    Resolves official installation directories and executable locations for
+    both the League of Legends Client and the Riot Client.
     Returns: (league_install_path, riot_install_path)
     """
     global _league_install_path, _riot_install_path, _paths_resolved
-    if _paths_resolved:
+    if _paths_resolved and _league_install_path and _riot_install_path:
         return _league_install_path, _riot_install_path
 
-    # Try standard paths for RiotClientInstalls.json
+    # 1. Parse RiotClientInstalls.json
     paths_to_try = [
         os.path.join(os.environ.get("ProgramData", "C:\\ProgramData"), "Riot Games", "RiotClientInstalls.json"),
         os.path.join(os.environ.get("ALLUSERSPROFILE", "C:\\ProgramData"), "Riot Games", "RiotClientInstalls.json"),
@@ -45,29 +46,63 @@ def resolve_installation_paths() -> Tuple[Optional[str], Optional[str]]:
                 with open(p, "r", encoding="utf-8") as f:
                     data = json.load(f)
 
-                # Resolve Riot Client executable and its directory
                 rc_path = data.get("rc_default") or data.get("rc_live")
                 if rc_path:
-                    # Convert to standard Windows backslashes
                     rc_path = os.path.normpath(rc_path)
                     _riot_install_path = os.path.dirname(rc_path)
-                    Logger.debug("Detector", f"Resolved Riot Client path: {_riot_install_path}")
 
-                # Resolve League of Legends install path
                 assoc = data.get("associated_client", {})
                 for game_path in assoc.keys():
                     if "league of legends" in game_path.lower():
                         _league_install_path = os.path.normpath(game_path)
-                        Logger.debug("Detector", f"Resolved League path: {_league_install_path}")
                         break
-
-                _paths_resolved = True
-                return _league_install_path, _riot_install_path
             except Exception as e:
-                Logger.debug("Detector", f"Failed to parse installs JSON at {p}: {e}")
+                Logger.debug("Detector", f"Failed parsing RiotClientInstalls.json: {e}")
 
-    # Fallback to defaults if parsing fails
+    # 2. Registry Lookup Fallback
+    try:
+        import winreg
+        for hkey in [winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE]:
+            if not _league_install_path:
+                try:
+                    key = winreg.OpenKey(hkey, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Riot Game league_of_legends.live")
+                    val, _ = winreg.QueryValueEx(key, "InstallLocation")
+                    if val and os.path.exists(val):
+                        _league_install_path = os.path.normpath(val)
+                except Exception:
+                    pass
+
+            if not _riot_install_path:
+                try:
+                    key = winreg.OpenKey(hkey, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Riot Game riot_client.live")
+                    val, _ = winreg.QueryValueEx(key, "UninstallString")
+                    if val:
+                        clean_p = val.split('"')[1] if '"' in val else val.split(' ')[0]
+                        if os.path.exists(clean_p):
+                            _riot_install_path = os.path.dirname(os.path.normpath(clean_p))
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    # 3. Common Drive Root Scanning Fallback
+    drives = ["C:", "D:", "E:", "F:", "G:"]
+    if not _league_install_path:
+        for d in drives:
+            candidate = os.path.join(d, "\\Riot Games", "League of Legends")
+            if os.path.exists(os.path.join(candidate, "LeagueClient.exe")):
+                _league_install_path = candidate
+                break
+
+    if not _riot_install_path:
+        for d in drives:
+            candidate = os.path.join(d, "\\Riot Games", "Riot Client")
+            if os.path.exists(os.path.join(candidate, "RiotClientServices.exe")):
+                _riot_install_path = candidate
+                break
+
     _paths_resolved = True
+    Logger.debug("Detector", f"Resolved paths - League: {_league_install_path}, Riot: {_riot_install_path}")
     return _league_install_path, _riot_install_path
 
 def get_league_lockfile() -> Tuple[Optional[str], Optional[str]]:

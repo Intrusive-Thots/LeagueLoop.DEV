@@ -76,8 +76,8 @@ class PlayPage(QWidget):
         """)
 
         supported_modes = [
-            "ARAM", "Ranked Solo/Duo", "Ranked Flex", "Draft Pick", "Quickplay",
-            "Arena", "URF", "One For All", "Ultimate Spellbook", "TFT Normal", "TFT Ranked"
+            "ARAM", "ARAM Mayhem", "Ranked Solo/Duo", "Ranked Flex", "Draft Pick", "Quickplay",
+            "Arena", "TFT Normal", "TFT Ranked", "TFT Hyper Roll", "TFT Double Up", "Co-op vs. AI"
         ]
         self.combo_mode.addItems(supported_modes)
         

@@ -12,8 +12,9 @@ class TestLCUClient(unittest.TestCase):
         self.assertIsNone(self.client.port)
         self.assertIsNone(self.client.auth_token)
 
-    @patch('services.api_handler.scan_clients')
-    def test_connect_success(self, mock_scan_clients):
+    @patch('requests.Session.request')
+    @patch('services.lcu_transport.scan_clients')
+    def test_connect_success(self, mock_scan_clients, mock_request):
         """Test connect via cmdline extraction (primary path)."""
         mock_scan_clients.return_value = {
             "league": {
@@ -23,6 +24,9 @@ class TestLCUClient(unittest.TestCase):
                 "pid": 12345
             }
         }
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_request.return_value = mock_resp
 
         # Override cooldown
         self.client._last_scan_time = 0
@@ -34,20 +38,21 @@ class TestLCUClient(unittest.TestCase):
         self.assertEqual(self.client.auth_token, "password")
 
     def test_request_success(self):
-        """Test request sends through session and returns response."""
+        """Test request sends through transport and returns response."""
         self.client.is_connected = True
+        self.client.transport = MagicMock()
+        self.client.transport.is_connected = True
         self.client.port = "1234"
         self.client.base_url = "https://127.0.0.1:1234"
         self.client.headers = {"Authorization": "Basic token"}
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        self.client.session = MagicMock()
-        self.client.session.request.return_value = mock_response
+        self.client.transport.request.return_value = mock_response
 
         result = self.client.request("GET", "/test", silent=True)
         self.assertEqual(result, mock_response)
-        self.client.session.request.assert_called_once()
+        self.client.transport.request.assert_called_once()
 
     def test_request_not_connected(self):
         self.client.is_connected = False

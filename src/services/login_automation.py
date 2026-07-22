@@ -354,20 +354,37 @@ class LoginAutomation:
         return False
 
     def launch_riot_client(self):
-        """Launch the Riot Client."""
+        """Launch the Riot Client using verified auto-detected executable paths."""
         if self._launch_client_func:
             self._launch_client_func()
             return
 
-        candidates = [
+        candidates = []
+
+        try:
+            from services.settings_service import get_settings_service
+            cfg_p = get_settings_service().get("riot_client_path")
+            if cfg_p and os.path.exists(cfg_p):
+                candidates.append(cfg_p)
+        except Exception:
+            pass
+
+        try:
+            from utils.client_detector import resolve_installation_paths
+            _, r_dir = resolve_installation_paths()
+            if r_dir:
+                rc_exe = os.path.join(r_dir, "RiotClientServices.exe")
+                if os.path.exists(rc_exe) and rc_exe not in candidates:
+                    candidates.append(rc_exe)
+        except Exception:
+            pass
+
+        candidates.extend([
             r"C:\Riot Games\Riot Client\RiotClientServices.exe",
             r"D:\Riot Games\Riot Client\RiotClientServices.exe",
             r"E:\Riot Games\Riot Client\RiotClientServices.exe",
-            os.path.join(
-                os.environ.get("USERPROFILE", ""),
-                r"Riot Games\Riot Client\RiotClientServices.exe",
-            ),
-        ]
+            r"F:\Riot Games\Riot Client\RiotClientServices.exe",
+        ])
 
         try:
             import winreg

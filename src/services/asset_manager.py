@@ -115,7 +115,9 @@ DEFAULT_CONFIG = {
     "discord_rpc_enabled": True,
     "skip_stats_enabled": True,
     "auto_runes_enabled": False,
-    "aram_auto_add_played": False
+    "aram_auto_add_played": False,
+    "league_client_path": "",
+    "riot_client_path": ""
 }
 
 
@@ -162,6 +164,17 @@ class ConfigManager:
                     self.cfg[k] = val_str
         except Exception:
             pass
+
+        # 4. Auto-detect client installation paths on initial setup
+        try:
+            from utils.client_detector import resolve_installation_paths
+            l_path, r_path = resolve_installation_paths()
+            if l_path and not self.cfg.get("league_client_path"):
+                self.cfg["league_client_path"] = os.path.join(l_path, "LeagueClient.exe")
+            if r_path and not self.cfg.get("riot_client_path"):
+                self.cfg["riot_client_path"] = os.path.join(r_path, "RiotClientServices.exe")
+        except Exception as e:
+            Logger.debug("ConfigManager", f"Client path detection error: {e}")
 
     def get(self, key, default=None):
         """Get a configuration value."""

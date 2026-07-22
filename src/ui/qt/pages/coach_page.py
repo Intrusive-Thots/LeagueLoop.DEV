@@ -10,6 +10,7 @@ from PySide6.QtCore import Qt, Slot
 
 from ui.qt.widgets import ScrollableList, make_card, make_button
 from ui.qt.theme import get_theme_color
+from ui.qt.pages.champions_page import RoundedIcon, pil_to_pixmap
 from services.settings_service import get_settings_service
 from services.draft_service import get_draft_service
 from core.events import EventBus
@@ -133,6 +134,21 @@ class RolePriorityListWidget(QWidget):
             lbl_num = QLabel(f"#{idx+1}", row)
             lbl_num.setStyleSheet("color: #C8AA6E; font-size: 10px; font-weight: bold;")
             rl.addWidget(lbl_num)
+
+            icon_lbl = RoundedIcon(row, radius=4)
+            icon_lbl.setFixedSize(22, 22)
+            root = self.window()
+            assets = getattr(root, "assets", None)
+            if assets and hasattr(assets, "get_champion_icon_pil"):
+                try:
+                    pil_img = assets.get_champion_icon_pil(name)
+                    if pil_img:
+                        pix = pil_to_pixmap(pil_img)
+                        if not pix.isNull():
+                            icon_lbl.setPixmap(pix.scaled(22, 22, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                except Exception:
+                    pass
+            rl.addWidget(icon_lbl)
 
             lbl_name = QLabel(name, row)
             lbl_name.setStyleSheet("color: #F0E6D2; font-size: 11px; font-weight: bold;")
@@ -335,6 +351,21 @@ class CoachPage(QWidget):
                 border-radius: 3px;
             """)
             cl.addWidget(lbl_tier)
+
+            icon_lbl = RoundedIcon(card, radius=4)
+            icon_lbl.setFixedSize(26, 26)
+            root = self.window()
+            assets = getattr(root, "assets", None)
+            if assets and hasattr(assets, "get_champion_icon_pil"):
+                try:
+                    pil_img = assets.get_champion_icon_pil(r["name"])
+                    if pil_img:
+                        pix = pil_to_pixmap(pil_img)
+                        if not pix.isNull():
+                            icon_lbl.setPixmap(pix.scaled(26, 26, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                except Exception:
+                    pass
+            cl.addWidget(icon_lbl)
 
             lbl_name = QLabel(r["name"], card)
             lbl_name.setStyleSheet("color: #F0E6D2; font-size: 12px; font-weight: bold;")
