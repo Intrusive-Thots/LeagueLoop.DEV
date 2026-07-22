@@ -290,6 +290,7 @@ class ChampionsPage(QWidget):
         # Edit Toggle Button
         self.btn_edit = QPushButton("Edit", toolbar)
         self.btn_edit.setFixedSize(50, 24)
+        self.btn_edit.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.btn_edit.setCursor(Qt.PointingHandCursor)
         self.btn_edit.setStyleSheet(f"""
             QPushButton {{
@@ -311,6 +312,7 @@ class ChampionsPage(QWidget):
         self.entry_add = QLineEdit(toolbar)
         self.entry_add.setPlaceholderText("Add champion...")
         self.entry_add.setFixedHeight(24)
+        self.entry_add.setMinimumWidth(80)
         bg_card = get_theme_color("colors.background.card", "#141E28")
         border = get_theme_color("colors.border.subtle", "#1E2328")
         gold = get_theme_color("colors.accent.gold", "#C8AA6E")
@@ -335,6 +337,7 @@ class ChampionsPage(QWidget):
         # Undo Button
         self.btn_undo = QPushButton("↩", toolbar)
         self.btn_undo.setFixedSize(24, 24)
+        self.btn_undo.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.btn_undo.setCursor(Qt.PointingHandCursor)
         self.btn_undo.setStyleSheet(f"""
             QPushButton {{
@@ -355,6 +358,7 @@ class ChampionsPage(QWidget):
         # Export Button
         self.btn_export = QPushButton("⎘", toolbar)
         self.btn_export.setFixedSize(24, 24)
+        self.btn_export.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.btn_export.setCursor(Qt.PointingHandCursor)
         self.btn_export.setStyleSheet(f"""
             QPushButton {{
@@ -375,6 +379,7 @@ class ChampionsPage(QWidget):
         # Import Button
         self.btn_import = QPushButton("📥", toolbar)
         self.btn_import.setFixedSize(24, 24)
+        self.btn_import.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.btn_import.setCursor(Qt.PointingHandCursor)
         self.btn_import.setStyleSheet(f"""
             QPushButton {{
@@ -398,20 +403,28 @@ class ChampionsPage(QWidget):
         self.filter_bar = QWidget(self.card)
         self.filter_bar_layout = QVBoxLayout(self.filter_bar)
         self.filter_bar_layout.setContentsMargins(0, 0, 0, 0)
-        self.filter_bar_layout.setSpacing(4)
+        self.filter_bar_layout.setSpacing(6)
         
-        # Role Buttons
-        self.roles_widget = QWidget(self.filter_bar)
+        # Role Buttons Scroll Container
+        self.scroll_roles = QScrollArea(self.filter_bar)
+        self.scroll_roles.setWidgetResizable(True)
+        self.scroll_roles.setFixedHeight(28)
+        self.scroll_roles.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll_roles.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll_roles.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        
+        self.roles_widget = QWidget(self.scroll_roles)
+        self.roles_widget.setStyleSheet("background: transparent;")
         self.roles_layout = QHBoxLayout(self.roles_widget)
         self.roles_layout.setContentsMargins(0, 0, 0, 0)
-        self.roles_layout.setSpacing(3)
+        self.roles_layout.setSpacing(4)
         
         self.role_buttons = {}
         roles = ["All", "Fighter", "Mage", "Assassin", "Support", "Marksman", "Tank"]
         for r in roles:
             btn = QPushButton(r, self.roles_widget)
             btn.setFixedHeight(24)
-            btn.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+            btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             btn.setCheckable(True)
             btn.setAutoExclusive(True)
             if r == "All":
@@ -423,10 +436,19 @@ class ChampionsPage(QWidget):
             self.role_buttons[r] = btn
             
         self.roles_layout.addStretch()
-        self.filter_bar_layout.addWidget(self.roles_widget)
+        self.scroll_roles.setWidget(self.roles_widget)
+        self.filter_bar_layout.addWidget(self.scroll_roles)
         
-        # Sort Selector Row
-        self.sort_widget = QWidget(self.filter_bar)
+        # Sort Selector Row Scroll Container
+        self.scroll_sorts = QScrollArea(self.filter_bar)
+        self.scroll_sorts.setWidgetResizable(True)
+        self.scroll_sorts.setFixedHeight(26)
+        self.scroll_sorts.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll_sorts.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll_sorts.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        
+        self.sort_widget = QWidget(self.scroll_sorts)
+        self.sort_widget.setStyleSheet("background: transparent;")
         self.sort_layout = QHBoxLayout(self.sort_widget)
         self.sort_layout.setContentsMargins(0, 0, 0, 0)
         self.sort_layout.setSpacing(4)
@@ -440,7 +462,7 @@ class ChampionsPage(QWidget):
         for name, code in sorts:
             btn = QPushButton(name, self.sort_widget)
             btn.setFixedHeight(22)
-            btn.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+            btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             btn.setCheckable(True)
             btn.setAutoExclusive(True)
             if name == "Priority":
@@ -456,14 +478,15 @@ class ChampionsPage(QWidget):
         # Favorites Toggle
         self.btn_favs_only = QPushButton("★ Favorites", self.sort_widget)
         self.btn_favs_only.setFixedHeight(22)
-        self.btn_favs_only.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        self.btn_favs_only.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.btn_favs_only.setCheckable(True)
         self.btn_favs_only.setCursor(Qt.PointingHandCursor)
         self.btn_favs_only.setStyleSheet(self._get_favs_btn_qss(False))
         self.btn_favs_only.clicked.connect(self._on_favs_only_toggled)
         self.sort_layout.addWidget(self.btn_favs_only)
         
-        self.filter_bar_layout.addWidget(self.sort_widget)
+        self.scroll_sorts.setWidget(self.sort_widget)
+        self.filter_bar_layout.addWidget(self.scroll_sorts)
         self.card.add_widget(self.filter_bar)
         
         # --- Suggestions Row ---
@@ -760,6 +783,14 @@ class ChampionsPage(QWidget):
     def hide_hover_card(self):
         self.hover_card.setVisible(False)
 
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "scroll") and self.scroll.viewport():
+            vw = self.scroll.viewport().width()
+            calc_cols = max(1, vw // (CELL_SIZE + 4))
+            if getattr(self, "_last_rendered_cols", None) != calc_cols:
+                self._render_grid()
+
     def _load_known_champions(self):
         root = self.window()
         assets = getattr(root, "assets", None)
@@ -861,7 +892,11 @@ class ChampionsPage(QWidget):
         root = self.window()
         assets = getattr(root, "assets", None)
         
-        cols = 5
+        # Calculate dynamic columns based on viewport width
+        viewport_w = self.scroll.viewport().width() if hasattr(self, "scroll") and self.scroll.viewport() else 360
+        cols = max(1, viewport_w // (CELL_SIZE + 4))
+        self._last_rendered_cols = cols
+
         for i, item in enumerate(filtered):
             row_idx = i // cols
             col_idx = i % cols

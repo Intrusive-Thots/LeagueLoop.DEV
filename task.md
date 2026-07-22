@@ -19,5 +19,5 @@
 - [x] Create reusable widgets under `src/ui/widgets/`
 
 ## Milestone 3: PySide6 Views Implementation
-- [ ] Build PySide6 pages: Friends page, Champion select page, Accounts page, Settings page
-- [ ] Build PySide6 shells: Dashboard page, AI Coach page, Match predictor page, Patch notes page
+- [x] Build PySide6 pages: Friends page, Champion select page, Accounts page, Settings page
+- [x] Build PySide6 shells: Dashboard page, AI Coach page, Match predictor page, Patch notes page

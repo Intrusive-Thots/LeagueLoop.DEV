@@ -399,11 +399,13 @@ class SidebarNavigation(QWidget):
             "CORE": [
                 ("Dashboard", "home", 1),
                 ("Play", "play", 0),
+                ("Predictor", "home", 7),
             ],
             "AUTOMATION": [
                 ("Champions", "champions", 3),
                 ("Friends", "friends", 2),
                 ("AI Coach", "coach", 4),
+                ("Patch Notes", "gear", 8),
             ],
             "SYSTEM": [
                 ("Accounts", "gear", 6),
@@ -650,15 +652,19 @@ class LeagueLoopQtWindow(QMainWindow):
         from ui.qt.pages.coach_page import CoachPage
         from ui.qt.pages.settings_page import SettingsPage
         from ui.qt.pages.accounts_page import AccountsPage
+        from ui.qt.pages.match_predictor_page import MatchPredictorPage
+        from ui.qt.pages.patch_notes_page import PatchNotesPage
 
         self.page_classes = [
-            PlayPage,       # Index 0
-            DashboardPage,  # Index 1
-            FriendsPage,    # Index 2
-            ChampionsPage,  # Index 3
-            CoachPage,      # Index 4
-            SettingsPage,   # Index 5
-            AccountsPage,   # Index 6
+            PlayPage,           # Index 0
+            DashboardPage,      # Index 1
+            FriendsPage,        # Index 2
+            ChampionsPage,      # Index 3
+            CoachPage,          # Index 4
+            SettingsPage,       # Index 5
+            AccountsPage,       # Index 6
+            MatchPredictorPage, # Index 7
+            PatchNotesPage,     # Index 8
         ]
         
         self.page_instances = [None] * len(self.page_classes)
