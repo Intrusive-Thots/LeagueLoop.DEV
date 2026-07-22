@@ -51,7 +51,7 @@ DEFAULT_CONFIG = {
     "auto_set_roles": False,
     "auto_hover": False,
     "auto_lock_in": False,
-    "auto_random_skin": False,
+    "auto_random_skin": True,
     "accept_delay": 2.0,
     "polling_rate_champ_select": 0.5,  # Default to Fast for CS
     # Role-Based Picks (3 slots per role)

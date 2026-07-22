@@ -17,33 +17,50 @@ def equip_random_skin(engine, session):
         if not champ_id:
             return
 
-        skins_req = engine.lcu.request("GET", f"/lol-champ-select/v1/skin-carousel-skins", silent=True)
+        skins_req = engine.lcu.request("GET", "/lol-champ-select/v1/skin-carousel-skins", silent=True)
         if not skins_req or skins_req.status_code != 200:
             return
 
         skins = skins_req.json()
-        owned_skins = [
+        if not isinstance(skins, list) or not skins:
+            return
+
+        # 1. Filter for owned or unlocked non-base custom skins
+        owned_custom = [
             s for s in skins
-            if s.get("ownership", {}).get("owned", False)
+            if (s.get("ownership", {}).get("owned", False) or s.get("unlocked", False))
             and not s.get("isBase", False)
             and s.get("id", 0) != (champ_id * 1000)
             and not s.get("disabled", False)
         ]
 
-        if not owned_skins:
-            engine._skin_equipped = True  # No skins available — stop polling
-            return
+        if owned_custom:
+            chosen = random.choice(owned_custom)
+        else:
+            # 2. Fallback: filter for any unlocked or available skin
+            unlocked = [
+                s for s in skins
+                if (s.get("ownership", {}).get("owned", False) or s.get("unlocked", False) or s.get("selected", False))
+                and not s.get("disabled", False)
+            ]
+            if unlocked:
+                chosen = random.choice(unlocked)
+            else:
+                engine._skin_equipped = True
+                return
 
-        chosen = random.choice(owned_skins)
         skin_id = chosen.get("id", 0)
+        if not skin_id:
+            engine._skin_equipped = True
+            return
 
         engine.lcu.request(
             "PATCH",
-            f"/lol-champ-select/v1/session/my-selection",
+            "/lol-champ-select/v1/session/my-selection",
             data={"selectedSkinId": skin_id}
         )
         skin_name = chosen.get("name", f"Skin #{skin_id}")
-        engine._log(f"Equipped: {skin_name}")
+        engine._log(f"Equipped Skin: {skin_name}")
         engine._skin_equipped = True
 
     except Exception as e:
