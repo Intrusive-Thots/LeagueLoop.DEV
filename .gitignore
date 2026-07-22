@@ -44,7 +44,8 @@ fix_cursors.py
 mock_benchmark.py
 test_compile.py
 test_script.py
-test_runner.py
+/test_runner.py
+!self_improving/test_runner.py
 run_tests_mocked.py
 launch_kopied.vbs
 skills.md
