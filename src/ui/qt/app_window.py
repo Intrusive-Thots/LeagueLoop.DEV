@@ -613,11 +613,13 @@ class LeagueLoopQtWindow(QMainWindow):
         try:
             from PySide6.QtWidgets import QSystemTrayIcon, QMenu
             from PySide6.QtGui import QAction, QIcon
+            import os
             
             if not QSystemTrayIcon.isSystemTrayAvailable():
                 return
                 
-            icon = QIcon("assets/app_icon.ico") if getattr(sys, 'frozen', False) else QIcon()
+            icon_path = "assets/app.ico" if os.path.exists("assets/app.ico") else ("assets/app.png" if os.path.exists("assets/app.png") else "")
+            icon = QIcon(icon_path) if icon_path else QIcon()
             self._tray_icon = QSystemTrayIcon(icon, self)
             
             tray_menu = QMenu()
@@ -788,10 +790,8 @@ class LeagueLoopQtWindow(QMainWindow):
             self.show()
 
     def closeEvent(self, event):
-        if self.config and self.config.get("run_in_tray", True):
+        if self.config and self.config.get("run_in_tray", True) and self._tray_icon and self._tray_icon.isVisible():
             self.hide()
-            if self._tray_icon:
-                self._tray_icon.show()
             event.ignore()
         else:
             self._win_service.unregister_window(int(self.winId()))

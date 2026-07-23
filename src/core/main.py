@@ -65,18 +65,22 @@ class LeagueLoopApp(HotkeyManagerMixin, QObject):
 
     def _auto_load_default_account(self):
         """Auto-load default account if client is not connected on startup."""
-        if not self.lcu.is_connected and self.account_manager:
-            default_idx = self.account_manager.get_default_account_index()
-            if default_idx >= 0:
-                Logger.info("SYS", "Auto-loading default account...")
-                
-                if not self.account_manager.riot_client.is_riot_client_running():
-                    self._hotkey_launch_client()
-                    
-                QTimer.singleShot(3000, lambda: self.account_manager.login_account(
-                    default_idx,
-                    log_func=Logger.info
-                ))
+        try:
+            if not self.lcu.is_connected and self.account_manager:
+                default_idx = self.account_manager.get_default_account_index()
+                if default_idx >= 0:
+                    pwd = self.account_manager.get_password(default_idx)
+                    if pwd:
+                        Logger.info("SYS", "Auto-loading default account...")
+                        if not self.account_manager.riot_client.is_riot_client_running():
+                            self._hotkey_launch_client()
+                            
+                        QTimer.singleShot(3000, lambda: self.account_manager.login_account(
+                            default_idx,
+                            log_func=Logger.info
+                        ))
+        except Exception as e:
+            Logger.error("SYS", f"Auto-load default account failed: {e}")
 
     def on_settings_saved(self):
         """Handles settings saved event."""
