@@ -133,8 +133,13 @@ class AccountManager:
         try:
             with open(ACCOUNTS_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            self._accounts = data.get("accounts", [])
-            self._active_idx = data.get("active_account_idx", -1)
+            
+            if isinstance(data, list):
+                self._accounts = data
+                self._active_idx = -1
+            else:
+                self._accounts = data.get("accounts", [])
+                self._active_idx = data.get("active_account_idx", -1)
         except Exception as e:
             Logger.error("AccountManager", f"Failed to load accounts: {e}")
             self._accounts = []

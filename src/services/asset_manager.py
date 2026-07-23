@@ -134,6 +134,7 @@ class ConfigManager:
 
     def __init__(self):
         """Initializes the ConfigManager."""
+        self._lock = threading.Lock()
         self.cfg = DEFAULT_CONFIG.copy()
         
         # 1. Load bundled template first (transfers dev configurations to users)
@@ -195,21 +196,22 @@ class ConfigManager:
 
     def save(self):
         """Save configuration securely to AppData config.json and SQLite database."""
-        try:
-            target_dir = os.path.dirname(USER_CONFIG_FILE)
-            if target_dir:
-                os.makedirs(target_dir, exist_ok=True)
-            tmp_path = USER_CONFIG_FILE + ".tmp"
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                json.dump(self.cfg, f, indent=4)
-                f.flush()
-                try:
-                    os.fsync(f.fileno())
-                except Exception:
-                    pass
-            os.replace(tmp_path, USER_CONFIG_FILE)
-        except Exception as e:
-            Logger.error("asset_manager.py", f"Failed saving config: {e}")
+        with self._lock:
+            try:
+                target_dir = os.path.dirname(USER_CONFIG_FILE)
+                if target_dir:
+                    os.makedirs(target_dir, exist_ok=True)
+                tmp_path = USER_CONFIG_FILE + ".tmp"
+                with open(tmp_path, "w", encoding="utf-8") as f:
+                    json.dump(self.cfg, f, indent=4)
+                    f.flush()
+                    try:
+                        os.fsync(f.fileno())
+                    except Exception:
+                        pass
+                os.replace(tmp_path, USER_CONFIG_FILE)
+            except Exception as e:
+                Logger.error("asset_manager.py", f"Failed saving config: {e}")
 
         # Sync to SQLite Database
         try:
