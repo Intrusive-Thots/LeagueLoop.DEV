@@ -96,6 +96,13 @@ class _EventBus:
                 if not self._listeners[event_key]:
                     del self._listeners[event_key]
 
+    def _safe_invoke(self, cb, args, kwargs):
+        from utils.logger import Logger
+        try:
+            cb(*args, **kwargs)
+        except Exception as e:
+            Logger.error("EVENTBUS", f"Error dispatching event (async Qt): {e}\n{traceback.format_exc()}")
+
     def emit(self, event_key: Union[str, Event], *args, **kwargs):
         """Dispatches an event instance or string event name to registered subscribers."""
         from utils.logger import Logger
@@ -110,6 +117,16 @@ class _EventBus:
 
         for cb in callbacks_to_invoke:
             try:
+                try:
+                    from PySide6.QtWidgets import QApplication
+                    from PySide6.QtCore import QTimer, QThread
+                    app_inst = QApplication.instance()
+                    if app_inst and QThread.currentThread() != app_inst.thread():
+                        QTimer.singleShot(0, lambda c=cb, a=payload_args, k=kwargs: self._safe_invoke(c, a, k))
+                        continue
+                except Exception:
+                    pass
+
                 cb(*payload_args, **kwargs)
             except Exception as e:
                 Logger.error("EVENTBUS", f"Error dispatching {key}: {e}\n{traceback.format_exc()}")

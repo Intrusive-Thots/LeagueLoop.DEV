@@ -752,10 +752,29 @@ class LeagueLoopQtWindow(QMainWindow):
 
     @Slot(int, int, int, int)
     def on_geometry_updated(self, x, y, w, h):
+        try:
+            from PySide6.QtWidgets import QApplication
+            from PySide6.QtCore import QTimer, QThread
+            app_inst = QApplication.instance()
+            if app_inst and QThread.currentThread() != app_inst.thread():
+                QTimer.singleShot(0, lambda: self.setGeometry(x, y, w, h))
+                return
+        except Exception:
+            pass
         self.setGeometry(x, y, w, h)
 
     @Slot(str)
     def on_state_updated(self, state_action):
+        try:
+            from PySide6.QtWidgets import QApplication
+            from PySide6.QtCore import QTimer, QThread
+            app_inst = QApplication.instance()
+            if app_inst and QThread.currentThread() != app_inst.thread():
+                QTimer.singleShot(0, lambda: self.on_state_updated(state_action))
+                return
+        except Exception:
+            pass
+
         if state_action == "minimize":
             self.showMinimized()
         elif state_action == "restore":
