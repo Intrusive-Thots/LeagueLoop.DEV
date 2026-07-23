@@ -1,7 +1,7 @@
 {
     "auto_accept": true,
     "auto_requeue": false,
-    "auto_pick": true,
+    "auto_pick": false,
     "auto_pick_backup": "",
     "auto_ban": "",
     "custom_status": "\ud83c\udfae LeagueLoop \u2699\ufe0f https://github.com/Intrusive-Thots/LeagueLoop-Installer",
@@ -46,15 +46,15 @@
     "poro_snacks": 0,
     "stealth_mode": false,
     "hotkey_launch_client": "ctrl+shift+l",
-    "hotkey_toggle_automation": "ctrl+shift+a",
+    "hotkey_toggle_automation": "ctrl+shift+f",
     "hotkey_find_match": "ctrl+shift+f",
     "hotkey_compact_mode": "ctrl+shift+m",
     "priority_picker": {
         "enabled": true,
         "list": [
+            "Nunu & Willump",
             "Nautilus",
             "Xerath",
-            "Nunu & Willump",
             "Master Yi",
             "Veigar",
             "Lux",
@@ -247,5 +247,6 @@
             "Zyra"
         ]
     },
-    "auto_launch_client": true
+    "auto_launch_client": true,
+    "docked_mode": true
 }

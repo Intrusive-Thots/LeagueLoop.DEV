@@ -271,12 +271,16 @@ class AccountsPage(QWidget):
         ToastManager.get_instance().show(f"Logging in as {username}...", icon="🔑", theme="info")
         
         def task():
-            if hasattr(self.acct_mgr, "switch_account"):
-                success = self.acct_mgr.switch_account(idx, lcu=self.league_service.lcu if hasattr(self.league_service, "lcu") else None)
-                if success:
-                    ToastManager.get_instance().show(f"Logged in as {username}", icon="✅", theme="success")
-                else:
-                    ToastManager.get_instance().show("Account switch failed", icon="⚠️", theme="error")
+            if hasattr(self.acct_mgr, "login_account"):
+                self.acct_mgr.login_account(
+                    idx,
+                    log_func=lambda msg: Logger.info("Accounts", msg),
+                    completion_func=lambda ok: ToastManager.get_instance().show(
+                        f"Logged in as {username}" if ok else "Account switch failed",
+                        icon="✅" if ok else "⚠️",
+                        theme="success" if ok else "error"
+                    )
+                )
             else:
                 ToastManager.get_instance().show(f"Account: {username}", icon="ℹ️", theme="info")
                 

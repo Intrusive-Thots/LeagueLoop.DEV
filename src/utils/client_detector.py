@@ -89,14 +89,14 @@ def resolve_installation_paths() -> Tuple[Optional[str], Optional[str]]:
     drives = ["C:", "D:", "E:", "F:", "G:"]
     if not _league_install_path:
         for d in drives:
-            candidate = os.path.join(d, "\\Riot Games", "League of Legends")
+            candidate = os.path.join(d + "\\", "Riot Games", "League of Legends")
             if os.path.exists(os.path.join(candidate, "LeagueClient.exe")):
                 _league_install_path = candidate
                 break
 
     if not _riot_install_path:
         for d in drives:
-            candidate = os.path.join(d, "\\Riot Games", "Riot Client")
+            candidate = os.path.join(d + "\\", "Riot Games", "Riot Client")
             if os.path.exists(os.path.join(candidate, "RiotClientServices.exe")):
                 _riot_install_path = candidate
                 break
