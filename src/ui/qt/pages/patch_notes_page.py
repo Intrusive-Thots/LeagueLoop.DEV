@@ -59,7 +59,7 @@ class PatchNotesPage(QWidget):
         # ── 3. LEAGUELOOP ENGINE RELEASE NOTES ──
         self.engine_card = make_card(title="LEAGUELOOP ENGINE RELEASE NOTES")
 
-        self.lbl_v1 = QLabel("✨ v2.4.0 — PySide6 Frameless Architecture & Real-Time In-Game Objective HUD.", self)
+        self.lbl_v1 = QLabel("✨ v2.4.0 — PySide6 Frameless Architecture & LCU Target Ban Prediction Engine.", self)
         self.lbl_v1.setStyleSheet("color: #F8F6F0; font-size: 11px; font-weight: bold;")
         self.engine_card.add_widget(self.lbl_v1)
 
