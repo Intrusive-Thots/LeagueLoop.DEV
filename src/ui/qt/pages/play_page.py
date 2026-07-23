@@ -119,19 +119,7 @@ class PlayPage(QWidget):
         
         self.scroll.add_widget(self.header_card)
         
-        # ── 1.5. LIVE IN-GAME METRICS CARD ──
-        self.live_card = make_card(title="LIVE IN-GAME ANALYTICS")
-        
-        self.lbl_live_status = QLabel("Standby — Live Client Data API (port 2999) activates during match execution.", self)
-        self.lbl_live_status.setStyleSheet("color: #A0A5B5; font-size: 11px; font-style: italic;")
-        self.live_card.add_widget(self.lbl_live_status)
 
-        self.lbl_live_score = QLabel("ORDER 0 - 0 CHAOS  |  Est. Gold Diff: 0", self)
-        self.lbl_live_score.setStyleSheet("color: #F0E6D2; font-size: 12px; font-weight: bold;")
-        self.live_card.add_widget(self.lbl_live_score)
-
-        self.scroll.add_widget(self.live_card)
-        
         # ── 2. MATCHMAKING ACTIONS CARD ──
         self.actions_card = make_card(title="QUEUE CONTROLS")
         
