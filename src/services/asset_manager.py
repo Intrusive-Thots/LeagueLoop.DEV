@@ -194,9 +194,11 @@ class ConfigManager:
         if save:
             self.save()
 
+    _save_lock = threading.Lock()
+
     def save(self):
         """Save configuration securely to AppData config.json and SQLite database."""
-        with self._lock:
+        with ConfigManager._save_lock:
             try:
                 target_dir = os.path.dirname(USER_CONFIG_FILE)
                 if target_dir:
@@ -209,7 +211,10 @@ class ConfigManager:
                         os.fsync(f.fileno())
                     except Exception:
                         pass
-                os.replace(tmp_path, USER_CONFIG_FILE)
+                try:
+                    os.replace(tmp_path, USER_CONFIG_FILE)
+                except FileNotFoundError:
+                    pass
             except Exception as e:
                 Logger.error("asset_manager.py", f"Failed saving config: {e}")
 
