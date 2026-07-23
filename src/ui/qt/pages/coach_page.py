@@ -275,6 +275,27 @@ class CoachPage(QWidget):
 
         self.advisor_card.add_widget(self.comp_widget)
 
+        # Target Bans Container
+        self.bans_widget = QWidget(self)
+        self.bans_layout = QVBoxLayout(self.bans_widget)
+        self.bans_layout.setContentsMargins(0, 6, 0, 6)
+        self.bans_layout.setSpacing(6)
+        
+        self.lbl_bans_title = QLabel("TARGET BAN PREDICTIONS", self.bans_widget)
+        self.lbl_bans_title.setStyleSheet("color: #E74C3C; font-size: 10px; font-weight: bold;")
+        self.bans_layout.addWidget(self.lbl_bans_title)
+        
+        self.lbl_bans_status = QLabel("Waiting for Champ Select...", self.bans_widget)
+        self.lbl_bans_status.setStyleSheet("color: #A0A5B5; font-size: 11px; font-style: italic;")
+        self.bans_layout.addWidget(self.lbl_bans_status)
+        
+        self.bans_list_layout = QHBoxLayout()
+        self.bans_list_layout.setContentsMargins(0, 0, 0, 0)
+        self.bans_list_layout.setSpacing(8)
+        self.bans_layout.addLayout(self.bans_list_layout)
+        
+        self.advisor_card.add_widget(self.bans_widget)
+
         # Recommendations List Container
         self.recs_widget = QWidget(self)
         self.recs_layout = QVBoxLayout(self.recs_widget)
@@ -286,6 +307,7 @@ class CoachPage(QWidget):
 
         # Event listeners
         EventBus.on("draft_state_changed", self._on_draft_state_changed)
+        EventBus.on("ban_predictions", self._on_ban_predictions)
         self._refresh_advisor()
 
     def _on_tab_changed(self, index):
@@ -296,6 +318,63 @@ class CoachPage(QWidget):
 
     def _on_draft_state_changed(self, session_data):
         self._refresh_advisor()
+
+    @Slot(dict)
+    def _on_ban_predictions(self, data):
+        # Clear existing
+        while self.bans_list_layout.count() > 0:
+            item = self.bans_list_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+                
+        if data.get("hidden"):
+            self.lbl_bans_status.setText("Enemy identities hidden in this queue. Unable to generate target bans.")
+            self.lbl_bans_status.show()
+            return
+            
+        preds = data.get("predictions", [])
+        if not preds:
+            self.lbl_bans_status.setText("No historical match data found for enemy team.")
+            self.lbl_bans_status.show()
+            return
+            
+        self.lbl_bans_status.hide()
+        
+        from services.champion_service import get_champion_service
+        champ_service = get_champion_service()
+        
+        for p in preds:
+            cid = p.get("championId")
+            count = p.get("count")
+            name = champ_service.get_champion_name(cid) if cid else "Unknown"
+            
+            card = QFrame(self.bans_widget)
+            card.setStyleSheet("background-color: #1A0D10; border: 1px solid #E74C3C; border-radius: 4px; padding: 4px;")
+            cl = QHBoxLayout(card)
+            cl.setContentsMargins(4, 4, 4, 4)
+            cl.setSpacing(4)
+            
+            # Icon
+            try:
+                img = champ_service.get_champion_icon(cid)
+                pix = pil_to_pixmap(img).scaled(24, 24, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                icon_lbl = QLabel()
+                icon_lbl.setPixmap(pix)
+            except:
+                icon_lbl = QLabel("?")
+                icon_lbl.setFixedSize(24, 24)
+                icon_lbl.setAlignment(Qt.AlignCenter)
+                icon_lbl.setStyleSheet("background-color: #080E18; color: #E74C3C;")
+                
+            cl.addWidget(icon_lbl)
+            
+            lbl = QLabel(f"{name} ({count}x)")
+            lbl.setStyleSheet("color: #F0E6D2; font-size: 10px; font-weight: bold; border: none; background: transparent;")
+            cl.addWidget(lbl)
+            
+            self.bans_list_layout.addWidget(card)
+            
+        self.bans_list_layout.addStretch()
 
     def _refresh_advisor(self):
         session = self.draft_service.get_session()

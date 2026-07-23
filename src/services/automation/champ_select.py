@@ -120,6 +120,7 @@ def handle_champ_select(engine, phase, session):
         engine.setup_done = False
         engine._skin_equipped = False
         engine._runes_equipped = False
+        engine._bans_predicted = False
         engine._chat_warden_warned = False
         engine._bravery_pick_id = 0
         engine._last_champ_id = 0
@@ -166,3 +167,65 @@ def handle_champ_select(engine, phase, session):
 
     if not engine._runes_equipped:
         engine._auto_equip_runes(session)
+
+    if not getattr(engine, "_bans_predicted", False):
+        predict_enemy_bans(engine, session)
+
+def predict_enemy_bans(engine, session):
+    """Fetches enemy PUUIDs (if visible) and aggregates top played champions to suggest bans."""
+    engine._bans_predicted = True
+    their_team = session.get("theirTeam", [])
+    
+    if not their_team:
+        return
+
+    enemy_puuids = []
+    for p in their_team:
+        puuid = p.get("puuid", "")
+        # LCU returns empty string or "0" if identities are hidden (e.g. Solo Queue)
+        if puuid and puuid != "0" and puuid != "":
+            enemy_puuids.append(puuid)
+
+    if not enemy_puuids:
+        # EventBus emission for hidden identities
+        EventBus.emit("ban_predictions", {"hidden": True, "predictions": []})
+        return
+
+    # Identities are visible (e.g. Clash, Custom, etc.)
+    champ_counts = {}
+    
+    for puuid in enemy_puuids:
+        # Fetch last 20 matches for the enemy
+        req = engine.lcu.request("GET", f"/lol-match-history/v1/products/lol/{puuid}/matches", silent=True)
+        if not req or req.status_code != 200:
+            continue
+            
+        data = req.json()
+        games = data.get("games", {}).get("games", [])
+        
+        for g in games:
+            # Check what champion this specific player played
+            # match history exposes participants. We need to find the participant with matching PUUID.
+            # actually, /lol-match-history/v1/products/lol/{puuid}/matches returns a simplified structure 
+            # where the 'participants' list usually only contains the target player at index 0 
+            # for their own perspective.
+            participants = g.get("participants", [])
+            if participants:
+                champ_id = participants[0].get("championId", 0)
+                if champ_id > 0:
+                    champ_counts[champ_id] = champ_counts.get(champ_id, 0) + 1
+
+    if not champ_counts:
+        EventBus.emit("ban_predictions", {"hidden": False, "predictions": []})
+        return
+        
+    # Sort by frequency descending
+    sorted_champs = sorted(champ_counts.items(), key=lambda x: x[1], reverse=True)
+    
+    # Grab the top 5
+    top_5 = sorted_champs[:5]
+    
+    # Map back to champion IDs and frequencies
+    predictions = [{"championId": cid, "count": count} for cid, count in top_5]
+    
+    EventBus.emit("ban_predictions", {"hidden": False, "predictions": predictions})
