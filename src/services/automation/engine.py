@@ -14,7 +14,97 @@ from typing import Optional, Callable, List
 
 from ..api_handler import LCUClient  # type: ignore
 from ..asset_manager import AssetManager, ConfigManager  # type: ignore
-from ..discord_rpc import DiscordPresenceManager  # type: ignore
+
+from utils.logger import Logger  # type: ignore
+from core.events import EventBus
+from core.constants import (
+    QUEUE_ARENA, QUEUE_ARENA_3V6, QUEUE_DRAFT, QUEUE_RANKED_SOLO, QUEUE_RANKED_FLEX,
+    TICK_SLEEP_DEFAULT, TICK_SLEEP_CHAMPSELECT,
+    TICK_SLEEP_READYCHECK, TICK_SLEEP_LOBBY, TICK_SLEEP_INGAME,
+    PRIORITY_SWAP_COOLDOWN,
+)
+
+class AutomationEngine:
+    """Core engine for executing automation tasks like auto-accept, priority sniper, draft assistant, and arena synergy."""
+    def __init__(
+        self,
+        lcu: LCUClient,
+        assets: AssetManager,
+        config: ConfigManager,
+        log_func=None,
+        stop_func=None,
+        **kwargs
+    ):
+        """Initializes the AutomationEngine with LCU client, asset manager, and config manager."""
+        self.lcu = lcu
+        self.assets = assets
+        self.config = config
+        self.log: Optional[Callable] = log_func
+        self.stop_func: Optional[Callable] = stop_func
+        # Legacy callback aliases — now routed through EventBus
+        self.stats_func: Optional[Callable] = kwargs.get("stats_func")
+        self.window_func: Optional[Callable] = kwargs.get("window_func")
+        self.toast_func: Optional[Callable] = kwargs.get("toast_func")
+        self.queue_func: Optional[Callable] = kwargs.get("queue_func")
+        self.running: bool = False
+        self.paused: bool = False
+        self.thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()
+        self._wake_event = threading.Event()
+        self.executor = ThreadPoolExecutor(max_workers=5)
+        self._last_error_times: dict = {}
+        self.setup_done: bool = False
+        self.last_phase: str = "None"
+        self.current_queue_id: Optional[int] = None
+        self._blacklist = [name.strip().lower() for name in self.config.get("dodge_blacklist", "").split(",") if name.strip()]
+        self._toxic_keywords = ["kys", "int", "troll", "run it down", "nword", "f slur"]
+        self._chat_warden_warned = False
+
+        self.ready_check_start: Optional[float] = None
+        self.ready_check_delay: Optional[float] = None
+        self.ready_check_accepted: bool = False
+        self._accept_timer = None  # Item #46: Init in __init__ instead of getattr guard
+        self._last_countdown_log: Optional[float] = None
+        self._last_mass_invite: float = 0.0  # Item #170: Init rate-limit timer
+
+        self._last_disconnect_log: float = 0.0
+        self._requeue_handled: bool = False
+        self._skin_equipped: bool = False
+        self._last_priority_swap: float = 0.0
+        self._last_search_state_time: float = 0.0
+        self._honor_handled: bool = False
+        self._runes_equipped: bool = False
+        self._last_champ_id: int = 0
+        self._cached_search_state: Optional[dict] = None
+        self._party_puuids = set()
+        self._honored_puuids = set()
+        # Item #40: Consecutive error killswitch
+        self._consecutive_errors: int = 0
+        self._first_error_time: float = 0.0
+
+        # Synergy / Draft / Friend action throttles (Items #163-165)
+        self._last_synergy_patch: float = 0.0
+        self._last_draft_action_time: float = 0.0
+        self._last_friend_check: float = 0.0
+
+        # Game process tracking — League of Legends.exe is a separate PID
+"""
+Automation Engine module.
+"""
+import json
+import random
+import subprocess
+import threading
+import time
+import traceback
+from concurrent.futures import ThreadPoolExecutor
+from typing import Optional, Callable, List
+
+
+
+from ..api_handler import LCUClient  # type: ignore
+from ..asset_manager import AssetManager, ConfigManager  # type: ignore
+
 from utils.logger import Logger  # type: ignore
 from core.events import EventBus
 from core.constants import (
@@ -94,7 +184,6 @@ class AutomationEngine:
         self._last_game_scan: float = 0.0
         
         # External Integrations
-        self.discord_rpc = DiscordPresenceManager(self.config)
 
     def start(self, start_paused: bool = False) -> None:
         """Starts the automation loop in a background thread."""
@@ -115,8 +204,6 @@ class AutomationEngine:
         except Exception as e:
             Logger.debug("Auto", f"WebSocket init error: {e}")
 
-        self.discord_rpc.connect()
-
         self.thread = threading.Thread(target=self._loop, daemon=True)
         self.thread.start()  # type: ignore
 
@@ -133,7 +220,6 @@ class AutomationEngine:
             self.lcu.stop_websocket()
         except Exception as e:
             Logger.debug("Auto", f"WebSocket stop error (safe to ignore): {e}")
-        self.discord_rpc.disconnect()
 
     def pause(self) -> None:
         """Pauses automation actions without stopping the loop."""
@@ -281,7 +367,6 @@ class AutomationEngine:
 
         self.last_phase = phase
         self._is_first_tick = False
-        self._update_discord_rpc(phase)
 
         lobby_data = None
         if f_lobby:
@@ -416,49 +501,6 @@ class AutomationEngine:
                 self._log("Status update failed.")
         except Exception as e:
             Logger.debug("Auto", f"Set status error: {e}")
-
-    def _update_discord_rpc(self, phase: str):
-        """Background method to calculate and push Discord Rich Presence States based on LCU Queue State."""
-        if not self.config.get("discord_rpc_enabled", True):
-            self.discord_rpc.disconnect()
-            return
-
-        # Item #171: Guard against reconnect spam — only connect if not already connected
-        if not self.discord_rpc.is_connected:
-            self.discord_rpc.connect()
-
-        state_text = self.config.get("custom_status", "LeagueLoop API").strip()
-        custom_status = f"Phase: {phase}" if not state_text else state_text
-
-        if phase == "None":
-            self.discord_rpc.update_presence("Idle", custom_status)
-        elif phase == "Lobby":
-            lobby = self.lcu.request("GET", "/lol-lobby/v2/lobby", silent=True)
-            details = "In Lobby"
-            party_size = None
-            if lobby and hasattr(lobby, "json"):
-                resp = lobby.json()
-                members = resp.get("members", [])
-                max_party = resp.get("gameConfig", {}).get("maxLobbySize", 5)
-                # Ensure it defaults gracefully
-                if type(max_party) is not int: max_party = 5
-                
-                party_size = [len(members), max_party]
-                queue_name = resp.get("gameConfig", {}).get("showPositionSelector", False)
-                details = f"Lobby - {'Draft/Ranked' if queue_name else 'Blind/ARAM'}"
-            self.discord_rpc.update_presence(details, custom_status, party_size=party_size)
-        elif phase == "Matchmaking":
-            self.discord_rpc.update_presence("In Queue", custom_status, start_time=int(time.time()))
-        elif phase == "ReadyCheck":
-            self.discord_rpc.update_presence("Match Found!", custom_status)
-        elif phase == "ChampSelect":
-            self.discord_rpc.update_presence("In Champ Select", custom_status)
-        elif phase == "InProgress":
-            self.discord_rpc.update_presence("In Game", custom_status, start_time=int(time.time()))
-        elif phase == "PreEndOfGame":
-            self.discord_rpc.update_presence("Game Ended", custom_status)
-        elif phase == "EndOfGame":
-            self.discord_rpc.update_presence("Post-Game Lobby", custom_status)
 
     def _get_local_player(self, session):
         from .champ_select import get_local_player

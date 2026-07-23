@@ -456,14 +456,7 @@ class SettingsPage(ScrollableList):
         )
         card_auto.add_widget(row_tray)
         
-        row_discord = SettingsToggleRow(
-            self,
-            label_text="Discord Rich Presence",
-            initial_state=self.config.get("discord_rpc_enabled", True),
-            on_toggle=lambda v: self._save_setting("discord_rpc_enabled", v)
-        )
-        card_auto.add_widget(row_discord)
-        
+
         self.add_widget(card_auto)
 
         # ─── 4. GLOBAL HOTKEYS ───

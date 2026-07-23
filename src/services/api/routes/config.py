@@ -21,8 +21,9 @@ def handle_get_config(handler):
             "skip_stats_enabled": cfg.get("skip_stats_enabled", False),
             "priority_picker_enabled": cfg.get('priority_picker', {}).get('enabled', False),
             "auto_join_enabled": cfg.get('auto_join_enabled', False),
+            "auto_dodge_enabled": cfg.get('auto_dodge_enabled', False),
+            "chat_warden_enabled": cfg.get('chat_warden_enabled', True),
             "auto_runes_enabled": cfg.get('auto_runes_enabled', False),
-            "discord_rpc_enabled": cfg.get('discord_rpc_enabled', True),
             "accept_delay": cfg.get('accept_delay', 0),
             "honor_strategy": cfg.get('honor_strategy', 'random'),
             "auto_hover": cfg.get('auto_hover', False),
@@ -47,7 +48,7 @@ def handle_post_config(handler):
     writable_keys = {
         'auto_accept', 'auto_lock_in', 'auto_random_skin', 'auto_honor_enabled',
         'auto_join_enabled', 'skip_stats_enabled', 'auto_runes_enabled',
-        'discord_rpc_enabled', 'accept_delay', 'honor_strategy',
+        'chat_warden_enabled', 'accept_delay', 'honor_strategy',
         'auto_hover', 'arena_auto_lock', 'arena_synergy_enabled',
         'aram_mode', 'honor_party_first'
     }
