@@ -1,17 +1,5 @@
-import sys
 import unittest
-from unittest.mock import patch, MagicMock
-
-# Mock dependencies before importing the module under test
-patch.dict(sys.modules, {
-    'customtkinter': MagicMock(),
-    'tkinter': MagicMock(),
-    'PIL': MagicMock(),
-    'PIL.Image': MagicMock(),
-    'PIL.ImageTk': MagicMock()
-}).start()
-
-from ui.components.color_utils import hex_to_rgb
+from utils.color_utils import hex_to_rgb
 
 class TestColorUtils(unittest.TestCase):
     def test_hex_to_rgb_6_char(self):

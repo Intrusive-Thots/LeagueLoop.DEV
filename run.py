@@ -46,7 +46,7 @@ if __name__ == "__main__":
     from core.main import LeagueLoopApp, _kill_other_instances
     _kill_other_instances()
     
-    # Initialize CustomTkinter app
+    # Initialize LeagueLoop core application controller
     app = LeagueLoopApp()
     
     # Initialize PySide6 QApplication and window shell

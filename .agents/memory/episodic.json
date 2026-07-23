@@ -1827,5 +1827,42 @@
       "todos": 0
     },
     "timestamp": "2026-07-18T13:55:08.911030+00:00"
+  },
+  {
+    "timestamp": "2026-07-22T02:55:30-04:00",
+    "task": "Implement In-Game Objective Respawn Timers HUD",
+    "duration_seconds": 120,
+    "actions": [
+      "Added compute_objective_timers to LiveMatchService (src/services/live_match_service.py).",
+      "Parsed Dragon (5m/6m), Baron (20m spawn/6m respawn), and Herald (14m spawn/6m respawn) event data.",
+      "Integrated live objective HUD labels into play_page.py with slot binding.",
+      "Added unit tests to tests/test_live_match_service.py and verified 157 passing tests."
+    ],
+    "outcome": "Success. 157/157 tests passing in 2.63s."
+  },
+  {
+    "timestamp": "2026-07-22T03:07:00-04:00",
+    "task": "Task Audit & Prioritization Matrix Execution",
+    "duration_seconds": 600,
+    "actions": [
+      "Audited task.txt, task.md, docs/roadmap.md, and codebase TODOs.",
+      "Applied Phase 6 priority scoring formula to identify and rank top unfinished tasks.",
+      "Generated prioritized_task_plan.md artifact with 6 ranked engineering initiatives.",
+      "Ran pytest suite with PYTHONPATH=src, verifying 161/161 test cases passing."
+    ],
+    "outcome": "Success. 161/161 tests passing. Task prioritization artifact generated."
+  },
+  {
+    "timestamp": "2026-07-22T03:11:30-04:00",
+    "task": "Execute Priority Task: PySide6 Views & CustomTkinter Deprecation",
+    "duration_seconds": 180,
+    "actions": [
+      "Created MatchPredictorPage (src/ui/qt/pages/match_predictor_page.py) for team composition win rates and power spike predictions.",
+      "Created PatchNotesPage (src/ui/qt/pages/patch_notes_page.py) for game balance updates and engine release notes.",
+      "Updated _PAGE_MAP in src/ui/qt/pages/__init__.py and wired new pages into app_window.py SidebarNavigation.",
+      "Marked Milestone 3 complete in task.md.",
+      "Created unit tests in tests/test_pyside6_pages.py and verified 162/162 test suite passing in 11.13s."
+    ],
+    "outcome": "Success. 162/162 tests passing. PySide6 UI page suite 100% complete."
   }
 ]
