@@ -41,7 +41,7 @@ class TestAccountManager(unittest.TestCase):
         self.assertFalse(mgr.get_accounts()[1]["is_default"])
 
     @patch("services.account_manager.win32crypt")
-    @patch("services.account_manager.scan_clients")
+    @patch("services.riot_client_api.scan_clients")
     @patch.object(AccountManager, "_load")
     @patch.object(AccountManager, "_save")
     def test_auto_populate_logged_in_account(self, mock_save, mock_load, mock_scan, mock_win32crypt):

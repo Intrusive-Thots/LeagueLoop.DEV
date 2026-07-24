@@ -10,6 +10,7 @@ Walks the project tree once per cycle, caching:
 """
 
 import os
+import re
 import json
 import time
 from pathlib import Path
@@ -71,15 +72,15 @@ def scan_repository(root: str) -> Dict[str, Any]:
 
             # Check for TODO / FIXME / HACK markers
             for i, line in enumerate(lines, 1):
-                upper = line.upper()
-                for marker in ("TODO", "FIXME", "HACK", "XXX"):
-                    if marker in upper:
-                        todos.append({
-                            "file": rel,
-                            "line": i,
-                            "marker": marker,
-                            "text": line.strip()[:120],
-                        })
+                m = re.search(r"\b(TODO|FIXME|HACK|XXX)\b", line, re.IGNORECASE)
+                if m:
+                    marker = m.group(1).upper()
+                    todos.append({
+                        "file": rel,
+                        "line": i,
+                        "marker": marker,
+                        "text": line.strip()[:120],
+                    })
 
             # Check for missing module docstring
             stripped = [l.strip() for l in lines if l.strip() and not l.strip().startswith("#")]
