@@ -1,3 +1,9 @@
+"""
+Chat Warden Automation Handler for LeagueLoop.
+
+Monitors champion select chat for toxicity and toxic keywords.
+"""
+
 from utils.logger import Logger
 from core.events import EventBus
 

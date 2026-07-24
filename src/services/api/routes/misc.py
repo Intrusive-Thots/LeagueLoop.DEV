@@ -1,3 +1,9 @@
+"""
+Miscellaneous API Routes Module for LeagueLoop local HTTP server.
+
+Handles utility endpoints including ARAM priority list retrieval and management.
+"""
+
 import json
 from services.api.registry import register_get, register_post
 from core.events import EventBus

@@ -1,3 +1,9 @@
+"""
+Local API Server Module for LeagueLoop.
+
+Runs an HTTP server locally to allow web apps, companion scripts, and external tools to interact with LeagueLoop.
+"""
+
 import json
 import socket
 import subprocess

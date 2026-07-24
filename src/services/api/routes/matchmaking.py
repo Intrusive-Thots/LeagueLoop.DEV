@@ -1,3 +1,9 @@
+"""
+Matchmaking API Routes Module for LeagueLoop local HTTP server.
+
+Handles matchmaking actions such as queueing, ready-check acceptance, and lobby management.
+"""
+
 import json
 from services.api.registry import register_post
 from core.events import EventBus

@@ -75,7 +75,7 @@ def apply_acrylic_blur(window, tint_color: int = 0x30000000, fallback_blur: bool
         return False
 
     try:
-        hwnd = _get_hwnd(tk_window)
+        hwnd = _get_hwnd(window)
 
         # Try acrylic first (Win10 1803+)
         accent = _AccentPolicy()

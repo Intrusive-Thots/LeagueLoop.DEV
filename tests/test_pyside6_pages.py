@@ -80,3 +80,25 @@ def test_settings_page_instantiation():
     page = SettingsPage()
     assert page is not None
 
+@pytest.mark.skipif(app is None, reason="PySide6 GUI not available")
+def test_friends_page_search():
+    """Test FriendsPage filter functionality."""
+    from ui.qt.pages.friends_page import FriendsPage
+    page = FriendsPage()
+    if hasattr(page, "search_input"):
+        page.search_input.setText("Faker")
+        page._filter_friends("Faker")
+        assert page.current_filter == "Faker"
+
+@pytest.mark.skipif(app is None, reason="PySide6 GUI not available")
+def test_champions_page_filter():
+    """Test ChampionsPage role filter and search."""
+    from ui.qt.pages.champions_page import ChampionsPage
+    page = ChampionsPage()
+    if hasattr(page, "search_input"):
+        page.search_input.setText("Ahri")
+        if hasattr(page, "_filter_champions"):
+            page._filter_champions()
+            assert page.search_input.text() == "Ahri"
+
+

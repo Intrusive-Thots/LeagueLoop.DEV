@@ -57,6 +57,30 @@ class LoginAutomation:
             try:
                 if log_func:
                     log_func(f"Switching to {label}...")
+
+                # 1. Ensure Riot Client process is launched & active
+                if not self.riot_client.is_riot_client_running():
+                    if log_func:
+                        log_func("Launching Riot Client...")
+                    self.launch_riot_client()
+                    time.sleep(2.0)
+
+                # 2. Try direct REST API sign-in if connected
+                if self.wait_for_riot_client_api(timeout=8):
+                    res = self.riot_client.sign_in(username, password, persist=True)
+                    if isinstance(res, dict):
+                        auth_type = res.get("type", "")
+                        error = res.get("error", "")
+                        if auth_type in ["success", "authenticated"] and not error:
+                            if log_func:
+                                log_func(f"Logged in as {label} via REST API!")
+                            if on_success:
+                                on_success(idx, label)
+                            if completion_func:
+                                completion_func(True)
+                            return
+
+                # 3. Fallback to keyboard macro form entry if REST API requires GUI interaction
                 self._keyboard_login(username, password, label, log_func,
                                      completion_func, idx, on_success)
             except Exception as e:
@@ -404,16 +428,9 @@ class LoginAutomation:
         except Exception:
             pass
 
+        from utils.client_detector import safe_launch_exe
         for c in candidates:
             if os.path.exists(c):
                 args = "--launch-product=league_of_legends --launch-patchline=live"
-                try:
-                    ctypes.windll.shell32.ShellExecuteW(
-                        None, "open", c, args, None, 1
-                    )
-                except Exception:
-                    subprocess.Popen(
-                        [c] + args.split(),
-                        creationflags=subprocess.CREATE_NO_WINDOW,
-                    )
-                return
+                if safe_launch_exe(c, args):
+                    return

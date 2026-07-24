@@ -17,3 +17,12 @@
 ### 4. Icon Asset Pre-caching Null Reference
 - **Issue**: Missing champion icon files caused rendering exceptions on cold boot.
 - **Fix**: Added fallback default icon rendering in `asset_manager.py` and auto-download from DataDragon CDN on asset cache miss.
+
+### 5. Acrylic Blur NameError Bug
+- **Issue**: `apply_acrylic_blur` referenced `tk_window` instead of the `window` function parameter, which raised a `NameError` on execution.
+- **Fix**: Updated `_get_hwnd(window)` call to match function parameter name and added platform check for Win32 `creationflags`.
+
+### 6. Qt Theme Compiler Function Alias Missing
+- **Issue**: `focus_states.py` attempted to import `get_color` from `ui.qt.theme`, but only `get_theme_color` was defined.
+- **Fix**: Added `get_color = get_theme_color` alias to `src/ui/qt/theme.py`.
+

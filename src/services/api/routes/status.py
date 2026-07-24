@@ -1,3 +1,9 @@
+"""
+Status API Routes Module for LeagueLoop local HTTP server.
+
+Handles server and client health and status endpoint responses.
+"""
+
 import time
 from services.api.registry import register_get
 from services.settings_service import get_settings_service

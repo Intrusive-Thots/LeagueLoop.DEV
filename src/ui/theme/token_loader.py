@@ -1,3 +1,9 @@
+"""
+UI Design Tokens Loader Module for LeagueLoop.
+
+Loads design tokens (colors, typography, radii, spacing) from design_tokens.json.
+"""
+
 import json
 import os
 import sys

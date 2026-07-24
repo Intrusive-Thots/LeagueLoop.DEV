@@ -199,12 +199,22 @@ class AccountManager:
                     return i
         return -1
 
-    def set_default_account(self, idx: int):
+    def get_default_account(self) -> Optional[Dict[str, Any]]:
+        """Return the default account dictionary, or None if none set."""
+        idx = self.get_default_account_index()
+        if idx >= 0:
+            return self.get_account(idx)
+        return None
+
+    def set_default_account(self, idx: int) -> bool:
         """Set the account at the given index as default and clear default on others."""
         with self._lock:
+            if not (0 <= idx < len(self._accounts)):
+                return False
             for i, acct in enumerate(self._accounts):
                 acct["is_default"] = (i == idx)
             self._save()
+            return True
 
     def add_account(self, label: str, username: str, password: str, tagline: str = "", region: str = "NA1") -> int:
         """Add a new account. Returns the index of the new account.
@@ -462,6 +472,21 @@ class AccountManager:
             Logger.debug("AccountManager", f"Wallet update failed: {e}")
 
     # ─────────── Login / Logout Delegation ───────────
+
+    def switch_account(self, idx: int, lcu=None, log_func=None, completion_func=None) -> bool:
+        """Switch account by signing out current session and logging in target account."""
+        if not (0 <= idx < len(self._accounts)):
+            if log_func:
+                log_func("Invalid account index.")
+            if completion_func:
+                completion_func(False)
+            return False
+
+        if lcu:
+            self.lcu = lcu
+
+        self.login_account(idx, log_func=log_func, completion_func=completion_func)
+        return True
 
     def login_account(self, idx: int, log_func=None, completion_func=None):
         """Log into a specific account via LoginAutomation."""

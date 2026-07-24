@@ -1,3 +1,10 @@
+"""
+Dodge and Requeue Automation Handler for LeagueLoop.
+
+Manages automatic re-queueing and client restart when a dodge or lobby reset is detected.
+"""
+
+import sys
 import time
 import subprocess
 from utils.logger import Logger
@@ -39,5 +46,12 @@ def handle_auto_dodge(engine, session):
             
             if name in engine._blacklist or full_name in engine._blacklist:
                 engine._log(f"BLACKLIST MATCH: {full_name}. Dodging immediately.")
-                subprocess.run(["taskkill", "/IM", "LeagueClient.exe", "/F"], creationflags=subprocess.CREATE_NO_WINDOW)
+                try:
+                    kwargs = {}
+                    if sys.platform == "win32":
+                        kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                    subprocess.run(["taskkill", "/IM", "LeagueClient.exe", "/F"], **kwargs)
+                except Exception as e:
+                    Logger.error("Automation", f"Failed to terminate LeagueClient process: {e}")
                 return
+

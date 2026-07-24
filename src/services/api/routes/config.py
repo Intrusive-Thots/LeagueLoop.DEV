@@ -1,3 +1,9 @@
+"""
+Configuration API Routes Module for LeagueLoop local HTTP server.
+
+Handles reading and updating persistent configuration settings over local HTTP requests.
+"""
+
 import json
 from services.api.registry import register_get, register_post
 from core.events import EventBus
