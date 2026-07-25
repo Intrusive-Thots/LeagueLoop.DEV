@@ -35,24 +35,54 @@ formatter = logging.Formatter(_log_format, datefmt=_date_format)
 _logger = logging.getLogger("LeagueLoop")
 _logger.setLevel(logging.DEBUG)
 
+class SafeStreamHandler(logging.StreamHandler):
+    """StreamHandler that swallows I/O errors on closed streams during process teardown."""
+    def emit(self, record):
+        try:
+            super().emit(record)
+        except Exception:
+            pass
+
+    def handleError(self, record):
+        try:
+            super().handleError(record)
+        except Exception:
+            pass
+
+
+class SafeRotatingFileHandler(RotatingFileHandler):
+    """RotatingFileHandler that safely handles write/close errors during teardown."""
+    def emit(self, record):
+        try:
+            super().emit(record)
+        except Exception:
+            pass
+
+    def handleError(self, record):
+        try:
+            super().handleError(record)
+        except Exception:
+            pass
+
+
 if not _logger.handlers:
     # File Handler - ALL Logs (5MB max size, keeps 3 backups)
     debug_log_path = os.path.join(_log_dir, 'debug.log')
-    file_handler = RotatingFileHandler(
+    file_handler = SafeRotatingFileHandler(
         debug_log_path, maxBytes=5*1024*1024, backupCount=3, encoding='utf-8'
     )
     file_handler.setFormatter(formatter)
     
     # Error File Handler - ERROR/CRITICAL Logs Only
     error_log_path = os.path.join(_log_dir, 'error.log')
-    error_handler = RotatingFileHandler(
+    error_handler = SafeRotatingFileHandler(
         error_log_path, maxBytes=2*1024*1024, backupCount=2, encoding='utf-8'
     )
     error_handler.setLevel(logging.ERROR)
     error_handler.setFormatter(formatter)
     
     # Console Handler
-    console_handler = logging.StreamHandler()
+    console_handler = SafeStreamHandler()
     console_handler.setFormatter(logging.Formatter('%(message)s'))
     
     _logger.addHandler(file_handler)

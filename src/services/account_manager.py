@@ -502,6 +502,10 @@ class AccountManager:
                 self._save()
 
     # ─────────── Backward-Compat Stubs ───────────
+    def get_all_accounts(self) -> List[Dict[str, Any]]:
+        """Alias for get_accounts()."""
+        return self.get_accounts()
+
 
 # Global singleton
 _instance = None

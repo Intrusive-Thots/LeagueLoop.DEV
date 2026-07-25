@@ -8,6 +8,12 @@
     "failure": "Missing page module import error during test execution",
     "pattern": "ImportError: No module named 'ui.qt.pages.coach_page' / 'friends_page'",
     "fix": "Check if page files were deleted or staged for deletion; restore missing page modules from git HEAD to restore test suite pass state."
+  },
+  {
+    "failure": "AttributeError: 'AccountManager' object has no attribute 'get_all_accounts'",
+    "pattern": "AttributeError: 'AccountManager' object has no attribute 'get_all_accounts'",
+    "fix": "Added get_all_accounts alias method in AccountManager pointing to get_accounts() for backward compatibility."
   }
 ]
+
 
