@@ -8,10 +8,10 @@ import string
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QFrame, QSizePolicy, QMenu, QGraphicsOpacityEffect,
-    QGridLayout, QScrollArea, QFileDialog, QApplication
+    QGridLayout, QScrollArea, QApplication
 )
 from PySide6.QtCore import Qt, QTimer, Property, QPropertyAnimation, QEasingCurve, Slot, QPoint, QMimeData
-from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath, QPixmap, QImage, QDrag, QCursor
+from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath, QPixmap, QImage, QDrag
 
 from ui.qt.widgets import ScrollableList, make_button
 from ui.qt.theme import get_theme_color, get_theme_radius, get_theme_spacing

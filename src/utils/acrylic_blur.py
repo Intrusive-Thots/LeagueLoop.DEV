@@ -10,7 +10,6 @@ Uses the undocumented SetWindowCompositionAttribute API with ACCENT_ENABLE_ACRYL
 import ctypes
 import ctypes.wintypes
 import platform
-import struct
 from utils.logger import Logger
 
 

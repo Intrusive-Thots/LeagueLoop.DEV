@@ -4,13 +4,12 @@ Implements custom Riot-inspired window chrome, top-tab navigation (Version One s
 """
 import sys
 import threading
-import urllib.request
-from PySide6.QtCore import Qt, QSize, Signal, Slot, Property, QPropertyAnimation, QEasingCurve, QTimer, QMetaObject, Q_ARG, QObject
+from PySide6.QtCore import Qt, Signal, Slot, Property, QPropertyAnimation, QEasingCurve, QTimer, QMetaObject, Q_ARG, QObject
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QStackedWidget, QFrame, QSizePolicy, QDialog
+    QLabel, QPushButton, QStackedWidget, QFrame, QSizePolicy
 )
-from PySide6.QtGui import QIcon, QMouseEvent, QPixmap
+from PySide6.QtGui import QIcon, QPixmap
 
 from services.window_service import get_window_service
 from services.league_service import get_league_service

@@ -5,7 +5,7 @@ Manages multiple Riot accounts, credentials, and one-click account switching.
 import threading
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QFrame, QSizePolicy, QMessageBox
+    QPushButton, QFrame, QSizePolicy
 )
 from PySide6.QtCore import Qt, QMetaObject, Slot, Q_ARG
 

@@ -27,20 +27,5 @@ PRIORITY_SWAP_COOLDOWN = 1.0       # seconds between priority sniper swaps
 # --- UI Dimensions ---
 ICON_SIZE = 32
 
-# --- LCU Request ---
-LCU_REQUEST_TIMEOUT = 2            # seconds
-
 # --- Asset Manager ---
-DDRAGON_DEFAULT_VERSION = "14.1.1"
 DOWNLOAD_WORKER_COUNT = 5
-PROCESS_SCAN_WARN_THRESHOLD = 0.5  # seconds; log warning if scan is slower
-
-# --- Icon Cache ---
-ICON_CACHE_MAX = 300
-
-# --- WebSocket ---
-WS_RECONNECT_DELAY = 3.0          # seconds between WS reconnect attempts
-
-# --- Rate Limiter ---
-RATE_LIMIT_CAPACITY = 20.0        # max burst tokens
-RATE_LIMIT_REFILL = 5.0           # tokens per second

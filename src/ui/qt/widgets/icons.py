@@ -4,7 +4,7 @@ Renders crisp, resolution-independent vector icons for PySide6 components using 
 Eliminates all text/emoji fallback icon characters across the application.
 """
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import Qt, QSize, QPointF, QRectF
+from PySide6.QtCore import Qt, QPointF, QRectF
 from PySide6.QtGui import QPainter, QPainterPath, QPen, QBrush, QColor, QIcon, QPixmap
 
 class VectorIconPainter:

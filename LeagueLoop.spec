@@ -1,17 +1,13 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
-import customtkinter
 import os
-
-ctk_path = os.path.dirname(customtkinter.__file__)
 
 a = Analysis(
     ['run.py'],
     pathex=['src'],
     binaries=[],
     datas=[
-        (ctk_path, 'customtkinter'),
         ('assets', 'assets'),
         ('config.json', '.')
     ],
@@ -43,13 +39,17 @@ a = Analysis(
         'PySide6.QtWebEngineCore', 'PySide6.QtWebEngineWidgets', 'PySide6.QtWebEngineQuick',
         'PySide6.QtQuick', 'PySide6.QtQml', 'PySide6.QtQuickWidgets', 'PySide6.QtQuickControls2',
         'PySide6.QtBluetooth', 'PySide6.QtSensors', 'PySide6.QtScxml', 'PySide6.QtSerialPort', 'PySide6.QtSerialBus',
+        'customtkinter',  # Exclude customtkinter from bundling (not used in final app)
+        'tkinter',        # Exclude tkinter from bundling (not used in final app)
+        'darkdetect',     # Exclude darkdetect (Linux theme detection not needed for Windows build)
+        'tkinterdnd2',    # Exclude tkinterdnd2 (not used in PySide6 implementation)
     ],
     noarchive=False,
     optimize=0,
 )
-pyz = PYZ(a.pure)
+pyz = PYZ(a.pure, exclude_binaries=True)
 
-# ONEDIR build — produces dist/LeagueLoop/ folder for Inno Setup packaging
+# ONEDIR build — produces dist/LeagueLoop/ folder (simpler, less space-intensive)
 exe = EXE(
     pyz,
     a.scripts,

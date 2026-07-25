@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QPushButton, QFrame, QSizePolicy, QMenu, QGraphicsOpacityEffect
 )
 from PySide6.QtCore import Qt, QMetaObject, Slot, Q_ARG, QPoint
-from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath, QPixmap, QImage, QCursor
+from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath, QPixmap, QImage
 
 from ui.qt.widgets import ScrollableList, make_card, make_button
 from ui.qt.theme import get_theme_color, get_theme_radius, get_theme_spacing
