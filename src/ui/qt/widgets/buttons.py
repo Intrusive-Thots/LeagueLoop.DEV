@@ -41,9 +41,6 @@ class RiotButton(QPushButton):
         if command:
             self.clicked.connect(command)
 
-    def set_text(self, text):
-        self.setText(text)
-
 
 def make_button(parent, text, style="primary", width=None, command=None, icon=None, **kw):
     """Factory wrapper for RiotButton matching the factory.py signature."""
