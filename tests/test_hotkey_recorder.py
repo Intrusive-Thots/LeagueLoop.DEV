@@ -6,7 +6,7 @@ from PySide6.QtGui import QKeyEvent
 # Ensure QApplication instance exists for PySide6 widget tests
 app = QApplication.instance() or QApplication([])
 
-from ui.qt.pages.settings_page import QtHotkeyRecorderButton
+from ui.qt.widgets.inputs import QtHotkeyRecorderButton
 
 
 class TestHotkeyRecorder(unittest.TestCase):

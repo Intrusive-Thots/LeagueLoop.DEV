@@ -174,22 +174,22 @@ if new_state == old_state:
 Agent must verify:
 
 **Functional**
-- [ ] Queue start works
-- [ ] Auto accept works
-- [ ] Friends list updates live
-- [ ] Champion selection logic works
-- [ ] No crashes on disconnect
+- [x] Queue start works
+- [x] Auto accept works
+- [x] Friends list updates live
+- [x] Champion selection logic works
+- [x] No crashes on disconnect
 
 **Performance**
-- [ ] No UI freezing
-- [ ] No unnecessary redraws
-- [ ] Events processed in real-time
+- [x] No UI freezing
+- [x] No unnecessary redraws
+- [x] Events processed in real-time
 
 **Architecture**
-- [ ] No direct API calls in UI
-- [ ] No polling loops
-- [ ] State is single source of truth
-- [ ] Events drive updates
+- [x] No direct API calls in UI
+- [x] No polling loops
+- [x] State is single source of truth
+- [x] Events drive updates
 
 ## 🔷 FINAL EXECUTION FLOW (TARGET)
 ```

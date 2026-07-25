@@ -3,5 +3,11 @@
     "failure": "win32crypt DLL load failure",
     "pattern": "ImportError: DLL load failed while importing win32crypt: The specified module could not be found.",
     "fix": "Run python using the global 'py' launcher instead of '.venv\\Scripts\\python.exe', or add the virtual environment's site-packages/pywin32_system32 folder to the environment PATH so that the pywin32 DLLs can be located by python."
+  },
+  {
+    "failure": "Missing page module import error during test execution",
+    "pattern": "ImportError: No module named 'ui.qt.pages.coach_page' / 'friends_page'",
+    "fix": "Check if page files were deleted or staged for deletion; restore missing page modules from git HEAD to restore test suite pass state."
   }
 ]
+

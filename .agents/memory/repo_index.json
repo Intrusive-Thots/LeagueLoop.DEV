@@ -1,10 +1,10 @@
 {
   "root": "C:\\Users\\Administrator\\LeagueLoop.DEV",
-  "scan_time_sec": 0.047,
-  "total_files": 191,
+  "scan_time_sec": 0.534,
+  "total_files": 210,
   "ext_counts": {
     ".json": 22,
-    ".py": 136,
+    ".py": 155,
     ".md": 21,
     ".yml": 1,
     ".html": 2,
@@ -14,11 +14,7 @@
   "python_modules": [
     {
       "path": "src\\ui\\qt\\pages\\champions_page.py",
-      "lines": 1396
-    },
-    {
-      "path": "src\\ui\\qt\\app_window.py",
-      "lines": 789
+      "lines": 1403
     },
     {
       "path": "src\\services\\asset_manager.py",
@@ -35,10 +31,6 @@
     {
       "path": "src\\services\\automation\\engine.py",
       "lines": 501
-    },
-    {
-      "path": "src\\ui\\qt\\pages\\settings_page.py",
-      "lines": 493
     },
     {
       "path": "src\\services\\login_automation.py",
@@ -61,12 +53,20 @@
       "lines": 366
     },
     {
-      "path": "src\\ui\\qt\\pages\\accounts_page.py",
-      "lines": 319
+      "path": "src\\ui\\qt\\widgets\\inputs.py",
+      "lines": 362
     },
     {
-      "path": "src\\ui\\qt\\pages\\play_page.py",
-      "lines": 316
+      "path": "src\\ui\\qt\\widgets\\components.py",
+      "lines": 350
+    },
+    {
+      "path": "src\\ui\\qt\\app_window.py",
+      "lines": 336
+    },
+    {
+      "path": "src\\ui\\qt\\pages\\accounts_page.py",
+      "lines": 321
     },
     {
       "path": "src\\services\\api\\routes\\champ_select.py",
@@ -78,7 +78,7 @@
     },
     {
       "path": "src\\core\\window_manager.py",
-      "lines": 280
+      "lines": 286
     },
     {
       "path": "tests\\test_automation_draft.py",
@@ -101,8 +101,20 @@
       "lines": 230
     },
     {
+      "path": "src\\ui\\qt\\widgets\\navigation\\header.py",
+      "lines": 220
+    },
+    {
+      "path": "src\\ui\\qt\\widgets\\champions\\champion_cell.py",
+      "lines": 218
+    },
+    {
       "path": "src\\ui\\qt\\widgets\\toast.py",
       "lines": 210
+    },
+    {
+      "path": "src\\ui\\qt\\widgets\\friends\\friend_row.py",
+      "lines": 206
     },
     {
       "path": "src\\services\\theme_service.py",
@@ -121,16 +133,24 @@
       "lines": 184
     },
     {
+      "path": "src\\core\\hotkey_manager.py",
+      "lines": 174
+    },
+    {
       "path": "src\\services\\automation\\champ_select.py",
       "lines": 174
+    },
+    {
+      "path": "src\\ui\\qt\\pages\\play_page.py",
+      "lines": 172
     },
     {
       "path": "src\\services\\draft_service.py",
       "lines": 171
     },
     {
-      "path": "src\\core\\hotkey_manager.py",
-      "lines": 168
+      "path": "src\\ui\\qt\\widgets\\coach\\role_priority_list.py",
+      "lines": 170
     },
     {
       "path": "src\\ui\\qt\\widgets\\icons.py",
@@ -145,6 +165,10 @@
       "lines": 163
     },
     {
+      "path": "src\\ui\\qt\\pages\\settings_page.py",
+      "lines": 152
+    },
+    {
       "path": "tools\\kopied.py",
       "lines": 152
     },
@@ -157,16 +181,16 @@
       "lines": 145
     },
     {
+      "path": "src\\core\\main.py",
+      "lines": 138
+    },
+    {
       "path": "src\\utils\\acrylic_blur.py",
       "lines": 138
     },
     {
       "path": "src\\core\\lifecycle.py",
       "lines": 137
-    },
-    {
-      "path": "src\\core\\main.py",
-      "lines": 134
     },
     {
       "path": "src\\services\\friend_service.py",
@@ -217,10 +241,6 @@
       "lines": 104
     },
     {
-      "path": "src\\services\\live_match_service.py",
-      "lines": 98
-    },
-    {
       "path": "src\\ui\\qt\\pages\\match_predictor_page.py",
       "lines": 97
     },
@@ -269,8 +289,16 @@
       "lines": 75
     },
     {
+      "path": "scratch\\test_live_functionality.py",
+      "lines": 74
+    },
+    {
       "path": "src\\services\\api\\routes\\config.py",
       "lines": 74
+    },
+    {
+      "path": "src\\ui\\qt\\viewmodels\\play_viewmodel.py",
+      "lines": 72
     },
     {
       "path": "src\\utils\\crash_reporter.py",
@@ -329,6 +357,10 @@
       "lines": 59
     },
     {
+      "path": "src\\ui\\qt\\pages\\automations_page.py",
+      "lines": 59
+    },
+    {
       "path": "src\\services\\security.py",
       "lines": 57
     },
@@ -337,7 +369,7 @@
       "lines": 57
     },
     {
-      "path": "tests\\test_live_match_service.py",
+      "path": "tests\\test_utils_extra.py",
       "lines": 57
     },
     {
@@ -385,16 +417,28 @@
       "lines": 52
     },
     {
+      "path": "src\\ui\\qt\\viewmodels\\app_viewmodel.py",
+      "lines": 51
+    },
+    {
       "path": "tests\\test_lcu_transport.py",
       "lines": 51
+    },
+    {
+      "path": "src\\ui\\qt\\widgets\\champions\\champion_hover_card.py",
+      "lines": 49
     },
     {
       "path": "src\\services\\settings_service.py",
       "lines": 46
     },
     {
-      "path": "tests\\test_utils_extra.py",
-      "lines": 45
+      "path": "src\\ui\\qt\\viewmodels\\header_viewmodel.py",
+      "lines": 43
+    },
+    {
+      "path": "src\\ui\\qt\\widgets\\__init__.py",
+      "lines": 43
     },
     {
       "path": "tests\\test_account_manager_rebuild.py",
@@ -403,6 +447,10 @@
     {
       "path": "tests\\test_theme_service.py",
       "lines": 42
+    },
+    {
+      "path": "src\\ui\\qt\\viewmodels\\champions_viewmodel.py",
+      "lines": 41
     },
     {
       "path": "src\\ui\\qt\\widgets\\scrollable_list.py",
@@ -415,6 +463,10 @@
     {
       "path": "src\\services\\automation\\ready_check.py",
       "lines": 37
+    },
+    {
+      "path": "src\\ui\\qt\\viewmodels\\friends_viewmodel.py",
+      "lines": 36
     },
     {
       "path": "tests\\test_coach_draft.py",
@@ -441,15 +493,15 @@
       "lines": 33
     },
     {
+      "path": "src\\ui\\qt\\viewmodels\\coach_viewmodel.py",
+      "lines": 32
+    },
+    {
       "path": "src\\utils\\path_utils.py",
       "lines": 32
     },
     {
       "path": "src\\ui\\qt\\pages\\__init__.py",
-      "lines": 31
-    },
-    {
-      "path": "src\\ui\\qt\\widgets\\__init__.py",
       "lines": 31
     },
     {
@@ -497,12 +549,12 @@
       "lines": 24
     },
     {
-      "path": "src\\services\\api\\registry.py",
-      "lines": 22
+      "path": "src\\ui\\qt\\viewmodels\\settings_viewmodel.py",
+      "lines": 23
     },
     {
-      "path": "src\\ui\\qt\\widgets\\inputs.py",
-      "lines": 21
+      "path": "src\\services\\api\\registry.py",
+      "lines": 22
     },
     {
       "path": "test_hotkeys_config.py",
@@ -514,7 +566,7 @@
     },
     {
       "path": "src\\core\\version.py",
-      "lines": 17
+      "lines": 18
     },
     {
       "path": "src\\utils\\smooth_scroll.py",
@@ -523,6 +575,14 @@
     {
       "path": "tests\\test_client_path_detection.py",
       "lines": 16
+    },
+    {
+      "path": "src\\ui\\qt\\viewmodels\\base_viewmodel.py",
+      "lines": 13
+    },
+    {
+      "path": "src\\services\\CONSTRAINT_LCU_ONLY.py",
+      "lines": 12
     },
     {
       "path": "fix_import.py",
@@ -545,6 +605,22 @@
       "lines": 3
     },
     {
+      "path": "src\\ui\\qt\\widgets\\champions\\__init__.py",
+      "lines": 3
+    },
+    {
+      "path": "src\\ui\\qt\\widgets\\friends\\__init__.py",
+      "lines": 3
+    },
+    {
+      "path": "src\\ui\\qt\\widgets\\coach\\__init__.py",
+      "lines": 1
+    },
+    {
+      "path": "src\\ui\\qt\\widgets\\navigation\\__init__.py",
+      "lines": 1
+    },
+    {
       "path": "src\\ui\\theme\\__init__.py",
       "lines": 0
     },
@@ -557,15 +633,8 @@
       "lines": 0
     }
   ],
-  "total_py_lines": 17921,
-  "todos": [
-    {
-      "file": "test_tokens.py",
-      "line": 6,
-      "marker": "XXX",
-      "text": "self.assertEqual(TOKENS.get(\"spacing\"), {\"xs\": 4, \"sm\": 8, \"md\": 12, \"lg\": 16, \"xl\": 24, \"xxl\": 32, \"xxxl\": 48})"
-    }
-  ],
+  "total_py_lines": 18896,
+  "todos": [],
   "missing_docstrings": [
     "fix_import.py",
     "run.py",
@@ -576,6 +645,8 @@
     "src\\services\\api\\__init__.py",
     "src\\services\\api\\routes\\__init__.py",
     "src\\services\\automation\\__init__.py",
+    "src\\ui\\qt\\widgets\\coach\\role_priority_list.py",
+    "src\\ui\\qt\\widgets\\navigation\\header.py",
     "tests\\test_account_manager.py",
     "tests\\test_account_manager_rebuild.py",
     "tests\\test_add_all_shortcut.py",
@@ -604,7 +675,6 @@
     "tests\\test_lcu_transport.py",
     "tests\\test_league_classic.py",
     "tests\\test_league_service.py",
-    "tests\\test_live_match_service.py",
     "tests\\test_logger.py",
     "tests\\test_login_automation.py",
     "tests\\test_notification_service.py",

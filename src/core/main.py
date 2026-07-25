@@ -23,6 +23,10 @@ except ImportError:
 class LeagueLoopApp(HotkeyManagerMixin, QObject):
     """Main application controller delegating to ApplicationContainer and ApplicationManager."""
 
+    def after(self, ms: int, func):
+        """Bridge method for legacy Tkinter .after() calls using QTimer.singleShot."""
+        QTimer.singleShot(int(ms), func)
+
     def __init__(self):
         super().__init__()
         

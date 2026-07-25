@@ -43,3 +43,15 @@ def test_focus_states(qapp):
 
     scroll_area = QScrollArea()
     scroll_to_widget(scroll_area, widget)
+
+def test_after_bridge(qapp):
+    from core.main import LeagueLoopApp
+    with patch("core.main.ApplicationContainer"), \
+         patch("core.main.ApplicationManager"), \
+         patch.object(LeagueLoopApp, "_bind_hotkeys"), \
+         patch.object(LeagueLoopApp, "_auto_load_default_account"):
+        app = LeagueLoopApp()
+        called = []
+        app.after(1, lambda: called.append(True))
+        qapp.processEvents()
+        assert hasattr(app, "after")

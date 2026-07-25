@@ -18,7 +18,7 @@ class TestGameModeSelector(unittest.TestCase):
 
     def test_game_mode_change_updates_config(self):
         self.page.combo_mode.setCurrentText("Ranked Solo/Duo")
-        saved_mode = self.page.config.get("aram_mode")
+        saved_mode = self.page.viewmodel.config.get("aram_mode")
         self.assertEqual(saved_mode, "Ranked Solo/Duo")
 
 

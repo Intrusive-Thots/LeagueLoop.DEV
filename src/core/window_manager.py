@@ -10,6 +10,8 @@ import time
 
 import psutil
 
+from PySide6.QtCore import QTimer
+
 from utils.logger import Logger
 from core.constants import (
     DOCKING_POLL_INTERVAL, DOCKING_IDLE_INTERVAL, GEOMETRY_THRESHOLD,
@@ -23,6 +25,10 @@ if hasattr(ctypes, "windll"):
 
 class WindowManagerMixin:
     """Mixin providing window docking, dragging, and state management for LeagueLoopApp."""
+
+    def after(self, ms: int, func):
+        """Bridge method for legacy Tkinter .after() calls using QTimer.singleShot."""
+        QTimer.singleShot(int(ms), func)
 
     def _handle_window_service_state(self, action):
         """Callback from WindowService to change CTk window state."""

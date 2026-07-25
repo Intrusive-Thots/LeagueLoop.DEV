@@ -113,5 +113,10 @@
     "error_pattern": "Regression detected by self_improving loop run #59",
     "fix": "Investigate the test failures reported above.",
     "context": "Passed tests dropped from 162 to 0"
+  },
+  {
+    "error_pattern": "Regression detected by self_improving loop run #68",
+    "fix": "Investigate the test failures reported above.",
+    "context": "Passed test count dropped from 197 to 194"
   }
 ]

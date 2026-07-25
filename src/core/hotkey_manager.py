@@ -12,11 +12,17 @@ import threading
 import ctypes
 import keyboard  # type: ignore
 
+from PySide6.QtCore import QTimer
+
 from utils.logger import Logger
 from core.events import EventBus
 
 class HotkeyManagerMixin:
     """Mixin providing hotkey registration and action handlers for LeagueLoopApp."""
+
+    def after(self, ms: int, func):
+        """Bridge method for legacy Tkinter .after() calls using QTimer.singleShot."""
+        QTimer.singleShot(int(ms), func)
 
     def _bind_hotkeys(self):
         try:

@@ -9,7 +9,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QMetaObject, Slot, Q_ARG
 
-from ui.qt.widgets import ScrollableList, make_card, make_button
+from ui.qt.widgets import ScrollableList, make_button
+from ui.qt.widgets.components import SectionHeader
 from ui.qt.theme import get_theme_color
 from services.account_manager import get_account_manager
 from services.league_service import get_league_service
@@ -160,29 +161,28 @@ class AccountsPage(QWidget):
         self.setup_ui()
 
     def setup_ui(self):
-        # ── 1. ACTIVE SESSION CARD ──
-        self.card_active = make_card(title="CURRENT ACTIVE ACCOUNT")
+        # ── 1. ACTIVE SESSION ──
+        self.scroll.add_widget(SectionHeader("Active Account"))
         
         self.lbl_sec_badge = QLabel("🔒 DPAPI ENCRYPTED  |  Secured locally at %LOCALAPPDATA%\\LeagueLoop\\accounts.json", self)
         self.lbl_sec_badge.setStyleSheet("color: #2ECC71; font-size: 10px; font-weight: bold; margin-bottom: 2px;")
-        self.card_active.add_widget(self.lbl_sec_badge)
+        self.scroll.add_widget(self.lbl_sec_badge)
 
         self.lbl_active_name = QLabel("Detecting active League Client session...", self)
         self.lbl_active_name.setStyleSheet("color: #F8F6F0; font-weight: bold; font-size: 13px;")
-        self.card_active.add_widget(self.lbl_active_name)
+        self.scroll.add_widget(self.lbl_active_name)
         
         self.lbl_active_details = QLabel("Connect League Client to automatically identify summoner profile.", self)
         self.lbl_active_details.setStyleSheet("color: #A8B8CC; font-size: 11px;")
-        self.card_active.add_widget(self.lbl_active_details)
+        self.scroll.add_widget(self.lbl_active_details)
         
         btn_detect = make_button(self, text="DETECT CURRENT CLIENT SESSION", style="secondary")
         btn_detect.clicked.connect(self._detect_session)
-        self.card_active.add_widget(btn_detect)
+        self.scroll.add_widget(btn_detect)
         
-        self.scroll.add_widget(self.card_active)
-        
-        # ── 2. ADD NEW ACCOUNT CARD ──
-        self.card_add = make_card(title="ADD RIOT ACCOUNT")
+
+        # ── 2. ADD NEW ACCOUNT ──
+        self.scroll.add_widget(SectionHeader("Add Account"))
         
         form_row = QHBoxLayout()
         form_row.setSpacing(8)
@@ -202,23 +202,21 @@ class AccountsPage(QWidget):
         
         form_widget = QWidget(self)
         form_widget.setLayout(form_row)
-        self.card_add.add_widget(form_widget)
+        self.scroll.add_widget(form_widget)
         
         btn_save = make_button(self, text="SAVE ACCOUNT", style="primary")
         btn_save.clicked.connect(self._save_new_account)
-        self.card_add.add_widget(btn_save)
+        self.scroll.add_widget(btn_save)
         
-        self.scroll.add_widget(self.card_add)
-        
-        # ── 3. SAVED ACCOUNTS LIST CARD ──
-        self.card_saved = make_card(title="SAVED ACCOUNTS")
+
+        # ── 3. SAVED ACCOUNTS LIST ──
+        self.scroll.add_widget(SectionHeader("Saved Accounts"))
         self.accounts_container = QWidget(self)
         self.accounts_layout = QVBoxLayout(self.accounts_container)
         self.accounts_layout.setContentsMargins(0, 0, 0, 0)
         self.accounts_layout.setSpacing(6)
         
-        self.card_saved.add_widget(self.accounts_container)
-        self.scroll.add_widget(self.card_saved)
+        self.scroll.add_widget(self.accounts_container)
         
         self._refresh_accounts_list()
         self._detect_session()

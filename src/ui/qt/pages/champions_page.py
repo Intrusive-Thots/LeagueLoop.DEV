@@ -13,12 +13,9 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QTimer, Property, QPropertyAnimation, QEasingCurve, Slot, QPoint, QMimeData
 from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath, QPixmap, QImage, QDrag, QCursor
 
-from ui.qt.widgets import ScrollableList, make_card, make_button
+from ui.qt.widgets import ScrollableList, make_button
 from ui.qt.theme import get_theme_color, get_theme_radius, get_theme_spacing
-from services.settings_service import get_settings_service
-from services.league_service import get_league_service
-from services.stats_scraper import get_stats_scraper
-from core.events import EventBus
+from ui.qt.viewmodels.champions_viewmodel import ChampionsViewModel
 from utils.logger import Logger
 
 # Standard size tokens
@@ -253,13 +250,17 @@ class ChampionHoverCard(QFrame):
 
 
 class ChampionsPage(QWidget):
-    """The PySide6 Champions Page containing the ARAM Priority Grid and Advanced Filters."""
-    
+    """The PySide6 Champions Editor Page using ChampionsViewModel."""
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.config = get_settings_service()
+        self.viewmodel = ChampionsViewModel(self)
+        self.config = self.viewmodel.config
         self.undo_stack = []
         self._row_widgets = []
+        
+        # State
+        self._all_champions = []
         self._selected_indices = set()
         self._edit_mode = False
         self._wiggle_state = 0.0
@@ -273,13 +274,20 @@ class ChampionsPage(QWidget):
         self.selected_role = "All"
         self.selected_sort = "Priority"
         
+        from ui.qt.widgets.components import SectionHeader
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
+        layout.setSpacing(10)
         
-        # Main Grid Scroll Frame Card
-        self.card = make_card(title="ARAM PRIORITY SNIPER")
-        layout.addWidget(self.card)
+        # Un-nested section header for clean Version One visual hierarchy
+        self.header = SectionHeader("Champion Priority Grid", "Snipe high priority bench & pick champions")
+        layout.addWidget(self.header)
+        
+        self.card = QWidget(self)
+        card_layout = QVBoxLayout(self.card)
+        card_layout.setContentsMargins(0, 0, 0, 0)
+        card_layout.setSpacing(10)
+        layout.addWidget(self.card, stretch=1)
         
         # ── 1. TOOLBAR ──
         toolbar = QWidget(self.card)
@@ -397,7 +405,7 @@ class ChampionsPage(QWidget):
         self.btn_import.setToolTip("Import List from Clipboard")
         toolbar_layout.addWidget(self.btn_import)
         
-        self.card.add_widget(toolbar)
+        card_layout.addWidget(toolbar)
         
         # ── 2. FILTER BAR ──
         self.filter_bar = QWidget(self.card)
@@ -487,7 +495,7 @@ class ChampionsPage(QWidget):
         
         self.scroll_sorts.setWidget(self.sort_widget)
         self.filter_bar_layout.addWidget(self.scroll_sorts)
-        self.card.add_widget(self.filter_bar)
+        card_layout.addWidget(self.filter_bar)
         
         # --- Suggestions Row ---
         self.suggestions_widget = QWidget(self.card)
@@ -495,7 +503,7 @@ class ChampionsPage(QWidget):
         self.suggestions_layout.setContentsMargins(0, 0, 0, 0)
         self.suggestions_layout.setSpacing(4)
         self.suggestions_widget.setVisible(False)
-        self.card.add_widget(self.suggestions_widget)
+        card_layout.addWidget(self.suggestions_widget)
         
         # --- Edit Mode Bar (Hidden by default) ---
         self.edit_bar = QWidget(self.card)
@@ -547,7 +555,7 @@ class ChampionsPage(QWidget):
         self.edit_bar_layout.addWidget(self.btn_clear_all)
         
         self.edit_bar_layout.addStretch()
-        self.card.add_widget(self.edit_bar)
+        card_layout.addWidget(self.edit_bar)
         
         # --- Grid Scroll Area ---
         self.scroll = QScrollArea(self.card)
@@ -568,7 +576,7 @@ class ChampionsPage(QWidget):
         self.grid_layout.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         
         self.scroll.setWidget(self.grid_container)
-        self.card.add_widget(self.scroll)
+        card_layout.addWidget(self.scroll)
         
         # Rich Hover Stats Preview Overlay
         self.hover_card = ChampionHoverCard(self)
@@ -578,7 +586,7 @@ class ChampionsPage(QWidget):
         self.wiggle_timer.timeout.connect(self._on_wiggle_tick)
         
         # LCU connection event binding to reload masteries
-        EventBus.on("league_connected", self._on_league_connected)
+        self.viewmodel.league_connected.connect(self._on_league_connected)
         
         # Initial scan/load
         QTimer.singleShot(100, self._load_known_champions)
@@ -690,17 +698,14 @@ class ChampionsPage(QWidget):
             self._render_grid()
 
     # ── Mastery Resolvers ──
-    def _on_league_connected(self):
-        QMetaObject.invokeMethod(self, "_load_masteries_async", Qt.QueuedConnection)
-
-    @Slot()
-    def _load_masteries_async(self):
+    @Slot(object)
+    def _on_league_connected(self, event_data):
         self._load_masteries()
         self._render_grid()
 
     def _load_masteries(self):
+        lcu = self.viewmodel.get_league_service()
         try:
-            lcu = get_league_service()
             if lcu and lcu.is_connected:
                 records = lcu.get_champion_masteries() or []
                 self.mastery_cache = {r.get("championId"): r for r in records}
@@ -750,23 +755,21 @@ class ChampionsPage(QWidget):
             self.hover_card.lbl_mastery.setText("Mastery: Level 0")
             self.hover_card.lbl_points.setText("Points: 0")
             
-        # Live win rate
-        try:
-            wr = get_stats_scraper().get_win_rate(name)
-            if wr > 0:
-                self.hover_card.lbl_winrate.setText(f"Win Rate: {wr:.1f}%")
-                if wr >= 53.0:
-                    self.hover_card.lbl_winrate.setStyleSheet("color: #2ECC71; font-size: 9px; font-weight: bold;")
-                elif wr <= 48.0:
-                    self.hover_card.lbl_winrate.setStyleSheet("color: #E74C3C; font-size: 9px; font-weight: bold;")
+            # Request win rate stats
+            stats = self.viewmodel.get_stats_sync()
+            if stats:
+                wr = stats.get_win_rate(name)
+                if wr > 0:
+                    self.hover_card.lbl_winrate.setText(f"Win Rate: {wr:.1f}%")
+                    if wr >= 53.0:
+                        self.hover_card.lbl_winrate.setStyleSheet("color: #2ECC71; font-size: 9px; font-weight: bold;")
+                    elif wr <= 48.0:
+                        self.hover_card.lbl_winrate.setStyleSheet("color: #E74C3C; font-size: 9px; font-weight: bold;")
+                    else:
+                        self.hover_card.lbl_winrate.setStyleSheet("color: #C8AA6E; font-size: 9px; font-weight: bold;")
                 else:
-                    self.hover_card.lbl_winrate.setStyleSheet("color: #C8AA6E; font-size: 9px; font-weight: bold;")
-            else:
-                self.hover_card.lbl_winrate.setText("Win Rate: --")
-                self.hover_card.lbl_winrate.setStyleSheet("color: #8A95A5; font-size: 9px;")
-        except Exception:
-            self.hover_card.lbl_winrate.setText("Win Rate: --")
-            self.hover_card.lbl_winrate.setStyleSheet("color: #8A95A5; font-size: 9px;")
+                    self.hover_card.lbl_winrate.setText("Win Rate: --")
+                    self.hover_card.lbl_winrate.setStyleSheet("color: #8A95A5; font-size: 9px;")
 
         # Apply position locks
         x = local_pos.x()
@@ -1119,8 +1122,11 @@ class ChampionsPage(QWidget):
                     names.append(name)
                     added_count += 1
                     
-            self._save_priority_list(names)
+            self.role_priority[self.active_role] = names
+            self.config.set("role_priority", self.role_priority)
             self._render_grid()
+            self._sync_undo_btn()
+            from ui.qt.widgets.toast import ToastManager
             toast = ToastManager.get_instance()
             if toast:
                 toast.show(f"Added {added_count} champions (#all)", icon="✨", theme="info")
@@ -1168,9 +1174,10 @@ class ChampionsPage(QWidget):
         names = self._get_priority_list()
         new_names = [names[i] for i in range(len(names)) if i not in self._selected_indices]
         
-        self._save_priority_list(new_names)
-        self._selected_indices.clear()
+        self.role_priority[self.active_role] = new_names
+        self.config.set("role_priority", self.role_priority)
         self._render_grid()
+        self._sync_undo_btn()
 
     def _clear_all(self):
         names = self._get_priority_list()
@@ -1185,9 +1192,9 @@ class ChampionsPage(QWidget):
         if not self.undo_stack:
             return
             
-        prev = self.undo_stack.pop()
-        self._save_priority_list(prev, record_history=False)
-        self._selected_indices.clear()
+        self.role_priority[self.active_role] = self._undo_stack.pop()
+        self.config.set("role_priority", self.role_priority)
+        self._render_grid()
         self._sync_undo_btn()
         self._render_grid()
 
@@ -1215,11 +1222,11 @@ class ChampionsPage(QWidget):
             else:
                 unknown.append(p)
                 
-        if resolved_list:
-            self._save_priority_list(resolved_list)
-            self._selected_indices.clear()
+        if len(self.role_priority[self.active_role]) > 1:
+            self.role_priority[self.active_role] = resolved_list
+            self.config.set("role_priority", self.role_priority)
             self._render_grid()
-            
+            self._sync_undo_btn()
             from ui.qt.widgets.toast import ToastManager
             if unknown:
                 ToastManager.get_instance().show(f"Imported {len(resolved_list)} champions. Skipped: {', '.join(unknown)}", icon="⚠️", theme="success")
