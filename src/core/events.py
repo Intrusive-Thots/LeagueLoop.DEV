@@ -26,24 +26,11 @@ class ChampionSelectedEvent(Event):
         self.is_intent = is_intent
 
 
-class SettingsChangedEvent(Event):
-    """Fired when configuration or settings are saved."""
-    def __init__(self, section: str = "all"):
-        self.section = section
-
-
 class LCUConnectionEvent(Event):
     """Fired when LCU connection state changes."""
     def __init__(self, connected: bool, port: int = 0):
         self.connected = connected
         self.port = port
-
-
-class MatchmakingEvent(Event):
-    """Fired when matchmaking status changes."""
-    def __init__(self, state: str, queue_id: int = 0):
-        self.state = state
-        self.queue_id = queue_id
 
 
 class SubscriptionHandle:
@@ -64,7 +51,7 @@ class SubscriptionHandle:
     def __enter__(self):
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_value, traceback):
         self.unsubscribe()
 
 

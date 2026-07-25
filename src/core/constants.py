@@ -7,7 +7,6 @@ Centralizes magic numbers and configuration defaults.
 QUEUE_DRAFT = 400
 QUEUE_RANKED_SOLO = 420
 QUEUE_RANKED_FLEX = 440
-QUEUE_ARAM = 450
 QUEUE_ARENA = 1700
 QUEUE_ARENA_3V6 = 1710
 QUEUE_CLASSIC = 1900
@@ -26,27 +25,8 @@ GEOMETRY_THRESHOLD = 2             # pixels of movement before triggering geomet
 PRIORITY_SWAP_COOLDOWN = 1.0       # seconds between priority sniper swaps
 
 # --- UI Dimensions ---
-SPACING_XS = 4
-SPACING_SM = 8
-SPACING_MD = 12
-SPACING_LG = 16
-SPACING_XL = 24
-
-SIDEBAR_WIDTH = 300
-SIDEBAR_HEIGHT = 500
-
-# --- Layout System ---
-PADDING_X = 8
-PADDING_Y = 8
-SECTION_GAP = 8       # Vertical gap between card containers
-CARD_PAD = 8          # Internal card padding (all sides)
-INNER_GAP = 8          # Gap between elements inside a card
-CARD_RADIUS = 8
 ICON_SIZE = 32
-ROW_HEIGHT = 32        # Toggle rows, status rows
-BTN_HEIGHT = 32        # All action buttons
-HEADER_HEIGHT = 40     # Top header / drag area
-FOOTER_HEIGHT = 48     # Bottom footer (pinned)
+
 # --- LCU Request ---
 LCU_REQUEST_TIMEOUT = 2            # seconds
 

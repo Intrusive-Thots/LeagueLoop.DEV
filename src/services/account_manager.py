@@ -171,10 +171,6 @@ class AccountManager:
 
         return list(self._accounts)
 
-    def get_all_accounts(self) -> List[Dict[str, Any]]:
-        """Alias for get_accounts()."""
-        return self.get_accounts()
-
     def get_account(self, idx: int, decrypt_password: bool = False) -> Optional[Dict[str, Any]]:
         """Get a single account by index, optionally decrypting the password."""
         with self._lock:
@@ -184,9 +180,6 @@ class AccountManager:
                     acct["password"] = self._decrypt(acct["password_enc"])
                 return acct
         return None
-
-    def get_account_count(self) -> int:
-        return len(self._accounts)
 
     def get_active_index(self) -> int:
         return self._active_idx
@@ -198,13 +191,6 @@ class AccountManager:
                 if acct.get("is_default", False):
                     return i
         return -1
-
-    def get_default_account(self) -> Optional[Dict[str, Any]]:
-        """Return the default account dictionary, or None if none set."""
-        idx = self.get_default_account_index()
-        if idx >= 0:
-            return self.get_account(idx)
-        return None
 
     def set_default_account(self, idx: int) -> bool:
         """Set the account at the given index as default and clear default on others."""
@@ -279,22 +265,6 @@ class AccountManager:
                 self._active_idx -= 1
             self._save()
             return True
-
-    def move_account(self, idx: int, direction: int):
-        """Move an account up (-1) or down (+1)."""
-        with self._lock:
-            new_idx = idx + direction
-            if not (0 <= new_idx < len(self._accounts)):
-                return
-            self._accounts[idx], self._accounts[new_idx] = (
-                self._accounts[new_idx], self._accounts[idx]
-            )
-            # Track active index through the swap
-            if self._active_idx == idx:
-                self._active_idx = new_idx
-            elif self._active_idx == new_idx:
-                self._active_idx = idx
-            self._save()
 
     def get_password(self, idx: int) -> str:
         """Decrypt and return the password for an account."""
@@ -532,15 +502,6 @@ class AccountManager:
                 self._save()
 
     # ─────────── Backward-Compat Stubs ───────────
-
-    @staticmethod
-    def _kill_game_processes(log_func=None):
-        """Delegate to LoginAutomation."""
-        return LoginAutomation.kill_game_processes(log_func)
-
-    def _launch_riot_client(self):
-        """Delegate to LoginAutomation."""
-        self.login_auto.launch_riot_client()
 
 # Global singleton
 _instance = None
