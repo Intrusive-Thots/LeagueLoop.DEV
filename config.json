@@ -73,6 +73,11 @@
     "auto_runes_enabled": true,
     "auto_runes": true,
     "aram_auto_add_played": false,
-    "league_client_path": "",
-    "riot_client_path": ""
+    "league_client_path": "C:\\Users\\Administrator\\Riot Games\\League of Legends (PBE)\\LeagueClient.exe",
+    "riot_client_path": "C:\\Users\\Administrator\\Riot Games\\Riot Client\\RiotClientServices.exe",
+    "draft_role_profiles": {
+        "TOP": [
+            "Aatrox"
+        ]
+    }
 }
