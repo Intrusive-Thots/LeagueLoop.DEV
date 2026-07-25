@@ -34,19 +34,7 @@ env/
 .DS_Store
 Thumbs.db
 
-# Coverage reports
-.coverage
-htmlcov/
-coverage/
-
-# Pytest cache
-.pytest_cache/
-
-# MyPy cache
-.mypy_cache/
-
-# Distribution archives
-*.tar.gz
-*.zip
-*.whl
+# Logs
+*.log
+cache/
 ```
