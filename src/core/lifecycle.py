@@ -33,7 +33,12 @@ class ApplicationManager(QObject):
         self.api_port: Optional[int] = None
         self._conn_thread: Optional[threading.Thread] = None
 
-    def startup(self, launch_client_func=None, toggle_automation_func=None, find_match_func=None):
+    def startup(
+        self,
+        launch_client_func=None,
+        toggle_automation_func=None,
+        find_match_func=None,
+    ):
         """Starts all subsystem background services, API server, and connection monitoring."""
         Logger.info("Lifecycle", "Starting ApplicationManager services...")
         self.running = True
@@ -50,20 +55,37 @@ class ApplicationManager(QObject):
 
         # Subscribe to EventBus events
         if find_match_func:
-            EventBus.on("action:find_match", lambda: QTimer.singleShot(0, find_match_func))
+            EventBus.on(
+                "action:find_match", lambda: QTimer.singleShot(0, find_match_func)
+            )
         if launch_client_func:
-            EventBus.on("action:launch_client", lambda: QTimer.singleShot(0, launch_client_func))
+            EventBus.on(
+                "action:launch_client", lambda: QTimer.singleShot(0, launch_client_func)
+            )
         if toggle_automation_func:
-            EventBus.on("action:toggle_automation", lambda: QTimer.singleShot(0, toggle_automation_func))
-        
-        EventBus.on("action:set_status", lambda msg: threading.Thread(
-            target=lambda: self.container.automation.set_custom_status(msg), daemon=True
-        ).start() if self.container.automation else None)
-        
-        EventBus.on("action:mass_invite", lambda: threading.Thread(
-            target=lambda: self.container.automation.mass_invite_friends(), daemon=True
-        ).start() if self.container.automation else None)
-        
+            EventBus.on(
+                "action:toggle_automation",
+                lambda: QTimer.singleShot(0, toggle_automation_func),
+            )
+
+        def handle_set_status(msg):
+            if self.container.automation:
+                threading.Thread(
+                    target=lambda: self.container.automation.set_custom_status(msg),
+                    daemon=True,
+                ).start()
+
+        EventBus.on("action:set_status", handle_set_status)
+
+        def handle_mass_invite():
+            if self.container.automation:
+                threading.Thread(
+                    target=lambda: self.container.automation.mass_invite_friends(),
+                    daemon=True,
+                ).start()
+
+        EventBus.on("action:mass_invite", handle_mass_invite)
+
         EventBus.on("settings_saved", self.on_settings_saved)
 
         # Start automation engine loop
@@ -76,7 +98,7 @@ class ApplicationManager(QObject):
         # Start background API server
         try:
             self.api_ip, self.api_port = start_api_server(self.container, port=8337)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             Logger.error("Lifecycle", f"Failed to start API server: {e}")
 
         # Start connection loop thread
@@ -105,7 +127,7 @@ class ApplicationManager(QObject):
                     if connected:
                         Logger.info("LCU", "Connected to League Client")
                 time.sleep(CONNECTION_POLL_INTERVAL)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 Logger.error("Lifecycle", f"Connection loop error: {e}")
                 time.sleep(CONNECTION_ERROR_INTERVAL)
 
@@ -118,20 +140,20 @@ class ApplicationManager(QObject):
         try:
             if self.container.automation:
                 self.container.automation.stop()
-        except Exception as e:
-            Logger.debug("Lifecycle", f"Engine stop error: {e}")
+        except Exception:  # noqa: BLE001
+            Logger.debug("Lifecycle", "Engine stop error")
 
         try:
             if self.container.window_service:
                 self.container.window_service.stop()
-        except Exception as e:
-            Logger.debug("Lifecycle", f"WindowService stop error: {e}")
+        except Exception:  # noqa: BLE001
+            Logger.debug("Lifecycle", "WindowService stop error")
 
         if keyboard:
             try:
                 keyboard.unhook_all()
-            except Exception as e:
-                Logger.debug("Lifecycle", f"Keyboard unhook error: {e}")
+            except Exception:  # noqa: BLE001
+                Logger.debug("Lifecycle", "Keyboard unhook error")
 
         Logger.info("Lifecycle", "Shutdown sequence finished.")
         os._exit(0)

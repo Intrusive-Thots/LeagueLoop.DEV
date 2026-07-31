@@ -26,23 +26,32 @@ class ApplicationContainer:
     def __init__(self):
         self.config: ConfigManager = ConfigManager()
         self.assets: AssetManager = AssetManager()
-        
+
         from core.state import State
+
         State.assets = self.assets
-        
+
         self.lcu: LCUClient = LCUClient()
-        self.scraper: StatsScraper = get_stats_scraper(mode=self.config.get("aram_mode", "ARAM"))
-        
+        self.scraper: StatsScraper = get_stats_scraper(
+            mode=self.config.get("aram_mode", "ARAM")
+        )
+
         # Service singletons
         self.settings_service: SettingsService = get_settings_service(self.config)
         self.league_service: LeagueService = get_league_service(self.lcu)
-        self.friend_service: FriendService = get_friend_service(self.settings_service, self.league_service)
-        self.champion_service: ChampionService = get_champion_service(self.assets, self.scraper)
+        self.friend_service: FriendService = get_friend_service(
+            self.settings_service, self.league_service
+        )
+        self.champion_service: ChampionService = get_champion_service(
+            self.assets, self.scraper
+        )
         self.draft_service: DraftService = get_draft_service(self.league_service)
         self.window_service: WindowService = get_window_service(self.settings_service)
         self.notification_service: NotificationService = get_notification_service()
-        self.queue_service: QueueService = get_queue_service(self.settings_service, self.league_service)
-        
+        self.queue_service: QueueService = get_queue_service(
+            self.settings_service, self.league_service
+        )
+
         self.automation: Optional[AutomationEngine] = None
         self.account_manager: Optional[AccountManager] = None
 
@@ -57,10 +66,11 @@ class ApplicationContainer:
         )
         return self.automation
 
-    def initialize_account_manager(self, launch_client_func=None) -> AccountManager:
+    def initialize_account_manager(
+        self, launch_client_func=None
+    ) -> AccountManager:
         """Instantiates and configures the AccountManager."""
         self.account_manager = get_account_manager(
-            lcu=self.lcu,
-            launch_client_func=launch_client_func
+            lcu=self.lcu, launch_client_func=launch_client_func
         )
         return self.account_manager

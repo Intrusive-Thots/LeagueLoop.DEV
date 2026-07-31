@@ -8,39 +8,80 @@ __pycache__/
 env/
 venv/
 .venv/
-.ENV
-.ENV.local
+.eggs/
+.egg-info/
+dist/
+build/
+*.egg-info/
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Environment variables
 .env
 .env.local
-.env.*
-.python-version
-.pytest_cache/
-.mypy_cache/
-.coverage
-coverage/
-htmlcov/
-
-# Build artifacts
-build/
-dist/
-*.egg
-*.egg-info/
-*.so
-*.dylib
-*.dll
+*.env.*
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+
+# Testing
+.coverage
+htmlcov/
+coverage/
+.pytest_cache/
+.mypy_cache/
+
+# Distribution / packaging
+*.tar.gz
+*.whl
+pip-log.txt
+pip-delete-this-directory.txt
+
+# PyInstaller
+*.spec
+
+# Cython
+*.so
+
+# Coverage
+.coverage*
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# mypy
+.mypy_cache/
+
+# pytest
+.pytest_cache/
+
+# Temporary files
 *.tmp
+*~
+```
 
-# OS
-.DS_Store
-Thumbs.db
+Wait, I need to reconsider this. Looking at the input again, the modified files are only Python source files and the .gitignore itself. There are no build artifacts, dependency directories, or temporary files in the change list that would require adding to .gitignore. The changes are only:
 
-# Logs
-*.log
-cache/
+- `.gitignore` (the file being modified)
+- `run.py` (Python source file)
+- `src/core/container.py` (Python source file)
+- `src/core/lifecycle.py` (Python source file)
+- `src/core/main.py` (Python source file)
+- `src/core/window_manager.py` (Python source file)
+
+Since only source code files are being modified (no build artifacts, no dependencies, no temp files), according to rule #6, I should output an empty .gitignore.
+
 ```

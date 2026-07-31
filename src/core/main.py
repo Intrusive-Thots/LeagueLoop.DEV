@@ -3,7 +3,6 @@ Entry point for LeagueLoop application.
 """
 import os
 import sys
-import threading
 import time
 
 from PySide6.QtCore import QObject, QTimer
@@ -29,10 +28,10 @@ class LeagueLoopApp(HotkeyManagerMixin, QObject):
 
     def __init__(self):
         super().__init__()
-        
+
         self.container = ApplicationContainer()
         self.lifecycle = ApplicationManager(self.container)
-        
+
         # Expose legacy property aliases for backwards compatibility with legacy routes/views
         self.config = self.container.config
         self.assets = self.container.assets
@@ -46,7 +45,7 @@ class LeagueLoopApp(HotkeyManagerMixin, QObject):
         self.window_service = self.container.window_service
         self.notification_service = self.container.notification_service
         self.queue_service = self.container.queue_service
-        
+
         # Keyboard shortcuts
         self._launch_hotkey = None
         self._automation_hotkey = None
@@ -63,7 +62,7 @@ class LeagueLoopApp(HotkeyManagerMixin, QObject):
         self.account_manager = self.container.account_manager
 
         self._bind_hotkeys()
-        
+
         # Auto-load default account on startup
         QTimer.singleShot(2000, self._auto_load_default_account)
 
@@ -73,14 +72,16 @@ class LeagueLoopApp(HotkeyManagerMixin, QObject):
             default_idx = self.account_manager.get_default_account_index()
             if default_idx >= 0:
                 Logger.info("SYS", "Auto-loading default account...")
-                
+
                 if not self.account_manager.riot_client.is_riot_client_running():
                     self._hotkey_launch_client()
-                    
-                QTimer.singleShot(3000, lambda: self.account_manager.login_account(
-                    default_idx,
-                    log_func=Logger.info
-                ))
+
+                QTimer.singleShot(
+                    3000,
+                    lambda: self.account_manager.login_account(
+                        default_idx, log_func=Logger.info
+                    ),
+                )
 
     def on_settings_saved(self):
         """Handles settings saved event."""
@@ -99,15 +100,16 @@ class LeagueLoopApp(HotkeyManagerMixin, QObject):
 def _kill_other_instances():
     """Terminate any other running instances of LeagueLoop."""
     import psutil
+
     my_pid = os.getpid()
     try:
         my_parent_pid = psutil.Process(my_pid).ppid()
-    except Exception:
+    except Exception:  # noqa: BLE001
         my_parent_pid = -1
-    
+
     safe_pids = {my_pid, my_parent_pid}
     killed = 0
-    
+
     for proc in psutil.process_iter(["pid", "name"]):
         try:
             if proc.pid in safe_pids:
@@ -118,16 +120,20 @@ def _kill_other_instances():
 
             if not (is_leagueloop_exe or is_python_script):
                 continue
-                
+
             if is_python_script:
                 try:
                     cmdline = proc.cmdline()
                 except (psutil.AccessDenied, psutil.ZombieProcess):
                     continue
                 cmdline_str = " ".join(cmdline).lower()
-                if "core.main" not in cmdline_str and "core\\main" not in cmdline_str and "run.py" not in cmdline_str:
+                if (
+                    "core.main" not in cmdline_str
+                    and "core\\main" not in cmdline_str
+                    and "run.py" not in cmdline_str
+                ):
                     continue
-            
+
             Logger.info("SYS", f"Killing stale instance PID {proc.pid} ({pname})")
             proc.kill()
             killed += 1
