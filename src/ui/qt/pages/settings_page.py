@@ -16,21 +16,21 @@ from ui.qt.widgets.toast import ToastManager
 
 class SettingsPage(ScrollableList):
     """The PySide6 Settings Page using SettingsViewModel."""
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.viewmodel = SettingsViewModel(self)
         self.viewmodel.config_changed.connect(self._on_config_changed)
-        
+
         self.container_layout.setContentsMargins(14, 14, 14, 14)
         self.container_layout.setSpacing(10)
-        
+
         self.setup_ui()
 
     def setup_ui(self):
         # ─── 1. LOBBY & MATCHMAKING ───
         self.add_widget(SectionHeader("Lobby & Matchmaking", "Queue accept behaviors and delays"))
-        
+
         row_accept = CleanSettingRow(
             "Auto-Accept Ready Check",
             "Automatically accept queue pops",
@@ -39,7 +39,7 @@ class SettingsPage(ScrollableList):
         )
         row_accept.toggled.connect(lambda v: self.viewmodel.set_setting("auto_accept", v))
         self.add_widget(row_accept)
-        
+
         accept_delay = float(self.viewmodel.get_setting("accept_delay", 2.0))
         row_delay = SettingsSliderRow(
             self,
@@ -48,7 +48,7 @@ class SettingsPage(ScrollableList):
             on_change=lambda v: self.viewmodel.set_setting("accept_delay", float(v))
         )
         self.add_widget(row_delay)
-        
+
         row_requeue = CleanSettingRow(
             "Auto-Requeue After Dodge",
             "Re-enter queue if someone dodges",
@@ -57,10 +57,10 @@ class SettingsPage(ScrollableList):
         )
         row_requeue.toggled.connect(lambda v: self.viewmodel.set_setting("auto_requeue_after_dodge", v))
         self.add_widget(row_requeue)
-        
+
         # ─── 2. CHAMPION SELECT AUTOMATION ───
         self.add_widget(SectionHeader("Champion Select", "Bench sniping, rune import, and skins"))
-        
+
         row_pick = CleanSettingRow(
             "Auto-Pick Priority Champion",
             "Automatically claim high priority champions",
@@ -69,7 +69,7 @@ class SettingsPage(ScrollableList):
         )
         row_pick.toggled.connect(lambda v: self.viewmodel.set_setting("auto_pick", v))
         self.add_widget(row_pick)
-        
+
         row_ban = CleanSettingRow(
             "Auto-Ban Blacklist Champion",
             "Ban configured blacklist targets",
@@ -78,7 +78,7 @@ class SettingsPage(ScrollableList):
         )
         row_ban.toggled.connect(lambda v: self.viewmodel.set_setting("auto_ban", v))
         self.add_widget(row_ban)
-        
+
         row_runes = CleanSettingRow(
             "Auto-Import Optimal Runes",
             "Apply high win rate rune pages",
@@ -87,7 +87,7 @@ class SettingsPage(ScrollableList):
         )
         row_runes.toggled.connect(lambda v: self.viewmodel.set_setting("auto_runes", v))
         self.add_widget(row_runes)
-        
+
         row_skin = CleanSettingRow(
             "Auto-Equip Favorite Skin",
             "Equip your favorite owned skin",
@@ -96,10 +96,10 @@ class SettingsPage(ScrollableList):
         )
         row_skin.toggled.connect(lambda v: self.viewmodel.set_setting("auto_skin", v))
         self.add_widget(row_skin)
-        
+
         # ─── 3. APP PREFERENCES ───
         self.add_widget(SectionHeader("App Preferences", "Client integration and background tray"))
-        
+
         row_autolaunch = CleanSettingRow(
             "Auto-Launch Client on Disconnect",
             "Relaunch League client automatically",
@@ -108,7 +108,7 @@ class SettingsPage(ScrollableList):
         )
         row_autolaunch.toggled.connect(lambda v: self.viewmodel.set_setting("auto_launch_client", v))
         self.add_widget(row_autolaunch)
-        
+
         row_tray = CleanSettingRow(
             "Minimize to System Tray",
             "Keep running silently in tray",
@@ -117,7 +117,7 @@ class SettingsPage(ScrollableList):
         )
         row_tray.toggled.connect(lambda v: self.viewmodel.set_setting("run_in_tray", v))
         self.add_widget(row_tray)
-        
+
         row_discord = CleanSettingRow(
             "Discord Rich Presence",
             "Broadcast active mode and status to Discord",
@@ -129,12 +129,12 @@ class SettingsPage(ScrollableList):
 
         # ─── 4. GLOBAL HOTKEYS ───
         self.add_widget(SectionHeader("Global Hotkeys", "Keyboard shortcuts for instant automation"))
-        
+
         hotkeys = [
             ("Toggle Automation", "hotkey_toggle_automation", "f3"),
             ("Trigger Matchmaking", "hotkey_find_match", "f4"),
         ]
-        
+
         for label_text, config_key, default_val in hotkeys:
             current_val = self.viewmodel.get_setting(config_key, default_val)
             row_hk = SettingsHotkeyRow(

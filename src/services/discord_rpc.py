@@ -106,7 +106,7 @@ class DiscordPresenceManager:
 
             self._last_update = now
             self._current_state = kwargs
-            
+
             self.rpc.update(**kwargs)
         except Exception as e:
             Logger.debug("DiscordRPC", f"Failed to update presence: {e}")

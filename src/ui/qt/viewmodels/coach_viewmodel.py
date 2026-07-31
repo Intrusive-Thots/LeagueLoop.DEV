@@ -16,15 +16,15 @@ class CoachViewModel(BaseViewModel):
         super().__init__(parent)
         self.draft_service = get_draft_service()
         self.config = get_settings_service()
-        
+
         EventBus.on("draft_state_changed", self._on_draft_state_changed)
 
     def get_session(self):
         return self.draft_service.get_session()
-        
+
     def get_team_comp_analysis(self):
         return self.draft_service.get_team_comp_analysis()
-        
+
     def get_recommendations(self, role):
         return self.draft_service.get_recommendations(role=role)
 

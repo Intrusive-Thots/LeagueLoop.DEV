@@ -25,21 +25,21 @@ class ThemeService:
         bg_card = self.get_color("colors.background.card", "#0F1A2A")
         bg_card_hover = self.get_color("colors.background.card_hover", "#142236")
         bg_input = self.get_color("colors.background.input", "#0A1220")
-        
+
         text_primary = self.get_color("colors.text.primary", "#F8F6F0")
         text_secondary = self.get_color("colors.text.secondary", "#F0C674")
         text_muted = self.get_color("colors.text.muted", "#A8B8CC")
         text_disabled = self.get_color("colors.text.disabled", "#708090")
-        
+
         accent_gold = self.get_color("colors.accent.gold", "#C8AA6E")
         accent_blue = self.get_color("colors.accent.blue", "#0BC6E3")
         state_success = self.get_color("colors.state.success", "#2ECC71")
         state_danger = self.get_color("colors.state.danger", "#E74C3C")
         state_hover = self.get_color("colors.state.hover", "#1C2630")
-        
+
         radius_md = 12
         radius_sm = 6
-        
+
         qss = f"""
         /* Global Defaults */
         QWidget {{
@@ -48,31 +48,31 @@ class ThemeService:
             font-family: "Inter", "Segoe UI", "SF Pro Text", Arial, sans-serif;
             font-size: 12px;
         }}
-        
+
         /* Main Window App Frame */
         QMainWindow, QDialog {{
             background-color: {bg_app};
         }}
-        
+
         /* Panel Container Frame */
         QFrame#panelFrame {{
             background-color: {bg_panel};
             border: 1px solid #182536;
             border-radius: {radius_md}px;
         }}
-        
+
         /* Card Frame */
         QFrame#cardFrame {{
             background-color: {bg_card};
             border: 1px solid #1E2D42;
             border-radius: {radius_md}px;
         }}
-        
+
         QFrame#cardFrame:hover {{
             background-color: {bg_card_hover};
             border-color: {accent_gold};
         }}
-        
+
         /* Standard Buttons */
         QPushButton {{
             border-radius: {radius_sm}px;
@@ -80,7 +80,7 @@ class ThemeService:
             padding: 6px 14px;
             outline: none;
         }}
-        
+
         QPushButton#primaryBtn {{
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #DCC186, stop:1 #C8AA6E);
             color: #080E18;
@@ -88,17 +88,17 @@ class ThemeService:
             min-height: 32px;
             border-radius: 6px;
         }}
-        
+
         QPushButton#primaryBtn:hover {{
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #EBE0C2, stop:1 #DCC186);
             border-color: #FFF2D6;
         }}
-        
+
         QPushButton#primaryBtn:pressed {{
             background-color: #9C824E;
             border-color: #9C824E;
         }}
-        
+
         QPushButton#secondaryBtn {{
             background-color: rgba(200, 170, 110, 0.08);
             color: {accent_gold};
@@ -106,16 +106,16 @@ class ThemeService:
             min-height: 30px;
             border-radius: 6px;
         }}
-        
+
         QPushButton#secondaryBtn:hover {{
             background-color: rgba(200, 170, 110, 0.18);
             border-color: {accent_gold};
         }}
-        
+
         QPushButton#secondaryBtn:pressed {{
             background-color: rgba(200, 170, 110, 0.28);
         }}
-        
+
         QPushButton#dangerBtn {{
             background-color: rgba(231, 76, 60, 0.1);
             color: {state_danger};
@@ -123,18 +123,18 @@ class ThemeService:
             min-height: 30px;
             border-radius: 6px;
         }}
-        
+
         QPushButton#dangerBtn:hover {{
             background-color: rgba(231, 76, 60, 0.25);
             border-color: {state_danger};
         }}
-        
+
         QPushButton:disabled {{
             color: #6C788A;
             background-color: #0E1624;
             border: 1px solid #1E2B3E;
         }}
-        
+
         /* Inputs & Entries */
         QLineEdit {{
             background-color: {bg_input};
@@ -143,12 +143,12 @@ class ThemeService:
             color: {text_primary};
             padding: 6px 12px;
         }}
-        
+
         QLineEdit:focus {{
             border: 1px solid {accent_gold};
             background-color: {bg_card};
         }}
-        
+
         /* Scrollbars styling */
         QScrollBar:vertical {{
             border: none;
@@ -156,23 +156,23 @@ class ThemeService:
             width: 6px;
             margin: 0px;
         }}
-        
+
         QScrollBar::handle:vertical {{
             background: #203048;
             min-height: 24px;
             border-radius: 3px;
         }}
-        
+
         QScrollBar::handle:vertical:hover {{
             background: {accent_gold};
         }}
-        
+
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
             border: none;
             background: none;
             height: 0px;
         }}
-        
+
         /* Tooltips */
         QToolTip {{
             background-color: #0A1424;
@@ -182,7 +182,7 @@ class ThemeService:
             padding: 4px 8px;
             font-size: 11px;
         }}
-        
+
         QPushButton:focus, QLineEdit:focus, QCheckBox:focus, QRadioButton:focus {{
             border: 1px solid {accent_gold};
         }}

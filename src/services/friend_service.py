@@ -14,10 +14,10 @@ class FriendService:
         self._league = league_service or get_league_service()
         self._friends_cache = []
         self._auto_join_names = {}
-        
+
         # Load initial config
         self._load_config()
-        
+
         # Subscribe to LCU friend events
         EventBus.on("friends_event", self._on_friends_update)
         EventBus.on("league_connected", self._on_league_connected)
@@ -87,10 +87,10 @@ class FriendService:
                 self._friends_cache[i].update(delta)
                 updated = True
                 break
-        
+
         if not updated:
             self._friends_cache.append(delta)
-        
+
         self._process_friends(self._friends_cache)
 
     def get_friends(self) -> list:
@@ -103,19 +103,19 @@ class FriendService:
         name_lower = name.lower()
         is_enabled = not self._auto_join_names.get(name_lower, False)
         self._auto_join_names[name_lower] = is_enabled
-        
+
         # Save updates back to settings
         if self._settings:
             lst = [{"name": n, "enabled": e} for n, e in self._auto_join_names.items()]
             self._settings.set("auto_join_list", lst)
-        
+
         EventBus.emit("friends_state_changed")
 
     def invite_friend(self, summoner_id: int):
         """Invite a friend to lobby."""
         if not self._league or not self._league.is_connected:
             return
-        
+
         payload = [{"toSummonerId": summoner_id}]
         self._league.request("POST", "/lol-lobby/v2/lobby/invitations", json=payload)
 

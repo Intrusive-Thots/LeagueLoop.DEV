@@ -35,6 +35,7 @@ formatter = logging.Formatter(_log_format, datefmt=_date_format)
 _logger = logging.getLogger("LeagueLoop")
 _logger.setLevel(logging.DEBUG)
 
+
 class SafeStreamHandler(logging.StreamHandler):
     """StreamHandler that swallows I/O errors on closed streams during process teardown."""
     def emit(self, record):
@@ -72,7 +73,7 @@ if not _logger.handlers:
         debug_log_path, maxBytes=5*1024*1024, backupCount=3, encoding='utf-8'
     )
     file_handler.setFormatter(formatter)
-    
+
     # Error File Handler - ERROR/CRITICAL Logs Only
     error_log_path = os.path.join(_log_dir, 'error.log')
     error_handler = SafeRotatingFileHandler(
@@ -80,11 +81,11 @@ if not _logger.handlers:
     )
     error_handler.setLevel(logging.ERROR)
     error_handler.setFormatter(formatter)
-    
+
     # Console Handler
     console_handler = SafeStreamHandler()
     console_handler.setFormatter(logging.Formatter('%(message)s'))
-    
+
     _logger.addHandler(file_handler)
     _logger.addHandler(error_handler)
     _logger.addHandler(console_handler)
@@ -92,7 +93,7 @@ if not _logger.handlers:
 
 class Logger:
     """Provides thread-safe logging access and exception management."""
-    
+
     _logs = []
     MAX_LOGS = 1000
 
@@ -200,8 +201,11 @@ def _handle_uncaught_thread_exception(args):
     thread_name = args.thread.name if args.thread else "UnknownThread"
     Logger.error("THREAD_CRASH", f"Uncaught Exception in [{thread_name}]: {args.exc_value}\n{tb}")
     try:
-        from utils.crash_reporter import CrashReporter
-        CrashReporter.generate_report(args.exc_type, args.exc_value, args.exc_traceback, thread_name=thread_name)
+        from utils.crash_reporter import CrashReporter  # noqa: E402
+
+        CrashReporter.generate_report(
+            args.exc_type, args.exc_value, args.exc_traceback, thread_name=thread_name
+        )
     except Exception:
         pass
 

@@ -11,7 +11,7 @@ class ChampionService:
     def __init__(self, asset_manager: AssetManager, stats_scraper: StatsScraper):
         self.assets = asset_manager
         self.scraper = stats_scraper
-        
+
         # Monitor asset loading changes
         EventBus.on("assets_loaded", self._on_assets_loaded)
 
@@ -48,7 +48,7 @@ class ChampionService:
         """Get winrate, pickrate, banrate, and tier for a champion."""
         if not self.scraper:
             return {"win_rate": 50.0, "pick_rate": 1.0, "ban_rate": 1.0, "tier": "A"}
-            
+
         # StatsScraper gets stats. ARAM queue ID is 450.
         win_rate = self.scraper.get_win_rate(champ_name)
         # Construct stats dict (scraper has win rate baselines, others can be mocked/scaled)
@@ -64,7 +64,7 @@ class ChampionService:
         """Asynchronously loads a champion profile icon and triggers a callback."""
         if not self.assets:
             return
-        
+
         key = self.assets.id_to_key.get(champ_id)
         if not key:
             return

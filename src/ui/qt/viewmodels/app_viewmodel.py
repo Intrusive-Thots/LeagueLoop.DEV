@@ -18,27 +18,27 @@ class AppViewModel(BaseViewModel):
         super().__init__(parent)
         self.league_service = get_league_service()
         self.config = get_settings_service()
-        
+
         EventBus.on("league_connected", self._on_connected)
         EventBus.on("league_disconnected", self._on_disconnected)
         EventBus.on("automation_queue_state", self._on_queue_state)
-        
+
         # We need a reference to the global engine to toggle power
         # For now, we will fire an event that the engine listens to, or call the state manager
-        
+
     def _on_connected(self, *args):
         self.league_connected.emit()
-        
+
     def _on_disconnected(self, *args):
         self.league_disconnected.emit()
-        
+
     def _on_queue_state(self, phase, search_state):
         self.queue_state_changed.emit(phase, search_state)
-        
+
     def toggle_power(self, state: bool):
         # We emit a global event that the automation engine handles
         EventBus.emit("toggle_automation_power", state)
-        
+
     def get_mode_string(self):
         # Read the current mode from config if the engine doesn't broadcast it
         # The engine stores the queue ID in state or config

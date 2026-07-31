@@ -30,7 +30,7 @@ class SettingsService:
             self.set(key, val, save=False)
         if save and self._config:
             self._config.save()
-            
+
     def save(self):
         if self._config:
             self._config.save()

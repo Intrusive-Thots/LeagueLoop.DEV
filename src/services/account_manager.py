@@ -62,7 +62,7 @@ class AccountManager:
         self._accounts: List[Dict[str, Any]] = []
         self._active_idx: int = -1
         self._lock = threading.Lock()
-        
+
         # Migration: Ensure existing accounts have new fields
         self._load()
         self._migrate_accounts()
@@ -204,7 +204,7 @@ class AccountManager:
 
     def add_account(self, label: str, username: str, password: str, tagline: str = "", region: str = "NA1") -> int:
         """Add a new account. Returns the index of the new account.
-        
+
         Args:
             label: Display name for the account (e.g. 'Main')
             username: Riot login username (NOT the in-game name)
@@ -278,7 +278,7 @@ class AccountManager:
     # ─────────── Active Account Detection ───────────
     def detect_active_account(self) -> int:
         """Try to detect which account is currently logged in.
-        
+
         Data model:
           - acct['username'] = Riot login username (e.g. 'themalcolm3')
           - acct['tagline']  = In-game Riot ID (e.g. 'IntrusiveThots#NTRSV')
@@ -343,13 +343,13 @@ class AccountManager:
                         gn = acct_info.get("game_name", "")
                         tl = acct_info.get("tag_line", "")
                         label = f"{gn}#{tl}" if gn and tl else (gn or "Previously Logged In")
-                        
+
                         exists = False
                         for acct in self._accounts:
                             if acct.get("tagline", "").lower() == label.lower():
                                 exists = True
                                 break
-                        
+
                         if not exists:
                             self.add_account(
                                 label=label,
@@ -396,13 +396,13 @@ class AccountManager:
                         gn = data.get("gameName", "")
                         tl = data.get("tagLine", "")
                         label = f"{gn}#{tl}" if gn and tl else (gn or "Previously Logged In")
-                        
+
                         exists = False
                         for acct in self._accounts:
                             if acct.get("tagline", "").lower() == label.lower():
                                 exists = True
                                 break
-                        
+
                         if not exists:
                             self.add_account(
                                 label=label,
@@ -427,14 +427,14 @@ class AccountManager:
         """Fetch and cache Blue Essence and RP for the active account."""
         if self._active_idx < 0 or not self.lcu or not self.lcu.is_connected:
             return
-            
+
         try:
             res = self.lcu.request("GET", "/lol-inventory/v1/wallet", silent=True)
             if res and res.status_code == 200:
                 wallet_data = res.json()
                 rp = wallet_data.get("RP", 0)
                 be = wallet_data.get("lol_blue_essence", 0)
-                
+
                 with self._lock:
                     self._accounts[self._active_idx]["wallet"] = {"be": be, "rp": rp}
                     self._save()

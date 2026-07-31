@@ -49,7 +49,7 @@ def handle_arena_ban(engine, session, action, banned_ids):
     arena_ban = engine.config.get("arena_ban", "")
     if not arena_ban:
         return
-        
+
     ban_id = engine.assets.name_to_id.get(arena_ban.lower(), 0)
     if not ban_id or ban_id in banned_ids:
         return
@@ -57,17 +57,17 @@ def handle_arena_ban(engine, session, action, banned_ids):
     now = time.time()
     action_id = action.get("id", 0)
     current_hover = action.get("championId", 0)
-    
+
     timer = session.get("timer", {})
     time_left_ms = timer.get("adjustedTimeLeftInPhase", 15000)
     instant_ban = engine.config.get("arena_instant_ban", False)
-    
+
     if current_hover != ban_id and (now - getattr(engine, "_last_synergy_patch", 0) > 0.5):
         engine._log(f"Arena: Hovering Ban {arena_ban}")
         engine.lcu.request("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}", data={"championId": ban_id})
         engine._last_synergy_patch = now
         engine._synergy_patch_time = now
-        
+
     elif current_hover == ban_id:
         time_since_patch = now - getattr(engine, "_synergy_patch_time", 0)
         if time_since_patch > 0.5 and (instant_ban or time_left_ms <= 2000) and (now - getattr(engine, "_last_synergy_patch", 0) > 0.5):
@@ -82,19 +82,19 @@ def handle_arena_pick(engine, session, me, action, banned_ids):
     action_id = action.get("id", 0)
     current_hover = action.get("championId", 0)
     now = time.time()
-    
+
     my_team = session.get("myTeam", [])
     teammate = next((p for p in my_team if p.get("cellId") != me.get("cellId")), None)
-    
+
     target_id = 0
     if teammate:
         teammate_champ_id = teammate.get("championId", 0)
         teammate_intent = teammate.get("championPickIntent", 0)
         target_id = teammate_champ_id if teammate_champ_id != 0 else teammate_intent
-    
+
     pairs = engine.config.get("arena_pairs", [])
     mapped_me_list = []
-    
+
     if target_id != 0:
         teammate_champ_name = engine.assets.get_champ_name(target_id)
         if teammate_champ_name:
@@ -109,12 +109,12 @@ def handle_arena_pick(engine, session, me, action, banned_ids):
         fallback = engine.config.get("arena_fallback_pick", "")
         if not fallback:
             fallback = engine.config.get("auto_pick", "")
-            
+
         if fallback:
             mapped_me_list = [fallback]
-            
+
     mapped_my_id, mapped_me_champ = 0, ""
-    
+
     if mapped_me_list:
         for champ_name in mapped_me_list:
             if champ_name.lower() in ("bravery", "random"):
@@ -137,7 +137,7 @@ def handle_arena_pick(engine, session, me, action, banned_ids):
                     mapped_my_id = cid
                     mapped_me_champ = champ_name
                     break
-                
+
     if mapped_my_id == 0:
         legacy_fallback = engine.config.get("auto_pick", "")
         if legacy_fallback:
@@ -145,10 +145,10 @@ def handle_arena_pick(engine, session, me, action, banned_ids):
             if cid and cid not in banned_ids and cid != target_id:
                 mapped_my_id = cid
                 mapped_me_champ = legacy_fallback
-            
+
     timer = session.get("timer", {})
     time_left_ms = timer.get("adjustedTimeLeftInPhase", 15000)
-    
+
     teammate_locked = False
     if teammate:
         actions = session.get("actions", [])
@@ -160,7 +160,7 @@ def handle_arena_pick(engine, session, me, action, banned_ids):
                     break
             if teammate_locked:
                 break
-                
+
     if not teammate_locked and target_id != 0 and teammate and teammate.get("championId", 0) != 0:
         teammate_locked = True
 
@@ -173,7 +173,7 @@ def handle_arena_pick(engine, session, me, action, banned_ids):
     else:
         if engine.config.get("arena_auto_lock", False):
             lock_target = mapped_my_id if mapped_my_id != 0 else current_hover
-            
+
             if lock_target != 0 and current_hover == lock_target:
                 time_since_patch = now - getattr(engine, "_synergy_patch_time", 0)
                 if time_since_patch > 0.5 and (time_left_ms <= 2000 or teammate_locked) and (now - getattr(engine, "_last_synergy_patch", 0) > 0.5):
@@ -191,9 +191,9 @@ def perform_draft_assistant(engine, session):
     assigned = me.get("assignedPosition", "")
     if not assigned:
         return
-        
+
     assigned = assigned.upper()
-    
+
     actions = session.get("actions", [])
     my_action = None
     for row in actions:
@@ -209,7 +209,7 @@ def perform_draft_assistant(engine, session):
 
     action_type = my_action.get("type", "")
     action_id = my_action.get("id", 0)
-    
+
     my_team = session.get("myTeam", [])
     banned_champ_ids = []
     for b in session.get("bannedChampions", []):
@@ -227,13 +227,13 @@ def perform_draft_assistant(engine, session):
             for champ_id in (p.get("championPickIntent", 0), p.get("championId", 0))
             if champ_id > 0
         }
-        
+
         ban_candidates = []
         for i in range(1, 4):
             ban_str = engine.config.get(f"ban_{assigned}_{i}", "")
             if ban_str:
                 ban_candidates.append(ban_str)
-        
+
         if not ban_candidates:
             global_ban = engine.config.get("auto_ban", "")
             if isinstance(global_ban, str) and global_ban.strip():
@@ -242,17 +242,17 @@ def perform_draft_assistant(engine, session):
                 ban_str = engine.config.get(f"auto_ban_{i}", "")
                 if ban_str:
                     ban_candidates.append(ban_str)
-        
+
         auto_lock_ban = engine.config.get("auto_lock_in", False) or engine.config.get("auto_ban", False)
         for ban_str in ban_candidates:
             ban_id = engine.assets.name_to_id.get(ban_str.lower(), 0)
             if not ban_id: continue
-            
+
             if ban_id in banned_champ_ids: continue
             if ban_id in teammate_hovers:
                 engine._log(f"Draft: Skipping ban {ban_str} because a teammate is hovering it.")
                 continue
-            
+
             if my_action.get("championId") != ban_id and (now - getattr(engine, "_last_draft_action_time", 0) > 0.5):
                 engine._log(f"Draft: Hovering Ban {ban_str}")
                 engine.lcu.request("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}", data={"championId": ban_id})
@@ -268,7 +268,7 @@ def perform_draft_assistant(engine, session):
         from itertools import chain
         enemy_team = session.get("theirTeam", [])
         picked_ids = {cid for p in chain(my_team, enemy_team) if (cid := p.get("championId", 0)) > 0}
-        
+
         my_cell_id = me.get("cellId")
         teammate_hovers = {
             champ_id
@@ -277,13 +277,13 @@ def perform_draft_assistant(engine, session):
             for champ_id in (p.get("championPickIntent", 0), p.get("championId", 0))
             if champ_id > 0
         }
-                
+
         pick_candidates = []
         for i in range(1, 4):
             pick_str = engine.config.get(f"pick_{assigned}_{i}", "")
             if pick_str:
                 pick_candidates.append(pick_str)
-                
+
         if not pick_candidates:
             global_pick = engine.config.get("auto_pick", "")
             if isinstance(global_pick, str) and global_pick.strip():
@@ -302,12 +302,12 @@ def perform_draft_assistant(engine, session):
             if not isinstance(pick_str, str) or not pick_str.strip(): continue
             pick_id = engine.assets.name_to_id.get(pick_str.lower(), 0)
             if not pick_id: continue
-            
+
             if pick_id in banned_champ_ids or pick_id in picked_ids or pick_id in teammate_hovers:
                 if pick_id in teammate_hovers:
                     engine._log(f"Draft: Skipping pick {pick_str} because a teammate is hovering it.")
                 continue
-            
+
             if my_action.get("championId") != pick_id and (now - getattr(engine, "_last_draft_action_time", 0) > 0.5):
                 engine._log(f"Draft: Hovering Pick {pick_str}")
                 engine.lcu.request("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}", data={"championId": pick_id})
@@ -327,7 +327,7 @@ def perform_priority_sniper(engine, session, priority_list):
     me = get_local_player(engine, session)
     my_champ_id = me.get("championId", 0) if me else 0
     my_champ_name = engine.assets.get_champ_name(my_champ_id) if my_champ_id else ""
-    
+
     bench_map = {}
     for champ in bench:
         cid = champ.get("championId")
@@ -359,7 +359,7 @@ def perform_priority_sniper(engine, session, priority_list):
         now = time.time()
 
         if now - getattr(engine, "_last_priority_swap", 0) < PRIORITY_SWAP_COOLDOWN: return
-        
+
         engine._log(f"Sniper: Found {best_bench_champ}! Swapping...")
         engine.lcu.request("POST", f"/lol-champ-select/v1/session/bench/swap/{best_bench_id}")
         engine._last_priority_swap = now

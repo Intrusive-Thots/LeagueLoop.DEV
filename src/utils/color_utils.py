@@ -21,8 +21,8 @@ def interpolate_color(color1: str, color2: str, factor: float) -> str:
     if color1 == "transparent" or color2 == "transparent":
         return color1
     try:
-        c1 = [int(color1[i : i + 2], 16) for i in (1, 3, 5)]
-        c2 = [int(color2[i : i + 2], 16) for i in (1, 3, 5)]
+        c1 = [int(color1[i:i + 2], 16) for i in (1, 3, 5)]
+        c2 = [int(color2[i:i + 2], 16) for i in (1, 3, 5)]
         new_color = [int(c1[i] + (c2[i] - c1[i]) * factor) for i in range(3)]
         return f"#{new_color[0]:02x}{new_color[1]:02x}{new_color[2]:02x}"
     except Exception as e:

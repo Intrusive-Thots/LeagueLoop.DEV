@@ -85,7 +85,7 @@ def auto_equip_runes(engine, session):
 
         assigned = me.get("assignedPosition", "")
         pos = assigned if assigned else ""
-        
+
         # 1. Primary: Apply official LCU recommended rune page
         req = engine.lcu.request("GET", f"/lol-perks/v1/recommended-pages/{champ_id}?position={pos}", silent=True)
         if req and req.status_code == 200:
@@ -131,7 +131,7 @@ def handle_champ_select(engine, phase, session):
         engine._last_champ_id = 0
         EventBus.emit("automation_lobby_stats", [], [], None)
         return
-        
+
     if not session:
         EventBus.emit("automation_lobby_stats", [], [], None)
         return
@@ -148,7 +148,7 @@ def handle_champ_select(engine, phase, session):
 
     my_team = session.get("myTeam", [])
     bench = session.get("benchChampions", [])
-    
+
     local_cell_id = session.get("localPlayerCellId")
     me_player = next((p for p in my_team if p.get("cellId") == local_cell_id), None)
     EventBus.emit("automation_lobby_stats", my_team, bench, me_player)

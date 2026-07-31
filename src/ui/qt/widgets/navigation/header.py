@@ -21,13 +21,13 @@ class TabButton(QPushButton):
         self.setFixedHeight(32)
         self.setFocusPolicy(Qt.StrongFocus)
         self.is_active = False
-        
+
         self._color = QColor("#6C757D")
-        
+
         self.anim = QVariantAnimation(self)
         self.anim.setDuration(120)
         self.anim.valueChanged.connect(self._on_anim)
-        
+
         self._update_style()
 
     def set_active(self, active):
@@ -95,7 +95,7 @@ class HeaderBar(QWidget):
         self.parent = parent
         self.setFixedHeight(40)
         self.setObjectName("headerBarFrame")
-        
+
         self.setStyleSheet("""
             QWidget#headerBarFrame {
                 background-color: #080E18;
@@ -113,22 +113,22 @@ class HeaderBar(QWidget):
                 border-radius: 4px;
             }
         """)
-        
+
         layout = QHBoxLayout(self)
         layout.setContentsMargins(14, 0, 6, 0)
         layout.setSpacing(0)
-        
+
         # 1. App Title
         self.logo_lbl = QLabel("League Loop", self)
         self.logo_lbl.setStyleSheet("font-weight: bold; color: #C8AA6E; font-size: 12px; margin-right: 16px;")
         layout.addWidget(self.logo_lbl)
-        
+
         # 2. Tab Navigation (Version One: Play | Automation | Champions | Settings)
         self.tab_container = QWidget(self)
         self.tab_layout = QHBoxLayout(self.tab_container)
         self.tab_layout.setContentsMargins(0, 0, 0, 0)
         self.tab_layout.setSpacing(4)
-        
+
         self.tabs = []
         tab_defs = [
             ("Play", 0),
@@ -141,21 +141,21 @@ class HeaderBar(QWidget):
             tab.clicked.connect(lambda checked=False, i=idx: self.parent.switch_page(i))
             self.tab_layout.addWidget(tab)
             self.tabs.append(tab)
-        
+
         layout.addWidget(self.tab_container)
         layout.addStretch()
-        
+
         # 3. Queue Timer Badge
         self.timer_lbl = QLabel("⏳ 0:00", self)
         self.timer_lbl.setStyleSheet("color: #C8AA6E; font-size: 11px; font-weight: bold; background: #0E1A2E; padding: 2px 8px; border-radius: 4px; border: 1px solid #1E2D42;")
         self.timer_lbl.setVisible(False)
         layout.addWidget(self.timer_lbl)
-        
+
         # 4. Profile Badge
         self.profile_lbl = QLabel("", self)
         self.profile_lbl.setStyleSheet("color: #C8AA6E; font-size: 11px; font-weight: bold;")
         layout.addWidget(self.profile_lbl)
-        
+
         # 5. Window Controls (Dock, Min, Close)
         self.btn_dock = QPushButton(self)
         self.btn_dock.setFixedSize(26, 26)
@@ -166,7 +166,7 @@ class HeaderBar(QWidget):
         btn_dock_layout.addWidget(self.dock_icon_widget)
         self.btn_dock.clicked.connect(self._toggle_dock)
         layout.addWidget(self.btn_dock)
-        
+
         self.btn_min = QPushButton(self)
         self.btn_min.setFixedSize(26, 26)
         self.btn_min.setCursor(Qt.PointingHandCursor)
@@ -175,7 +175,7 @@ class HeaderBar(QWidget):
         btn_min_layout.addWidget(RiotIconWidget("minimize", size=16, color="#C8AA6E", parent=self.btn_min))
         self.btn_min.clicked.connect(self.parent.showMinimized)
         layout.addWidget(self.btn_min)
-        
+
         self.btn_close = QPushButton(self)
         self.btn_close.setFixedSize(26, 26)
         self.btn_close.setCursor(Qt.PointingHandCursor)
@@ -184,11 +184,11 @@ class HeaderBar(QWidget):
         btn_close_layout.addWidget(RiotIconWidget("close", size=16, color="#E74C3C", parent=self.btn_close))
         self.btn_close.clicked.connect(self.parent.close)
         layout.addWidget(self.btn_close)
-        
+
         self._drag_position = None
         self._window_service = get_window_service()
         self._update_dock_icon()
-        
+
         # Initialize and bind ViewModel
         self.viewmodel = HeaderViewModel(self)
         self.viewmodel.timer_text_changed.connect(self.timer_lbl.setText)
@@ -198,12 +198,12 @@ class HeaderBar(QWidget):
     def set_active_tab(self, index):
         for tab in self.tabs:
             tab.set_active(tab.page_index == index)
-        
+
     def _toggle_dock(self):
         is_docked = self._window_service.is_docked
         self._window_service.set_docked_mode(not is_docked)
         self._update_dock_icon()
-        
+
     def _update_dock_icon(self):
         is_docked = self._window_service.is_docked
         self.btn_dock.setToolTip("Docked Mode (Snaps to League)" if is_docked else "Undocked Mode (Free Window)")

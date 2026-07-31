@@ -33,7 +33,7 @@ class LCUTransport:
         self.base_url: Optional[str] = None
         self.is_connected: bool = False
         self.headers: Dict[str, str] = {}
-        
+
         self._max_retries = max_retries
         self._lock = threading.Lock()
         self._backoff = 1.0
@@ -92,7 +92,7 @@ class LCUTransport:
                     EventBus.publish(LCUConnectionEvent(connected=True, port=int(self.port)))
                     EventBus.emit("lcu_connected", True)
                     return True
-                
+
                 self.is_connected = False
                 return False
 

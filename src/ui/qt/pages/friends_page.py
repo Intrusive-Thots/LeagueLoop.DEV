@@ -44,7 +44,7 @@ def pil_to_pixmap(pil_img):
 
 class CircleLabel(QLabel):
     """Custom circular image widget for profile icons."""
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedSize(32, 32)
@@ -71,20 +71,20 @@ class CircleLabel(QLabel):
 
 class FriendRowWidget(QFrame):
     """A single friend entry card featuring profile avatar, status dot, rank badges, and auto-join toggle."""
-    
+
     def __init__(self, parent=None, friend_data=None, assets=None, on_toggle_auto=None, on_context=None):
         super().__init__(parent)
         self.friend_data = friend_data
         self.on_toggle_auto = on_toggle_auto
         self.on_context = on_context
-        
+
         self.name = friend_data.get("gameName", "") or friend_data.get("name", "")
         self.name_lower = friend_data.get("_name_lower", self.name.lower())
         self.avail = friend_data.get("availability", "offline")
-        
+
         self.setFixedHeight(46)
         self.setCursor(Qt.PointingHandCursor)
-        
+
         # Stylesheet layout matching design tokens
         border = get_theme_color("colors.border.subtle", "#1E2328")
         self.setStyleSheet(f"""
@@ -98,15 +98,15 @@ class FriendRowWidget(QFrame):
                 border: 1px solid {border};
             }}
         """)
-        
+
         layout = QHBoxLayout(self)
         layout.setContentsMargins(6, 4, 6, 4)
         layout.setSpacing(8)
-        
+
         # Circle Avatar
         self.avatar = CircleLabel(self)
         layout.addWidget(self.avatar)
-        
+
         # Async Icon Loading
         icon_id = friend_data.get("icon", 1)
         if not isinstance(icon_id, int) or icon_id < 0:
@@ -117,34 +117,34 @@ class FriendRowWidget(QFrame):
                     pix = pil_to_pixmap(img._image)
                     QMetaObject.invokeMethod(self.avatar, "set_pixmap", Qt.QueuedConnection, Q_ARG(QPixmap, pix))
             assets.get_icon_async("profileicon", str(icon_id), _on_icon_loaded, size=(32, 32))
-            
+
         # Status Dot
         self.status_dot = QLabel("●", self)
         is_online = self.avail != "offline"
         dot_color = get_theme_color("colors.state.success", "#2ECC71") if is_online else get_theme_color("colors.state.error", "#E74C3C")
         self.status_dot.setStyleSheet(f"color: {dot_color}; font-size: 13px;")
         layout.addWidget(self.status_dot)
-        
+
         # Text Stack Layout (Name + Message / Champion status)
         text_widget = QWidget(self)
         text_layout = QVBoxLayout(text_widget)
         text_layout.setContentsMargins(0, 0, 0, 0)
         text_layout.setSpacing(2)
-        
+
         name_color = get_theme_color("colors.accent.primary", "#C8AA6E") if is_online else get_theme_color("colors.text.disabled", "#5C6B73")
         self.lbl_name = QLabel(self.name, text_widget)
         self.lbl_name.setStyleSheet(f"color: {name_color}; font-weight: bold; font-size: 12px; background: transparent;")
         text_layout.addWidget(self.lbl_name)
-        
+
         # Resolve dynamic game details
         status_msg = "Offline"
         if is_online:
             status_msg = friend_data.get("availabilityMessage") or friend_data.get("statusMessage") or "Online"
-            
+
             # Check LCU inner game state details
             lol = friend_data.get("lol", {})
             game_state = lol.get("gameStatus") or friend_data.get("gameStatus")
-            
+
             if game_state == "inGame":
                 champ_id = lol.get("championId") or friend_data.get("championId")
                 if champ_id and assets:
@@ -159,15 +159,15 @@ class FriendRowWidget(QFrame):
                 status_msg = "Champ Select"
             elif game_state == "inQueue":
                 status_msg = "In Queue"
-                
+
         lbl_msg_color = get_theme_color("colors.text.muted", "#A0A5B5") if is_online else get_theme_color("colors.text.disabled", "#5C6B73")
         self.lbl_msg = QLabel(status_msg, text_widget)
         self.lbl_msg.setStyleSheet(f"color: {lbl_msg_color}; font-size: 10px; background: transparent;")
         text_layout.addWidget(self.lbl_msg)
-        
+
         layout.addWidget(text_widget)
         layout.addStretch()
-        
+
         # Resolve Rank Details
         lol_dict = friend_data.get("lol", {})
         tier = lol_dict.get("rankedLeagueTier") or friend_data.get("tier", "")
@@ -187,13 +187,13 @@ class FriendRowWidget(QFrame):
                 height: 14px;
             """)
             layout.addWidget(self.lbl_rank)
-        
+
         # Auto-Join Toggle Icon Button
         self.is_auto = get_friend_service().get_auto_join_status(self.name_lower)
         self.btn_auto = QPushButton("⚭", self)
         self.btn_auto.setFixedSize(24, 24)
         self.btn_auto.setCursor(Qt.PointingHandCursor)
-        
+
         auto_color = get_theme_color("colors.accent.blue", "#00A2FF") if self.is_auto else get_theme_color("colors.text.disabled")
         self.btn_auto.setStyleSheet(f"""
             QPushButton {{
@@ -209,7 +209,7 @@ class FriendRowWidget(QFrame):
         """)
         self.btn_auto.clicked.connect(self._toggle_auto_join)
         layout.addWidget(self.btn_auto)
-        
+
         # Tooltips
         self.setToolTip(f"{self.name} - Status: {self.avail.capitalize()}")
         self.btn_auto.setToolTip("Auto-Join Config - Click to Toggle")
@@ -228,34 +228,34 @@ class FriendRowWidget(QFrame):
 
 class FriendsPage(ScrollableList):
     """The PySide6 Friends Management Page containing active logs, filters, stats, and auto-join states."""
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._friends_data = []
         self._row_widgets = []
-        
+
         self.container_layout.setContentsMargins(16, 16, 16, 16)
         self.container_layout.setSpacing(12)
-        
+
         # Setup UI frame card
         self.setup_ui()
-        
+
         # Subscribe to EventBus updates
         EventBus.on("friends_state_changed", self._on_friends_state_changed)
-        
+
         # Initial render
         self.refresh_list_data()
 
     def setup_ui(self):
         self.card = make_card(title="FRIEND LIST")
         self.add_widget(self.card)
-        
+
         # Header Toolbar Layout
         toolbar = QWidget(self.card)
         toolbar_layout = QHBoxLayout(toolbar)
         toolbar_layout.setContentsMargins(0, 0, 0, 0)
         toolbar_layout.setSpacing(6)
-        
+
         # Online Badge Indicator bubble
         self.lbl_online_count = QLabel("0", toolbar)
         self.lbl_online_count.setFixedSize(22, 18)
@@ -270,12 +270,12 @@ class FriendsPage(ScrollableList):
             }}
         """)
         toolbar_layout.addWidget(self.lbl_online_count)
-        
+
         # Filter Input
         self.entry_filter = QLineEdit(toolbar)
         self.entry_filter.setPlaceholderText("Search friends...")
         self.entry_filter.setFixedHeight(24)
-        
+
         bg_card = get_theme_color("colors.background.card", "#141E28")
         border = get_theme_color("colors.border.subtle", "#1E2328")
         gold = get_theme_color("colors.accent.gold", "#C8AA6E")
@@ -295,7 +295,7 @@ class FriendsPage(ScrollableList):
         """)
         self.entry_filter.textChanged.connect(self._apply_filter)
         toolbar_layout.addWidget(self.entry_filter)
-        
+
         # Mass Invite Button
         self.btn_invite = make_button(toolbar, text="👥 Invite All", style="primary", width=80, height=24)
         self.btn_invite.setStyleSheet("""
@@ -307,7 +307,7 @@ class FriendsPage(ScrollableList):
         self.btn_invite.clicked.connect(self._on_mass_invite)
         self.btn_invite.setToolTip("Invite all online friends (or VIPs) to your lobby")
         toolbar_layout.addWidget(self.btn_invite)
-        
+
         # Export Clipboard Button
         self.btn_export = QPushButton("⎘", toolbar)
         self.btn_export.setFixedSize(24, 24)
@@ -328,7 +328,7 @@ class FriendsPage(ScrollableList):
         self.btn_export.clicked.connect(self._export_list)
         self.btn_export.setToolTip("Export List to Clipboard")
         toolbar_layout.addWidget(self.btn_export)
-        
+
         # Refresh Data Button
         self.btn_refresh = QPushButton("↻", toolbar)
         self.btn_refresh.setFixedSize(24, 24)
@@ -349,16 +349,16 @@ class FriendsPage(ScrollableList):
         self.btn_refresh.clicked.connect(self._refresh_friends_data)
         self.btn_refresh.setToolTip("Refresh Friend List")
         toolbar_layout.addWidget(self.btn_refresh)
-        
+
         self.card.add_widget(toolbar)
-        
+
         # Content frame containing friend rows list
         self.list_container = QFrame(self.card)
         self.list_container.setStyleSheet("background-color: transparent;")
         self.list_layout = QVBoxLayout(self.list_container)
         self.list_layout.setContentsMargins(0, 0, 0, 0)
         self.list_layout.setSpacing(2)
-        
+
         self.card.add_widget(self.list_container)
 
     def refresh_list_data(self):
@@ -381,10 +381,10 @@ class FriendsPage(ScrollableList):
             w.setParent(None)
             w.deleteLater()
         self._row_widgets.clear()
-        
+
         # Filter matching text
         filter_text = self.entry_filter.text().strip().lower()
-        
+
         # Update online count bubble
         online_count = sum(1 for f in self._friends_data if f.get("availability", "offline") != "offline")
         self.lbl_online_count.setText(str(online_count))
@@ -408,7 +408,7 @@ class FriendsPage(ScrollableList):
                     font-size: 10px;
                 }}
             """)
-            
+
         if not self._friends_data:
             lbl = QLabel("Checking friends...", self.list_container)
             lbl.setStyleSheet(f"color: {get_theme_color('colors.text.muted')}; font-size: 11px;")
@@ -420,17 +420,17 @@ class FriendsPage(ScrollableList):
         # Fetch AssetManager from top window
         root = self.window()
         assets = getattr(root, "assets", None)
-        
+
         row_count = 0
         for friend in self._friends_data:
             name = friend.get("gameName", "") or friend.get("name", "")
             if not name:
                 continue
-                
+
             # Filter matches
             if filter_text and filter_text not in name.lower():
                 continue
-                
+
             row = FriendRowWidget(
                 self.list_container,
                 friend_data=friend,
@@ -441,7 +441,7 @@ class FriendsPage(ScrollableList):
             self.list_layout.addWidget(row)
             self._row_widgets.append(row)
             row_count += 1
-            
+
         if row_count == 0:
             lbl = QLabel("No friends match the active filter.", self.list_container)
             lbl.setStyleSheet(f"color: {get_theme_color('colors.text.muted')}; font-size: 11px; padding: 12px;")
@@ -474,23 +474,23 @@ class FriendsPage(ScrollableList):
                 color: #FFFFFF;
             }}
         """)
-        
+
         name_lower = friend_name.lower()
         is_auto = get_friend_service().get_auto_join_status(name_lower)
         label = "✕ Disable Auto-Join" if is_auto else "✓ Enable Auto-Join"
-        
+
         act_toggle = menu.addAction(label)
         act_toggle.triggered.connect(lambda: self._toggle_auto_join(friend_name))
-        
+
         act_invite = menu.addAction("👥 Send Party Invite")
         act_invite.triggered.connect(lambda: get_friend_service().invite_friend(friend_name))
-        
+
         act_spectate = menu.addAction("👁 Spectate Game")
         act_spectate.triggered.connect(lambda: self._spectate_friend(friend_name))
-        
+
         act_msg = menu.addAction("💬 Quick Message (Copy Name)")
         act_msg.triggered.connect(lambda: self._message_friend(friend_name))
-        
+
         menu.exec(pos)
 
     def _spectate_friend(self, name):
@@ -520,14 +520,14 @@ class FriendsPage(ScrollableList):
         if not self._friends_data:
             ToastManager.get_instance().show("Friend list is empty!", icon="⚠️", theme="error")
             return
-            
+
         names = [f.get("name", "") for f in self._friends_data if f.get("name", "")]
         export_str = "\n".join(names)
-        
+
         from PySide6.QtGui import QGuiApplication
         cb = QGuiApplication.clipboard()
         cb.setText(export_str)
-        
+
         ToastManager.get_instance().show(
             "Friend List Copied!",
             icon="📋",

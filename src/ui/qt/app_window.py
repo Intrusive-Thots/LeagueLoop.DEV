@@ -45,21 +45,21 @@ class StatusBar(QFrame):
                 font-family: "Inter", sans-serif;
             }
         """)
-        
+
         layout = QHBoxLayout(self)
         layout.setContentsMargins(14, 0, 14, 0)
         layout.setSpacing(10)
-        
+
         self.lbl_status = QLabel("● Disconnected", self)
         self.lbl_status.setStyleSheet("color: #E74C3C; font-weight: bold; font-size: 11px;")
         layout.addWidget(self.lbl_status)
-        
+
         layout.addStretch()
-        
+
         self.lbl_mode = QLabel("ARAM Mode", self)
         self.lbl_mode.setStyleSheet("color: #A0A5B5; font-size: 11px; font-weight: 500;")
         layout.addWidget(self.lbl_mode)
-        
+
         from ui.qt.widgets.inputs import QtLolToggle
         self.toggle_power = QtLolToggle(
             self,
@@ -70,21 +70,21 @@ class StatusBar(QFrame):
         self.toggle_power.setChecked(True)
         self.toggle_power.clicked.connect(self._on_power_toggled)
         layout.addWidget(self.toggle_power)
-        
+
         from ui.qt.viewmodels.app_viewmodel import AppViewModel
         self.viewmodel = AppViewModel(self)
-        
+
         self.viewmodel.league_connected.connect(self._on_connected)
         self.viewmodel.league_disconnected.connect(self._on_disconnected)
         self.viewmodel.queue_state_changed.connect(self._on_queue_state)
-        
+
     def _connected_async(self):
         self.lbl_status.setText("● Connected to LCU")
         self.lbl_status.setStyleSheet("color: #2ECC71; font-weight: bold; font-size: 11px;")
 
     def _on_connected(self):
         QMetaObject.invokeMethod(self, "_connected_async", Qt.QueuedConnection)
-        
+
     def _disconnected_async(self):
         self.lbl_status.setText("● Disconnected")
         self.lbl_status.setStyleSheet("color: #E74C3C; font-weight: bold; font-size: 11px;")
@@ -99,7 +99,7 @@ class StatusBar(QFrame):
     def _on_power_toggled(self):
         state = self.toggle_power.isChecked()
         self.viewmodel.toggle_power(state)
-            
+
         from ui.qt.widgets.toast import ToastManager
         toast = ToastManager.get_instance()
         if toast:
@@ -118,50 +118,50 @@ class LeagueLoopQtWindow(QMainWindow):
     def __init__(self, ctk_app=None):
         super().__init__()
         self.ctk_app = ctk_app
-        
+
         # Load singletons directly, independent of ctk_app
         self.config = get_settings_service()
-        
+
         from services.asset_manager import get_asset_manager
         self.assets = get_asset_manager()
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground, False)
-        
+
         # No sidebar → full width goes to content. Clean 420px like V1.
         self.setMinimumSize(380, 600)
         self.resize(420, 640)
-        
+
         self.central_widget = QWidget(self)
         self.central_widget.setObjectName("centralWidget")
         self.central_widget.setStyleSheet("QWidget#centralWidget { background-color: #080E18; }")
         self.setCentralWidget(self.central_widget)
-        
+
         self.outer_layout = QVBoxLayout(self.central_widget)
         self.outer_layout.setContentsMargins(0, 0, 0, 0)
         self.outer_layout.setSpacing(0)
-        
+
         self.header_bar = HeaderBar(self)
         self.outer_layout.addWidget(self.header_bar)
-        
+
         # Page stack (no sidebar, full width)
         self.pages_stack = QStackedWidget(self)
         self.pages_stack.setObjectName("pagesStack")
         self.pages_stack.setStyleSheet("QStackedWidget#pagesStack { background-color: #080E18; }")
         self.outer_layout.addWidget(self.pages_stack)
-        
+
         self.status_bar = StatusBar(self)
         self.outer_layout.addWidget(self.status_bar)
-        
+
         self.setup_pages()
         apply_theme(self)
-        
+
         self._win_service = get_window_service()
         self._win_service.register_window(
             int(self.winId()),
             self.on_geometry_updated,
             self.on_state_updated
         )
-        
+
         self._setup_toast_overlay()
         self._tray_icon = None
         self._setup_tray_icon()
@@ -177,22 +177,22 @@ class LeagueLoopQtWindow(QMainWindow):
         try:
             from PySide6.QtWidgets import QSystemTrayIcon, QMenu
             from PySide6.QtGui import QAction, QIcon
-            
+
             if not QSystemTrayIcon.isSystemTrayAvailable():
                 return
-                
+
             icon = QIcon("assets/app_icon.ico") if getattr(sys, 'frozen', False) else QIcon()
             self._tray_icon = QSystemTrayIcon(icon, self)
-            
+
             tray_menu = QMenu()
             show_action = QAction("Show Window", self)
             show_action.triggered.connect(self.showNormal)
             tray_menu.addAction(show_action)
-            
+
             quit_action = QAction("Exit LeagueLoop", self)
             quit_action.triggered.connect(QApplication.quit)
             tray_menu.addAction(quit_action)
-            
+
             self._tray_icon.setContextMenu(tray_menu)
             self._tray_icon.activated.connect(self._on_tray_activated)
             self._tray_icon.show()
@@ -221,7 +221,7 @@ class LeagueLoopQtWindow(QMainWindow):
             ChampionsPage,     # Index 2 (Config)
             SettingsPage,      # Index 3 (Misc)
         ]
-        
+
         self.page_instances = [None] * len(self.page_classes)
         for i in range(len(self.page_classes)):
             placeholder = QWidget()
@@ -257,13 +257,13 @@ class LeagueLoopQtWindow(QMainWindow):
     def switch_page(self, index):
         if index < 0 or index >= len(self.page_classes):
             return
-            
+
         if self.page_instances[index] is None:
             try:
                 creator = self.page_classes[index]
                 instance = creator(self)
                 self.page_instances[index] = instance
-                
+
                 placeholder = self.pages_stack.widget(index)
                 self.pages_stack.insertWidget(index, instance)
                 self.pages_stack.removeWidget(placeholder)
@@ -277,25 +277,25 @@ class LeagueLoopQtWindow(QMainWindow):
                 l.addWidget(lbl)
                 self.pages_stack.insertWidget(index, error_widget)
                 return
-                
+
         target_widget = self.pages_stack.widget(index)
         if not target_widget:
             return
-            
+
         self.pages_stack.setCurrentIndex(index)
-        
+
         # Update tab highlights
         if hasattr(self, "header_bar") and self.header_bar:
             self.header_bar.set_active_tab(index)
-        
+
         # Fade-in transition
         if self.isVisible():
             from PySide6.QtWidgets import QGraphicsOpacityEffect
             target_widget.setGraphicsEffect(None)
-            
+
             eff = QGraphicsOpacityEffect(target_widget)
             target_widget.setGraphicsEffect(eff)
-            
+
             self._page_anim = QPropertyAnimation(eff, b"opacity", target_widget)
             self._page_anim.setDuration(150)
             self._page_anim.setStartValue(0.0)

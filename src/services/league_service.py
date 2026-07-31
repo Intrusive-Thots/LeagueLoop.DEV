@@ -13,10 +13,10 @@ class LeagueService:
         self.lcu = lcu_client
         self._phase = "None"
         self._summoner_info = {}
-        
+
         # Subscribe to connection events
         EventBus.on("lcu_connected", self._on_lcu_connection_change)
-        
+
         # Subscribe to WebSocket events once LCU is connected
         self.lcu.subscribe("OnJsonApiEvent_lol-gameflow_v1_gameflow-phase", self._on_gameflow_phase_event)
         self.lcu.subscribe("OnJsonApiEvent_lol-summoner_v1_current-summoner", self._on_summoner_event)
@@ -71,7 +71,7 @@ class LeagueService:
                 self._phase = resp.json()
                 Logger.info("LeagueService", f"Initial game phase: {self._phase}")
                 EventBus.emit("game_phase_changed", self._phase)
-            
+
             # 2. Fetch current summoner info
             resp = self.request("GET", "/lol-summoner/v1/current-summoner")
             if resp and resp.status_code == 200:

@@ -19,7 +19,7 @@ class ChampionsViewModel(BaseViewModel):
         self.config = get_settings_service()
         self.league_service = get_league_service()
         self.stats_scraper = get_stats_scraper()
-        
+
         EventBus.on("league_connected", self._on_league_connected)
 
     def get_setting(self, key, default=None):
@@ -27,10 +27,10 @@ class ChampionsViewModel(BaseViewModel):
 
     def set_setting(self, key, value):
         self.config.set(key, value)
-        
+
     def save_settings(self):
         self.config.save()
-        
+
     def get_stats_sync(self):
         return self.stats_scraper.get_stats_sync()
 

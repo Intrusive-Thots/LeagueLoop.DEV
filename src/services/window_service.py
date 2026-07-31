@@ -37,11 +37,11 @@ class WindowService:
         self._client_hwnd = 0
         self._is_dock_attached = False
         self._is_minimized_by_sync = False
-        
+
         # Load docked mode state from settings
         if self._settings:
             self._docked_mode = self._settings.get("docked_mode", True)
-            
+
         EventBus.on("setting_changed:docked_mode", self._on_docked_mode_setting_changed)
 
     def start(self):
@@ -152,7 +152,7 @@ class WindowService:
         last_hwnd = 0
         last_geom = (0, 0, 0, 0)
         last_topmost = None
-        
+
         while self._running:
             try:
                 if not user32:
@@ -187,21 +187,21 @@ class WindowService:
                     # Minimize / Restore Sync
                     is_game_active = self._is_game_running()
                     is_client_minimized = (user32.IsIconic(hwnd) != 0) or (user32.IsWindowVisible(hwnd) == 0)
-                    
+
                     if is_game_active:
                         if self._is_minimized_by_sync:
                             with self._lock:
                                 for h, info in self._registered_windows.items():
                                     info["state_cb"]("restore")
                             self._is_minimized_by_sync = False
-                            
+
                         # Game is active: do not set topmost
                         if last_topmost is not False:
                             with self._lock:
                                 for h, info in self._registered_windows.items():
                                     info["state_cb"]("topmost_off")
                             last_topmost = False
-                            
+
                     elif is_client_minimized:
                         if not self._is_minimized_by_sync:
                             with self._lock:
@@ -222,7 +222,7 @@ class WindowService:
                         client_y = rect.top
                         client_w = rect.right - rect.left
                         client_h = rect.bottom - rect.top
-                        
+
                         if client_w > 100:
                             # Width of docked panel (defaults to 300, matches registered window width dynamically)
                             my_w = 300
@@ -235,12 +235,12 @@ class WindowService:
                             my_h = client_h
                             target_x = client_x + client_w
                             target_y = client_y
-                            
+
                             # Clamp screen positioning
                             screen_w = user32.GetSystemMetrics(0) # SM_CXSCREEN
                             if target_x + my_w > screen_w:
                                 target_x = client_x - my_w
-                                
+
                             curr_geom = (target_x, target_y, my_w, my_h)
                             # Only update if geometry changed significantly (threshold = 2px)
                             if any(abs(curr_geom[i] - last_geom[i]) > 2 for i in range(4)):
@@ -257,7 +257,7 @@ class WindowService:
                                     if fg_hwnd == h:
                                         is_active = True
                                         break
-                                        
+
                             if is_active != last_topmost:
                                 last_topmost = is_active
                                 with self._lock:

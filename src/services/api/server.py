@@ -111,10 +111,10 @@ def start_api_server(app_instance, port=8337):
         server.app_instance = app_instance
         server._summoner_cache = None
         server._summoner_cache_time = 0
-        
+
         server_thread = threading.Thread(target=server.serve_forever, daemon=True)
         server_thread.start()
-        
+
         local_ip = get_local_ip()
         Logger.info("API", f"Remote Link API started on http://{local_ip}:{port}")
         return local_ip, port

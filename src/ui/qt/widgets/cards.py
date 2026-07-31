@@ -13,11 +13,11 @@ class RiotCard(QFrame):
     def __init__(self, parent=None, title=None, collapsible=False, start_collapsed=False):
         super().__init__(parent)
         self.setObjectName("cardFrame")
-        
+
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(14, 14, 14, 14)
         self.main_layout.setSpacing(10)
-        
+
         self.header_widget = None
         self.collapsible = collapsible
         self.is_expanded = not start_collapsed
@@ -62,7 +62,7 @@ class RiotCard(QFrame):
         self.content_layout = QVBoxLayout(self.content_frame)
         self.content_layout.setContentsMargins(0, 0, 0, 0)
         self.content_layout.setSpacing(8)
-        
+
         self.main_layout.addWidget(self.content_frame)
 
         if collapsible and start_collapsed:

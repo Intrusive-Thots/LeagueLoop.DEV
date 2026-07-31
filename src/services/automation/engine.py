@@ -92,7 +92,7 @@ class AutomationEngine:
         # InProgress phase awareness even when the LCU API connection drops.
         self._game_pid: Optional[int] = None
         self._last_game_scan: float = 0.0
-        
+
         # External Integrations
         self.discord_rpc = DiscordPresenceManager(self.config)
 
@@ -103,7 +103,7 @@ class AutomationEngine:
         self.paused = start_paused
         self._stop_event.clear()
         self._wake_event.clear()
-        
+
         # Subscribe to LCU WebSocket events to wake the loop instantly on state changes
         try:
             self.lcu.start_websocket()
@@ -232,7 +232,7 @@ class AutomationEngine:
 
     def _tick(self):
         f_phase = self.executor.submit(self.lcu.request, "GET", "/lol-gameflow/v1/gameflow-phase", None, True)
-        
+
         f_lobby = None
         if self.last_phase in ("None", "EndOfGame", "Lobby", "Matchmaking"):
             f_lobby = self.executor.submit(self.lcu.request, "GET", "/lol-lobby/v2/lobby", None, True)
@@ -442,7 +442,7 @@ class AutomationEngine:
                 max_party = resp.get("gameConfig", {}).get("maxLobbySize", 5)
                 # Ensure it defaults gracefully
                 if type(max_party) is not int: max_party = 5
-                
+
                 party_size = [len(members), max_party]
                 queue_name = resp.get("gameConfig", {}).get("showPositionSelector", False)
                 details = f"Lobby - {'Draft/Ranked' if queue_name else 'Blind/ARAM'}"

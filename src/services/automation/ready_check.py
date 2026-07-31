@@ -26,12 +26,12 @@ def handle_ready_check(engine, phase):
     base_delay = engine.config.get("accept_delay", 2.0)
     delay = base_delay + random.uniform(0.0, 1.5) if base_delay > 0 else 0.0
     engine.ready_check_delay = delay
-    
+
     def _do_accept():
         engine.lcu.request("POST", "/lol-matchmaking/v1/ready-check/accept")
         engine.ready_check_accepted = True
         engine._log("Ready Check Accepted!")
-        
+
     engine._accept_timer = threading.Timer(delay, _do_accept)
     engine._accept_timer.daemon = True
     engine._accept_timer.start()

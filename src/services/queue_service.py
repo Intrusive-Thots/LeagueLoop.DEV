@@ -11,15 +11,15 @@ class QueueService:
     def __init__(self, settings_service=None, league_service=None):
         self._settings = settings_service
         self._league = league_service
-        
+
         self.current_phase = "None"
         self._current_queue_time = 0
         self._estimated_queue_time = 120
         self.is_searching = False
-        
+
         self._timer_thread = None
         self._timer_stop_event = threading.Event()
-        
+
         # Subscribe to LCU connection / state / phase events
         EventBus.on("game_phase_changed", self._on_phase_changed)
         EventBus.on("lcu_connected", self._on_lcu_connected)
@@ -43,7 +43,7 @@ class QueueService:
         if not search_state:
             self._stop_timer()
             return
-        
+
         search_status = search_state.get("searchState")
         if search_status == "Searching":
             time_in_queue = search_state.get("timeInQueue", 0)
@@ -56,7 +56,7 @@ class QueueService:
     def _start_timer(self, start_time, estimated_time):
         self._estimated_queue_time = estimated_time if estimated_time > 0 else 120
         self._current_queue_time = start_time
-        
+
         # Avoid duplicating timer threads
         if not self.is_searching:
             self.is_searching = True
@@ -104,15 +104,15 @@ class QueueService:
         """Triggers matchmaking search based on the configured aram/game mode."""
         if not self._league or not self._league.is_connected:
             return False
-        
+
         mode = self._settings.get("aram_mode", "ARAM") if self._settings else "ARAM"
         Logger.info("QueueService", f"Initiating {mode} matchmaking search...")
-        
+
         try:
             # Check search state first
             state_req = self._league.request("GET", "/lol-lobby/v2/lobby/matchmaking/search-state")
             state_data = state_req.json() if state_req and state_req.status_code == 200 else {}
-            
+
             if state_data.get("searchState") == "Searching":
                 # Toggle search state: cancel it
                 self.cancel_matchmaking()

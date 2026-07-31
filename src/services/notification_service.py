@@ -19,13 +19,13 @@ class NotificationService:
             "confetti": confetti,
             "timestamp": None # Will be set on emit or by listener
         }
-        
+
         self._history.append(notification)
         if len(self._history) > self._max_history:
             self._history.pop(0)
-            
+
         Logger.info("NotificationService", f"Notification: {message} [{theme}]")
-        
+
         # Emit to both CustomTkinter and PySide6 subscribers
         EventBus.emit("show_toast", message, icon, theme, confetti)
         EventBus.emit("notification_received", notification)

@@ -34,10 +34,10 @@ def handle_end_of_game(engine, phase):
         eog = engine.lcu.request("GET", "/lol-end-of-game/v1/eog-stats-block", silent=True)
         if not eog or eog.status_code != 200:
             return
-        
+
         data = eog.json()
         game_id = data.get("gameId")
-        
+
         my_puuid = data.get("localPlayer", {}).get("puuid")
         if not my_puuid:
             me_req = engine.lcu.request("GET", "/lol-chat/v1/me")
@@ -46,7 +46,7 @@ def handle_end_of_game(engine, phase):
 
         teams = data.get("teams", [])
         teammates = []
-        
+
         for team in teams:
             players = team.get("players", [])
 
@@ -102,12 +102,12 @@ def handle_end_of_game(engine, phase):
                 if friends_res and friends_res.status_code == 200:
                     friend_puuids = {f.get("puuid", "") for f in friends_res.json()}
                     friend_teammates = [p for p in teammates if p.get("puuid", "") in friend_puuids]
-                
+
                 candidates = friend_teammates if friend_teammates else teammates
                 if not candidates:
                     engine._honor_handled = True
                     return
-                
+
                 sorted_cand = sort_players(candidates)
                 targets = [sorted_cand[0]]
 
@@ -182,6 +182,6 @@ def handle_end_of_game(engine, phase):
                                 engine._log(f"ARAM List: Auto-added {played_name}")
                 except Exception as e:
                     Logger.debug("Auto", f"Auto-add played champion error: {e}")
-            
+
     except Exception as e:
         Logger.debug("Auto", f"End of game error: {e}")

@@ -10,7 +10,7 @@ class DraftService:
     def __init__(self, league_service=None):
         self._league = league_service or get_league_service()
         self._session_cache = {}
-        
+
         # Subscribe to LCU draft updates
         EventBus.on("champ_select_event", self._on_champ_select_update)
         EventBus.on("league_disconnected", self._on_disconnect)
@@ -23,7 +23,7 @@ class DraftService:
         if not session_data:
             self._session_cache = {}
             return
-        
+
         data = session_data if isinstance(session_data, dict) else session_data.get("data", {})
         self._session_cache = data
         EventBus.emit("draft_state_changed", data)
@@ -41,23 +41,23 @@ class DraftService:
                 # Find my action ID
                 local_cell_id = self._session_cache.get("localPlayerCellId", -1)
                 actions = self._session_cache.get("actions", [])
-                
+
                 my_action_id = -1
                 for group in actions:
                     for act in group:
                         if act.get("actorCellId") == local_cell_id and act.get("type") == action_type and not act.get("completed"):
                             my_action_id = act.get("id", -1)
                             break
-                
+
                 if my_action_id == -1:
                     Logger.debug("DraftService", f"No active {action_type} action found for local player.")
                     return
-                
+
                 # Hover/Select
                 url = f"/lol-champ-select/v1/session/actions/{my_action_id}"
                 payload = {"championId": champ_id}
                 self._league.request("PATCH", url, json=payload)
-                
+
                 # Lock-in
                 if lock_in:
                     self._league.request("POST", f"{url}/complete")
@@ -71,7 +71,7 @@ class DraftService:
         """Swaps current pick with a champion on the bench (ARAM only)."""
         if not self._league or not self._league.is_connected:
             return
-        
+
         url = f"/lol-champ-select/v1/session/bench/swap/{champ_id}"
         self._league.request("POST", url)
 
@@ -110,7 +110,7 @@ class DraftService:
         """Analyzes active session team comp balance (AD/AP ratio, CC score, frontline count)."""
         my_team = self._session_cache.get("myTeam", [])
         picked_champs = [p.get("championId", 0) for p in my_team if p.get("championId", 0) > 0]
-        
+
         # Default balanced stats
         if not picked_champs:
             return {
@@ -120,11 +120,11 @@ class DraftService:
                 "frontline": 2,
                 "total_picked": 0
             }
-            
+
         ad_count = sum(1 for c in picked_champs if c % 2 == 1)
         ap_count = len(picked_champs) - ad_count
         total = len(picked_champs)
-        
+
         return {
             "ad_ratio": int((ad_count / total) * 100),
             "ap_ratio": int((ap_count / total) * 100),
@@ -142,13 +142,13 @@ class DraftService:
             "BOTTOM": ["Jinx", "Ezreal", "Kaisa", "Caitlyn", "Vayne", "Lucian", "Jhin"],
             "UTILITY": ["Thresh", "Nami", "Lulu", "Nautilus", "Blitzcrank", "Morgana"]
         }
-        
+
         champs = role_pools.get(role.upper(), role_pools["MIDDLE"])
         results = []
         tiers = ["S+", "S", "A+", "A", "B+"]
-        
+
         banned_ids = set(self.get_banned_champion_ids())
-        
+
         for idx, name in enumerate(champs[:5]):
             results.append({
                 "name": name,
@@ -158,7 +158,7 @@ class DraftService:
                 "counter_rating": "Strong Counter" if idx == 0 else ("Favorable" if idx <= 2 else "Neutral"),
                 "reason": f"High team synergy in {role} lane with strong late-game scaling."
             })
-            
+
         return results
 
 # Global singleton

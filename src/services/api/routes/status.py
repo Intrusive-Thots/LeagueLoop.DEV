@@ -18,12 +18,12 @@ def handle_status(handler):
     queue_mode = "None"
     summoner_info = None
     lobby_info = None
-    
+
     league = get_league_service()
     settings = get_settings_service()
     queue_service = get_queue_service()
     app = handler.app_instance
-    
+
     if league and league.is_connected:
         phase = league.get_phase()
         now = time.time()
@@ -32,7 +32,7 @@ def handle_status(handler):
                 s_res = league.request('GET', '/lol-summoner/v1/current-summoner', silent=True)
                 if s_res and s_res.status_code == 200:
                     sdata = s_res.json()
-                    
+
                     tier = "UNRANKED"
                     rank = ""
                     lp = 0
@@ -45,7 +45,7 @@ def handle_status(handler):
                                 rank = q.get('division', '')
                                 lp = q.get('leaguePoints', 0)
                                 break
-                    
+
                     handler.server._summoner_cache = {
                         "summoner_name": sdata.get("displayName") or f"{sdata.get('gameName')}#{sdata.get('tagLine')}",
                         "profile_icon_id": sdata.get("profileIconId", 1),
@@ -58,9 +58,9 @@ def handle_status(handler):
                     handler.server._summoner_cache_time = now
             except Exception as e:
                 Logger.debug("API", f"Error updating summoner cache: {e}")
-        
+
         summoner_info = getattr(handler.server, '_summoner_cache', None)
-        
+
         try:
             lobby_res = league.request('GET', '/lol-lobby/v2/lobby', silent=True)
             if lobby_res and lobby_res.status_code == 200:
@@ -74,7 +74,7 @@ def handle_status(handler):
                         m_name = summoner_info.get("summoner_name")
                     if not m_name:
                         m_name = "Summoner"
-                    
+
                     members.append({
                         "summonerName": m_name,
                         "isLeader": m.get('isLeader', False),
@@ -90,11 +90,11 @@ def handle_status(handler):
 
     if app and hasattr(app, "automation") and app.automation:
         power_state = app.automation.running and not app.automation.paused
-    
+
     queue_mode = settings.get("aram_mode", "ARAM") if settings else "ARAM"
     queue_timer = queue_service.get_queue_time() if queue_service else 0
     queue_estimated = queue_service.get_estimated_time() if queue_service else 120
-    
+
     data = {
         "phase": phase,
         "automation_enabled": power_state,

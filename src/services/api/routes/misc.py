@@ -34,7 +34,7 @@ def handle_post_aram_list(handler):
         pp['list'] = aram_list
         app.config.cfg['priority_picker'] = pp
         app.config.save()
-        
+
         try:
             EventBus.emit("config_event", app.config.cfg)
         except:

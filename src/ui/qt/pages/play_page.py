@@ -154,12 +154,12 @@ class PlayPage(QWidget):
             row = QWidget(self.friends_container)
             r_layout = QHBoxLayout(row)
             r_layout.setContentsMargins(0, 2, 0, 2)
-            
+
             dot_color = "#2ECC71" if f["status"] == "online" else "#E67E22"
             lbl_name = QLabel(f"●  {f['name']}", row)
             lbl_name.setStyleSheet(f"color: {dot_color}; font-size: 11px;")
             r_layout.addWidget(lbl_name, stretch=1)
-            
+
             self.friends_layout.addWidget(row)
 
     @Slot(bool, str)

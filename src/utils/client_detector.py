@@ -137,7 +137,7 @@ def get_riot_lockfile() -> Tuple[Optional[str], Optional[str]]:
     # Standard Riot Client lockfile path
     local_appdata = os.environ.get("LOCALAPPDATA", "")
     standard_lockfile = os.path.join(local_appdata, "Riot Games", "Riot Client", "Config", "lockfile")
-    
+
     if os.path.exists(standard_lockfile):
         try:
             with open(standard_lockfile, "r", encoding="utf-8") as f:
@@ -192,7 +192,7 @@ def scan_clients(force: bool = False) -> Dict[str, Dict]:
             try:
                 name = proc.info.get("name", "")
                 pid = proc.info.get("pid")
-                
+
                 # Check for League of Legends client
                 if not league_found and name in league_procs:
                     league_data["pid"] = pid
@@ -208,7 +208,7 @@ def scan_clients(force: bool = False) -> Dict[str, Dict]:
                                 break
                     except psutil.AccessDenied:
                         pass  # Handled below by lockfile fallback
-                    
+
                     league_found = True
 
                 # Check for Riot Client
@@ -226,7 +226,7 @@ def scan_clients(force: bool = False) -> Dict[str, Dict]:
                                 break
                     except psutil.AccessDenied:
                         pass
-                    
+
                     riot_found = True
 
                 # Stop iteration early if both are fully resolved
@@ -272,7 +272,7 @@ def is_game_running() -> bool:
     """Unified check if League of Legends.exe (the game) is running with caching."""
     global _game_running_cache, _last_game_check, _cached_game_pid
     now = time.time()
-    
+
     # 1. Fast-path: check cached PID
     if _cached_game_pid is not None:
         try:
@@ -282,14 +282,14 @@ def is_game_running() -> bool:
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             pass
         _cached_game_pid = None
-        
+
     # 2. Throttle scan to once per 2 seconds
     if _last_game_check > 0 and (now - _last_game_check < 2.0):
         return bool(_game_running_cache)
-        
+
     _last_game_check = now
     _game_running_cache = False
-    
+
     try:
         for p in psutil.process_iter(attrs=["pid", "name"]):
             try:
@@ -302,7 +302,7 @@ def is_game_running() -> bool:
                 continue
     except Exception as e:
         Logger.debug("Detector", f"Process scan for game failed: {e}")
-        
+
     return _game_running_cache
 
 

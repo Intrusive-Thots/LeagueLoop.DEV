@@ -21,7 +21,7 @@ def _resolve_token_path():
         for c in candidates:
             if os.path.exists(c):
                 return c
-    
+
     # Dev or fallback
     base = os.path.abspath(os.path.dirname(__file__))
     return os.path.join(base, "design_tokens.json")

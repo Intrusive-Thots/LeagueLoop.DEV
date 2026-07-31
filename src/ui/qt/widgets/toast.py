@@ -5,11 +5,9 @@ Implements holographic, non-intrusive animated feedback overlay widgets.
 Fully thread-safe via Qt Signal/Slot communication.
 """
 from PySide6.QtWidgets import QFrame, QLabel, QHBoxLayout, QWidget, QVBoxLayout
-from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QPoint, QRect, QObject, Signal, Slot, QEvent
-from PySide6.QtGui import QCursor
+from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QObject, Signal, Slot, QEvent
 from ui.qt.theme import get_theme_color, get_theme_radius
 from core.events import EventBus
-from utils.logger import Logger
 
 
 class Toast(QFrame):
@@ -19,10 +17,10 @@ class Toast(QFrame):
         super().__init__(parent)
         self.duration = duration
         self._is_dismissing = False
-        
+
         # Cursor & Styling
         self.setCursor(Qt.PointingHandCursor)
-        
+
         # Color definitions based on token themes
         border_c = "#1A2332"
         if theme == "success":
@@ -81,7 +79,7 @@ class Toast(QFrame):
         if self._is_dismissing:
             return
         self._is_dismissing = True
-        
+
         # Simple Qt property animation for smooth opacity fade out
         self.anim = QPropertyAnimation(self, b"windowOpacity")
         self.anim.setDuration(200)
@@ -102,7 +100,7 @@ class ToastSignalEmitter(QObject):
 
 class ToastManager(QWidget):
     """Manages the overlay layout, stack, and positioning of active Toast widgets."""
-    
+
     _instance = None
     MAX_TOASTS = 5
 
@@ -125,11 +123,11 @@ class ToastManager(QWidget):
     def __init__(self, root):
         super().__init__(root)
         self.root = root
-        
+
         # Overlay settings
         self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         self.setWindowFlags(Qt.SubWindow)
-        
+
         # Stack Layout (Bottom-Up)
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
@@ -137,17 +135,18 @@ class ToastManager(QWidget):
         self.main_layout.addStretch()  # Forces toasts to pile at bottom
 
         self._toasts = []
-        
+
         # Thread-safe emitter setup
         self.emitter = ToastSignalEmitter()
         self.emitter.show_toast.connect(self._on_show_toast)
-        
+
         # Listen on the core EventBus
         EventBus.on("show_toast", self.trigger_toast)
 
         # Monitor size / moves of parent to align correctly
         self.root.installEventFilter(self)
         self.update_geometry()
+
     def show(self, message=None, icon="✨", duration=3000, theme="primary", confetti=False):
         """Show toast message or call QWidget.show()."""
         if message is None or not isinstance(message, str):
@@ -171,11 +170,11 @@ class ToastManager(QWidget):
 
         # Create Toast widget
         toast = Toast(message, icon, duration, theme, self)
-        
+
         # Add to stacked layout (inserted before the spacer)
         self.main_layout.insertWidget(self.main_layout.count() - 1, toast)
         self._toasts.append(toast)
-        
+
         # Auto clean list on destruction
         toast.destroyed.connect(lambda: self._on_toast_destroyed(toast))
         self.update_geometry()
@@ -189,18 +188,18 @@ class ToastManager(QWidget):
         """Align ToastManager container to the bottom-right of root parent."""
         if not self.root:
             return
-        
+
         parent_w = self.root.width()
         parent_h = self.root.height()
-        
+
         # Margin and bounds
         margin = 10
         width = 250
         height = min(300, parent_h - 40)
-        
+
         x = parent_w - width - margin
-        y = parent_h - height - 32 - margin # Offset bottom status bar
-        
+        y = parent_h - height - 32 - margin  # Offset bottom status bar
+
         self.setGeometry(x, y, width, height)
 
     def eventFilter(self, watched, event):

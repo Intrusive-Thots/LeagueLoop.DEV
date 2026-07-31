@@ -14,7 +14,7 @@ from services.queue_service import get_queue_service
 def handle_action(handler):
     content_length = int(handler.headers.get('Content-Length', 0))
     post_data = handler.rfile.read(content_length)
-    
+
     action = ""
     try:
         body = json.loads(post_data.decode('utf-8'))
@@ -74,7 +74,7 @@ def handle_action(handler):
         queue_mode = body.get('queue_mode', '')
         if queue_mode and queue_service:
             queue_service.create_lobby(queue_mode)
-    
+
     handler.send_json({"status": "success", "action": action})
 
 

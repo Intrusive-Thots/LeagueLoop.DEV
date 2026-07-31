@@ -14,7 +14,7 @@ class HeaderViewModel(BaseViewModel):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        
+
         # Subscribe to background events
         EventBus.on("queue_timer_tick", self._on_timer_tick)
         EventBus.on("automation_queue_state", self._on_queue_state)

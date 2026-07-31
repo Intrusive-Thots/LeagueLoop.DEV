@@ -36,14 +36,14 @@ def check_friend_lobby(engine, phase):
         game_name = f.get("gameName", "") or f.get("name", "")
         game_tag = f.get("gameTag", "")
         combo_name = f"{game_name}#{game_tag}" if game_tag else game_name
-        
+
         friend_map[game_name.lower()] = f
         if combo_name:
             friend_map[combo_name.lower()] = f
 
     for target_dict in active_friends:
         target_friend = target_dict.get("name", "").strip().lower()
-        
+
         f = friend_map.get(target_friend)
         if not f:
             continue

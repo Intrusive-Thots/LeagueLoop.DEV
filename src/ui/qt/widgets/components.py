@@ -19,7 +19,7 @@ class SectionHeader(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 8, 0, 4)
         layout.setSpacing(2)
-        
+
         self.lbl_title = QLabel(title.upper(), self)
         self.lbl_title.setStyleSheet("""
             color: #C8AA6E;
@@ -29,7 +29,7 @@ class SectionHeader(QWidget):
             background: transparent;
         """)
         layout.addWidget(self.lbl_title)
-        
+
         if subtitle:
             self.lbl_sub = QLabel(subtitle, self)
             self.lbl_sub.setStyleSheet("color: #A0A5B5; font-size: 11px; background: transparent;")
@@ -42,13 +42,13 @@ class PrimaryButton(QPushButton):
         super().__init__(text, parent)
         self.setCursor(Qt.PointingHandCursor)
         self.setFixedHeight(36)
-        
+
         self.shadow = QGraphicsDropShadowEffect(self)
         self.shadow.setBlurRadius(0)
         self.shadow.setColor(QColor("#C8AA6E"))
         self.shadow.setOffset(0, 0)
         self.setGraphicsEffect(self.shadow)
-        
+
         self.anim = QVariantAnimation(self)
         self.anim.setDuration(120)
         self.anim.setEasingCurve(QEasingCurve.OutCubic)
@@ -105,13 +105,13 @@ class SecondaryButton(QPushButton):
         super().__init__(text, parent)
         self.setCursor(Qt.PointingHandCursor)
         self.setFixedHeight(32)
-        
+
         self.shadow = QGraphicsDropShadowEffect(self)
         self.shadow.setBlurRadius(0)
         self.shadow.setColor(QColor("#C8AA6E"))
         self.shadow.setOffset(0, 0)
         self.setGraphicsEffect(self.shadow)
-        
+
         self.anim = QVariantAnimation(self)
         self.anim.setDuration(120)
         self.anim.setEasingCurve(QEasingCurve.OutCubic)
@@ -161,13 +161,13 @@ class DangerButton(QPushButton):
         super().__init__(text, parent)
         self.setCursor(Qt.PointingHandCursor)
         self.setFixedHeight(32)
-        
+
         self.shadow = QGraphicsDropShadowEffect(self)
         self.shadow.setBlurRadius(0)
         self.shadow.setColor(QColor("#E74C3C"))
         self.shadow.setOffset(0, 0)
         self.setGraphicsEffect(self.shadow)
-        
+
         self.anim = QVariantAnimation(self)
         self.anim.setDuration(120)
         self.anim.setEasingCurve(QEasingCurve.OutCubic)
@@ -217,25 +217,25 @@ class CleanSettingRow(QWidget):
     def __init__(self, title: str, subtitle: str = "", initial_state: bool = False, parent=None):
         super().__init__(parent)
         self.setFixedHeight(40)
-        
+
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 4, 0, 4)
         layout.setSpacing(12)
-        
+
         text_layout = QVBoxLayout()
         text_layout.setSpacing(0)
-        
+
         self.lbl_title = QLabel(title, self)
         self.lbl_title.setStyleSheet("color: #F0E6D2; font-size: 12px; font-weight: 500; background: transparent;")
         text_layout.addWidget(self.lbl_title)
-        
+
         if subtitle:
             self.lbl_sub = QLabel(subtitle, self)
             self.lbl_sub.setStyleSheet("color: #6C757D; font-size: 10px; background: transparent;")
             text_layout.addWidget(self.lbl_sub)
-            
+
         layout.addLayout(text_layout, stretch=1)
-        
+
         self.toggle = QtLolToggle(
             self,
             active_color="#C8AA6E",
@@ -270,11 +270,11 @@ class MasterToggleRow(QWidget):
         """)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 8)
-        
+
         self.lbl_title = QLabel(title, self)
         self.lbl_title.setStyleSheet("color: #C8AA6E; font-size: 12px; font-weight: bold;")
         layout.addWidget(self.lbl_title, stretch=1)
-        
+
         self.toggle = QtLolToggle(
             self,
             active_color="#C8AA6E",

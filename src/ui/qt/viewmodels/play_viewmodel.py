@@ -41,7 +41,7 @@ class PlayViewModel(BaseViewModel):
 
     def set_game_mode(self, mode: str):
         self.config.set("aram_mode", mode)
-        
+
     def set_automation_states(self, state_dict: dict):
         for key, val in state_dict.items():
             self.config.set(key, val)

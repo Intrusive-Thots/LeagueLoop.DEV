@@ -39,7 +39,7 @@ def pil_to_pixmap(pil_img):
 
 class RoundedIcon(QLabel):
     """Rounded champion avatar label."""
-    
+
     def __init__(self, parent=None, radius=8):
         super().__init__(parent)
         self.setFixedSize(ICON_SIZE, ICON_SIZE)
@@ -84,21 +84,21 @@ class RotatedFrame(QFrame):
         if self._rotation == 0.0:
             super().paintEvent(event)
             return
-            
+
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setRenderHint(QPainter.SmoothPixmapTransform)
-        
+
         painter.translate(self.width() / 2.0, self.height() / 2.0)
         painter.rotate(self._rotation)
         painter.translate(-self.width() / 2.0, -self.height() / 2.0)
-        
+
         super().paintEvent(event)
 
 
 class ChampionCellWidget(RotatedFrame):
     """A single champion cell inside the priority grid with overlays and hover listeners."""
-    
+
     def __init__(self, parent_page, parent_widget=None, champ_name="", index=-1, assets=None, on_click=None, on_drag_start=None):
         super().__init__(parent_widget)
         self.parent_page = parent_page
@@ -108,19 +108,19 @@ class ChampionCellWidget(RotatedFrame):
         self.on_drag_start = on_drag_start
         self.selected = False
         self._drag_start_pos = None
-        
+
         self.setFixedSize(CELL_SIZE, CELL_SIZE)
         self.setCursor(Qt.PointingHandCursor)
-        
+
         # Main layout
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(2)
         layout.setAlignment(Qt.AlignCenter)
-        
+
         self.icon = RoundedIcon(self, radius=6)
         layout.addWidget(self.icon)
-        
+
         # Async Icon Loading
         if assets:
             def _on_icon_loaded(img):
@@ -128,12 +128,12 @@ class ChampionCellWidget(RotatedFrame):
                     pix = pil_to_pixmap(img._image)
                     self.icon.set_pixmap(pix)
             assets.get_icon_async("champion", champ_name, _on_icon_loaded, size=(ICON_SIZE, ICON_SIZE))
-            
+
         self.setToolTip(f"{champ_name} (Priority #{index + 1})")
-        
+
         self._border_subtle = get_theme_color("colors.border.subtle", "#1E2328")
         self._gold = get_theme_color("colors.accent.gold", "#C8AA6E")
-        
+
         # Overlay Favorite Star Button
         self.btn_fav = QPushButton(self)
         self.btn_fav.setFixedSize(14, 14)
@@ -142,7 +142,7 @@ class ChampionCellWidget(RotatedFrame):
         self.btn_fav.move(CELL_SIZE - 18, 4)
         self.btn_fav.setStyleSheet("background: transparent; border: none; font-size: 11px; font-weight: bold;")
         self.btn_fav.raise_()
-        
+
         self.update_style()
 
     def _on_fav_clicked(self):
@@ -168,7 +168,7 @@ class ChampionCellWidget(RotatedFrame):
                 color: #F0E6D2;
             }}
         """)
-        
+
         if self.selected:
             self.setStyleSheet(f"""
                 QFrame {{
@@ -211,7 +211,7 @@ class ChampionCellWidget(RotatedFrame):
             # Reordering check - delegate to parent page to decide if locked
             if not getattr(self.parent_page, "can_reorder", lambda: True)():
                 return
-                
+
             if (event.position().toPoint() - self._drag_start_pos).manhattanLength() >= 10:
                 if self.on_drag_start:
                     self.on_drag_start(self.index, self)

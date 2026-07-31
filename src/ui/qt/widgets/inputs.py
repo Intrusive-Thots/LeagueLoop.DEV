@@ -23,7 +23,7 @@ def make_input(parent, placeholder="", width=None, **kw):
 
 class QtLolToggle(QPushButton):
     """Custom Riot-style animated sliding toggle switch for PySide6."""
-    
+
     def __init__(self, parent=None, active_color=None, inactive_color=None, knob_color=None):
         super().__init__(parent)
         self.setCheckable(True)
@@ -31,13 +31,13 @@ class QtLolToggle(QPushButton):
         self.setFixedSize(34, 18)
         self.setCursor(Qt.PointingHandCursor)
         self.setFocusPolicy(Qt.StrongFocus)
-        
+
         self.active_color = QColor(active_color or "#A88A4E")
         self.inactive_color = QColor(inactive_color or "#1E2328")
         self.knob_color = QColor(knob_color or "#F0E6D2")
-        
+
         self._knob_position = 2.0
-        
+
         self.anim = QPropertyAnimation(self, b"knob_position", self)
         self.anim.setDuration(120)
         self.anim.setEasingCurve(QEasingCurve.InOutQuad)
@@ -76,15 +76,15 @@ class QtLolToggle(QPushButton):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        
+
         track_color = self.active_color if self.isChecked() else self.inactive_color
         painter.setBrush(QBrush(track_color))
         painter.setPen(Qt.NoPen)
         painter.drawRoundedRect(0, 0, self.width(), self.height(), 9, 9)
-        
+
         painter.setBrush(QBrush(self.knob_color))
         painter.drawEllipse(QPoint(int(self._knob_position + 9), 9), 6, 6)
-        
+
         if self.hasFocus():
             painter.setPen(QPen(QColor("#4A90E2"), 1.5))
             painter.setBrush(Qt.NoBrush)
@@ -93,14 +93,14 @@ class QtLolToggle(QPushButton):
 
 class SettingsToggleRow(QWidget):
     """Horizontal setting row with label and QtLolToggle."""
-    
+
     def __init__(self, parent=None, label_text="", initial_state=False, on_toggle=None):
         super().__init__(parent)
         self.on_toggle = on_toggle
         self.setFocusPolicy(Qt.StrongFocus)
         self.setCursor(Qt.PointingHandCursor)
         self.setFixedHeight(32)
-        
+
         self.setStyleSheet("""
             QWidget {
                 background: transparent;
@@ -109,17 +109,17 @@ class SettingsToggleRow(QWidget):
                 background-color: rgba(200, 170, 110, 0.05);
             }
         """)
-        
+
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 0, 8, 0)
         layout.setSpacing(12)
-        
+
         self.lbl_text = QLabel(label_text, self)
         self.lbl_text.setStyleSheet("color: #F0E6D2; font-size: 12px; font-weight: normal;")
         layout.addWidget(self.lbl_text, alignment=Qt.AlignVCenter)
-        
+
         layout.addStretch()
-        
+
         self.toggle = QtLolToggle(
             self,
             active_color="#A88A4E",
@@ -129,7 +129,7 @@ class SettingsToggleRow(QWidget):
         self.toggle.setChecked(initial_state)
         self.toggle.clicked.connect(self._on_toggle_clicked)
         layout.addWidget(self.toggle, alignment=Qt.AlignVCenter)
-        
+
     def _on_toggle_clicked(self):
         if self.on_toggle:
             self.on_toggle(self.toggle.isChecked())
@@ -149,23 +149,23 @@ class SettingsToggleRow(QWidget):
 
 class SettingsSliderRow(QWidget):
     """Horizontal setting row with label, QSlider, and live value badge."""
-    
+
     def __init__(self, parent=None, label_text="", initial_value=0.0, min_val=0.0, max_val=5.0, step=0.5, on_change=None):
         super().__init__(parent)
         self.on_change = on_change
         self.step = step
         self.setFixedHeight(32)
-        
+
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 0, 8, 0)
         layout.setSpacing(10)
-        
+
         self.lbl_text = QLabel(label_text, self)
         self.lbl_text.setStyleSheet("color: #F0E6D2; font-size: 12px;")
         layout.addWidget(self.lbl_text)
-        
+
         layout.addStretch()
-        
+
         self.slider = QSlider(Qt.Horizontal, self)
         self.slider.setFixedWidth(100)
         self.slider.setRange(int(min_val * 10), int(max_val * 10))
@@ -190,7 +190,7 @@ class SettingsSliderRow(QWidget):
         """)
         self.slider.valueChanged.connect(self._on_slider_changed)
         layout.addWidget(self.slider)
-        
+
         self.lbl_val = QLabel(f"{initial_value:.1f}s", self)
         self.lbl_val.setStyleSheet("color: #C8AA6E; font-size: 11px; font-weight: bold; min-width: 30px;")
         layout.addWidget(self.lbl_val)
@@ -204,19 +204,19 @@ class SettingsSliderRow(QWidget):
 
 class QtHotkeyRecorderButton(QPushButton):
     """A QPushButton that records global hotkey shortcuts on click."""
-    
+
     def __init__(self, parent=None, config_key="", initial_value="", on_change=None):
         super().__init__(parent)
         self.config_key = config_key
         self.hotkey_value = initial_value
         self.on_change = on_change
         self.recording = False
-        
+
         self.setText(initial_value or "Click to set")
         self.setFixedSize(110, 26)
         self.setCursor(Qt.PointingHandCursor)
         self.clicked.connect(self.toggle_recording)
-        
+
         self.setStyleSheet("""
             QPushButton {
                 background-color: #0A1424;
@@ -256,7 +256,7 @@ class QtHotkeyRecorderButton(QPushButton):
     def stop_recording(self, success=False, cancel=False):
         self.recording = False
         self.releaseKeyboard()
-        
+
         self.setStyleSheet("""
             QPushButton {
                 background-color: #0A1424;
@@ -271,17 +271,17 @@ class QtHotkeyRecorderButton(QPushButton):
                 border-color: #C8AA6E;
             }
         """)
-        
+
         if success and self.on_change:
             self.on_change(self.hotkey_value)
-            
+
         self.setText(self.hotkey_value or "Click to set")
 
     def keyPressEvent(self, event):
         if not self.recording:
             super().keyPressEvent(event)
             return
-            
+
         key = event.key()
         if key == Qt.Key_Escape:
             self.stop_recording(cancel=True)
@@ -289,13 +289,13 @@ class QtHotkeyRecorderButton(QPushButton):
 
         if key in (Qt.Key_Control, Qt.Key_Shift, Qt.Key_Alt, Qt.Key_Meta):
             return
-            
+
         modifiers = event.modifiers()
         parts = []
         if modifiers & Qt.ControlModifier: parts.append("ctrl")
         if modifiers & Qt.AltModifier: parts.append("alt")
         if modifiers & Qt.ShiftModifier: parts.append("shift")
-        
+
         key_str = self._map_key_to_str(key)
         if key_str:
             parts.append(key_str)
@@ -309,7 +309,7 @@ class QtHotkeyRecorderButton(QPushButton):
             return chr(key)
         if Qt.Key_F1 <= key <= Qt.Key_F12:
             return f"f{key - Qt.Key_F1 + 1}"
-            
+
         key_map = {
             Qt.Key_Space: "space",
             Qt.Key_Tab: "tab",
@@ -339,20 +339,20 @@ class QtHotkeyRecorderButton(QPushButton):
 
 class SettingsHotkeyRow(QWidget):
     """Horizontal hotkey configuration row."""
-    
+
     def __init__(self, parent=None, label_text="", config_key="", default_val="", on_change=None):
         super().__init__(parent)
         self.setFixedHeight(32)
-        
+
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 0, 8, 0)
-        
+
         self.lbl = QLabel(label_text, self)
         self.lbl.setStyleSheet("color: #F0E6D2; font-size: 12px;")
         layout.addWidget(self.lbl)
-        
+
         layout.addStretch()
-        
+
         self.btn_hk = QtHotkeyRecorderButton(
             self,
             config_key=config_key,

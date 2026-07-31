@@ -41,23 +41,23 @@ class LCUClient:
         self.is_connected: bool = False
         self.headers: Dict[str, str] = {}
         self.session = self.transport.session
-        
+
         self._client_pid: Optional[int] = None
-        
+
         # 3.1 & 3.3 State
         self._backoff = 1.0
         self._last_scan_time = 0.0
-        
+
         self._tokens = 20.0
         self._token_capacity = 20.0
         self._token_rate = 5.0
         self._last_token_update = time.time()
         self._rate_lock = threading.Lock()
-        
+
         # 3.5 Offline Retry Queue
         self._offline_queue = []
         self._offline_queue_max = 50  # Item #179: Prevent unbounded growth
-        
+
         # WebSocket internals
         self._subscriptions = {}  # event_name -> list of callbacks
         self._ws_thread = None
@@ -146,7 +146,7 @@ class LCUClient:
         """Starts the persistent websocket thread if not running."""
         if self._ws_thread and self._ws_thread.is_alive():
             return
-        
+
         self._ws_should_run = True
         self._ws_thread = threading.Thread(target=self._ws_loop, daemon=True)
         self._ws_thread.start()
@@ -189,7 +189,7 @@ class LCUClient:
             if not self.is_connected or not self.port or not self.auth_token:
                 time.sleep(2)
                 continue
-            
+
             auth_str = f"riot:{self.auth_token}"
             b64_auth = base64.b64encode(auth_str.encode()).decode()
             headers = {"Authorization": f"Basic {b64_auth}"}
@@ -199,7 +199,7 @@ class LCUClient:
                 with ws_connect(uri, ssl=ctx, additional_headers=headers) as ws:
                     self._ws_connection = ws
                     Logger.debug("LCU_WS", "WebSocket connected.")
-                    
+
                     # Re-subscribe to all existing subscriptions
                     with self._lock:
                         for ev in self._subscriptions:
@@ -217,7 +217,7 @@ class LCUClient:
                             continue
                         if not message:
                             continue
-                            
+
                         # WAMP v1 is JSON array
                         try:
                             # [8, "OnJsonApiEvent...", payload]
@@ -225,7 +225,7 @@ class LCUClient:
                             if isinstance(data, list) and len(data) >= 3 and data[0] == 8:
                                 event_name = data[1]
                                 payload = data[2]
-                                
+
                                 # 3.4 WAMP auto-normalization
                                 try:
                                     if isinstance(payload, dict) and 'data' in payload and 'eventType' in payload:
@@ -244,7 +244,7 @@ class LCUClient:
                                         callbacks = self._subscriptions[event_name].copy()
                                     if "OnJsonApiEvent" in self._subscriptions:
                                         callbacks.extend(self._subscriptions["OnJsonApiEvent"])
-                                
+
                                 for cb in callbacks:
                                     try:
                                         # Run callback in bounded pool so we don't stall the websocket
@@ -261,6 +261,6 @@ class LCUClient:
                 Logger.debug("LCU_WS", "WebSocket closed normally or by server.")
             except Exception as e:
                 Logger.debug("LCU_WS", f"WebSocket connection failed: {e}")
-            
+
             self._ws_connection = None
             time.sleep(3)  # Reconnect delay

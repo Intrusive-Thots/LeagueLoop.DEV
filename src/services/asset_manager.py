@@ -135,7 +135,7 @@ class ConfigManager:
     def __init__(self):
         """Initializes the ConfigManager."""
         self.cfg = DEFAULT_CONFIG.copy()
-        
+
         # 1. Load bundled template first (transfers dev configurations to users)
         if os.path.exists(BUNDLED_CONFIG_FILE):
             try:
@@ -143,7 +143,7 @@ class ConfigManager:
                     self.cfg.update(json.load(f))
             except Exception as e:
                 Logger.debug("Assets", f"Bundled config load failed: {e}")
-                
+
         # 2. Override with the user's local runtime config
         if os.path.exists(USER_CONFIG_FILE):
             try:
@@ -392,7 +392,7 @@ class AssetManager:
                     except json.JSONDecodeError as e:
                         Logger.error("asset_manager.py", f"Failed to parse Meraki download: {e}")
                         return
-            
+
             if os.path.exists(path):
                 with open(path, "r", encoding="utf-8") as f:
                      try:
@@ -482,7 +482,7 @@ class AssetManager:
         safe_key = cache_key.replace(" ", "_").replace(":", "").replace("/", "_")
         processed_fname = f"processed_{safe_key}.png"
         processed_path = os.path.join(CACHE_DIR, processed_fname)
-        
+
         if os.path.exists(processed_path):
             try:
                 pil_img = Image.open(processed_path).convert("RGBA")
@@ -495,11 +495,11 @@ class AssetManager:
                 return img
             except Exception as e:
                 Logger.debug("Assets", f"Cached icon corrupt, regenerating: {e}")
-                
+
         if os.path.exists(path):
             try:
                 pil_img = Image.open(path).convert("RGBA")
-                
+
                 # Resize
                 if size and pil_img.size[:2] != size[:2]:
                     # If only width is provided or aspect ratio should be kept, handle it:
@@ -545,7 +545,7 @@ class AssetManager:
         cache_key = f"{type_}_{key}_{size[0]}x{size[1]}"
         fname = ""
         url = ""
-        
+
         if type_ == "champion":
             # DDragon uses champion name keys (e.g. "Yuumi"), not numeric IDs (e.g. "350")
             # or display names with spaces (e.g. "Twisted Fate" -> "TwistedFate")
@@ -647,7 +647,7 @@ class AssetManager:
     ) -> Optional[HeadlessImage]:
         """Get a CTkImage for the specified skin splash art."""
         cache_key = f"splash_{skin_id}_{width}_{opacity}"
-        
+
         if cache_key in self.icons:
             img = self.icons.pop(cache_key)
             self.icons[cache_key] = img

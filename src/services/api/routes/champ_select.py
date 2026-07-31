@@ -257,7 +257,7 @@ def handle_spells(handler):
                 payload['spell1Id'] = int(spell1_id)
             if spell2_id is not None:
                 payload['spell2Id'] = int(spell2_id)
-            
+
             res = auto.lcu.request('PATCH', '/lol-champ-select/v1/session/my-selection', data=payload)
             if res and res.status_code in (200, 204):
                 result = {'status': 'success'}

@@ -15,7 +15,7 @@ class ScrollableList(QScrollArea):
         self.setWidgetResizable(True)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        
+
         # Transparent background, no borders
         self.setStyleSheet("""
             QScrollArea {
@@ -27,7 +27,7 @@ class ScrollableList(QScrollArea):
         # Container widget for layout
         self.container = QWidget(self)
         self.container.setStyleSheet("background-color: transparent;")
-        
+
         self.container_layout = QVBoxLayout(self.container)
         self.container_layout.setContentsMargins(0, 0, 0, 0)
         self.container_layout.setSpacing(4)
