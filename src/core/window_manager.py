@@ -26,22 +26,22 @@ if hasattr(ctypes, "windll"):
 class WindowManagerMixin:
     """Mixin providing window docking, dragging, and state management for LeagueLoopApp."""
 
-    def after(self, ms: int, func):
-        """Bridge method for legacy Tkinter .after() calls using QTimer.singleShot."""
+    def _schedule_callback(self, ms: int, func):
+        """Schedule a callback to run after specified milliseconds using QTimer."""
         QTimer.singleShot(int(ms), func)
 
     def _handle_window_service_state(self, action):
         """Callback from WindowService to change CTk window state."""
         if action == "minimize":
-            self.after(0, lambda: self._handle_window_state("minimize"))
+            self._schedule_callback(0, lambda: self._handle_window_state("minimize"))
             self._is_minimized_by_sync = True
         elif action == "restore":
-            self.after(0, lambda: self._handle_window_state("restore"))
+            self._schedule_callback(0, lambda: self._handle_window_state("restore"))
             self._is_minimized_by_sync = False
         elif action == "topmost_on":
-            self.after(0, lambda: self.attributes("-topmost", True))
+            self._schedule_callback(0, lambda: self.attributes("-topmost", True))
         elif action == "topmost_off":
-            self.after(0, lambda: self.attributes("-topmost", False))
+            self._schedule_callback(0, lambda: self.attributes("-topmost", False))
 
     def _on_close_request(self):
         """Intercept X button. Hide to tray if enabled, otherwise quit."""
@@ -106,20 +106,20 @@ class WindowManagerMixin:
                 ctypes.windll.user32.ShowWindow(hwnd, SW_RESTORE)
             except Exception:
                 pass
-            self.after(0, self.deiconify)
-            self.after(50, self.lift)
+            self._schedule_callback(0, self.deiconify)
+            self._schedule_callback(50, self.lift)
             Logger.info("SYS", "Restoring window.")
         elif state == "restore_quiet":
             if getattr(self, "_manually_hidden", False):
                 Logger.info("SYS", "Window is manually hidden to tray, skipping restore_quiet.")
                 return
             try:
-                SW_SHOWNOACTIVATE = 4
+                SW_SHOWNOACTIVATE = 9
                 hwnd = ctypes.windll.user32.GetParent(self.winfo_id())
                 if hwnd == 0: hwnd = self.winfo_id()
                 ctypes.windll.user32.ShowWindow(hwnd, SW_SHOWNOACTIVATE)
             except Exception:
-                self.after(0, self.deiconify)
+                self._schedule_callback(0, self.deiconify)
             self.attributes("-topmost", False)
             Logger.info("SYS", "Stealth restore (no focus steal).")
 
@@ -210,7 +210,7 @@ class WindowManagerMixin:
                 if hwnd != 0:
                     if hwnd != last_hwnd or not self._is_dock_attached:
                         last_hwnd = hwnd
-                        self.after(0, lambda h=hwnd: self._attach_to_hwnd(h))
+                        self._schedule_callback(0, lambda h=hwnd: self._attach_to_hwnd(h))
                         self._is_dock_attached = True
 
                     is_game_active = is_game_process_running()
@@ -218,19 +218,19 @@ class WindowManagerMixin:
 
                     if is_game_active:
                         if self._is_minimized_by_sync and not self._manually_hidden:
-                            self.after(0, lambda: self._handle_window_state("restore"))
+                            self._schedule_callback(0, lambda: self._handle_window_state("restore"))
                             self._is_minimized_by_sync = False
 
                         if last_topmost is not False:
-                            self.after(0, lambda: self.attributes("-topmost", False))
+                            self._schedule_callback(0, lambda: self.attributes("-topmost", False))
                             last_topmost = False
                     elif is_client_minimized:
                         if self.state() != "withdrawn" and self.state() != "iconic" and not self._is_minimized_by_sync:
-                            self.after(0, lambda: self._handle_window_state("minimize"))
+                            self._schedule_callback(0, lambda: self._handle_window_state("minimize"))
                             self._is_minimized_by_sync = True
                     else:
                         if self._is_minimized_by_sync and not self._manually_hidden:
-                            self.after(0, lambda: self._handle_window_state("restore"))
+                            self._schedule_callback(0, lambda: self._handle_window_state("restore"))
                             self._is_minimized_by_sync = False
 
                         rect = ctypes.wintypes.RECT()
@@ -254,7 +254,7 @@ class WindowManagerMixin:
 
                             curr_geom = (target_x, target_y, my_w, my_h)
                             if any(abs(curr_geom[i] - last_geom[i]) > GEOMETRY_THRESHOLD for i in range(4)):
-                                self.after(0, lambda x=target_x, y=target_y, h=my_h: self.geometry(f"{my_w}x{h}+{x}+{y}"))
+                                self._schedule_callback(0, lambda x=target_x, y=target_y, h=my_h: self.geometry(f"{my_w}x{h}+{x}+{y}"))
                                 last_geom = curr_geom
 
                             fg_hwnd = user32.GetForegroundWindow()
@@ -267,15 +267,15 @@ class WindowManagerMixin:
                             if is_active != last_topmost:
                                 last_topmost = is_active
                                 if is_active:
-                                    self.after(0, lambda: self.attributes("-alpha", 1.0))
-                                    self.after(0, lambda: self.attributes("-topmost", True))
+                                    self._schedule_callback(0, lambda: self.attributes("-alpha", 1.0))
+                                    self._schedule_callback(0, lambda: self.attributes("-topmost", True))
                                 else:
-                                    self.after(0, lambda: self.attributes("-topmost", False))
+                                    self._schedule_callback(0, lambda: self.attributes("-topmost", False))
 
                     time.sleep(DOCKING_POLL_INTERVAL)
                 else:
                     if self._is_dock_attached:
-                        self.after(0, lambda: self._attach_to_hwnd(0))
+                        self._schedule_callback(0, lambda: self._attach_to_hwnd(0))
                         self._is_dock_attached = False
                     last_hwnd = 0
                     last_geom = (0, 0, 0, 0)

@@ -2,7 +2,8 @@
 Application State Management Module
 Centralized single source of truth for LeagueLoop UI and background service state.
 """
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
+
 from core.events import (
     EventBus,
     LCUConnectionEvent,
@@ -21,7 +22,7 @@ class ApplicationState:
         self._selected_champion: Dict[str, Any] = {}
         self._lcu_port: int = 0
         self._active_account: str = ""
-        
+
         # Legacy compatibility properties
         self.connected = False
         self.phase = "None"
@@ -71,14 +72,22 @@ class ApplicationState:
     def selected_champion(self) -> Dict[str, Any]:
         return self._selected_champion
 
-    def set_selected_champion(self, champion_id: int, champion_name: str, is_intent: bool = False):
+    def set_selected_champion(
+        self, champion_id: int, champion_name: str, is_intent: bool = False
+    ):
         """Sets hovered/locked champion selection and dispatches ChampionSelectedEvent."""
         self._selected_champion = {
             "id": champion_id,
             "name": champion_name,
             "is_intent": is_intent,
         }
-        EventBus.publish(ChampionSelectedEvent(champion_id=champion_id, champion_name=champion_name, is_intent=is_intent))
+        EventBus.publish(
+            ChampionSelectedEvent(
+                champion_id=champion_id,
+                champion_name=champion_name,
+                is_intent=is_intent
+            )
+        )
 
 
 # Global singleton instance for backward compatibility

@@ -1,32 +1,43 @@
 """
-State Manager Module for LeagueLoop.
+State Manager module for LeagueLoop.
 
-Subscribes to EventBus events and updates global application state in real-time.
+Subscribes to EventBus events and updates global application state.
 """
 
 from core.state import State
 from core.events import EventBus
+
 
 class StateManager:
     """
     Subscribes to EventBus and updates State in real-time.
     This eliminates the need for polling loops to keep state accurate.
     """
+
     def __init__(self):
         # Bind LCU Connection
         EventBus.on("lcu_connected", self._on_lcu_connected)
-        
+
         # Bind Gameflow/Phase
-        EventBus.on("OnJsonApiEvent_lol-gameflow_v1_gameflow-phase", self._on_phase)
-        
+        EventBus.on(
+            "OnJsonApiEvent_lol-gameflow_v1_gameflow-phase",
+            self._on_phase
+        )
+
         # Bind Champ Select
-        EventBus.on("OnJsonApiEvent_lol-champ-select_v1_session", self._on_session)
-        
+        EventBus.on(
+            "OnJsonApiEvent_lol-champ-select_v1_session",
+            self._on_session
+        )
+
         # Bind Lobby
         EventBus.on("OnJsonApiEvent_lol-lobby_v2_lobby", self._on_lobby)
-        
+
         # Bind Matchmaking
-        EventBus.on("OnJsonApiEvent_lol-matchmaking_v1_search", self._on_search)
+        EventBus.on(
+            "OnJsonApiEvent_lol-matchmaking_v1_search",
+            self._on_search
+        )
 
         # Bind Friends List
         EventBus.on("OnJsonApiEvent_lol-chat_v1_friends", self._on_friends)
@@ -38,7 +49,10 @@ class StateManager:
         EventBus.emit("state_updated")
 
     def _on_phase(self, payload):
-        phase = payload if isinstance(payload, str) else payload.get("data", "None")
+        if isinstance(payload, str):
+            phase = payload
+        else:
+            phase = payload.get("data", "None")
         if State.phase != phase:
             State.phase = phase
             EventBus.emit("phase_changed", phase)
@@ -63,6 +77,7 @@ class StateManager:
         State.friends = friends_data
         EventBus.emit("friends_event", friends_data)
         EventBus.emit("state_updated")
+
 
 # Initialize globally
 _state_manager = StateManager()
