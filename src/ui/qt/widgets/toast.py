@@ -5,8 +5,7 @@ Implements holographic, non-intrusive animated feedback overlay widgets.
 Fully thread-safe via Qt Signal/Slot communication.
 """
 from PySide6.QtWidgets import QFrame, QLabel, QHBoxLayout, QWidget, QVBoxLayout
-from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QPoint, QRect, QObject, Signal, Slot, QEvent
-from PySide6.QtGui import QCursor
+from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QPoint, QObject, Signal, Slot, QEvent
 from ui.qt.theme import get_theme_color, get_theme_radius
 from core.events import EventBus
 from utils.logger import Logger

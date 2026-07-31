@@ -4,7 +4,7 @@ Renders individual friend cards with status dots, badges, and avatars.
 """
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QWidget
 from PySide6.QtCore import Qt, QMetaObject, Q_ARG, QPoint
-from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath, QPixmap, QImage, QCursor
+from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath, QPixmap, QImage
 
 from ui.qt.theme import get_theme_color
 from services.friend_service import get_friend_service
