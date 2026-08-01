@@ -13,11 +13,13 @@ from utils.client_detector import (
 
 class TestClientDetector(unittest.TestCase):
 
+    @patch("os.path.getsize")
     @patch("os.path.exists")
     @patch("builtins.open", new_callable=mock_open, read_data='{"rc_default": "C:/Riot Games/Riot Client/RiotClientServices.exe", "associated_client": {"C:/Riot Games/League of Legends/": ""}}')
-    def test_resolve_installation_paths(self, mock_file, mock_exists):
+    def test_resolve_installation_paths(self, mock_file, mock_exists, mock_getsize):
         # Setup mocks
         mock_exists.return_value = True
+        mock_getsize.return_value = 100  # Mock file size > 2
 
         # Run method (force re-evaluation by resetting internal module state if necessary, 
         # but since we run it first, it's fine)
@@ -31,10 +33,12 @@ class TestClientDetector(unittest.TestCase):
         self.assertEqual(riot, os.path.normpath("C:/Riot Games/Riot Client"))
         self.assertEqual(league, os.path.normpath("C:/Riot Games/League of Legends/"))
 
+    @patch("os.path.getsize")
     @patch("os.path.exists")
     @patch("builtins.open", new_callable=mock_open, read_data="LeagueClient:12345:8888:token:https")
-    def test_get_league_lockfile(self, mock_file, mock_exists):
+    def test_get_league_lockfile(self, mock_file, mock_exists, mock_getsize):
         mock_exists.return_value = True
+        mock_getsize.return_value = 100  # Mock file size > 2
         
         import utils.client_detector
         utils.client_detector._league_install_path = "C:\\Riot Games\\League of Legends"

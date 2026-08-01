@@ -288,6 +288,10 @@ class LoginAutomation:
 
     def _find_riot_client_window(self, timeout=30) -> int:
         """Find the VISIBLE Riot Client window handle."""
+        # Only available on Windows - return 0 on other platforms
+        if not hasattr(ctypes, 'windll'):
+            return 0
+            
         user32 = ctypes.windll.user32
         deadline = time.time() + timeout
 
