@@ -86,6 +86,9 @@ class AutomationEditor(ctk.CTkToplevel):
         )
         self.body.pack(fill="both", expand=True, padx=SPACING_MD, pady=SPACING_MD)
 
+        # Common setting card for quick icon visibility on main page
+        self._build_common_show_icon()
+
         # Build form fields based on automation type
         builder = getattr(self, f"_build_{self._automation_key}", None)
         if builder:
@@ -328,11 +331,54 @@ class AutomationEditor(ctk.CTkToplevel):
             wraplength=320, justify="left"
         ).pack(anchor="w", pady=(2, 0))
 
+    def _build_common_show_icon(self):
+        """Standard setting for enabling/disabling the mainpage quick access icon."""
+        card = ctk.CTkFrame(
+            self.body,
+            fg_color=get_color("colors.background.card", "#192230"),
+            corner_radius=8,
+            border_width=1,
+            border_color="#1E2838"
+        )
+        card.pack(fill="x", pady=(0, SPACING_MD))
+
+        inner = ctk.CTkFrame(card, fg_color="transparent")
+        inner.pack(fill="x", padx=12, pady=8)
+
+        config_key = f"show_icon_{self._automation_key}"
+        val = bool(self.config.get(config_key, True))
+        self._show_icon_var = ctk.BooleanVar(value=val)
+
+        lbl = ctk.CTkLabel(
+            inner, text="Show Icon on Main Page",
+            font=get_font("body", "bold"),
+            text_color=get_color("colors.text.primary")
+        )
+        lbl.pack(side="left")
+
+        sw = ctk.CTkSwitch(
+            inner, text="",
+            variable=self._show_icon_var,
+            progress_color=get_color("colors.accent.gold", "#C8AA6E"),
+            width=40
+        )
+        sw.pack(side="right")
+
+        sub = ctk.CTkLabel(
+            card, text="Displays quick action toggle icon below 'Find Match' button on main page",
+            font=get_font("caption"),
+            text_color=get_color("colors.text.muted")
+        )
+        sub.pack(anchor="w", padx=12, pady=(0, 8))
+
     # ── Save / Cancel ──
 
     def _on_save(self):
         """Save parameters back to config."""
         key = self._automation_key
+
+        if hasattr(self, "_show_icon_var"):
+            self.config.set(f"show_icon_{key}", self._show_icon_var.get())
 
         if key == "auto_accept":
             if hasattr(self, "_delay_var"):
@@ -363,6 +409,13 @@ class AutomationEditor(ctk.CTkToplevel):
                     self.config.set(f"auto_ban_{i}", val)
             if hasattr(self, "_respect_hovers_var"):
                 self.config.set("auto_ban_respect_hovers", self._respect_hovers_var.get())
+
+        # Notify parent sidebar if active
+        if self.master and hasattr(self.master, "_update_all_quick_icons"):
+            try:
+                self.master._update_all_quick_icons()
+            except Exception:
+                pass
 
         # Show toast
         try:

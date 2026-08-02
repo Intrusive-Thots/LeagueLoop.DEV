@@ -1075,13 +1075,23 @@ class SidebarWidget(ctk.CTkFrame):
             self._update_quick_icon_entry(entry)
 
     def _update_quick_icon_entry(self, entry):
-        """Updates a single quick icon button appearance based on its current ON/OFF state."""
+        """Updates a single quick icon button appearance based on its current ON/OFF state and visibility config."""
         if not entry or not entry.get("btn") or not entry["btn"].winfo_exists():
             return
 
+        key = entry["key"]
+        show_icon = bool(self.config.get(f"show_icon_{key}", True))
+        btn = entry["btn"]
+
+        if not show_icon:
+            btn.pack_forget()
+            return
+
+        if not bool(btn.winfo_manager()):
+            btn.pack(side="left", expand=True, padx=1, pady=1)
+
         is_on = entry["var"].get()
         label = entry["label"]
-        btn = entry["btn"]
 
         if is_on:
             btn.configure(
