@@ -2,22 +2,19 @@
 Manages external assets, champions, and configurations.
 """
 from utils.logger import Logger
+import gc
 import json
 import os
+import sys
 import threading
 import queue
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from collections import OrderedDict
 
+import customtkinter as ctk
 import requests
 from PIL import Image
-
-class HeadlessImage:
-    """Mock class that mimics ctk.CTkImage for PySide6 compatibility without Tkinter."""
-    def __init__(self, pil_img, size=None):
-        self._image = pil_img
-        self.size = size or pil_img.size
 
 from utils.path_utils import get_asset_path, get_data_dir
 
@@ -27,18 +24,13 @@ USER_CONFIG_FILE = os.path.join(USER_DATA_DIR, "config.json")
 BUNDLED_CONFIG_FILE = get_asset_path("config.json")
 
 CACHE_DIR = os.path.join(USER_DATA_DIR, "cache")
-CHAMPIONS_CACHE_DIR = os.path.join(CACHE_DIR, "champions")
-ITEMS_CACHE_DIR = os.path.join(CACHE_DIR, "items")
-SKINS_CACHE_DIR = os.path.join(CACHE_DIR, "skins")
-METADATA_CACHE_DIR = os.path.join(CACHE_DIR, "metadata")
 BUNDLED_ASSETS_DIR = get_asset_path("assets")
 
 # Ensure user directories exist
-for sub_dir in [CACHE_DIR, CHAMPIONS_CACHE_DIR, ITEMS_CACHE_DIR, SKINS_CACHE_DIR, METADATA_CACHE_DIR]:
-    try:
-        os.makedirs(sub_dir, exist_ok=True)
-    except OSError:
-        pass
+try:
+    os.makedirs(CACHE_DIR, exist_ok=True)
+except OSError:
+    pass
 
 DEFAULT_CONFIG = {
     "auto_accept": False,
@@ -112,13 +104,9 @@ DEFAULT_CONFIG = {
     "arena_auto_lock": False,
     "arena_synergy_enabled": True,
     "run_in_tray": True,
-    "discord_rpc_enabled": True,
     "skip_stats_enabled": True,
-    "auto_runes_enabled": True,
-    "auto_runes": True,
-    "aram_auto_add_played": False,
-    "league_client_path": "",
-    "riot_client_path": ""
+    "auto_runes_enabled": False,
+    "aram_auto_add_played": False
 }
 
 
@@ -151,31 +139,6 @@ class ConfigManager:
                     self.cfg.update(json.load(f))
             except Exception as e:
                 Logger.error("asset_manager.py", f"Handled exception: {type(e).__name__}: {e}")
-        else:
-            self.save()
-
-        # 3. Restore any persisted settings from SQLite Database
-        try:
-            from database.db_manager import DatabaseManager
-            db = DatabaseManager.get_instance()
-            for k, val_str in db.get_all_settings().items():
-                try:
-                    self.cfg[k] = json.loads(val_str)
-                except Exception:
-                    self.cfg[k] = val_str
-        except Exception:
-            pass
-
-        # 4. Auto-detect client installation paths on initial setup
-        try:
-            from utils.client_detector import resolve_installation_paths
-            l_path, r_path = resolve_installation_paths()
-            if l_path and not self.cfg.get("league_client_path"):
-                self.cfg["league_client_path"] = os.path.join(l_path, "LeagueClient.exe")
-            if r_path and not self.cfg.get("riot_client_path"):
-                self.cfg["riot_client_path"] = os.path.join(r_path, "RiotClientServices.exe")
-        except Exception as e:
-            Logger.debug("ConfigManager", f"Client path detection error: {e}")
 
     def get(self, key, default=None):
         """Get a configuration value."""
@@ -194,31 +157,14 @@ class ConfigManager:
             self.save()
 
     def save(self):
-        """Save configuration securely to AppData config.json and SQLite database."""
+        """Save configuration to file securely in AppData using atomic write."""
         try:
-            target_dir = os.path.dirname(USER_CONFIG_FILE)
-            if target_dir:
-                os.makedirs(target_dir, exist_ok=True)
             tmp_path = USER_CONFIG_FILE + ".tmp"
             with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(self.cfg, f, indent=4)
-                f.flush()
-                try:
-                    os.fsync(f.fileno())
-                except Exception:
-                    pass
             os.replace(tmp_path, USER_CONFIG_FILE)
         except Exception as e:
             Logger.error("asset_manager.py", f"Failed saving config: {e}")
-
-        # Sync to SQLite Database
-        try:
-            from database.db_manager import DatabaseManager
-            db = DatabaseManager.get_instance()
-            for k, v in self.cfg.items():
-                db.set_setting(k, json.dumps(v))
-        except Exception:
-            pass
 
 
 
@@ -226,26 +172,64 @@ class ConfigManager:
 class AssetManager:
     """Manages application assets (images, data)."""
 
-    def __init__(self, log_func=None, cache_dir=None):
+    def __init__(self, log_func=None):
         """Initializes the AssetManager."""
         self._log_func = log_func
-        self.cache_dir = cache_dir or CACHE_DIR
-        if cache_dir:
-            os.makedirs(cache_dir, exist_ok=True)
 
         self.champ_data: Dict[str, Any] = {}
         self.id_to_key: Dict[int, str] = {}  # ID (int) -> Key/DDragonID (str)
         self.id_to_tags: Dict[int, list] = {}  # ID (int) -> List[Tags]
         self.name_to_id: Dict[str, int] = {}  # Name/Key (lower) -> ID (int)
         self.champ_roles: Dict[int, list] = {}  # ID -> List[Positions]
-        self.icons: OrderedDict[str, HeadlessImage] = OrderedDict()
+        self.icons: OrderedDict[str, ctk.CTkImage] = OrderedDict()
+        self.splash_icons: OrderedDict[str, ctk.CTkImage] = OrderedDict()
+        self.skin_icons: OrderedDict[str, ctk.CTkImage] = OrderedDict()
+        self.max_splash_icons: int = 15
+        self.max_skin_icons: int = 80
+        self._splash_hits: int = 0
+        self._splash_misses: int = 0
+        self._splash_evictions: int = 0
+        # Task 152: Benchmark and optimize LRU cache hit-rate telemetry for champion skin icon previews
+        self._skin_icon_hits: int = 0
+        self._skin_icon_misses: int = 0
+        self._skin_icon_evictions: int = 0
 
         self._pending_downloads = set()
         self._lock = threading.Lock()
 
-        # Bolt: Use a Queue + Daemon Threads to prevent thread explosion during high load
-        # (e.g., skin selector) while ensuring clean app exit.
-        self._download_queue = queue.Queue()
+        # Task 146: Optimize disk cache auto-prune time-threshold evaluation under high asset download throughput
+        self._last_prune_check_timestamp = 0.0
+        self._prune_check_interval_s = 2.0
+        self._prune_check_count = 0
+        self._prune_check_skipped_count = 0
+        self._prune_executed_count = 0
+        self._total_auto_pruned_files = 0
+        self._total_auto_freed_bytes = 0
+
+        # Task 149: Memory pooling and GC optimization for champion splash asset downloads
+        self._splash_download_count = 0
+        self._gc_triggers_count = 0
+        self._splash_mem_pool_bytes_saved = 0
+        self._last_gc_timestamp = time.time()
+        self._gc_interval_s = 60.0
+
+        # Task 155: Benchmark and optimize disk cache subfolder scanning performance
+        self._cached_disk_stats: Optional[Dict[str, Any]] = None
+        self._disk_stats_scan_timestamp: float = 0.0
+        self._disk_stats_cache_ttl_s: float = 3.0
+        self._disk_scan_count: int = 0
+        self._disk_scan_cache_hits: int = 0
+        self._disk_scan_total_latency_ms: float = 0.0
+
+        # Task 158: Benchmark and optimize champion data search index lookup performance
+        self._champ_search_index: List[Dict[str, Any]] = []
+        self._champ_search_count: int = 0
+        self._champ_search_total_latency_ms: float = 0.0
+
+        # Bolt: Use a PriorityQueue + Daemon Threads to prevent thread explosion during high load
+        # while ensuring high-priority UI requests preempt low-priority background pre-loads.
+        self._download_queue = queue.PriorityQueue()
+        self._queue_counter = 0
         from core.constants import DOWNLOAD_WORKER_COUNT
         for _ in range(DOWNLOAD_WORKER_COUNT):
             threading.Thread(target=self._download_worker, daemon=True).start()
@@ -268,10 +252,11 @@ class AssetManager:
                     Logger.error("asset_manager.py", f"Handled exception: {type(e).__name__}: {e}")
 
     def _download_worker(self):
-        """Worker thread for background downloads."""
+        """Worker thread for background downloads using PriorityQueue."""
         while True:
-            func = self._download_queue.get()
+            item = self._download_queue.get()
             try:
+                func = item[-1] if isinstance(item, tuple) else item
                 func()
             except Exception as e:  # pylint: disable=broad-exception-caught
                 Logger.error("asset_manager.py", f"Handled exception: {type(e).__name__}: {e}")
@@ -334,7 +319,6 @@ class AssetManager:
 
         self._load_champion_data()
         self._load_meraki_data()
-        self.preload_champion_icons()
         self.log("Assets Loaded.")
 
     def _load_champion_data(self):
@@ -360,13 +344,17 @@ class AssetManager:
                     name = info["name"]
 
                     self.id_to_key[cid] = key_str
-                    self.id_to_tags[cid] = info.get("tags", [])
+                    raw_tags = info.get("tags", [])
+                    self.id_to_tags[cid] = tuple(sys.intern(str(t)) for t in raw_tags)
 
                     # Map both DDragon Key (e.g. "MonkeyKing") and Name (e.g. "Wukong")
                     self.name_to_id[key_str.lower()] = cid
                     self.name_to_id[name.lower()] = cid
                 except (ValueError, KeyError):
                     continue
+
+            # Task 158: Build pre-normalized champion search index
+            self._build_champ_search_index()
 
         except Exception as e:  # pylint: disable=broad-exception-caught
             Logger.error("asset_manager.py", f"Handled exception: {type(e).__name__}: {e}")
@@ -408,16 +396,18 @@ class AssetManager:
                              cid = info.get("id", 0)
                              positions = info.get("positions", [])
                              if cid and positions:
-                                 # Normalize "SUPPORT" -> "UTILITY" to match internal convention
-                                 clean_pos = [
-                                     "UTILITY" if p == "SUPPORT" else p 
+                                 # Normalize "SUPPORT" -> "UTILITY" to match internal convention with interned tuples
+                                 clean_pos = tuple(
+                                     sys.intern("UTILITY" if p == "SUPPORT" else str(p))
                                      for p in positions
-                                 ]
+                                 )
                                  self.champ_roles[int(cid)] = clean_pos
                          except Exception as e:
                              Logger.error("asset_manager.py", f"Handled exception: {e}")
                              continue
                 self.log(f"Loaded Meraki role data for {len(self.champ_roles)} champions.")
+                # Task 158: Rebuild index after role data is attached
+                self._build_champ_search_index()
 
         except Exception as e:
             Logger.error("asset_manager.py", f"Failed to load Meraki data: {type(e).__name__}: {e}")
@@ -426,6 +416,76 @@ class AssetManager:
                     os.remove(path)
             except OSError as e:
                 Logger.warning("asset_manager.py", f"Failed to remove file {path}: {e}")
+
+    def _build_champ_search_index(self) -> None:
+        """Task 158: Rebuilds pre-normalized champion search index for fast filtered queries."""
+        with self._lock:
+            search_list = []
+            for cid, key_str in self.id_to_key.items():
+                name = self.champ_data.get(key_str, {}).get("name", key_str)
+                tags = self.id_to_tags.get(cid, ())
+                roles = self.champ_roles.get(cid, ())
+                search_list.append({
+                    "id": cid,
+                    "key": key_str,
+                    "name": name,
+                    "lower_key": key_str.lower(),
+                    "lower_name": name.lower(),
+                    "tags": tags,
+                    "roles": roles,
+                })
+            self._champ_search_index = search_list
+
+    def search_champions(
+        self, query: str = "", role: Optional[str] = None, tag: Optional[str] = None, limit: int = 20
+    ) -> List[Dict[str, Any]]:
+        """Task 158: Fast indexed champion search filtering by name/key substring, role, and tag."""
+        t_start = time.perf_counter()
+        q_clean = query.strip().lower() if query else ""
+        role_clean = role.strip().upper() if role else None
+        tag_clean = tag.strip().title() if tag else None
+
+        with self._lock:
+            if not self._champ_search_index and self.id_to_key:
+                self._build_champ_search_index()
+            index_copy = list(self._champ_search_index)
+
+        results = []
+        for entry in index_copy:
+            if q_clean and (q_clean not in entry["lower_name"] and q_clean not in entry["lower_key"]):
+                continue
+            if role_clean and role_clean not in entry["roles"]:
+                continue
+            if tag_clean and tag_clean not in entry["tags"]:
+                continue
+            results.append(entry)
+            if len(results) >= limit:
+                break
+
+        dur_ms = (time.perf_counter() - t_start) * 1000.0
+        with self._lock:
+            self._champ_search_count += 1
+            self._champ_search_total_latency_ms += dur_ms
+
+        return results
+
+    def get_champ_search_telemetry(self) -> Dict[str, Any]:
+        """Task 158: Returns champion search index benchmarking and lookup performance metrics."""
+        with self._lock:
+            count = self._champ_search_count
+            tot_lat = self._champ_search_total_latency_ms
+            avg_lat = round(tot_lat / max(1, count), 4) if count > 0 else 0.0
+            idx_len = len(self._champ_search_index)
+
+            return {
+                "indexed_champion_count": idx_len,
+                "search_query_count": count,
+                "avg_search_latency_ms": avg_lat,
+                "search_count": count,
+                "index_size": idx_len,
+                "total_latency_ms": round(tot_lat, 4),
+            }
+
 
     def get_champ_name(self, champ_id: int) -> str:
         """Get champion name by ID."""
@@ -454,12 +514,14 @@ class AssetManager:
         except Exception as e:  # pylint: disable=broad-exception-caught
             Logger.error("asset_manager.py", f"Exception {url} -> {e}")
 
-    def _start_download(self, url, path):
+    def _start_download(self, url, path, priority=5):
         """Helper to start a download if not already in progress."""
         with self._lock:
             if path in self._pending_downloads:
                 return
             self._pending_downloads.add(path)
+            self._queue_counter += 1
+            counter = self._queue_counter
 
         def _target():
             try:
@@ -468,14 +530,28 @@ class AssetManager:
                 with self._lock:
                     if path in self._pending_downloads:
                         self._pending_downloads.remove(path)
-        self._download_queue.put(_target)
+        self._download_queue.put((priority, counter, _target))
 
     def _download_and_cache_image(self, url, path, cache_key, size=None, opacity=1.0):
-        if cache_key in self.icons:
-            # LRU Cache Hit: move to end
-            img = self.icons.pop(cache_key)
-            self.icons[cache_key] = img
-            return img
+        is_splash = cache_key.startswith("splash_")
+        target_dict = self.splash_icons if is_splash else self.icons
+        max_limit = self.max_splash_icons if is_splash else 300
+
+        with self._lock:
+            if cache_key in target_dict:
+                # LRU Cache Hit: move to end
+                img = target_dict.pop(cache_key)
+                target_dict[cache_key] = img
+                if is_splash:
+                    self._splash_hits += 1
+                return img
+            elif is_splash and cache_key in self.icons:
+                img = self.icons.pop(cache_key)
+                target_dict[cache_key] = img
+                self._splash_hits += 1
+                return img
+            elif is_splash:
+                self._splash_misses += 1
 
         # Check for pre-processed image on disk
         # We replace spaces and invalid characters in cache_key to be safe
@@ -488,10 +564,13 @@ class AssetManager:
                 pil_img = Image.open(processed_path).convert("RGBA")
                 # CTkImage size requires integer tuple, fallback to original if size contains None
                 disp_size = size if size and size[1] is not None else pil_img.size
-                img = HeadlessImage(pil_img, size=disp_size)
-                self.icons[cache_key] = img
-                if len(self.icons) > 300:
-                    self.icons.popitem(last=False)
+                img = ctk.CTkImage(pil_img, size=disp_size)
+                with self._lock:
+                    target_dict[cache_key] = img
+                    while len(target_dict) > max_limit:
+                        target_dict.popitem(last=False)
+                        if is_splash:
+                            self._splash_evictions += 1
                 return img
             except Exception as e:
                 Logger.debug("Assets", f"Cached icon corrupt, regenerating: {e}")
@@ -527,11 +606,17 @@ class AssetManager:
                     Logger.debug("Assets", f"Failed to cache processed icon: {e}")
 
                 img_size = size if size and size[1] is not None else pil_img.size
-                img = HeadlessImage(pil_img, size=img_size)
-                self.icons[cache_key] = img
+                img = ctk.CTkImage(pil_img, size=img_size)
                 with self._lock:
-                    if len(self.icons) > 300:
-                        self.icons.popitem(last=False)
+                    target_dict[cache_key] = img
+                    while len(target_dict) > max_limit:
+                        target_dict.popitem(last=False)
+                        if is_splash:
+                            self._splash_evictions += 1
+                    if is_splash:
+                        self._splash_download_count += 1
+                if is_splash:
+                    self.gc_optimize_splash_downloads()
                 return img
             except Exception as e:
                 Logger.error("asset_manager.py", f"Image load error: {e}")
@@ -540,7 +625,7 @@ class AssetManager:
         self._start_download(url, path)
         return None
 
-    def get_icon(self, type_, key, size=(40, 40)) -> Optional[HeadlessImage]:
+    def get_icon(self, type_, key, size=(40, 40)) -> Optional[ctk.CTkImage]:
         """Synchronously get an icon if cached on disk, otherwise trigger a download and return None."""
         cache_key = f"{type_}_{key}_{size[0]}x{size[1]}"
         fname = ""
@@ -570,27 +655,90 @@ class AssetManager:
         path = os.path.join(CACHE_DIR, fname)
         return self._download_and_cache_image(url, path, cache_key, size=size)
 
-    def preload_champion_icons(self, size=(48, 48)):
-        """Background preloader for all champion icons to maximize UI responsiveness."""
-        if not self.id_to_key:
+    def check_auto_prune_disk_cache(
+        self,
+        file_limit: int = 350,
+        bytes_limit: int = 35 * 1024 * 1024,
+        target_files: Optional[int] = None,
+        target_bytes: Optional[int] = None,
+        force: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Task 146: Checks current disk cache consumption and triggers auto-pruning if soft limits are exceeded.
+        Optimized with time-threshold evaluation to prevent high disk scan overhead during high asset download throughput.
+        """
+        now = time.time()
+        with self._lock:
+            self._prune_check_count += 1
+            if not force and (now - self._last_prune_check_timestamp) < self._prune_check_interval_s:
+                self._prune_check_skipped_count += 1
+                return None
+            self._last_prune_check_timestamp = now
+
+        try:
+            stats = self.get_disk_cache_stats()
+            if stats["total_files"] > file_limit or stats["total_bytes"] > bytes_limit:
+                Logger.info("AssetManager", f"Auto-pruning disk cache trigger fired (files={stats['total_files']}, bytes={stats['total_bytes']}).")
+                max_f = target_files if target_files is not None else max(file_limit - 50, 10)
+                max_b = target_bytes if target_bytes is not None else max(bytes_limit - (5 * 1024 * 1024), 1024)
+                res = self.clean_disk_cache(max_files=max_f, max_bytes=max_b, max_age_days=7)
+                if res:
+                    with self._lock:
+                        self._prune_executed_count += 1
+                        self._total_auto_pruned_files += res.get("removed_files", 0)
+                        self._total_auto_freed_bytes += res.get("freed_bytes", 0)
+                return res
+        except Exception as e:
+            Logger.debug("AssetManager", f"Auto-prune check failed: {e}")
+        return None
+
+    def get_disk_cache_prune_metrics(self) -> Dict[str, Any]:
+        """Task 146: Returns disk cache auto-prune time-threshold evaluation and optimization metrics."""
+        with self._lock:
+            now = time.time()
+            last_age = round(now - self._last_prune_check_timestamp, 2) if self._last_prune_check_timestamp > 0 else None
+            return {
+                "prune_check_count": self._prune_check_count,
+                "prune_check_skipped_count": self._prune_check_skipped_count,
+                "prune_executed_count": self._prune_executed_count,
+                "total_auto_pruned_files": self._total_auto_pruned_files,
+                "total_auto_freed_bytes": self._total_auto_freed_bytes,
+                "total_auto_freed_mb": round(self._total_auto_freed_bytes / (1024 * 1024), 2),
+                "prune_check_interval_s": self._prune_check_interval_s,
+                "last_check_age_s": last_age,
+            }
+
+    def preload_champion_icons(self, champ_keys, size=(40, 40)):
+        """Pre-downloads and caches champion icons asynchronously in worker threads during champ select roll phase."""
+        if not champ_keys:
             return
+        # Item #128: Check & trigger disk cache auto-prune on champ select asset pre-fetches
+        self.check_auto_prune_disk_cache()
 
-        def _preload_job():
-            count = 0
-            for key_str in list(self.id_to_key.values()):
-                fname = f"champion_{key_str}.png"
-                path = os.path.join(CACHE_DIR, fname)
-                if not os.path.exists(path):
-                    url = f"https://ddragon.leagueoflegends.com/cdn/{self.ddragon_ver}/img/champion/{key_str}.png"
-                    self._start_download(url, path)
-                    count += 1
-            if count > 0:
-                self.log(f"Queued {count} champion icons for background caching.")
+        unique_keys = set(champ_keys)
+        for key in unique_keys:
+            if not key:
+                continue
+            resolved_key = key
+            if str(key).isdigit() and hasattr(self, "id_to_key"):
+                resolved_key = self.id_to_key.get(int(key), key)
+            elif hasattr(self, "name_to_id") and hasattr(self, "id_to_key"):
+                cid = self.name_to_id.get(str(key).lower())
+                if cid is not None:
+                    resolved_key = self.id_to_key.get(cid, key)
+            cache_key = f"champion_{resolved_key}_{size[0]}x{size[1]}"
+            if cache_key in self.icons:
+                continue
+            def _preload_task(k=resolved_key):
+                self.get_icon("champion", k, size=size)
+            with self._lock:
+                self._queue_counter += 1
+                counter = self._queue_counter
+            self._download_queue.put((10, counter, _preload_task))
 
-        threading.Thread(target=_preload_job, daemon=True).start()
 
     def get_icon_async(self, type_, key, callback, size=(40, 40), widget=None):
-        """Helper to get an icon asynchronously and call the callback when ready."""
+        """Helper to get an icon and call the callback when it's ready."""
         img = self.get_icon(type_, key, size=size)
         if img:
             callback(img)
@@ -598,40 +746,15 @@ class AssetManager:
 
         if widget is not None:
             def _poll(attempts=50):
-                if hasattr(widget, "winfo_exists"):
-                    try:
-                        if not widget.winfo_exists():
-                            return
-                    except Exception:
-                        return
-                elif hasattr(widget, "isWidgetType"):
-                    try:
-                        if not widget.isVisible() and attempts < 45:
-                            pass
-                    except Exception:
-                        return
-
+                if not widget.winfo_exists():
+                    return
                 poll_img = self.get_icon(type_, key, size=size)
                 if poll_img:
                     callback(poll_img)
                     return
-
                 if attempts > 0:
-                    if hasattr(widget, "after"):
-                        widget.after(100, lambda: _poll(attempts - 1))
-                    else:
-                        def _qt_poll():
-                            _poll(attempts - 1)
-                        try:
-                            from PySide6.QtCore import QTimer
-                            QTimer.singleShot(100, _qt_poll)
-                        except Exception:
-                            threading.Thread(target=lambda: (time.sleep(0.1), _poll(attempts - 1)), daemon=True).start()
-
-            if hasattr(widget, "after"):
-                widget.after(0, _poll)
-            else:
-                _poll()
+                    widget.after(100, lambda: _poll(attempts - 1))
+            widget.after(0, _poll)
         else:
             def _wait():
                 for _ in range(50):  # Wait up to 5 seconds
@@ -644,14 +767,21 @@ class AssetManager:
 
     def get_splash_art(
         self, skin_id: int, width=1280, opacity=1.0
-    ) -> Optional[HeadlessImage]:
+    ) -> Optional[ctk.CTkImage]:
         """Get a CTkImage for the specified skin splash art."""
         cache_key = f"splash_{skin_id}_{width}_{opacity}"
         
-        if cache_key in self.icons:
-            img = self.icons.pop(cache_key)
-            self.icons[cache_key] = img
-            return img
+        with self._lock:
+            if cache_key in self.splash_icons:
+                img = self.splash_icons.pop(cache_key)
+                self.splash_icons[cache_key] = img
+                self._splash_hits += 1
+                return img
+            elif cache_key in self.icons:
+                img = self.icons.pop(cache_key)
+                self.splash_icons[cache_key] = img
+                self._splash_hits += 1
+                return img
 
         try:
             champ_id = skin_id // 1000
@@ -669,30 +799,380 @@ class AssetManager:
 
         return self._download_and_cache_image(url, path, cache_key, size=(width, None), opacity=opacity)
 
-    def get_champion_icon_path(self, champion_key: str) -> str:
-        """Return absolute path to cached champion icon image file."""
-        resolved = champion_key
-        if hasattr(self, "id_to_key") and champion_key.isdigit():
-            resolved = self.id_to_key.get(int(champion_key), champion_key)
-        elif hasattr(self, "name_to_id") and hasattr(self, "id_to_key"):
-            cid = self.name_to_id.get(champion_key.lower())
-            if cid is not None:
-                resolved = self.id_to_key.get(cid, champion_key)
-        fname = f"champion_{resolved}.png"
-        return os.path.join(CACHE_DIR, fname)
+    def get_skin_icon(self, skin_id: int, size=(60, 60)) -> Optional[ctk.CTkImage]:
+        """Get a CTkImage for champion skin icon preview with dedicated LRU memory cache."""
+        cache_key = f"skin_icon_{skin_id}_{size[0]}x{size[1]}"
+        with self._lock:
+            if cache_key in self.skin_icons:
+                img = self.skin_icons.pop(cache_key)
+                self.skin_icons[cache_key] = img
+                self._skin_icon_hits += 1
+                return img
+            self._skin_icon_misses += 1
 
-    def get_default_icon_path(self) -> str:
-        """Return default fallback icon path."""
-        return os.path.join(CACHE_DIR, "default.png")
+        try:
+            champ_id = skin_id // 1000
+            skin_num = skin_id % 1000
+            ddragon_id = self.get_champ_name(champ_id)
+            if not ddragon_id or ddragon_id == str(champ_id):
+                return None
+        except Exception as e:
+            Logger.error("asset_manager.py", f"Handled exception in get_skin_icon: {e}")
+            return None
 
-    def get_known_champions(self) -> dict:
-        """Returns a dict mapping lowercase key/name to actual DDragon champion key string."""
-        known = {}
-        if hasattr(self, "champ_data") and self.champ_data:
-            for key_str, info in self.champ_data.items():
-                known[key_str.lower()] = key_str
-                name = info.get("name", "")
-                if name:
-                    known[name.lower()] = key_str
-        return known
+        fname = f"skin_icon_{ddragon_id}_{skin_num}.png"
+        path = os.path.join(CACHE_DIR, fname)
+        url = f"https://ddragon.leagueoflegends.com/cdn/img/champion/loading/{ddragon_id}_{skin_num}.jpg"
+
+        return self._download_and_cache_skin_icon(url, path, cache_key, size=size)
+
+    def _download_and_cache_skin_icon(self, url, path, cache_key, size=(60, 60)):
+        with self._lock:
+            if cache_key in self.skin_icons:
+                img = self.skin_icons.pop(cache_key)
+                self.skin_icons[cache_key] = img
+                self._skin_icon_hits += 1
+                return img
+
+        safe_key = cache_key.replace(" ", "_").replace(":", "").replace("/", "_")
+        processed_fname = f"processed_{safe_key}.png"
+        processed_path = os.path.join(CACHE_DIR, processed_fname)
+
+        if os.path.exists(processed_path):
+            try:
+                pil_img = Image.open(processed_path).convert("RGBA")
+                disp_size = size if size and size[1] is not None else pil_img.size
+                img = ctk.CTkImage(pil_img, size=disp_size)
+                with self._lock:
+                    self.skin_icons[cache_key] = img
+                    while len(self.skin_icons) > self.max_skin_icons:
+                        self.skin_icons.popitem(last=False)
+                        self._skin_icon_evictions += 1
+                return img
+            except Exception as e:
+                Logger.debug("Assets", f"Cached skin icon corrupt, regenerating: {e}")
+
+        if os.path.exists(path):
+            try:
+                pil_img = Image.open(path).convert("RGBA")
+                if size and pil_img.size[:2] != size[:2]:
+                    pil_img = pil_img.resize(size, Image.Resampling.BICUBIC)
+
+                try:
+                    pil_img.save(processed_path, "PNG")
+                except Exception as e:
+                    Logger.debug("Assets", f"Failed to cache processed skin icon: {e}")
+
+                img_size = size if size and size[1] is not None else pil_img.size
+                img = ctk.CTkImage(pil_img, size=img_size)
+                with self._lock:
+                    self.skin_icons[cache_key] = img
+                    while len(self.skin_icons) > self.max_skin_icons:
+                        self.skin_icons.popitem(last=False)
+                        self._skin_icon_evictions += 1
+                return img
+            except Exception as e:
+                Logger.error("asset_manager.py", f"Skin icon image load error: {e}")
+                return None
+
+        self._start_download(url, path)
+        return None
+
+    def evict_skin_icon_memory(self, max_skin_count: Optional[int] = None) -> int:
+        """Enforces memory eviction strategy for champion skin icon preview cache."""
+        if max_skin_count is None:
+            max_skin_count = self.max_skin_icons
+        evicted = 0
+        with self._lock:
+            while len(self.skin_icons) > max_skin_count:
+                self.skin_icons.popitem(last=False)
+                evicted += 1
+            self._skin_icon_evictions += evicted
+        if evicted > 0:
+            Logger.info("AssetManager", f"Evicted {evicted} skin icon preview images from memory cache.")
+        return evicted
+
+    def get_skin_icon_lru_cache_metrics(self) -> Dict[str, Any]:
+        """Task 152: Returns benchmark and optimization metrics for champion skin icon preview LRU memory cache."""
+        with self._lock:
+            hits = self._skin_icon_hits
+            misses = self._skin_icon_misses
+            evictions = self._skin_icon_evictions
+            total = hits + misses
+            hit_ratio = round(hits / total, 4) if total > 0 else 0.0
+            return {
+                "skin_icon_count": len(self.skin_icons),
+                "max_skin_icon_count": self.max_skin_icons,
+                "hits": hits,
+                "misses": misses,
+                "evictions": evictions,
+                "hit_ratio": hit_ratio,
+            }
+
+    def get_skin_icon_memory_stats(self) -> Dict[str, Any]:
+        """Returns in-memory skin icon preview cache statistics."""
+        return self.get_skin_icon_lru_cache_metrics()
+
+    def evict_splash_art_memory(self, max_splash_count: Optional[int] = None) -> int:
+        """Enforces high-resolution splash art memory eviction strategy.
+        Returns the count of splash images evicted from RAM."""
+        if max_splash_count is None:
+            max_splash_count = self.max_splash_icons
+        evicted = 0
+        with self._lock:
+            while len(self.splash_icons) > max_splash_count:
+                self.splash_icons.popitem(last=False)
+                evicted += 1
+            legacy_keys = [k for k in self.icons if k.startswith("splash_")]
+            for k in legacy_keys:
+                self.icons.pop(k, None)
+                evicted += 1
+            self._splash_evictions += evicted
+        if evicted > 0:
+            Logger.info("AssetManager", f"Evicted {evicted} high-res splash art images from memory cache.")
+        return evicted
+
+    def get_splash_lru_cache_metrics(self) -> Dict[str, Any]:
+        """Returns benchmark and optimization metrics for splash art LRU memory cache."""
+        with self._lock:
+            hits = self._splash_hits
+            misses = self._splash_misses
+            total = hits + misses
+            hit_ratio = round(hits / total, 4) if total > 0 else 0.0
+            return {
+                "splash_count": len(self.splash_icons),
+                "max_splash_count": self.max_splash_icons,
+                "hits": hits,
+                "misses": misses,
+                "evictions": self._splash_evictions,
+                "hit_ratio": hit_ratio,
+                "legacy_splash_count": sum(1 for k in self.icons if k.startswith("splash_")),
+            }
+
+    def get_splash_memory_stats(self) -> Dict[str, Any]:
+        """Returns in-memory splash art cache statistics."""
+        return self.get_splash_lru_cache_metrics()
+
+    def gc_optimize_splash_downloads(self, force_gc: bool = False) -> Dict[str, Any]:
+        """
+        Task 149: Benchmarks and executes memory pooling & GC optimization for champion splash asset downloads.
+        Forces garbage collection when high splash asset churn is detected or time threshold elapses.
+        """
+        now = time.time()
+        should_gc = force_gc or (now - self._last_gc_timestamp >= self._gc_interval_s and self._splash_download_count > 0)
+        uncollected = 0
+        if should_gc:
+            with self._lock:
+                self._last_gc_timestamp = now
+                self._gc_triggers_count += 1
+            uncollected = gc.collect()
+            Logger.debug("AssetManager", f"Executed splash download GC optimization (uncollected={uncollected} objects).")
+
+        return self.get_splash_gc_metrics()
+
+    def get_splash_gc_metrics(self) -> Dict[str, Any]:
+        """Task 149: Returns memory pooling & GC optimization metrics for champion splash asset downloads."""
+        with self._lock:
+            return {
+                "splash_download_count": self._splash_download_count,
+                "gc_triggers_count": self._gc_triggers_count,
+                "splash_mem_pool_bytes_saved": self._splash_mem_pool_bytes_saved,
+                "last_gc_age_s": round(time.time() - self._last_gc_timestamp, 2) if self._last_gc_timestamp > 0 else 0.0,
+            }
+
+    def get_memory_summary_diagnostics(self) -> Dict[str, Any]:
+        """Returns and logs a comprehensive memory usage summary of RAM and disk caches for diagnostics."""
+        with self._lock:
+            icon_count = len(self.icons)
+            splash_count = len(self.splash_icons)
+            skin_icon_count = len(self.skin_icons)
+            champ_data_count = len(self.champ_data)
+            pending_count = len(self._pending_downloads)
+            queue_size = self._download_queue.qsize()
+            id_to_tags_count = len(self.id_to_tags)
+            champ_roles_count = len(self.champ_roles)
+
+        est_icon_ram_bytes = icon_count * 50 * 1024
+        est_splash_ram_bytes = splash_count * 300 * 1024
+        est_skin_ram_bytes = skin_icon_count * 60 * 1024
+        est_total_ram_mb = round((est_icon_ram_bytes + est_splash_ram_bytes + est_skin_ram_bytes) / (1024 * 1024), 2)
+
+        disk_stats = self.get_disk_cache_stats()
+
+        summary = {
+            "icon_cache_count": icon_count,
+            "max_icons_limit": 300,
+            "splash_cache_count": splash_count,
+            "max_splash_icons_limit": self.max_splash_icons,
+            "skin_icon_cache_count": skin_icon_count,
+            "max_skin_icons_limit": self.max_skin_icons,
+            "champ_data_champions": champ_data_count,
+            "id_to_tags_count": id_to_tags_count,
+            "champ_roles_count": champ_roles_count,
+            "pending_downloads": pending_count,
+            "download_queue_size": queue_size,
+            "est_ram_mb": est_total_ram_mb,
+            "splash_lru_metrics": self.get_splash_lru_cache_metrics(),
+            "skin_icon_lru_metrics": self.get_skin_icon_lru_cache_metrics(),
+            "splash_gc_metrics": self.get_splash_gc_metrics(),
+            "disk_cache_scan_telemetry": self.get_disk_cache_scan_telemetry(),
+            "champ_search_telemetry": self.get_champ_search_telemetry(),
+            "disk_cache": disk_stats,
+        }
+
+        Logger.info(
+            "AssetManager",
+            f"Memory Diagnostics Summary: RAM ~{est_total_ram_mb}MB ({icon_count} icons, {splash_count} splashes, {skin_icon_count} skin icons) | Disk Cache: {disk_stats.get('total_files', 0)} files ({disk_stats.get('total_mb', 0.0)}MB)"
+        )
+        return summary
+
+    def get_disk_cache_stats(self, force_scan: bool = False) -> Dict[str, Any]:
+        """Task 155: Benchmark and optimize disk cache subfolder scanning performance with TTL caching."""
+        with self._lock:
+            now = time.time()
+            if not force_scan and self._cached_disk_stats is not None:
+                if (now - self._disk_stats_scan_timestamp) < self._disk_stats_cache_ttl_s:
+                    self._disk_scan_cache_hits += 1
+                    return self._cached_disk_stats
+
+        t_start = time.perf_counter()
+        total_files = 0
+        total_bytes = 0
+        processed_count = 0
+        raw_image_count = 0
+
+        if os.path.exists(CACHE_DIR):
+            for entry in os.scandir(CACHE_DIR):
+                if entry.is_file():
+                    total_files += 1
+                    try:
+                        total_bytes += entry.stat().st_size
+                    except OSError:
+                        pass
+                    if entry.name.startswith("processed_"):
+                        processed_count += 1
+                    elif entry.name.endswith((".png", ".jpg", ".jpeg", ".webp")):
+                        raw_image_count += 1
+
+        scan_dur_ms = (time.perf_counter() - t_start) * 1000.0
+
+        stats = {
+            "total_files": total_files,
+            "total_bytes": total_bytes,
+            "total_mb": round(total_bytes / (1024 * 1024), 2),
+            "processed_count": processed_count,
+            "raw_image_count": raw_image_count,
+            "cache_dir": CACHE_DIR
+        }
+
+        with self._lock:
+            self._cached_disk_stats = stats
+            self._disk_stats_scan_timestamp = time.time()
+            self._disk_scan_count += 1
+            self._disk_scan_total_latency_ms += scan_dur_ms
+
+        return stats
+
+    def get_disk_cache_scan_telemetry(self) -> Dict[str, Any]:
+        """Task 155: Returns benchmark and optimization metrics for disk cache scanning performance."""
+        with self._lock:
+            scans = self._disk_scan_count
+            hits = self._disk_scan_cache_hits
+            tot_lat = self._disk_scan_total_latency_ms
+            avg_lat = round(tot_lat / max(1, scans), 3) if scans > 0 else 0.0
+            return {
+                "disk_scan_count": scans,
+                "disk_scan_cache_hits": hits,
+                "avg_scan_latency_ms": avg_lat,
+                "scan_ttl_seconds": self._disk_stats_cache_ttl_s,
+            }
+
+    def clean_disk_cache(self, max_files: int = 500, max_bytes: int = 50 * 1024 * 1024, max_age_days: int = 14) -> Dict[str, Any]:
+        """
+        Benchmarks and executes disk cache cleanup strategy during high asset churn.
+        Removes oldest cache files if file count, total bytes, or max age thresholds are exceeded.
+        """
+        t_start = time.perf_counter()
+        removed_count = 0
+        freed_bytes = 0
+
+        if not os.path.exists(CACHE_DIR):
+            return {
+                "removed_files": 0,
+                "freed_bytes": 0,
+                "freed_mb": 0.0,
+                "duration_ms": round((time.perf_counter() - t_start) * 1000, 2)
+            }
+
+        now = time.time()
+        max_age_sec = max_age_days * 86400
+
+        files_info = []
+        for entry in os.scandir(CACHE_DIR):
+            if not entry.is_file():
+                continue
+            # Do not delete critical system metadata like version.txt
+            if entry.name in ("version.txt", "champion.json", "item.json", "meraki_champions.json"):
+                continue
+            try:
+                st = entry.stat()
+                files_info.append({
+                    "path": entry.path,
+                    "name": entry.name,
+                    "mtime": st.st_mtime,
+                    "size": st.st_size
+                })
+            except OSError:
+                continue
+
+        # Sort files by modification time (oldest first)
+        files_info.sort(key=lambda x: x["mtime"])
+
+        files_to_remove = set()
+
+        # 1. Remove expired files (older than max_age_days)
+        for f in files_info:
+            if (now - f["mtime"]) > max_age_sec:
+                files_to_remove.add(f["path"])
+
+        # 2. Prune oldest if total files exceeds max_files
+        remaining_files = [f for f in files_info if f["path"] not in files_to_remove]
+        if len(remaining_files) > max_files:
+            excess_count = len(remaining_files) - max_files
+            for f in remaining_files[:excess_count]:
+                files_to_remove.add(f["path"])
+
+        # 3. Prune oldest if total bytes exceeds max_bytes
+        remaining_files = [f for f in files_info if f["path"] not in files_to_remove]
+        current_size = sum(f["size"] for f in remaining_files)
+        if current_size > max_bytes:
+            for f in remaining_files:
+                if current_size <= max_bytes:
+                    break
+                files_to_remove.add(f["path"])
+                current_size -= f["size"]
+
+        # Execute removal
+        for path in files_to_remove:
+            try:
+                sz = os.path.getsize(path)
+                os.remove(path)
+                removed_count += 1
+                freed_bytes += sz
+            except OSError as e:
+                Logger.warning("AssetManager", f"Failed to prune cache file {path}: {e}")
+
+        duration_ms = round((time.perf_counter() - t_start) * 1000, 2)
+        Logger.info("AssetManager", f"Cache cleanup pruned {removed_count} files ({freed_bytes / (1024*1024):.2f} MB) in {duration_ms}ms.")
+
+        with self._lock:
+            self._cached_disk_stats = None
+
+        return {
+            "removed_files": removed_count,
+            "freed_bytes": freed_bytes,
+            "freed_mb": round(freed_bytes / (1024 * 1024), 2),
+            "duration_ms": duration_ms
+        }
+
 

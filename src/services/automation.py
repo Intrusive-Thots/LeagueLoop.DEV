@@ -88,6 +88,11 @@ class AutomationEngine:
         self._last_game_scan: float = 0.0
         self._spectate_start_time: Optional[float] = None
 
+        # Friend auto-join cooldown & tracking
+        self._auto_joined_friends_cooldown: dict = {}  # friend_name.lower() -> expiry_timestamp
+        self._current_auto_joined_friend: Optional[str] = None
+        self._current_auto_joined_party_id: Optional[str] = None
+
     def start(self, start_paused: bool = False) -> None:
         """Starts the automation loop in a background thread."""
         if self.running: return
@@ -522,7 +527,7 @@ class AutomationEngine:
             self._perform_draft_assistant(session)
 
         # Auto-equip a non-default skin
-        if not self._skin_equipped:
+        if self.config.get("auto_random_skin", True) and not self._skin_equipped:
             self._equip_random_skin(session)
 
         # 2.1 Auto-Equip Runes
@@ -536,69 +541,104 @@ class AutomationEngine:
 
     def _equip_random_skin(self, session):
         """Pick a random non-default skin from the available skins for the current champion."""
+        if not self.config.get("auto_random_skin", True):
+            return
+
         try:
             me = self._get_local_player(session)
             if not me:
                 return
-            champ_id = me.get("championId", 0)
+            champ_id = me.get("championId", 0) or me.get("championPickIntent", 0)
             if not champ_id:
                 return
 
             # Get available skins for this champion
-            skins_req = self.lcu.request("GET", f"/lol-champ-select/v1/skin-carousel-skins")
+            skins_req = self.lcu.request("GET", "/lol-champ-select/v1/skin-carousel-skins")
             if not skins_req or skins_req.status_code != 200:
                 Logger.debug("Auto", f"Skin carousel request failed: {getattr(skins_req, 'status_code', 'None')}")
                 return
 
             skins = skins_req.json()
-            if not skins:
+            if not skins or not isinstance(skins, list):
                 return
 
             base_skin_id = champ_id * 1000
 
             # Filter to owned/available non-default skins for this champion.
-            # The LCU API has changed the ownership field structure across
-            # patches, so we check multiple possible locations for the flag.
-            def _is_owned(s):
-                # Nested ownership object (older clients)
-                if s.get("ownership", {}).get("owned", False):
+            def _is_selectable(s):
+                if s.get("isBase", False):
+                    return False
+                if s.get("disabled", False):
+                    return False
+                if s.get("id", 0) == base_skin_id:
+                    return False
+                if s.get("unlocked") is True or s.get("isSelectable") is True or s.get("selected") is True:
                     return True
-                # Top-level 'unlocked' flag (newer clients)
-                if s.get("unlocked", False):
-                    return True
-                # Top-level 'owned' flag (some client versions)
-                if s.get("owned", False):
+                ownership = s.get("ownership") or {}
+                if isinstance(ownership, dict):
+                    if ownership.get("owned") is True or ownership.get("rental", {}).get("rented") is True:
+                        return True
+                if s.get("owned") is True:
                     return True
                 return False
 
-            owned_skins = [
-                s for s in skins
-                if _is_owned(s)
-                and not s.get("isBase", False)
-                and s.get("id", 0) != base_skin_id
-                and not s.get("disabled", False)
-            ]
+            eligible_skins = [s for s in skins if _is_selectable(s)]
+            if not eligible_skins:
+                # Fallback: Any non-base, non-disabled skin in carousel
+                eligible_skins = [
+                    s for s in skins
+                    if not s.get("isBase", False)
+                    and s.get("id", 0) != base_skin_id
+                    and not s.get("disabled", False)
+                ]
 
-            if not owned_skins:
-                Logger.debug("Auto", f"No owned non-default skins found for champ {champ_id} "
+            if not eligible_skins:
+                Logger.debug("Auto", f"No non-default skins found for champ {champ_id} "
                              f"(total carousel entries: {len(skins)})")
                 return
 
-            chosen = random.choice(owned_skins)
+            chosen = random.choice(eligible_skins)
             skin_id = chosen.get("id", 0)
+            if not skin_id:
+                return
 
-            # Patch the skin selection
-            patch_resp = self.lcu.request(
-                "PATCH",
-                f"/lol-champ-select/v1/session/my-selection",
-                data={"selectedSkinId": skin_id}
-            )
-            if patch_resp and patch_resp.status_code in (200, 204):
-                skin_name = chosen.get("name", f"Skin #{skin_id}")
+            skin_name = chosen.get("name", f"Skin #{skin_id}")
+            success = False
+
+            # 1. Primary Endpoint: /lol-champ-select/v1/session/my-selection
+            res1 = self.lcu.request("PATCH", "/lol-champ-select/v1/session/my-selection", data={"selectedSkinId": skin_id})
+            if res1 and res1.status_code in (200, 201, 204):
+                success = True
+
+            # 2. Secondary Endpoint: /lol-champ-select/v1/current-champion/skin
+            if not success:
+                res2 = self.lcu.request("PATCH", "/lol-champ-select/v1/current-champion/skin", data={"skinId": skin_id, "selectedSkinId": skin_id})
+                if res2 and res2.status_code in (200, 201, 204):
+                    success = True
+
+            # 3. Action Endpoint: /lol-champ-select/v1/session/actions/{action_id}
+            if not success and session:
+                try:
+                    local_cell_id = session.get("localPlayerCellId")
+                    actions = session.get("actions", [])
+                    for action_group in actions:
+                        for act in action_group:
+                            if act.get("actorCellId") == local_cell_id and act.get("type") in ("pick", "intent"):
+                                act_id = act.get("id")
+                                if act_id:
+                                    res3 = self.lcu.request("PATCH", f"/lol-champ-select/v1/session/actions/{act_id}", data={"selectedSkinId": skin_id})
+                                    if res3 and res3.status_code in (200, 201, 204):
+                                        success = True
+                                        break
+                except Exception:
+                    pass
+
+            if success:
                 self._log(f"Equipped: {skin_name}")
                 self._skin_equipped = True
+                Logger.info("Auto", f"Equipped skin '{skin_name}' ({skin_id}) for champ {champ_id}")
             else:
-                Logger.debug("Auto", f"Skin PATCH failed: {getattr(patch_resp, 'status_code', 'None')}")
+                Logger.debug("Auto", f"Skin PATCH failed for '{skin_name}' ({skin_id}) via all LCU endpoints")
 
         except Exception as e:
             Logger.error("Auto", f"Skin equip error: {e}")
@@ -1035,6 +1075,63 @@ class AutomationEngine:
             # Reset skin flag so we re-equip for the new champion
             self._skin_equipped = False
 
+    def leave_friend_lobby_and_cooldown(self, friend_name: Optional[str] = None) -> bool:
+        """
+        If currently in a friend's lobby or auto-joined lobby, leaves the lobby and
+        places a 5-minute auto-join cooldown on that friend so auto-join does not
+        immediately pull the user back into their party.
+        Returns True if a friend's lobby was left.
+        """
+        if not self.lcu or not getattr(self.lcu, "is_connected", False):
+            return False
+
+        try:
+            my_res = self.lcu.request("GET", "/lol-lobby/v2/lobby", silent=True)
+            if not my_res or my_res.status_code != 200:
+                self._current_auto_joined_friend = None
+                self._current_auto_joined_party_id = None
+                return False
+
+            my_lobby = my_res.json()
+            local_member = my_lobby.get("localMember", {})
+            is_leader = local_member.get("isLeader", False)
+            members = my_lobby.get("members", [])
+
+            target_friend = friend_name or self._current_auto_joined_friend
+            is_friends_lobby = bool(target_friend) or (not is_leader) or (len(members) > 1)
+
+            if is_friends_lobby:
+                if target_friend:
+                    friend_key = target_friend.lower()
+                    self._auto_joined_friends_cooldown[friend_key] = time.time() + 300.0  # 5 minutes
+                    self._log(f"Paused auto-joining {target_friend} for 5 minutes.")
+                    Logger.info("AutoJoin", f"Applied 5-minute auto-join cooldown to '{target_friend}'.")
+
+                self.lcu.request("DELETE", "/lol-lobby/v2/lobby/matchmaking/search", silent=True)
+                time.sleep(0.15)
+                self.lcu.request("DELETE", "/lol-lobby/v2/lobby", silent=True)
+                time.sleep(0.2)
+
+                self._current_auto_joined_friend = None
+                self._current_auto_joined_party_id = None
+                return True
+        except Exception as e:
+            Logger.debug("Auto", f"Error leaving friend lobby: {e}")
+
+        return False
+
+    def reset_auto_join_cooldowns(self, name: Optional[str] = None) -> None:
+        """Clears 5-minute auto-join cooldown timers for a specific friend or all friends."""
+        if name:
+            key = name.strip().lower()
+            self._auto_joined_friends_cooldown.pop(key, None)
+            self._log(f"Cleared auto-join cooldown for friend '{name}'.")
+            Logger.info("AutoJoin", f"Cleared auto-join cooldown for '{name}'.")
+        else:
+            self._auto_joined_friends_cooldown.clear()
+            self._log("Cleared all friend auto-join cooldown timers.")
+            Logger.info("AutoJoin", "Cleared all friend auto-join cooldown timers.")
+
     def _check_friend_lobby(self, phase):
         # We only try to join when not in game/champ select/readycheck
         if phase in ("InProgress", "ChampSelect", "ReadyCheck"):
@@ -1042,6 +1139,25 @@ class AutomationEngine:
 
         if not self.config.get("auto_join_enabled", True):
             return
+
+        # Purge expired cooldowns
+        now = time.time()
+        self._auto_joined_friends_cooldown = {
+            name: exp for name, exp in self._auto_joined_friends_cooldown.items()
+            if exp > now
+        }
+
+        # Check if we are still in our auto-joined lobby
+        if self._current_auto_joined_party_id:
+            my_res = self.lcu.request("GET", "/lol-lobby/v2/lobby", silent=True)
+            if my_res and my_res.status_code == 200:
+                my_lobby = my_res.json()
+                if my_lobby.get("partyId") != self._current_auto_joined_party_id:
+                    self._current_auto_joined_party_id = None
+                    self._current_auto_joined_friend = None
+            else:
+                self._current_auto_joined_party_id = None
+                self._current_auto_joined_friend = None
 
         friend_list = self.config.get("auto_join_list", [])
         active_friends = [f for f in friend_list if f.get("enabled") and f.get("name", "").strip()]
@@ -1075,12 +1191,17 @@ class AutomationEngine:
 
         for target_dict in active_friends:
             target_friend = target_dict.get("name", "").strip().lower()
+
+            # Skip friend if 5-minute auto-join cooldown is active
+            if target_friend in self._auto_joined_friends_cooldown:
+                if now < self._auto_joined_friends_cooldown[target_friend]:
+                    continue
             
             f = friend_map.get(target_friend)
             if not f:
                 continue
 
-            game_name = f.get("gameName", "")
+            game_name = f.get("gameName", "") or f.get("name", "")
             lol = f.get("lol", {})
             if lol.get("ptyType") == "open":
                 pty_str = lol.get("pty", "")
@@ -1094,6 +1215,8 @@ class AutomationEngine:
                             if my_res and my_res.status_code == 200:
                                 my_lobby = my_res.json()
                                 if my_lobby.get("partyId") == party_id:
+                                    self._current_auto_joined_party_id = party_id
+                                    self._current_auto_joined_friend = game_name
                                     return  # Already in their party
 
                             # If we are currently searching for a match, cancel it first
@@ -1105,6 +1228,8 @@ class AutomationEngine:
                             join_res = self.lcu.request("POST", f"/lol-lobby/v2/party/{party_id}/join")
                             if join_res and join_res.status_code in [200, 204]:
                                 self._log(f"Auto-joined {game_name}'s Party!")
+                                self._current_auto_joined_party_id = party_id
+                                self._current_auto_joined_friend = game_name
                                 break # Joined a friend, stop iterating the priority list
                     except Exception as e:
                         Logger.debug("Auto", f"Failed parsing friend party: {e}")
