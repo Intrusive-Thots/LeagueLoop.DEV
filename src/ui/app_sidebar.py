@@ -404,7 +404,7 @@ class SidebarWidget(ctk.CTkFrame):
 
         # ARAM Picker
         self.var_priority = ctk.BooleanVar(value=self.config.get("priority_picker", {}).get("enabled", False))
-        self.row_priority = _make_item_card("priority_picker", "ARAM Picker", self.var_priority, self._on_toggle_priority, "Attempts to pick highest available champion from ARAM List", "2052")
+        self.row_priority = _make_item_card("priority_picker", "ARAM Picker", self.var_priority, self._on_toggle_priority, "Attempts to pick highest available champion from ARAM List", "2010")
 
         # Friend Auto-Join
         self.var_auto_join = ctk.BooleanVar(value=self.config.get("auto_join_enabled", True))
@@ -1009,7 +1009,7 @@ class SidebarWidget(ctk.CTkFrame):
 
         items = [
             ("auto_accept", "Auto Accept", self.var_accept, self._on_toggle_accept, "2420", "item"),
-            ("priority_picker", "ARAM Picker", self.var_priority, self._on_toggle_priority, "2052", "item"),
+            ("priority_picker", "ARAM Picker", self.var_priority, self._on_toggle_priority, "2010", "item"),
             ("auto_join", "Friend Auto-Join", self.var_auto_join, self._on_toggle_auto_join, "3109", "item"),
             ("auto_honor", "Auto Honor", self.var_auto_honor, self._on_toggle_auto_honor, "3105", "item"),
             ("skip_stats", "Skip Stats", self.var_skip_stats, self._on_toggle_skip_stats, "3111", "item"),
