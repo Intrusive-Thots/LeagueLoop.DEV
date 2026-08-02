@@ -132,6 +132,13 @@ class LCUClient:
         self._ws_deser_recycle_misses = 0
         self._ws_deser_bytes_recycled = 0
 
+        # Task 163: Dynamic websocket payload decompression memory pool recycling
+        self._ws_decomp_pool = []
+        self._ws_decomp_pool_max_size = 50
+        self._ws_decomp_recycle_hits = 0
+        self._ws_decomp_recycle_misses = 0
+        self._ws_decomp_bytes_recycled = 0
+
         # Task 157: Automated websocket subscription filter performance metrics & dispatch latency telemetry
         self._ws_dispatch_count: int = 0
         self._ws_total_dispatched_callbacks: int = 0
@@ -936,6 +943,53 @@ class LCUClient:
                 "deser_pool_memory_kb": pool_mem_kb,
             }
 
+    def _acquire_decomp_buffer(self, size: int = 1024) -> bytearray:
+        """Task 163: Acquires a recycled bytearray buffer from the decompression pool or creates a new bytearray."""
+        with self._ws_telemetry_lock:
+            if self._ws_decomp_pool:
+                self._ws_decomp_recycle_hits += 1
+                buf = self._ws_decomp_pool.pop()
+                if len(buf) < size:
+                    buf.extend(b"\x00" * (size - len(buf)))
+                return buf
+            else:
+                self._ws_decomp_recycle_misses += 1
+                return bytearray(size)
+
+    def _recycle_decomp_buffer(self, buf: Any) -> None:
+        """Task 163: Recycles a bytearray buffer back into the decompression pool if capacity permits."""
+        if isinstance(buf, bytearray):
+            with self._ws_telemetry_lock:
+                if len(self._ws_decomp_pool) < self._ws_decomp_pool_max_size:
+                    self._ws_decomp_pool.append(buf)
+                    self._ws_decomp_bytes_recycled += sys.getsizeof(buf)
+
+    def clear_ws_decomp_pool(self) -> None:
+        """Task 163: Clears the recycled websocket decompression memory pool."""
+        with self._ws_telemetry_lock:
+            self._ws_decomp_pool.clear()
+
+    def get_ws_decomp_pool_telemetry(self) -> Dict[str, Any]:
+        """Task 163: Returns automated websocket decompression memory pool recycling metrics."""
+        with self._ws_telemetry_lock:
+            pool_size = len(self._ws_decomp_pool)
+            hits = self._ws_decomp_recycle_hits
+            misses = self._ws_decomp_recycle_misses
+            tot = hits + misses
+            hit_ratio = round(hits / tot, 4) if tot > 0 else 0.0
+            bytes_rec = self._ws_decomp_bytes_recycled
+            pool_mem_kb = round(sys.getsizeof(self._ws_decomp_pool) / 1024.0, 3)
+
+            return {
+                "decomp_pool_size": pool_size,
+                "decomp_pool_max_size": self._ws_decomp_pool_max_size,
+                "decomp_recycle_hits": hits,
+                "decomp_recycle_misses": misses,
+                "decomp_recycle_hit_ratio": hit_ratio,
+                "decomp_bytes_recycled": bytes_rec,
+                "decomp_pool_memory_kb": pool_mem_kb,
+            }
+
     def _record_ws_dispatch_telemetry(self, event_name: str, callbacks_count: int, dispatch_latency_ms: float) -> None:
         """Task 157: Records websocket subscription filter performance metrics & callback dispatch telemetry."""
         with self._ws_telemetry_lock:
@@ -1006,6 +1060,7 @@ class LCUClient:
         payload_meta = self.get_ws_payload_telemetry()
         deser_meta = self.get_ws_deser_telemetry()
         deser_pool_meta = self.get_ws_deser_pool_telemetry()
+        decomp_pool_meta = self.get_ws_decomp_pool_telemetry()
         dispatch_meta = self.get_ws_dispatch_telemetry()
         with self._ws_telemetry_lock:
             cutoff = now - 10.0
@@ -1054,5 +1109,6 @@ class LCUClient:
             res.update(payload_meta)
             res.update(deser_meta)
             res.update(deser_pool_meta)
+            res.update(decomp_pool_meta)
             res.update(dispatch_meta)
             return res

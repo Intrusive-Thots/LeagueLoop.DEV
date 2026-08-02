@@ -94,5 +94,10 @@
   {
     "optimization": "UI Component Test Suite & Telemetry Schema Alignment",
     "details": "Created test_ui_components.py unit test suite testing LolToggle state transitions/keyboard bindings, TabBar tab switching callbacks, CTkTooltip scheduling, and ToastManager singleton toast eviction. Aligned get_champ_search_telemetry() schema with search_count/index_size alias keys. Expanded test suite to 178 passing tests (178/178 in 1.40s) with 100% build compilation readiness."
+  },
+  {
+    "optimization": "WebSocket Payload Decompression Pool Recycling & Fuzzy Search LRU Telemetry",
+    "details": "Implemented dynamic bytearray memory pool recycling (_acquire_decomp_buffer, _recycle_decomp_buffer, get_ws_decomp_pool_telemetry) in LCUClient to eliminate heap memory allocation overhead during websocket payload decompression, alongside benchmarked LRU cache hit-rate, eviction, and memory footprint telemetry for fuzzy champion search queries (get_fuzzy_search_lru_cache_metrics, _champ_search_fuzzy_evictions) in AssetManager. Expanded unit test suite to 186 passing tests (186/186 in 1.45s) and verified 100% pre-flight build compilation readiness via tools/build_validator.py."
   }
 ]
+

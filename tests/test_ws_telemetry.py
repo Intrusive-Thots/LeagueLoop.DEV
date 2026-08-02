@@ -305,6 +305,50 @@ def test_lcu_client_ws_deser_memory_pool_recycling():
     assert "deser_recycle_hit_ratio" in t
 
 
+def test_lcu_client_ws_decomp_memory_pool_recycling():
+    client = LCUClient()
+    initial = client.get_ws_decomp_pool_telemetry()
+    assert initial["decomp_pool_size"] == 0
+    assert initial["decomp_recycle_hits"] == 0
+    assert initial["decomp_recycle_misses"] == 0
+    assert initial["decomp_recycle_hit_ratio"] == 0.0
+
+    # Acquire new buffer (miss)
+    buf1 = client._acquire_decomp_buffer(1024)
+    assert isinstance(buf1, bytearray)
+    assert len(buf1) == 1024
+
+    # Recycle buffer back into pool
+    client._recycle_decomp_buffer(buf1)
+
+    pool_after_recycle = client.get_ws_decomp_pool_telemetry()
+    assert pool_after_recycle["decomp_pool_size"] == 1
+    assert pool_after_recycle["decomp_bytes_recycled"] > 0
+
+    # Acquire again (hit from pool)
+    buf2 = client._acquire_decomp_buffer(2048)
+    assert isinstance(buf2, bytearray)
+    assert len(buf2) >= 2048
+
+    after_hit = client.get_ws_decomp_pool_telemetry()
+    assert after_hit["decomp_pool_size"] == 0
+    assert after_hit["decomp_recycle_hits"] == 1
+    assert after_hit["decomp_recycle_misses"] == 1
+    assert after_hit["decomp_recycle_hit_ratio"] == 0.5
+
+    # Clear pool
+    client._recycle_decomp_buffer(buf2)
+    client.clear_ws_decomp_pool()
+    assert client.get_ws_decomp_pool_telemetry()["decomp_pool_size"] == 0
+
+    # Verify inclusion in general get_ws_telemetry()
+    t = client.get_ws_telemetry()
+    assert "decomp_pool_size" in t
+    assert "decomp_recycle_hits" in t
+    assert "decomp_recycle_hit_ratio" in t
+
+
+
 
 
 

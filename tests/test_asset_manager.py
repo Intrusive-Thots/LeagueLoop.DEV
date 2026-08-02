@@ -264,11 +264,21 @@ class TestAssetManager(unittest.TestCase):
         self.assertEqual(telemetry["fuzzy_cache_hits"], 1)
         self.assertEqual(telemetry["fuzzy_cache_misses"], 1)
         self.assertEqual(telemetry["fuzzy_cache_hit_ratio"], 0.5)
+        self.assertIn("fuzzy_cache_evictions", telemetry)
+        self.assertIn("fuzzy_cache_memory_kb", telemetry)
+
+        lru_metrics = self.assets.get_fuzzy_search_lru_cache_metrics()
+        self.assertEqual(lru_metrics["hits"], 1)
+        self.assertEqual(lru_metrics["misses"], 1)
+        self.assertEqual(lru_metrics["hit_ratio"], 0.5)
 
         summary = self.assets.get_memory_summary_diagnostics()
         self.assertIn("fuzzy_search_telemetry", summary)
+        self.assertIn("fuzzy_search_lru_metrics", summary)
         self.assertEqual(summary["fuzzy_search_telemetry"]["fuzzy_cache_hits"], 1)
+        self.assertEqual(summary["fuzzy_search_lru_metrics"]["hits"], 1)
 
 if __name__ == '__main__':
     unittest.main()
+
 

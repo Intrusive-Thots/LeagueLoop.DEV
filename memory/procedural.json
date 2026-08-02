@@ -194,7 +194,19 @@
       "In AssetManager, implement pre-normalized indexed search filtering in _build_champ_search_index() mapping cid, key, name, lower_key, lower_name, tags, and roles",
       "Implement search_champions(query, role, tag, limit=20) and get_champ_search_telemetry() returning search count, total latency, average latency, and index size"
     ]
+  },
+  {
+    "pattern_name": "WebSocket Payload Decompression Pool Recycling & Champion Fuzzy Search LRU Telemetry",
+    "steps": [
+      "In LCUClient, maintain _ws_decomp_pool list, _ws_decomp_pool_max_size (50), _ws_decomp_recycle_hits, _ws_decomp_recycle_misses, and _ws_decomp_bytes_recycled under _ws_telemetry_lock",
+      "Implement _acquire_decomp_buffer(size=1024) to pop pre-allocated bytearray buffers from pool or allocate new bytearrays on pool miss",
+      "Implement _recycle_decomp_buffer(buf) to return buffers to pool if capacity permits, accumulating sys.getsizeof memory recycled",
+      "Implement get_ws_decomp_pool_telemetry() returning pool_size, decomp_recycle_hits, decomp_recycle_misses, decomp_recycle_hit_ratio, and decomp_pool_memory_kb",
+      "In AssetManager, maintain _champ_search_fuzzy_evictions counter under _lock and increment when _champ_search_fuzzy_cache.popitem(last=False) is invoked during LRU capacity trimming",
+      "Implement get_fuzzy_search_lru_cache_metrics() returning fuzzy_cache_size, fuzzy_cache_max_size, hits, misses, evictions, hit_ratio, and memory_kb, and integrate into get_memory_summary_diagnostics()"
+    ]
   }
 ]
+
 
 

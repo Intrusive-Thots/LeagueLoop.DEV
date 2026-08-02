@@ -103,9 +103,15 @@
 - [x] **Task 162**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 171 tests passing in 1.43s).
 
 ## Upcoming Autonomous Improvement Tasks
-- [ ] **Task 163**: Implement dynamic websocket payload decompression memory pool recycling in `LCUClient`.
-- [ ] **Task 164**: Benchmark and optimize LRU cache hit-rate telemetry for fuzzy champion search queries in `AssetManager`.
-- [ ] **Task 165**: Maintain continuous system-wide health and build readiness validation.
+- [x] **Task 163**: Implement dynamic websocket payload decompression memory pool recycling in `LCUClient` (`_acquire_decomp_buffer`, `_recycle_decomp_buffer`, `get_ws_decomp_pool_telemetry`).
+- [x] **Task 164**: Benchmark and optimize LRU cache hit-rate telemetry for fuzzy champion search queries in `AssetManager` (`get_fuzzy_search_lru_cache_metrics`, `_champ_search_fuzzy_evictions`).
+- [x] **Task 165**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 186 tests passing).
+
+## Upcoming Autonomous Improvement Tasks
+- [ ] **Task 166**: Implement automated websocket compressed payload size ratio anomaly detection in `LCUClient`.
+- [ ] **Task 167**: Benchmark memory allocation profiling during fuzzy champion search query cache evictions in `AssetManager`.
+- [ ] **Task 168**: Maintain continuous system-wide health and build readiness validation.
+
 
 
 

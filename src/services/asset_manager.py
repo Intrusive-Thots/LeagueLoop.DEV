@@ -226,10 +226,11 @@ class AssetManager:
         self._champ_search_count: int = 0
         self._champ_search_total_latency_ms: float = 0.0
 
-        # Task 161: Benchmark and optimize champion search index fuzzy matching query latency
+        # Task 161 & 164: Benchmark and optimize champion search index fuzzy matching query latency & LRU cache telemetry
         self._champ_search_fuzzy_count: int = 0
         self._champ_search_fuzzy_hits: int = 0
         self._champ_search_fuzzy_misses: int = 0
+        self._champ_search_fuzzy_evictions: int = 0
         self._champ_search_fuzzy_cache: OrderedDict = OrderedDict()
         self._champ_search_fuzzy_cache_max: int = 100
         self._champ_search_fuzzy_total_latency_ms: float = 0.0
@@ -532,6 +533,7 @@ class AssetManager:
                 self._champ_search_fuzzy_cache[cache_key] = fuzzy_res
                 while len(self._champ_search_fuzzy_cache) > self._champ_search_fuzzy_cache_max:
                     self._champ_search_fuzzy_cache.popitem(last=False)
+                    self._champ_search_fuzzy_evictions += 1
             results = fuzzy_res
 
         dur_ms = (time.perf_counter() - t_start) * 1000.0
@@ -561,24 +563,50 @@ class AssetManager:
                 "total_latency_ms": round(tot_lat, 4),
             }
 
+    def get_fuzzy_search_lru_cache_metrics(self) -> Dict[str, Any]:
+        """Task 164: Returns benchmark and optimization metrics for fuzzy champion search LRU memory cache."""
+        with self._lock:
+            hits = self._champ_search_fuzzy_hits
+            misses = self._champ_search_fuzzy_misses
+            evictions = self._champ_search_fuzzy_evictions
+            tot = hits + misses
+            hit_ratio = round(hits / tot, 4) if tot > 0 else 0.0
+            cache_len = len(self._champ_search_fuzzy_cache)
+            mem_kb = round(sys.getsizeof(self._champ_search_fuzzy_cache) / 1024.0, 3)
+
+            return {
+                "fuzzy_cache_size": cache_len,
+                "fuzzy_cache_max_size": self._champ_search_fuzzy_cache_max,
+                "hits": hits,
+                "misses": misses,
+                "evictions": evictions,
+                "hit_ratio": hit_ratio,
+                "memory_kb": mem_kb,
+            }
+
     def get_fuzzy_search_telemetry(self) -> Dict[str, Any]:
-        """Task 161: Returns champion search index fuzzy matching benchmark and latency telemetry."""
+        """Task 161 & 164: Returns champion search index fuzzy matching benchmark, LRU cache hit-rate, and latency telemetry."""
         with self._lock:
             count = self._champ_search_fuzzy_count
             hits = self._champ_search_fuzzy_hits
             misses = self._champ_search_fuzzy_misses
+            evictions = self._champ_search_fuzzy_evictions
             tot = hits + misses
             hit_ratio = round(hits / tot, 4) if tot > 0 else 0.0
             tot_lat = self._champ_search_fuzzy_total_latency_ms
             avg_lat = round(tot_lat / max(1, count), 4) if count > 0 else 0.0
             cache_len = len(self._champ_search_fuzzy_cache)
+            mem_kb = round(sys.getsizeof(self._champ_search_fuzzy_cache) / 1024.0, 3)
 
             return {
                 "fuzzy_search_count": count,
                 "fuzzy_cache_hits": hits,
                 "fuzzy_cache_misses": misses,
+                "fuzzy_cache_evictions": evictions,
                 "fuzzy_cache_hit_ratio": hit_ratio,
                 "fuzzy_cache_size": cache_len,
+                "fuzzy_cache_max_size": self._champ_search_fuzzy_cache_max,
+                "fuzzy_cache_memory_kb": mem_kb,
                 "avg_fuzzy_latency_ms": avg_lat,
                 "total_fuzzy_latency_ms": round(tot_lat, 4),
             }
@@ -1115,6 +1143,7 @@ class AssetManager:
             "disk_cache_scan_telemetry": self.get_disk_cache_scan_telemetry(),
             "champ_search_telemetry": self.get_champ_search_telemetry(),
             "fuzzy_search_telemetry": self.get_fuzzy_search_telemetry(),
+            "fuzzy_search_lru_metrics": self.get_fuzzy_search_lru_cache_metrics(),
             "disk_cache": disk_stats,
         }
 
