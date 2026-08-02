@@ -235,6 +235,12 @@ class AssetManager:
         self._champ_search_fuzzy_cache_max: int = 100
         self._champ_search_fuzzy_total_latency_ms: float = 0.0
 
+        # Task 167: Benchmark memory allocation profiling during fuzzy champion search query cache evictions
+        self._champ_search_fuzzy_eviction_memory_bytes: int = 0
+        self._champ_search_fuzzy_eviction_profile: List[Dict[str, Any]] = []
+        self._champ_search_fuzzy_eviction_profile_max: int = 50
+        self._champ_search_fuzzy_last_eviction_time: float = 0.0
+
         # Bolt: Use a PriorityQueue + Daemon Threads to prevent thread explosion during high load
         # while ensuring high-priority UI requests preempt low-priority background pre-loads.
         self._download_queue = queue.PriorityQueue()
@@ -532,9 +538,24 @@ class AssetManager:
             with self._lock:
                 self._champ_search_fuzzy_cache[cache_key] = fuzzy_res
                 while len(self._champ_search_fuzzy_cache) > self._champ_search_fuzzy_cache_max:
-                    self._champ_search_fuzzy_cache.popitem(last=False)
+                    evicted_key, evicted_val = self._champ_search_fuzzy_cache.popitem(last=False)
                     self._champ_search_fuzzy_evictions += 1
+
+                    # Task 167: Benchmark memory allocation profiling during eviction
+                    freed_bytes = sys.getsizeof(evicted_key) + sys.getsizeof(evicted_val) + sum(sys.getsizeof(x) for x in evicted_val if isinstance(x, (str, dict, list)))
+                    self._champ_search_fuzzy_eviction_memory_bytes += freed_bytes
+                    now_ts = time.time()
+                    self._champ_search_fuzzy_last_eviction_time = now_ts
+                    eviction_entry = {
+                        "evicted_key": evicted_key,
+                        "freed_bytes": freed_bytes,
+                        "timestamp": now_ts,
+                    }
+                    self._champ_search_fuzzy_eviction_profile.append(eviction_entry)
+                    if len(self._champ_search_fuzzy_eviction_profile) > self._champ_search_fuzzy_eviction_profile_max:
+                        self._champ_search_fuzzy_eviction_profile.pop(0)
             results = fuzzy_res
+
 
         dur_ms = (time.perf_counter() - t_start) * 1000.0
         with self._lock:
@@ -563,8 +584,25 @@ class AssetManager:
                 "total_latency_ms": round(tot_lat, 4),
             }
 
+    def get_fuzzy_search_eviction_profile_telemetry(self) -> Dict[str, Any]:
+        """Task 167: Returns benchmark memory allocation profiling metrics during fuzzy search cache evictions."""
+        with self._lock:
+            eviction_count = self._champ_search_fuzzy_evictions
+            total_bytes = self._champ_search_fuzzy_eviction_memory_bytes
+            avg_bytes = round(total_bytes / eviction_count, 2) if eviction_count > 0 else 0.0
+            last_ts = self._champ_search_fuzzy_last_eviction_time
+            profiles = [dict(entry) for entry in self._champ_search_fuzzy_eviction_profile]
+
+        return {
+            "fuzzy_eviction_count": eviction_count,
+            "total_eviction_memory_bytes_reclaimed": total_bytes,
+            "avg_eviction_memory_bytes": avg_bytes,
+            "last_eviction_timestamp": last_ts,
+            "recent_eviction_profiles": profiles,
+        }
+
     def get_fuzzy_search_lru_cache_metrics(self) -> Dict[str, Any]:
-        """Task 164: Returns benchmark and optimization metrics for fuzzy champion search LRU memory cache."""
+        """Task 164 & 167: Returns benchmark and optimization metrics for fuzzy champion search LRU memory cache."""
         with self._lock:
             hits = self._champ_search_fuzzy_hits
             misses = self._champ_search_fuzzy_misses
@@ -573,6 +611,7 @@ class AssetManager:
             hit_ratio = round(hits / tot, 4) if tot > 0 else 0.0
             cache_len = len(self._champ_search_fuzzy_cache)
             mem_kb = round(sys.getsizeof(self._champ_search_fuzzy_cache) / 1024.0, 3)
+            reclaimed_bytes = self._champ_search_fuzzy_eviction_memory_bytes
 
             return {
                 "fuzzy_cache_size": cache_len,
@@ -582,10 +621,11 @@ class AssetManager:
                 "evictions": evictions,
                 "hit_ratio": hit_ratio,
                 "memory_kb": mem_kb,
+                "eviction_memory_bytes_reclaimed": reclaimed_bytes,
             }
 
     def get_fuzzy_search_telemetry(self) -> Dict[str, Any]:
-        """Task 161 & 164: Returns champion search index fuzzy matching benchmark, LRU cache hit-rate, and latency telemetry."""
+        """Task 161, 164 & 167: Returns champion search index fuzzy matching benchmark, LRU cache hit-rate, memory eviction profiling, and latency telemetry."""
         with self._lock:
             count = self._champ_search_fuzzy_count
             hits = self._champ_search_fuzzy_hits
@@ -598,18 +638,23 @@ class AssetManager:
             cache_len = len(self._champ_search_fuzzy_cache)
             mem_kb = round(sys.getsizeof(self._champ_search_fuzzy_cache) / 1024.0, 3)
 
-            return {
-                "fuzzy_search_count": count,
-                "fuzzy_cache_hits": hits,
-                "fuzzy_cache_misses": misses,
-                "fuzzy_cache_evictions": evictions,
-                "fuzzy_cache_hit_ratio": hit_ratio,
-                "fuzzy_cache_size": cache_len,
-                "fuzzy_cache_max_size": self._champ_search_fuzzy_cache_max,
-                "fuzzy_cache_memory_kb": mem_kb,
-                "avg_fuzzy_latency_ms": avg_lat,
-                "total_fuzzy_latency_ms": round(tot_lat, 4),
-            }
+        eviction_profile = self.get_fuzzy_search_eviction_profile_telemetry()
+        return {
+            "fuzzy_search_count": count,
+            "fuzzy_cache_hits": hits,
+            "fuzzy_cache_misses": misses,
+            "fuzzy_cache_evictions": evictions,
+            "fuzzy_cache_hit_ratio": hit_ratio,
+            "fuzzy_cache_size": cache_len,
+            "fuzzy_cache_max_size": self._champ_search_fuzzy_cache_max,
+            "fuzzy_cache_memory_kb": mem_kb,
+            "avg_fuzzy_latency_ms": avg_lat,
+            "total_fuzzy_latency_ms": round(tot_lat, 4),
+            "eviction_memory_bytes_reclaimed": eviction_profile["total_eviction_memory_bytes_reclaimed"],
+            "avg_eviction_memory_bytes": eviction_profile["avg_eviction_memory_bytes"],
+            "eviction_profile_telemetry": eviction_profile,
+        }
+
 
 
     def get_champ_name(self, champ_id: int) -> str:

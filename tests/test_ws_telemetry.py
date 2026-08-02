@@ -348,6 +348,36 @@ def test_lcu_client_ws_decomp_memory_pool_recycling():
     assert "decomp_recycle_hit_ratio" in t
 
 
+def test_lcu_client_ws_compressed_payload_ratio_anomaly_detection():
+    client = LCUClient()
+    initial_anomaly = client.get_ws_compression_anomaly_telemetry()
+    assert initial_anomaly["ws_compression_anomaly_count"] == 0
+    assert initial_anomaly["last_compression_anomaly"] is None
+    assert initial_anomaly["ws_compression_anomaly_rate"] == 0.0
+
+    # Simulate normal message
+    client._record_ws_payload_metrics('{"event": "normal_event", "data": "abc"}')
+    t_normal = client.get_ws_payload_telemetry()
+    assert t_normal["ws_compression_anomaly_count"] == 0
+
+    # Set threshold tight to trigger anomaly
+    client._ws_min_expected_compression_ratio = 1.0
+    client._ws_max_expected_compression_ratio = 1.05
+    client._record_ws_payload_metrics('{"event": "test_anomaly", "data": "' + ("A" * 5000) + '"}')
+
+    t_anomaly = client.get_ws_payload_telemetry()
+    assert t_anomaly["ws_compression_anomaly_count"] >= 1
+    assert t_anomaly["last_compression_anomaly"] is not None
+    assert "anomaly_reason" in t_anomaly["last_compression_anomaly"]
+    assert t_anomaly["ws_compression_anomaly_rate"] > 0.0
+
+    # Verify inclusion in get_ws_telemetry()
+    full_t = client.get_ws_telemetry()
+    assert "ws_compression_anomaly_count" in full_t
+    assert "last_compression_anomaly" in full_t
+
+
+
 
 
 

@@ -278,7 +278,35 @@ class TestAssetManager(unittest.TestCase):
         self.assertEqual(summary["fuzzy_search_telemetry"]["fuzzy_cache_hits"], 1)
         self.assertEqual(summary["fuzzy_search_lru_metrics"]["hits"], 1)
 
+    def test_champ_search_fuzzy_eviction_memory_profiling(self):
+        """Verify memory allocation profiling during fuzzy champion search query cache evictions for Task 167."""
+        self.assets.id_to_key = {21: "MissFortune", 266: "Aatrox", 157: "Yasuo", 222: "Jinx"}
+        self.assets.key_to_name = {"MissFortune": "Miss Fortune", "Aatrox": "Aatrox", "Yasuo": "Yasuo", "Jinx": "Jinx"}
+        self.assets._build_champ_search_index()
+
+        # Set small max capacity to trigger evictions easily
+        self.assets._champ_search_fuzzy_cache_max = 2
+
+        # Perform 3 distinct fuzzy searches to overflow cache of size 2
+        self.assets.search_champions(query="mff", enable_fuzzy=True)
+        self.assets.search_champions(query="aatt", enable_fuzzy=True)
+        self.assets.search_champions(query="yass", enable_fuzzy=True)
+
+
+        evictions_profile = self.assets.get_fuzzy_search_eviction_profile_telemetry()
+        self.assertGreaterEqual(evictions_profile["fuzzy_eviction_count"], 1)
+        self.assertGreater(evictions_profile["total_eviction_memory_bytes_reclaimed"], 0)
+        self.assertGreater(evictions_profile["avg_eviction_memory_bytes"], 0.0)
+        self.assertGreater(len(evictions_profile["recent_eviction_profiles"]), 0)
+
+        # Check telemetry output
+        fuzzy_t = self.assets.get_fuzzy_search_telemetry()
+        self.assertIn("eviction_memory_bytes_reclaimed", fuzzy_t)
+        self.assertIn("avg_eviction_memory_bytes", fuzzy_t)
+        self.assertIn("eviction_profile_telemetry", fuzzy_t)
+
 if __name__ == '__main__':
     unittest.main()
+
 
 

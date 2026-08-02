@@ -139,6 +139,13 @@ class LCUClient:
         self._ws_decomp_recycle_misses = 0
         self._ws_decomp_bytes_recycled = 0
 
+        # Task 166: Automated websocket compressed payload size ratio anomaly detection
+        self._ws_compression_anomaly_count = 0
+        self._ws_compression_anomaly_history = []
+        self._ws_compression_anomaly_history_max = 50
+        self._ws_min_expected_compression_ratio = 0.5
+        self._ws_max_expected_compression_ratio = 50.0
+
         # Task 157: Automated websocket subscription filter performance metrics & dispatch latency telemetry
         self._ws_dispatch_count: int = 0
         self._ws_total_dispatched_callbacks: int = 0
@@ -810,11 +817,47 @@ class LCUClient:
             self._ws_compressed_bytes_est += comp_len
             self._ws_last_compression_ratio = round(payload_bytes / max(comp_len, 1), 2)
 
+            # Task 166: Compressed payload size ratio anomaly detection
+            ratio = self._ws_last_compression_ratio
+            if ratio < self._ws_min_expected_compression_ratio or ratio > self._ws_max_expected_compression_ratio:
+                self._ws_compression_anomaly_count += 1
+                reason = "Ratio below min expected threshold" if ratio < self._ws_min_expected_compression_ratio else "Ratio above max expected threshold"
+                anomaly_entry = {
+                    "timestamp": time.time(),
+                    "payload_bytes": payload_bytes,
+                    "compressed_bytes": comp_len,
+                    "compression_ratio": ratio,
+                    "anomaly_reason": reason,
+                }
+                self._ws_compression_anomaly_history.append(anomaly_entry)
+                if len(self._ws_compression_anomaly_history) > self._ws_compression_anomaly_history_max:
+                    self._ws_compression_anomaly_history.pop(0)
+
             # Memory footprint of payload samples container
             self._ws_payload_memory_kb = round(sys.getsizeof(self._ws_payload_samples) / 1024.0, 3)
 
+    def get_ws_compression_anomaly_telemetry(self) -> Dict[str, Any]:
+        """Task 166: Returns automated websocket compressed payload size ratio anomaly telemetry."""
+        with self._ws_telemetry_lock:
+            anomalies = self._ws_compression_anomaly_count
+            sample_cnt = len(self._ws_payload_samples)
+            history = [dict(entry) for entry in self._ws_compression_anomaly_history]
+            last_anomaly = dict(history[-1]) if history else None
+            min_exp = self._ws_min_expected_compression_ratio
+            max_exp = self._ws_max_expected_compression_ratio
+
+        anomaly_rate = round(anomalies / max(sample_cnt, 1), 4) if sample_cnt > 0 else 0.0
+        return {
+            "ws_compression_anomaly_count": anomalies,
+            "ws_compression_anomaly_rate": anomaly_rate,
+            "ws_min_expected_compression_ratio": min_exp,
+            "ws_max_expected_compression_ratio": max_exp,
+            "last_compression_anomaly": last_anomaly,
+            "recent_compression_anomalies": history,
+        }
+
     def get_ws_payload_telemetry(self) -> Dict[str, Any]:
-        """Task 145: Returns automated payload compression ratio and memory footprint analysis metrics."""
+        """Task 145 & 166: Returns automated payload compression ratio, anomaly detection, and memory footprint analysis metrics."""
         with self._ws_telemetry_lock:
             samples = self._ws_payload_samples.copy()
             total_bytes = self._ws_total_payload_bytes
@@ -826,8 +869,9 @@ class LCUClient:
 
         avg_bytes = round(sum(samples) / len(samples), 2) if samples else 0.0
         overall_ratio = round(total_bytes / max(comp_bytes, 1), 2) if comp_bytes > 0 else 1.0
+        anomaly_meta = self.get_ws_compression_anomaly_telemetry()
 
-        return {
+        res = {
             "total_payload_bytes": total_bytes,
             "last_payload_bytes": last_bytes,
             "max_payload_bytes": max_bytes,
@@ -838,6 +882,9 @@ class LCUClient:
             "payload_memory_kb": mem_kb,
             "payload_memory_mb": round(mem_kb / 1024.0, 4),
         }
+        res.update(anomaly_meta)
+        return res
+
 
     def _record_ws_deser_telemetry(self, deser_latency_ms: float) -> None:
         """Task 148: Records WebSocket message payload deserialization latency samples and histogram metrics."""

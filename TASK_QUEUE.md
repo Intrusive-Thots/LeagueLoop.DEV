@@ -108,11 +108,11 @@
 - [x] **Task 165**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 186 tests passing).
 
 ## Upcoming Autonomous Improvement Tasks
-- [ ] **Task 166**: Implement automated websocket compressed payload size ratio anomaly detection in `LCUClient`.
-- [ ] **Task 167**: Benchmark memory allocation profiling during fuzzy champion search query cache evictions in `AssetManager`.
-- [ ] **Task 168**: Maintain continuous system-wide health and build readiness validation.
+- [x] **Task 166**: Implement automated websocket compressed payload size ratio anomaly detection in `LCUClient` (`_ws_compression_anomaly_count`, `get_ws_compression_anomaly_telemetry`).
+- [x] **Task 167**: Benchmark memory allocation profiling during fuzzy champion search query cache evictions in `AssetManager` (`_champ_search_fuzzy_eviction_memory_bytes`, `get_fuzzy_search_eviction_profile_telemetry`).
+- [x] **Task 168**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 188 tests passing).
 
-
-
-
-
+## Upcoming Autonomous Improvement Tasks
+- [ ] **Task 169**: Implement automated HTTP response status distribution anomaly threshold alerts in `LCUClient`.
+- [ ] **Task 170**: Benchmark and optimize memory recycling for champion search index filter predicate lambda functions in `AssetManager`.
+- [ ] **Task 171**: Maintain continuous system-wide health and build readiness validation.

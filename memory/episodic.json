@@ -1,11 +1,10 @@
 {
-  "task": "Clean duplicate settings, purge Discord code/toggles, fix Champion Add input focus & verify Remote Link API",
+  "task": "LeagueLoop.DEV Autonomous Improvement Loop — Tasks 166, 167, 168",
   "status": "completed",
   "changes": [
-    "Removed duplicate Accept Delay setting card from Settings tab (now solely managed within the Auto Accept modal editor)",
-    "Purged remaining Discord RPC toggles and config references across app_sidebar.py, local_api.py, and asset_manager.py",
-    "Updated PriorityIconGrid._show_add_input() to auto-expand the ARAM container and pack the input row directly at top under the header with instant text focus",
-    "Verified Remote Link API server binds to 0.0.0.0 on port 8337 with auto-configured Windows Firewall rule for future mobile app connectivity",
-    "Recompiled fully self-contained installer dist/LeagueLoop_Installer.exe (31.1 MB)"
+    "Task 166: Implemented automated websocket compressed payload size ratio anomaly detection & historical logging in LCUClient (_ws_compression_anomaly_count, get_ws_compression_anomaly_telemetry)",
+    "Task 167: Benchmarked memory allocation profiling during fuzzy champion search query cache evictions in AssetManager (_champ_search_fuzzy_eviction_memory_bytes, get_fuzzy_search_eviction_profile_telemetry)",
+    "Task 168: Verified 100% test pass rate across all 188 unit & integration tests and updated TASK_QUEUE.md"
   ]
 }
+
