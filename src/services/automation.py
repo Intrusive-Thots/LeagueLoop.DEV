@@ -1078,10 +1078,16 @@ class AutomationEngine:
     def leave_friend_lobby_and_cooldown(self, friend_name: Optional[str] = None) -> bool:
         """
         If currently in a friend's lobby or auto-joined lobby, leaves the lobby and
-        places a 5-minute auto-join cooldown on that friend so auto-join does not
-        immediately pull the user back into their party.
+        places a 5-minute auto-join cooldown on all friends in that lobby so auto-join
+        does not immediately pull the user back into their party.
         Returns True if a friend's lobby was left.
         """
+        if getattr(self, "_auto_joined_friends_cooldown", None) is None:
+            self._auto_joined_friends_cooldown = {}
+
+        # Temporarily pause auto-joining for 15 seconds to allow queue setup / search creation
+        self._pause_auto_join_until = time.time() + 15.0
+
         if not self.lcu or not getattr(self.lcu, "is_connected", False):
             return False
 
@@ -1094,18 +1100,44 @@ class AutomationEngine:
 
             my_lobby = my_res.json()
             local_member = my_lobby.get("localMember", {})
+            local_puuid = local_member.get("puuid")
+            local_id = local_member.get("summonerId")
             is_leader = local_member.get("isLeader", False)
             members = my_lobby.get("members", [])
 
-            target_friend = friend_name or self._current_auto_joined_friend
-            is_friends_lobby = bool(target_friend) or (not is_leader) or (len(members) > 1)
+            # Collect names of all friends in the lobby to put on 5-minute cooldown
+            friends_to_cooldown = set()
+            if friend_name:
+                friends_to_cooldown.add(friend_name.strip().lower())
+                friends_to_cooldown.add(friend_name.strip().lower().split("#")[0])
+            if getattr(self, "_current_auto_joined_friend", None):
+                friends_to_cooldown.add(self._current_auto_joined_friend.strip().lower())
+                friends_to_cooldown.add(self._current_auto_joined_friend.strip().lower().split("#")[0])
+
+            for m in members:
+                m_puuid = m.get("puuid")
+                m_id = m.get("summonerId")
+                if (local_puuid and m_puuid == local_puuid) or (local_id and m_id == local_id):
+                    continue
+                g_name = (m.get("gameName") or m.get("summonerName") or m.get("name") or "").strip()
+                g_tag = (m.get("gameTag") or "").strip()
+                if g_name:
+                    friends_to_cooldown.add(g_name.lower())
+                    if g_tag:
+                        friends_to_cooldown.add(f"{g_name}#{g_tag}".lower())
+
+            is_friends_lobby = bool(friends_to_cooldown) or (not is_leader) or (len(members) > 1)
 
             if is_friends_lobby:
-                if target_friend:
-                    friend_key = target_friend.lower()
-                    self._auto_joined_friends_cooldown[friend_key] = time.time() + 300.0  # 5 minutes
-                    self._log(f"Paused auto-joining {target_friend} for 5 minutes.")
-                    Logger.info("AutoJoin", f"Applied 5-minute auto-join cooldown to '{target_friend}'.")
+                now = time.time()
+                for fn in friends_to_cooldown:
+                    if fn:
+                        self._auto_joined_friends_cooldown[fn] = now + 300.0  # 5 minutes
+
+                if friends_to_cooldown:
+                    names_str = ", ".join(sorted(friends_to_cooldown))
+                    self._log(f"Paused auto-joining {names_str} for 5 minutes.")
+                    Logger.info("AutoJoin", f"Applied 5-minute auto-join cooldown to: {names_str}")
 
                 self.lcu.request("DELETE", "/lol-lobby/v2/lobby/matchmaking/search", silent=True)
                 time.sleep(0.15)
@@ -1122,9 +1154,16 @@ class AutomationEngine:
 
     def reset_auto_join_cooldowns(self, name: Optional[str] = None) -> None:
         """Clears 5-minute auto-join cooldown timers for a specific friend or all friends."""
+        if getattr(self, "_auto_joined_friends_cooldown", None) is None:
+            self._auto_joined_friends_cooldown = {}
+
+        self._pause_auto_join_until = 0.0
+
         if name:
             key = name.strip().lower()
             self._auto_joined_friends_cooldown.pop(key, None)
+            base_key = key.split("#")[0]
+            self._auto_joined_friends_cooldown.pop(base_key, None)
             self._log(f"Cleared auto-join cooldown for friend '{name}'.")
             Logger.info("AutoJoin", f"Cleared auto-join cooldown for '{name}'.")
         else:
@@ -1140,15 +1179,24 @@ class AutomationEngine:
         if not self.config.get("auto_join_enabled", True):
             return
 
-        # Purge expired cooldowns
         now = time.time()
+
+        # Check temporary pause flag (e.g. while match search / lobby creation is in progress)
+        if now < getattr(self, "_pause_auto_join_until", 0.0):
+            return
+
+        # Defensive initialization for cooldown dict
+        if getattr(self, "_auto_joined_friends_cooldown", None) is None:
+            self._auto_joined_friends_cooldown = {}
+
+        # Purge expired cooldowns
         self._auto_joined_friends_cooldown = {
             name: exp for name, exp in self._auto_joined_friends_cooldown.items()
             if exp > now
         }
 
         # Check if we are still in our auto-joined lobby
-        if self._current_auto_joined_party_id:
+        if getattr(self, "_current_auto_joined_party_id", None):
             my_res = self.lcu.request("GET", "/lol-lobby/v2/lobby", silent=True)
             if my_res and my_res.status_code == 200:
                 my_lobby = my_res.json()
@@ -1176,9 +1224,7 @@ class AutomationEngine:
             else:
                 return
 
-        # ⚡ Bolt: Fast-path priority sniper early-return optimization.
-        # Instead of an O(N*M) nested loop evaluating every friend against the priority list,
-        # we index the active online friends into an O(1) dictionary mapping their lowercased names.
+        # Fast-path priority sniper indexing
         friend_map = {}
         for f in friends:
             game_name = f.get("gameName", "") or f.get("name", "")
@@ -1190,18 +1236,28 @@ class AutomationEngine:
                 friend_map[combo_name.lower()] = f
 
         for target_dict in active_friends:
-            target_friend = target_dict.get("name", "").strip().lower()
+            raw_name = target_dict.get("name", "").strip().lower()
+            base_name = raw_name.split("#")[0] if "#" in raw_name else raw_name
 
-            # Skip friend if 5-minute auto-join cooldown is active
-            if target_friend in self._auto_joined_friends_cooldown:
-                if now < self._auto_joined_friends_cooldown[target_friend]:
-                    continue
-            
-            f = friend_map.get(target_friend)
+            f = friend_map.get(raw_name) or friend_map.get(base_name)
             if not f:
                 continue
 
             game_name = f.get("gameName", "") or f.get("name", "")
+            game_tag = f.get("gameTag", "")
+            combo_name = f"{game_name}#{game_tag}" if game_tag else game_name
+
+            # Check if friend or any variation is on 5-minute cooldown
+            on_cooldown = False
+            for name_variant in (raw_name, base_name, game_name.lower(), combo_name.lower()):
+                if name_variant in self._auto_joined_friends_cooldown:
+                    if now < self._auto_joined_friends_cooldown[name_variant]:
+                        on_cooldown = True
+                        break
+
+            if on_cooldown:
+                continue
+
             lol = f.get("lol", {})
             if lol.get("ptyType") == "open":
                 pty_str = lol.get("pty", "")
@@ -1216,7 +1272,7 @@ class AutomationEngine:
                                 my_lobby = my_res.json()
                                 if my_lobby.get("partyId") == party_id:
                                     self._current_auto_joined_party_id = party_id
-                                    self._current_auto_joined_friend = game_name
+                                    self._current_auto_joined_friend = combo_name
                                     return  # Already in their party
 
                             # If we are currently searching for a match, cancel it first
@@ -1229,7 +1285,7 @@ class AutomationEngine:
                             if join_res and join_res.status_code in [200, 204]:
                                 self._log(f"Auto-joined {game_name}'s Party!")
                                 self._current_auto_joined_party_id = party_id
-                                self._current_auto_joined_friend = game_name
+                                self._current_auto_joined_friend = combo_name
                                 break # Joined a friend, stop iterating the priority list
                     except Exception as e:
                         Logger.debug("Auto", f"Failed parsing friend party: {e}")
