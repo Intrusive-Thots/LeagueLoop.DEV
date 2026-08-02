@@ -662,6 +662,9 @@ class PriorityIconGrid(ctk.CTkFrame):
         self._selected_indices.clear()
         self._delete_marked.clear()
         if self._edit_mode:
+            # Auto-expand if collapsed so the edit controls are visible
+            if not self._expanded:
+                self._toggle_collapse()
             self.btn_edit.configure(text="Done", text_color=get_color("colors.state.danger", "#ff4444"))
             # Staged reveal: sweep gold borders across grid cells before showing edit bar
             self._sweep_edit_borders(entering=True)
@@ -1134,11 +1137,20 @@ class PriorityIconGrid(ctk.CTkFrame):
         self.after(200, finalize)
 
     def _show_add_input(self):
+        """Expand the ARAM list if collapsed and focus the always-visible add entry."""
         if not self._expanded:
             self._toggle_collapse()
-        if not self.add_container.winfo_manager():
-            self.add_container.pack(fill="x", pady=(0, SPACING_SM), before=self.scroll)
-        self.add_entry.focus_set()
+        # Ensure add_container is packed (it may have been forgotten)
+        if not self.add_container.winfo_viewable():
+            try:
+                self.add_container.pack(fill="x", pady=(0, SPACING_SM))
+            except Exception:
+                pass
+        try:
+            self.add_entry.focus_set()
+            self.add_entry.select_range(0, "end")
+        except Exception:
+            pass
 
     def _commit_add(self):
         raw = self.add_entry.get().strip()
@@ -1175,9 +1187,16 @@ class PriorityIconGrid(ctk.CTkFrame):
             names.append(real_name)
             self._save_priority_list(names)
         self.add_entry.delete(0, "end")
-        self.suggestions_frame.pack_forget()
-        self.add_container.pack_forget()
+        try:
+            self.suggestions_frame.pack_forget()
+        except Exception:
+            pass
+        # Keep add_container visible — don't hide it after adding
         self._render_grid()
+        try:
+            self.add_entry.focus_set()
+        except Exception:
+            pass
 
     # ───────────── animation helpers ─────────────
     def _shake_widget(self, widget, orig_padx, amplitude=6, steps=6):
