@@ -28,20 +28,45 @@ class AutomationEditor(ctk.CTkToplevel):
         self.resizable(False, False)
         self.configure(fg_color=get_color("colors.accent.gold", "#C8AA6E"))
         
-        # Center on parent
+        try:
+            self.attributes("-topmost", True)
+        except Exception:
+            pass
+
+        # Center on parent and bring to front
         self.transient(master.winfo_toplevel())
         self.grab_set()
+        try:
+            self.lift()
+        except Exception:
+            pass
+        try:
+            self.focus_force()
+        except Exception:
+            pass
         self.after(10, self._center_on_parent)
 
         self._build_ui()
 
     def _center_on_parent(self):
-        """Center the popup over the main window."""
+        """Center the popup over the main window and enforce topmost z-order."""
         try:
             parent = self.master.winfo_toplevel()
-            px = parent.winfo_rootx() + parent.winfo_width() // 2 - 190
-            py = parent.winfo_rooty() + parent.winfo_height() // 2 - 240
+            px = parent.winfo_rootx() + (parent.winfo_width() // 2) - 190
+            py = parent.winfo_rooty() + (parent.winfo_height() // 2) - 240
             self.geometry(f"380x480+{px}+{py}")
+            try:
+                self.attributes("-topmost", True)
+            except Exception:
+                pass
+            try:
+                self.lift()
+            except Exception:
+                pass
+            try:
+                self.focus_force()
+            except Exception:
+                pass
         except Exception:
             pass
 
