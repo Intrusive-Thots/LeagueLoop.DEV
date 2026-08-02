@@ -254,6 +254,13 @@ class SidebarWidget(ctk.CTkFrame):
         hk_find = self.config.get("hotkey_find_match", "ctrl+shift+f").upper()
         CTkTooltip(self.btn_find_match, f"Start or Cancel Matchmaking ({hk_find})")
 
+        # ── Quick Automation Icons Bar (below Find Match) ──
+        self.quick_icon_bar = ctk.CTkFrame(
+            self.queue_actions_container,
+            fg_color="transparent"
+        )
+        self.quick_icon_bar.pack(fill="x", pady=(6, 4))
+
         # ── Quick Actions Row (2-column grid, fixed height) ──
         self.quick_actions_frame = ctk.CTkFrame(
             self.queue_actions_container,
@@ -417,7 +424,7 @@ class SidebarWidget(ctk.CTkFrame):
 
         # Auto Select Skin
         self.var_auto_skin = ctk.BooleanVar(value=self.config.get("auto_random_skin", True))
-        self.row_auto_skin = _make_item_card("auto_skin", "Auto Select Skin", self.var_auto_skin, self._on_toggle_auto_skin, "Automatically selects a random skin when a champion is selected", "2052", icon_type="champion")
+        self.row_auto_skin = _make_item_card("auto_skin", "Auto Select Skin", self.var_auto_skin, self._on_toggle_auto_skin, "Automatically selects a random skin when a champion is selected", "3157", icon_type="item")
 
         # Auto-Add Played Champions
         self.var_auto_add_played = ctk.BooleanVar(value=self.config.get("aram_auto_add_played", False))
@@ -426,6 +433,9 @@ class SidebarWidget(ctk.CTkFrame):
         # Auto-Ban
         self.var_auto_ban = ctk.BooleanVar(value=self.config.get("auto_ban_enabled", False))
         self.row_auto_ban = _make_item_card("auto_ban", "Auto-Ban", self.var_auto_ban, self._on_toggle_auto_ban, "Automatically bans configured champions in champ select", "350", icon_type="champion")
+
+        # Build quick automation icons row below Find Match
+        self._build_quick_automation_icon_bar()
         
         # (Divider removed — card containers provide visual separation)
 
@@ -981,36 +991,164 @@ class SidebarWidget(ctk.CTkFrame):
 
         threading.Thread(target=_execute_sync, daemon=True).start()
 
+    def _build_quick_automation_icon_bar(self):
+        """Creates the row of quick automation toggle icons below the Find Match button."""
+        if not hasattr(self, "quick_icon_bar") or not self.quick_icon_bar:
+            return
+
+        from PIL import ImageOps, ImageEnhance
+
+        items = [
+            ("auto_accept", "Auto Accept", self.var_accept, self._on_toggle_accept, "2420", "item"),
+            ("priority_picker", "ARAM Picker", self.var_priority, self._on_toggle_priority, "2052", "item"),
+            ("auto_join", "Friend Auto-Join", self.var_auto_join, self._on_toggle_auto_join, "3109", "item"),
+            ("auto_honor", "Auto Honor", self.var_auto_honor, self._on_toggle_auto_honor, "3105", "item"),
+            ("skip_stats", "Skip Stats", self.var_skip_stats, self._on_toggle_skip_stats, "3111", "item"),
+            ("auto_runes", "Auto Runes", self.var_auto_runes, self._on_toggle_auto_runes, "3340", "item"),
+            ("auto_skin", "Auto Select Skin", self.var_auto_skin, self._on_toggle_auto_skin, "3157", "item"),
+            ("auto_add_played", "Auto-Add Played", self.var_auto_add_played, self._on_toggle_auto_add_played, "2052", "item"),
+            ("auto_ban", "Auto-Ban", self.var_auto_ban, self._on_toggle_auto_ban, "350", "champion"),
+        ]
+
+        self._quick_icon_widgets = {}
+
+        for key, label, var, cmd, icon_id, icon_type in items:
+            btn = ctk.CTkButton(
+                self.quick_icon_bar,
+                text="",
+                width=26,
+                height=26,
+                corner_radius=6,
+                fg_color="#12171F",
+                border_width=1,
+                border_color="#1B222C",
+                hover_color="#253245",
+                cursor="hand2"
+            )
+            btn.pack(side="left", expand=True, padx=1, pady=1)
+
+            entry = {
+                "key": key,
+                "label": label,
+                "var": var,
+                "cmd": cmd,
+                "btn": btn,
+                "color_img": None,
+                "gray_img": None,
+                "tooltip": None
+            }
+            self._quick_icon_widgets[key] = entry
+
+            def _make_handler(v=var, c=cmd):
+                def _handle():
+                    v.set(not v.get())
+                    c()
+                    self._update_all_quick_icons()
+                return _handle
+
+            btn.configure(command=_make_handler())
+            entry["tooltip"] = CTkTooltip(btn, f"{label}: {'ON' if var.get() else 'OFF'}\nClick to toggle")
+
+            def _make_on_loaded(e=entry):
+                def _on_loaded(ctk_img):
+                    e["color_img"] = ctk_img
+                    try:
+                        pil_light = ctk_img._light_image if hasattr(ctk_img, '_light_image') else None
+                        if pil_light:
+                            gray_pil = ImageOps.grayscale(pil_light).convert("RGBA")
+                            gray_pil = ImageEnhance.Brightness(gray_pil).enhance(0.35)
+                            e["gray_img"] = ctk.CTkImage(gray_pil, size=(18, 18))
+                    except Exception:
+                        e["gray_img"] = None
+                    self._update_quick_icon_entry(e)
+                return _on_loaded
+
+            if self.assets and icon_id:
+                self.assets.get_icon_async(
+                    icon_type,
+                    icon_id,
+                    _make_on_loaded(),
+                    size=(18, 18),
+                    widget=btn
+                )
+
+            self._update_quick_icon_entry(entry)
+
+    def _update_quick_icon_entry(self, entry):
+        """Updates a single quick icon button appearance based on its current ON/OFF state."""
+        if not entry or not entry.get("btn") or not entry["btn"].winfo_exists():
+            return
+
+        is_on = entry["var"].get()
+        label = entry["label"]
+        btn = entry["btn"]
+
+        if is_on:
+            btn.configure(
+                fg_color="#1E2A3A",
+                border_color="#C8AA6E",
+                border_width=1,
+                image=entry.get("color_img")
+            )
+        else:
+            btn.configure(
+                fg_color="#10141C",
+                border_color="#1B222C",
+                border_width=1,
+                image=entry.get("gray_img") or entry.get("color_img")
+            )
+
+        if entry.get("tooltip") and hasattr(entry["tooltip"], "configure"):
+            try:
+                entry["tooltip"].configure(text=f"{label}: {'ON' if is_on else 'OFF'}\nClick to toggle")
+            except Exception:
+                pass
+
+    def _update_all_quick_icons(self):
+        """Refreshes all quick icon buttons to match current config/variable states."""
+        if hasattr(self, "_quick_icon_widgets"):
+            for entry in self._quick_icon_widgets.values():
+                self._update_quick_icon_entry(entry)
+
     def _on_toggle_accept(self):
         self.config.set("auto_accept", self.var_accept.get())
+        self._update_all_quick_icons()
 
     def _on_toggle_priority(self):
         cfg = self.config.get("priority_picker", {})
         cfg["enabled"] = self.var_priority.get()
         self.config.set("priority_picker", cfg)
+        self._update_all_quick_icons()
 
     def _on_toggle_auto_join(self):
         self.config.set("auto_join_enabled", self.var_auto_join.get())
         if hasattr(self, "automation") and self.automation:
             self.automation.reset_auto_join_cooldowns()
+        self._update_all_quick_icons()
 
     def _on_toggle_auto_honor(self):
         self.config.set("auto_honor_enabled", self.var_auto_honor.get())
+        self._update_all_quick_icons()
 
     def _on_toggle_skip_stats(self):
         self.config.set("skip_stats_enabled", self.var_skip_stats.get())
+        self._update_all_quick_icons()
         
     def _on_toggle_auto_runes(self):
         self.config.set("auto_runes_enabled", self.var_auto_runes.get())
+        self._update_all_quick_icons()
 
     def _on_toggle_auto_skin(self):
         self.config.set("auto_random_skin", self.var_auto_skin.get())
+        self._update_all_quick_icons()
 
     def _on_toggle_auto_add_played(self):
         self.config.set("aram_auto_add_played", self.var_auto_add_played.get())
+        self._update_all_quick_icons()
 
     def _on_toggle_auto_ban(self):
         self.config.set("auto_ban_enabled", self.var_auto_ban.get())
+        self._update_all_quick_icons()
 
     def _on_master_toggle(self):
         """Master switch: toggle all automations on or off."""
@@ -1049,6 +1187,7 @@ class SidebarWidget(ctk.CTkFrame):
                 var.set(False)
                 row.set_enabled(False)
                 row._update_icon_state()
+            self._update_all_quick_icons()
             # Persist the off states
             self._on_toggle_accept()
             self._on_toggle_priority()
