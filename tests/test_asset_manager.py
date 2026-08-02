@@ -305,8 +305,40 @@ class TestAssetManager(unittest.TestCase):
         self.assertIn("avg_eviction_memory_bytes", fuzzy_t)
         self.assertIn("eviction_profile_telemetry", fuzzy_t)
 
+    def test_champ_search_predicate_memory_recycling(self):
+        """Verify memory recycling for champion search index filter predicate functions for Task 170."""
+        self.assets.id_to_key = {266: "Aatrox", 103: "Ahri"}
+        self.assets.champ_data = {"Aatrox": {"name": "Aatrox"}, "Ahri": {"name": "Ahri"}}
+        self.assets._build_champ_search_index()
+
+        initial_telemetry = self.assets.get_search_predicate_pool_telemetry()
+        self.assertEqual(initial_telemetry["predicate_recycle_hits"], 0)
+        self.assertEqual(initial_telemetry["predicate_recycle_misses"], 0)
+
+        # First search will create & cache predicate
+        self.assets.search_champions(query="aatrox")
+        tel1 = self.assets.get_search_predicate_pool_telemetry()
+        self.assertEqual(tel1["predicate_recycle_misses"], 1)
+        self.assertEqual(tel1["predicate_recycle_hits"], 0)
+
+        # Second search with identical filter criteria should hit predicate cache
+        self.assets.search_champions(query="aatrox")
+        tel2 = self.assets.get_search_predicate_pool_telemetry()
+        self.assertEqual(tel2["predicate_recycle_hits"], 1)
+        self.assertGreater(tel2["predicate_recycle_hit_ratio"], 0.0)
+        self.assertGreater(tel2["predicate_bytes_recycled"], 0)
+
+        champ_tel = self.assets.get_champ_search_telemetry()
+        self.assertIn("predicate_recycle_hits", champ_tel)
+        self.assertIn("predicate_recycle_hit_ratio", champ_tel)
+
+        # Clear pool
+        self.assets.clear_search_predicate_pool()
+        self.assertEqual(len(self.assets._champ_search_predicate_cache), 0)
+
 if __name__ == '__main__':
     unittest.main()
+
 
 
 

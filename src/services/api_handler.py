@@ -177,6 +177,14 @@ class LCUClient:
         self._recent_http_errors: list = []
         self._max_recent_http_errors: int = 50
 
+        # Task 169: Automated HTTP response status distribution anomaly threshold alerts
+        self._http_anomaly_error_rate_threshold_pct: float = 15.0
+        self._http_anomaly_5xx_count_threshold: int = 5
+        self._http_anomaly_count: int = 0
+        self._http_status_anomaly_active: bool = False
+        self._http_status_anomaly_history: list = []
+        self._http_status_anomaly_history_max: int = 50
+
         # Task 139: Adaptive HTTP client timeout adjustment based on LCU response latency histograms
         self._http_latency_lock = threading.Lock()
         self._http_latency_samples = []
@@ -473,7 +481,7 @@ class LCUClient:
         return None
 
     def _record_http_status_code(self, status_code: int, method: str, endpoint: str) -> None:
-        """Task 151: Records HTTP response status code distribution and logs 4xx/5xx error telemetry."""
+        """Task 151 & 169: Records HTTP response status code distribution and evaluates status distribution anomaly threshold alerts."""
         with self._req_diag_lock:
             self._http_status_codes[status_code] = self._http_status_codes.get(status_code, 0) + 1
             if 200 <= status_code <= 299:
@@ -499,8 +507,54 @@ class LCUClient:
                     self._recent_http_errors.pop(0)
                 Logger.warning("LCU_TELEMETRY", f"HTTP {status_code} Error on {method} {endpoint}")
 
+            # Task 169: Automated HTTP status distribution anomaly threshold evaluation
+            total_reqs = self._total_requests_count
+            err_count = self._http_4xx_count + self._http_5xx_count + self._http_error_count
+            err_rate = round((err_count / max(1, total_reqs)) * 100.0, 2)
+
+            is_rate_anomaly = total_reqs >= 5 and err_rate > self._http_anomaly_error_rate_threshold_pct
+            is_5xx_anomaly = self._http_5xx_count >= self._http_anomaly_5xx_count_threshold
+
+            if is_rate_anomaly or is_5xx_anomaly or status_code >= 500:
+                self._http_status_anomaly_active = True
+                self._http_anomaly_count += 1
+                reason = f"Error rate {err_rate}% exceeded threshold {self._http_anomaly_error_rate_threshold_pct}%" if is_rate_anomaly else f"HTTP 5xx count {self._http_5xx_count} reached threshold"
+                anomaly_entry = {
+                    "timestamp": time.time(),
+                    "status_code": status_code,
+                    "method": method,
+                    "endpoint": endpoint,
+                    "error_rate_pct": err_rate,
+                    "reason": reason,
+                }
+                self._http_status_anomaly_history.append(anomaly_entry)
+                if len(self._http_status_anomaly_history) > self._http_status_anomaly_history_max:
+                    self._http_status_anomaly_history.pop(0)
+                Logger.warning("LCU_HTTP_STATUS_ANOMALY", f"HTTP status anomaly threshold alert on {method} {endpoint} (status {status_code}): {reason}")
+            else:
+                self._http_status_anomaly_active = False
+
+    def get_http_status_anomaly_telemetry(self) -> Dict[str, Any]:
+        """Task 169: Returns automated HTTP response status distribution anomaly threshold alert telemetry."""
+        with self._req_diag_lock:
+            anomalies = self._http_anomaly_count
+            active = self._http_status_anomaly_active
+            history = [dict(entry) for entry in self._http_status_anomaly_history]
+            last_anomaly = dict(history[-1]) if history else None
+            err_thresh = self._http_anomaly_error_rate_threshold_pct
+            c5xx_thresh = self._http_anomaly_5xx_count_threshold
+
+        return {
+            "http_status_anomaly_count": anomalies,
+            "http_status_anomaly_active": active,
+            "http_anomaly_error_rate_threshold_pct": err_thresh,
+            "http_anomaly_5xx_count_threshold": c5xx_thresh,
+            "last_http_status_anomaly": last_anomaly,
+            "recent_http_status_anomalies": history,
+        }
+
     def get_http_status_telemetry(self) -> Dict[str, Any]:
-        """Task 151: Returns automated HTTP response status distribution diagnostics & error telemetry."""
+        """Task 151 & 169: Returns automated HTTP response status distribution diagnostics & error anomaly telemetry."""
         with self._req_diag_lock:
             dist = {str(k): v for k, v in sorted(self._http_status_codes.items())}
             total_reqs = self._total_requests_count
@@ -508,19 +562,23 @@ class LCUClient:
             err_rate = round((err_count / max(1, total_reqs)) * 100.0, 2)
             recent_errs = list(self._recent_http_errors)
 
-            return {
-                "total_requests": total_reqs,
-                "status_code_distribution": dist,
-                "http_2xx_count": self._http_2xx_count,
-                "http_3xx_count": self._http_3xx_count,
-                "http_4xx_count": self._http_4xx_count,
-                "http_5xx_count": self._http_5xx_count,
-                "http_429_count": self._http_429_count,
-                "http_error_count": self._http_error_count,
-                "http_error_rate_pct": err_rate,
-                "recent_errors_count": len(recent_errs),
-                "recent_errors": recent_errs,
-            }
+        anomaly_meta = self.get_http_status_anomaly_telemetry()
+
+        res = {
+            "total_requests": total_reqs,
+            "status_code_distribution": dist,
+            "http_2xx_count": self._http_2xx_count,
+            "http_3xx_count": self._http_3xx_count,
+            "http_4xx_count": self._http_4xx_count,
+            "http_5xx_count": self._http_5xx_count,
+            "http_429_count": self._http_429_count,
+            "http_error_count": self._http_error_count,
+            "http_error_rate_pct": err_rate,
+            "recent_errors_count": len(recent_errs),
+            "recent_errors": recent_errs,
+        }
+        res.update(anomaly_meta)
+        return res
 
     def _execute_offline_retry(self, method: str, endpoint: str, data: Optional[Dict]) -> None:
         """Task 154: Helper to execute an offline queued retry request and log success/fail telemetry."""

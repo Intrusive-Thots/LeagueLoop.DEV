@@ -241,6 +241,13 @@ class AssetManager:
         self._champ_search_fuzzy_eviction_profile_max: int = 50
         self._champ_search_fuzzy_last_eviction_time: float = 0.0
 
+        # Task 170: Benchmark and optimize memory recycling for champion search index filter predicate lambda functions
+        self._champ_search_predicate_cache: Dict[Tuple[str, Optional[str], Optional[str]], Any] = {}
+        self._champ_search_predicate_pool_max: int = 50
+        self._champ_search_predicate_recycle_hits: int = 0
+        self._champ_search_predicate_recycle_misses: int = 0
+        self._champ_search_predicate_bytes_recycled: int = 0
+
         # Bolt: Use a PriorityQueue + Daemon Threads to prevent thread explosion during high load
         # while ensuring high-priority UI requests preempt low-priority background pre-loads.
         self._download_queue = queue.PriorityQueue()
@@ -454,6 +461,57 @@ class AssetManager:
                 })
             self._champ_search_index = search_list
 
+    def _acquire_search_predicate(self, q_clean: str, role_clean: Optional[str], tag_clean: Optional[str]) -> Any:
+        """Task 170: Acquires or creates a cached filter predicate function for champion search to avoid lambda allocations."""
+        cache_key = (q_clean, role_clean, tag_clean)
+        with self._lock:
+            if cache_key in self._champ_search_predicate_cache:
+                self._champ_search_predicate_recycle_hits += 1
+                return self._champ_search_predicate_cache[cache_key]
+
+            self._champ_search_predicate_recycle_misses += 1
+
+            def _predicate(entry: Dict[str, Any]) -> bool:
+                if q_clean and (q_clean not in entry["lower_name"] and q_clean not in entry["lower_key"]):
+                    return False
+                if role_clean and role_clean not in entry["roles"]:
+                    return False
+                if tag_clean and tag_clean not in entry["tags"]:
+                    return False
+                return True
+
+            if len(self._champ_search_predicate_cache) < self._champ_search_predicate_pool_max:
+                self._champ_search_predicate_cache[cache_key] = _predicate
+                self._champ_search_predicate_bytes_recycled += sys.getsizeof(_predicate)
+
+            return _predicate
+
+    def clear_search_predicate_pool(self) -> None:
+        """Task 170: Clears recycled champion search filter predicate pool and cache."""
+        with self._lock:
+            self._champ_search_predicate_cache.clear()
+
+    def get_search_predicate_pool_telemetry(self) -> Dict[str, Any]:
+        """Task 170: Returns benchmark and optimization metrics for champion search filter predicate lambda memory recycling."""
+        with self._lock:
+            cache_size = len(self._champ_search_predicate_cache)
+            hits = self._champ_search_predicate_recycle_hits
+            misses = self._champ_search_predicate_recycle_misses
+            tot = hits + misses
+            hit_ratio = round(hits / tot, 4) if tot > 0 else 0.0
+            bytes_rec = self._champ_search_predicate_bytes_recycled
+            mem_kb = round(sys.getsizeof(self._champ_search_predicate_cache) / 1024.0, 3)
+
+            return {
+                "predicate_cache_size": cache_size,
+                "predicate_pool_max_size": self._champ_search_predicate_pool_max,
+                "predicate_recycle_hits": hits,
+                "predicate_recycle_misses": misses,
+                "predicate_recycle_hit_ratio": hit_ratio,
+                "predicate_bytes_recycled": bytes_rec,
+                "predicate_pool_memory_kb": mem_kb,
+            }
+
     def search_champions(
         self,
         query: str = "",
@@ -462,7 +520,7 @@ class AssetManager:
         limit: int = 20,
         enable_fuzzy: bool = True,
     ) -> List[Dict[str, Any]]:
-        """Task 158 & 161: Fast indexed champion search with fuzzy matching query latency benchmarking & optimization."""
+        """Task 158, 161 & 170: Fast indexed champion search with filter predicate memory recycling & fuzzy matching query latency benchmarking."""
         t_start = time.perf_counter()
         q_clean = query.strip().lower() if query else ""
         role_clean = role.strip().upper() if role else None
@@ -473,13 +531,10 @@ class AssetManager:
                 self._build_champ_search_index()
             index_copy = list(self._champ_search_index)
 
+        predicate = self._acquire_search_predicate(q_clean, role_clean, tag_clean)
         results = []
         for entry in index_copy:
-            if q_clean and (q_clean not in entry["lower_name"] and q_clean not in entry["lower_key"]):
-                continue
-            if role_clean and role_clean not in entry["roles"]:
-                continue
-            if tag_clean and tag_clean not in entry["tags"]:
+            if not predicate(entry):
                 continue
             results.append(entry)
             if len(results) >= limit:
@@ -568,21 +623,25 @@ class AssetManager:
         return results
 
     def get_champ_search_telemetry(self) -> Dict[str, Any]:
-        """Task 158: Returns champion search index benchmarking and lookup performance metrics."""
+        """Task 158 & 170: Returns champion search index benchmarking, lookup performance, and filter predicate memory recycling metrics."""
         with self._lock:
             count = self._champ_search_count
             tot_lat = self._champ_search_total_latency_ms
             avg_lat = round(tot_lat / max(1, count), 4) if count > 0 else 0.0
             idx_len = len(self._champ_search_index)
 
-            return {
-                "indexed_champion_count": idx_len,
-                "search_query_count": count,
-                "avg_search_latency_ms": avg_lat,
-                "search_count": count,
-                "index_size": idx_len,
-                "total_latency_ms": round(tot_lat, 4),
-            }
+        predicate_meta = self.get_search_predicate_pool_telemetry()
+
+        res = {
+            "indexed_champion_count": idx_len,
+            "search_query_count": count,
+            "avg_search_latency_ms": avg_lat,
+            "search_count": count,
+            "index_size": idx_len,
+            "total_latency_ms": round(tot_lat, 4),
+        }
+        res.update(predicate_meta)
+        return res
 
     def get_fuzzy_search_eviction_profile_telemetry(self) -> Dict[str, Any]:
         """Task 167: Returns benchmark memory allocation profiling metrics during fuzzy search cache evictions."""

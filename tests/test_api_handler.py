@@ -252,5 +252,33 @@ class TestLCUClient(unittest.TestCase):
         self.assertIn("active_subscription_filters", ws_meta)
         self.assertIn("dispatched_callbacks_count", ws_meta)
 
+    def test_http_status_distribution_anomaly_threshold_alerts(self):
+        """Test automated HTTP response status distribution anomaly threshold alerts for Task 169."""
+        initial_telemetry = self.client.get_http_status_anomaly_telemetry()
+        self.assertEqual(initial_telemetry["http_status_anomaly_count"], 0)
+        self.assertFalse(initial_telemetry["http_status_anomaly_active"])
+        self.assertIn("http_anomaly_error_rate_threshold_pct", initial_telemetry)
+
+        # Simulate normal 200 responses
+        for _ in range(10):
+            self.client._record_http_status_code(200, "GET", "/lol-summoner/v1/current-summoner")
+
+        tel_200 = self.client.get_http_status_anomaly_telemetry()
+        self.assertFalse(tel_200["http_status_anomaly_active"])
+
+        # Trigger HTTP 5xx anomaly threshold
+        for _ in range(5):
+            self.client._record_http_status_code(500, "POST", "/lol-lobby/v2/lobby")
+
+        tel_500 = self.client.get_http_status_anomaly_telemetry()
+        self.assertTrue(tel_500["http_status_anomaly_active"])
+        self.assertGreater(tel_500["http_status_anomaly_count"], 0)
+        self.assertIsNotNone(tel_500["last_http_status_anomaly"])
+
+        full_status_telemetry = self.client.get_http_status_telemetry()
+        self.assertIn("http_status_anomaly_active", full_status_telemetry)
+        self.assertIn("http_status_anomaly_count", full_status_telemetry)
+
 if __name__ == '__main__':
     unittest.main()
+
