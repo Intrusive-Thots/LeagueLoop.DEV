@@ -241,7 +241,7 @@ class PriorityIconGrid(ctk.CTkFrame):
     def _build_body(self):
         self.body = ctk.CTkFrame(self, fg_color="transparent")
         if self._expanded:
-            self.body.pack(fill="x", pady=(SPACING_SM, SPACING_MD), padx=SPACING_MD)
+            self.body.pack(fill="both", expand=True, pady=(SPACING_SM, SPACING_MD), padx=SPACING_MD)
 
         # ── Hovered Champion Display ──
         self.hover_frame = ctk.CTkFrame(self.body, fg_color="#141E28", corner_radius=get_radius("sm"), height=48)
@@ -274,7 +274,7 @@ class PriorityIconGrid(ctk.CTkFrame):
             self.scroll._scrollbar.configure(width=6)
         except Exception:
             pass
-        self.scroll.pack(fill="x")
+        self.scroll.pack(fill="both", expand=True, pady=(0, SPACING_SM))
         apply_smooth_scroll(self.scroll)
 
         # Grid container enforcing 4 columns
@@ -565,7 +565,19 @@ class PriorityIconGrid(ctk.CTkFrame):
 
             self._icon_widgets.append((cell, lbl, i))
 
+        cols_per_row = getattr(self, "_icons_per_row", ICONS_PER_ROW)
+        if hasattr(self, "grid_parent") and self.grid_parent.winfo_exists():
+            for c in range(cols_per_row):
+                self.grid_parent.grid_columnconfigure(c, weight=0, minsize=48)
+
         self._refresh_visuals()
+
+        # Reset scrollbar position so top champion icons are always visible
+        if hasattr(self, "scroll") and hasattr(self.scroll, "_parent_canvas"):
+            try:
+                self.scroll._parent_canvas.yview_moveto(0.0)
+            except Exception:
+                pass
 
     # ───────────── tooltip ─────────────
     def _show_tooltip(self, event, name, idx=None):
