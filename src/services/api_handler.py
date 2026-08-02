@@ -433,8 +433,48 @@ class LCUClient:
             "sample_count": n,
         }
 
+    def get_http_retry_jitter_skewness_kurtosis_telemetry(self) -> Dict[str, Any]:
+        """Task 187: Returns automated HTTP request retry exponential backoff jitter skewness & kurtosis statistical telemetry."""
+        with self._req_diag_lock:
+            samples = self._http_retry_jitter_samples.copy()
+
+        if not samples or len(samples) < 3:
+            return {
+                "http_retry_jitter_skewness": 0.0,
+                "http_retry_jitter_kurtosis": 0.0,
+                "http_retry_jitter_excess_kurtosis": 0.0,
+                "sample_count": len(samples),
+            }
+
+        n = len(samples)
+        mean = sum(samples) / n
+        variance = sum((x - mean) ** 2 for x in samples) / n
+        stddev = math.sqrt(variance)
+
+        if stddev < 1e-9:
+            return {
+                "http_retry_jitter_skewness": 0.0,
+                "http_retry_jitter_kurtosis": 0.0,
+                "http_retry_jitter_excess_kurtosis": 0.0,
+                "sample_count": n,
+            }
+
+        m3 = sum((x - mean) ** 3 for x in samples) / n
+        m4 = sum((x - mean) ** 4 for x in samples) / n
+
+        skewness = round(m3 / (stddev ** 3), 4)
+        kurtosis = round(m4 / (stddev ** 4), 4)
+        excess_kurtosis = round(kurtosis - 3.0, 4)
+
+        return {
+            "http_retry_jitter_skewness": skewness,
+            "http_retry_jitter_kurtosis": kurtosis,
+            "http_retry_jitter_excess_kurtosis": excess_kurtosis,
+            "sample_count": n,
+        }
+
     def get_http_retry_jitter_entropy_telemetry(self) -> Dict[str, Any]:
-        """Task 181 & 184: Returns automated HTTP request retry exponential backoff jitter entropy & distribution percentiles telemetry."""
+        """Task 181, 184 & 187: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness & kurtosis telemetry."""
         with self._req_diag_lock:
             samples = self._http_retry_jitter_samples.copy()
             entropy = self._http_retry_jitter_entropy_bits
@@ -444,6 +484,7 @@ class LCUClient:
 
         avg_s = round(sum(samples) / len(samples), 4) if samples else 0.0
         perc_meta = self.get_http_retry_jitter_percentiles_telemetry()
+        shape_meta = self.get_http_retry_jitter_skewness_kurtosis_telemetry()
 
         res = {
             "http_retry_jitter_samples_count": len(samples),
@@ -454,6 +495,7 @@ class LCUClient:
             "http_retry_count": retries,
         }
         res.update(perc_meta)
+        res.update(shape_meta)
         return res
 
     def get_http_latency_histogram(self) -> Dict[str, Any]:

@@ -367,7 +367,7 @@ class TestAssetManager(unittest.TestCase):
         summary = self.assets.get_memory_summary_diagnostics()
         self.assertIn("search_slice_pool_telemetry", summary)
 
-        # Clear slice pool
+        # Clear pool
         self.assets.clear_search_slice_pool()
         self.assertEqual(len(self.assets._champ_search_slice_pool), 0)
 
@@ -494,6 +494,34 @@ class TestAssetManager(unittest.TestCase):
         # Clear pool
         self.assets.clear_rune_page_search_slice_pool()
         self.assertEqual(len(self.assets._rune_page_search_slice_pool), 0)
+
+    def test_spell_ability_recommendations_memory_pooling(self):
+        """Task 188: Test champion spell ability recommendation search query result slice tuple memory recycling and telemetry."""
+        initial_tel = self.assets.get_spell_ability_search_slice_pool_telemetry()
+        self.assertEqual(initial_tel["spell_ability_slice_recycle_hits"], 0)
+        self.assertEqual(initial_tel["spell_ability_slice_recycle_misses"], 0)
+
+        # Initial query creates slice tuple (miss)
+        spells1 = self.assets.search_spell_ability_recommendations(query="ahri", limit=10)
+        tel1 = self.assets.get_spell_ability_search_slice_pool_telemetry()
+        self.assertEqual(tel1["spell_ability_slice_recycle_misses"], 1)
+        self.assertEqual(tel1["spell_ability_slice_recycle_hits"], 0)
+
+        # Repeated query accesses pooled spell ability slice tuple (hit)
+        spells2 = self.assets.search_spell_ability_recommendations(query="ahri", limit=10)
+        tel2 = self.assets.get_spell_ability_search_slice_pool_telemetry()
+        self.assertEqual(tel2["spell_ability_slice_recycle_hits"], 1)
+        self.assertGreater(tel2["spell_ability_slice_recycle_hit_ratio"], 0.0)
+        self.assertGreater(tel2["spell_ability_slice_bytes_recycled"], 0)
+        self.assertEqual(spells1, spells2)
+
+        summary = self.assets.get_memory_summary_diagnostics()
+        self.assertIn("spell_ability_search_slice_pool_telemetry", summary)
+        self.assertEqual(summary["spell_ability_search_slice_pool_telemetry"]["spell_ability_slice_recycle_hits"], 1)
+
+        # Clear pool
+        self.assets.clear_spell_ability_search_slice_pool()
+        self.assertEqual(len(self.assets._spell_ability_search_slice_pool), 0)
 
 if __name__ == '__main__':
     unittest.main()

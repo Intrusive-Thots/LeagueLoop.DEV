@@ -428,6 +428,29 @@ def test_lcu_client_http_retry_jitter_percentiles_telemetry():
     assert "http_retry_jitter_iqr_s" in diag
 
 
+def test_lcu_client_http_retry_jitter_skewness_kurtosis_telemetry():
+    client = LCUClient()
+    initial = client.get_http_retry_jitter_skewness_kurtosis_telemetry()
+    assert initial["http_retry_jitter_skewness"] == 0.0
+    assert initial["http_retry_jitter_kurtosis"] == 0.0
+    assert initial["http_retry_jitter_excess_kurtosis"] == 0.0
+    assert initial["sample_count"] == 0
+
+    with client._req_diag_lock:
+        client._http_retry_jitter_samples = [0.01, 0.02, 0.05, 0.08, 0.12, 0.15, 0.20]
+
+    meta = client.get_http_retry_jitter_skewness_kurtosis_telemetry()
+    assert meta["sample_count"] == 7
+    assert isinstance(meta["http_retry_jitter_skewness"], float)
+    assert isinstance(meta["http_retry_jitter_kurtosis"], float)
+    assert isinstance(meta["http_retry_jitter_excess_kurtosis"], float)
+
+    entropy_meta = client.get_http_retry_jitter_entropy_telemetry()
+    assert "http_retry_jitter_skewness" in entropy_meta
+    assert "http_retry_jitter_kurtosis" in entropy_meta
+    assert "http_retry_jitter_excess_kurtosis" in entropy_meta
+
+
 
 
 
