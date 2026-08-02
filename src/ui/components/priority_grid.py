@@ -528,6 +528,18 @@ class PriorityIconGrid(ctk.CTkFrame):
             # Start with centered place for easy animation
             lbl.place(relx=0.5, rely=0.5, anchor="center")
 
+            # Rank order badge overlay (#1, #2, #3...)
+            rank_bg = get_color("colors.accent.gold", "#C8AA6E") if i < 3 else "#121C2A"
+            rank_fg = "#0A1428" if i < 3 else get_color("colors.accent.gold", "#C8AA6E")
+            rank_badge = ctk.CTkLabel(
+                cell, text=f"#{i + 1}", width=20, height=14,
+                corner_radius=4,
+                fg_color=rank_bg,
+                text_color=rank_fg,
+                font=get_font("caption", "bold")
+            )
+            rank_badge.place(x=2, y=2)
+
             # Start async load
             def _update_icon(img, label=lbl):
                 try:
@@ -919,13 +931,24 @@ class PriorityIconGrid(ctk.CTkFrame):
 
     def _refresh_visuals(self):
         self._sync_edit_bar_state()
-        for cell, lbl, idx in self._icon_widgets:
-            if idx in self._selected_indices:
-                cell.configure(fg_color=SEL_BG, border_width=2,
-                               border_color=DEL_BORDER if len(self._selected_indices) > 1 else SEL_BORDER, 
-                               corner_radius=6)
+        count_sel = len(self._selected_indices)
+        if hasattr(self, "btn_del") and self.btn_del.winfo_exists():
+            if count_sel > 0:
+                self.btn_del.configure(text=f"✕ Delete Selected ({count_sel})")
             else:
-                cell.configure(fg_color="transparent", border_width=0, corner_radius=4)
+                self.btn_del.configure(text="✕ Delete Selected")
+
+        for cell, lbl, idx in self._icon_widgets:
+            if idx < 0:
+                continue
+            if idx in self._selected_indices:
+                cell.configure(
+                    fg_color=SEL_BG, border_width=2,
+                    border_color=DEL_BORDER if count_sel > 1 else SEL_BORDER,
+                    corner_radius=6
+                )
+            else:
+                cell.configure(fg_color="transparent", border_width=1, border_color=get_color("colors.border.subtle"), corner_radius=4)
 
     def _delete_active(self):
         if not self._selected_indices:

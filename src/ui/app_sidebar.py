@@ -1119,7 +1119,8 @@ class SidebarWidget(ctk.CTkFrame):
 
         if entry.get("tooltip") and hasattr(entry["tooltip"], "configure"):
             try:
-                entry["tooltip"].configure(text=f"{label}: {'ON' if is_on else 'OFF'}\nClick to toggle")
+                state_str = "ON" if is_on else "OFF"
+                entry["tooltip"].configure(text=f"⚡ {label} — {state_str}\nClick to toggle")
             except Exception:
                 pass
 
