@@ -128,9 +128,15 @@
 - [x] **Task 177**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 194 tests passing in 0.49s).
 
 ## Upcoming Autonomous Improvement Tasks
-- [ ] **Task 178**: Implement automated HTTP client request latency skewness & kurtosis statistical telemetry in `LCUClient`.
-- [ ] **Task 179**: Benchmark and optimize memory pooling for champion splash art filter query result slice tuple creation in `AssetManager`.
-- [ ] **Task 180**: Maintain continuous system-wide health and build readiness validation.
+- [x] **Task 178**: Implement automated HTTP client request latency skewness & kurtosis statistical telemetry in `LCUClient` (`get_http_latency_skewness_kurtosis_telemetry`, `http_latency_skewness`, `http_latency_kurtosis`, `http_latency_excess_kurtosis`).
+- [x] **Task 179**: Benchmark and optimize memory pooling for champion splash art filter query result slice tuple creation in `AssetManager` (`_acquire_splash_search_slice_tuple`, `search_splash_previews`, `get_splash_search_slice_pool_telemetry`).
+- [x] **Task 180**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 196 tests passing in 1.49s).
+
+## Upcoming Autonomous Improvement Tasks
+- [ ] **Task 181**: Implement automated HTTP request retry exponential backoff jitter entropy telemetry in `LCUClient`.
+- [ ] **Task 182**: Benchmark and optimize memory pooling for champion item build recommendation search query slice tuple creation in `AssetManager`.
+- [ ] **Task 183**: Maintain continuous system-wide health and build readiness validation.
+
 
 
 

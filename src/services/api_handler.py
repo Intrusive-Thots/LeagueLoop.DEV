@@ -317,8 +317,48 @@ class LCUClient:
             "sample_count": n,
         }
 
+    def get_http_latency_skewness_kurtosis_telemetry(self) -> Dict[str, Any]:
+        """Task 178: Returns automated HTTP client request latency skewness & kurtosis statistical telemetry."""
+        with self._http_latency_lock:
+            samples = self._http_latency_samples.copy()
+
+        if not samples or len(samples) < 3:
+            return {
+                "http_latency_skewness": 0.0,
+                "http_latency_kurtosis": 0.0,
+                "http_latency_excess_kurtosis": 0.0,
+                "sample_count": len(samples),
+            }
+
+        n = len(samples)
+        mean = sum(samples) / n
+        variance = sum((x - mean) ** 2 for x in samples) / n
+        stddev = math.sqrt(variance)
+
+        if stddev < 1e-9:
+            return {
+                "http_latency_skewness": 0.0,
+                "http_latency_kurtosis": 0.0,
+                "http_latency_excess_kurtosis": 0.0,
+                "sample_count": n,
+            }
+
+        m3 = sum((x - mean) ** 3 for x in samples) / n
+        m4 = sum((x - mean) ** 4 for x in samples) / n
+
+        skewness = m3 / (stddev ** 3)
+        kurtosis = m4 / (stddev ** 4)
+        excess_kurtosis = kurtosis - 3.0
+
+        return {
+            "http_latency_skewness": round(skewness, 4),
+            "http_latency_kurtosis": round(kurtosis, 4),
+            "http_latency_excess_kurtosis": round(excess_kurtosis, 4),
+            "sample_count": n,
+        }
+
     def get_http_latency_histogram(self) -> Dict[str, Any]:
-        """Task 172 & 175: Returns LCU response latency histogram buckets, variance metrics, confidence intervals, and statistics."""
+        """Task 172, 175 & 178: Returns LCU response latency histogram buckets, variance metrics, confidence intervals, and skewness/kurtosis statistics."""
         with self._http_latency_lock:
             samples = self._http_latency_samples.copy()
             buckets = self._http_latency_buckets.copy()
@@ -337,6 +377,7 @@ class LCUClient:
         adaptive_timeout = self.get_adaptive_http_timeout()
         var_meta = self.get_http_latency_variance_telemetry()
         ci_meta = self.get_http_latency_confidence_interval_telemetry()
+        shape_meta = self.get_http_latency_skewness_kurtosis_telemetry()
 
         res = {
             "sample_count": len(samples),
@@ -351,6 +392,7 @@ class LCUClient:
         }
         res.update(var_meta)
         res.update(ci_meta)
+        res.update(shape_meta)
         return res
 
     def connect(self, silent=False) -> bool:

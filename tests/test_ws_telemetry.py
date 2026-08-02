@@ -377,6 +377,33 @@ def test_lcu_client_ws_compressed_payload_ratio_anomaly_detection():
     assert "last_compression_anomaly" in full_t
 
 
+def test_lcu_client_http_latency_skewness_kurtosis_telemetry():
+    client = LCUClient()
+    initial = client.get_http_latency_skewness_kurtosis_telemetry()
+    assert initial["http_latency_skewness"] == 0.0
+    assert initial["http_latency_kurtosis"] == 0.0
+    assert initial["http_latency_excess_kurtosis"] == 0.0
+    assert initial["sample_count"] == 0
+
+    for lat in [10.0, 10.0, 10.0, 10.0, 100.0]:
+        client._record_http_latency(lat)
+
+    meta = client.get_http_latency_skewness_kurtosis_telemetry()
+    assert meta["sample_count"] == 5
+    assert meta["http_latency_skewness"] > 0.0
+    assert meta["http_latency_kurtosis"] > 0.0
+    assert "http_latency_excess_kurtosis" in meta
+
+    hist = client.get_http_latency_histogram()
+    assert "http_latency_skewness" in hist
+    assert "http_latency_kurtosis" in hist
+
+    diag = client.get_request_diagnostics()
+    assert "http_latency_skewness" in diag
+    assert "http_latency_kurtosis" in diag
+
+
+
 
 
 
