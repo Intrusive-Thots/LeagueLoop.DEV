@@ -248,6 +248,13 @@ class AssetManager:
         self._champ_search_predicate_recycle_misses: int = 0
         self._champ_search_predicate_bytes_recycled: int = 0
 
+        # Task 173: Benchmark and optimize memory pooling for champion search result slice tuple creation
+        self._champ_search_slice_pool: Dict[Tuple[Any, ...], Tuple[Dict[str, Any], ...]] = {}
+        self._champ_search_slice_pool_max: int = 100
+        self._champ_search_slice_recycle_hits: int = 0
+        self._champ_search_slice_recycle_misses: int = 0
+        self._champ_search_slice_bytes_recycled: int = 0
+
         # Bolt: Use a PriorityQueue + Daemon Threads to prevent thread explosion during high load
         # while ensuring high-priority UI requests preempt low-priority background pre-loads.
         self._download_queue = queue.PriorityQueue()
@@ -512,6 +519,46 @@ class AssetManager:
                 "predicate_pool_memory_kb": mem_kb,
             }
 
+    def _acquire_search_slice_tuple(self, cache_key: Tuple[Any, ...], results: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], ...]:
+        """Task 173: Acquires or creates a pooled champion search result slice tuple to optimize memory recycling."""
+        with self._lock:
+            if cache_key in self._champ_search_slice_pool:
+                self._champ_search_slice_recycle_hits += 1
+                return self._champ_search_slice_pool[cache_key]
+
+            self._champ_search_slice_recycle_misses += 1
+            res_tuple = tuple(results)
+            if len(self._champ_search_slice_pool) < self._champ_search_slice_pool_max:
+                self._champ_search_slice_pool[cache_key] = res_tuple
+                self._champ_search_slice_bytes_recycled += sys.getsizeof(res_tuple)
+            return res_tuple
+
+    def clear_search_slice_pool(self) -> None:
+        """Task 173: Clears the recycled champion search result slice tuple pool."""
+        with self._lock:
+            self._champ_search_slice_pool.clear()
+
+    def get_search_slice_pool_telemetry(self) -> Dict[str, Any]:
+        """Task 173: Returns benchmark and optimization metrics for champion search result slice tuple memory pooling."""
+        with self._lock:
+            pool_size = len(self._champ_search_slice_pool)
+            hits = self._champ_search_slice_recycle_hits
+            misses = self._champ_search_slice_recycle_misses
+            tot = hits + misses
+            hit_ratio = round(hits / tot, 4) if tot > 0 else 0.0
+            bytes_rec = self._champ_search_slice_bytes_recycled
+            mem_kb = round(sys.getsizeof(self._champ_search_slice_pool) / 1024.0, 3)
+
+            return {
+                "slice_pool_size": pool_size,
+                "slice_pool_max_size": self._champ_search_slice_pool_max,
+                "slice_recycle_hits": hits,
+                "slice_recycle_misses": misses,
+                "slice_recycle_hit_ratio": hit_ratio,
+                "slice_bytes_recycled": bytes_rec,
+                "slice_pool_memory_kb": mem_kb,
+            }
+
     def search_champions(
         self,
         query: str = "",
@@ -620,10 +667,12 @@ class AssetManager:
                 self._champ_search_fuzzy_count += 1
                 self._champ_search_fuzzy_total_latency_ms += dur_ms
 
-        return results
+        slice_key = (q_clean, role_clean, tag_clean, limit, enable_fuzzy, len(results))
+        res_tuple = self._acquire_search_slice_tuple(slice_key, results)
+        return list(res_tuple)
 
     def get_champ_search_telemetry(self) -> Dict[str, Any]:
-        """Task 158 & 170: Returns champion search index benchmarking, lookup performance, and filter predicate memory recycling metrics."""
+        """Task 158, 170 & 173: Returns champion search index benchmarking, lookup performance, filter predicate, and result slice tuple memory recycling metrics."""
         with self._lock:
             count = self._champ_search_count
             tot_lat = self._champ_search_total_latency_ms
@@ -631,6 +680,7 @@ class AssetManager:
             idx_len = len(self._champ_search_index)
 
         predicate_meta = self.get_search_predicate_pool_telemetry()
+        slice_meta = self.get_search_slice_pool_telemetry()
 
         res = {
             "indexed_champion_count": idx_len,
@@ -641,6 +691,7 @@ class AssetManager:
             "total_latency_ms": round(tot_lat, 4),
         }
         res.update(predicate_meta)
+        res.update(slice_meta)
         return res
 
     def get_fuzzy_search_eviction_profile_telemetry(self) -> Dict[str, Any]:
@@ -1248,6 +1299,7 @@ class AssetManager:
             "champ_search_telemetry": self.get_champ_search_telemetry(),
             "fuzzy_search_telemetry": self.get_fuzzy_search_telemetry(),
             "fuzzy_search_lru_metrics": self.get_fuzzy_search_lru_cache_metrics(),
+            "search_slice_pool_telemetry": self.get_search_slice_pool_telemetry(),
             "disk_cache": disk_stats,
         }
 

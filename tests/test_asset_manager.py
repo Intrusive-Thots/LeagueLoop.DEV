@@ -336,6 +336,41 @@ class TestAssetManager(unittest.TestCase):
         self.assets.clear_search_predicate_pool()
         self.assertEqual(len(self.assets._champ_search_predicate_cache), 0)
 
+    def test_champ_search_slice_tuple_memory_pooling(self):
+        """Verify memory pooling for champion search result slice tuple creation for Task 173."""
+        self.assets.id_to_key = {266: "Aatrox", 103: "Ahri", 157: "Yasuo"}
+        self.assets.champ_data = {"Aatrox": {"name": "Aatrox"}, "Ahri": {"name": "Ahri"}, "Yasuo": {"name": "Yasuo"}}
+        self.assets._build_champ_search_index()
+
+        initial_tel = self.assets.get_search_slice_pool_telemetry()
+        self.assertEqual(initial_tel["slice_recycle_hits"], 0)
+        self.assertEqual(initial_tel["slice_recycle_misses"], 0)
+
+        # First query builds and caches slice tuple
+        res1 = self.assets.search_champions(query="a", limit=10)
+        tel1 = self.assets.get_search_slice_pool_telemetry()
+        self.assertEqual(tel1["slice_recycle_misses"], 1)
+        self.assertEqual(tel1["slice_recycle_hits"], 0)
+
+        # Repeated query accesses pooled slice tuple
+        res2 = self.assets.search_champions(query="a", limit=10)
+        tel2 = self.assets.get_search_slice_pool_telemetry()
+        self.assertEqual(tel2["slice_recycle_hits"], 1)
+        self.assertGreater(tel2["slice_recycle_hit_ratio"], 0.0)
+        self.assertGreater(tel2["slice_bytes_recycled"], 0)
+        self.assertEqual(res1, res2)
+
+        champ_tel = self.assets.get_champ_search_telemetry()
+        self.assertIn("slice_recycle_hits", champ_tel)
+        self.assertIn("slice_recycle_hit_ratio", champ_tel)
+
+        summary = self.assets.get_memory_summary_diagnostics()
+        self.assertIn("search_slice_pool_telemetry", summary)
+
+        # Clear slice pool
+        self.assets.clear_search_slice_pool()
+        self.assertEqual(len(self.assets._champ_search_slice_pool), 0)
+
 if __name__ == '__main__':
     unittest.main()
 

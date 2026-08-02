@@ -279,6 +279,34 @@ class TestLCUClient(unittest.TestCase):
         self.assertIn("http_status_anomaly_active", full_status_telemetry)
         self.assertIn("http_status_anomaly_count", full_status_telemetry)
 
+    def test_http_latency_variance_telemetry(self):
+        """Test HTTP request latency variance calculation & telemetry for Task 172."""
+        empty_tel = self.client.get_http_latency_variance_telemetry()
+        self.assertEqual(empty_tel["http_latency_variance_ms2"], 0.0)
+        self.assertEqual(empty_tel["http_latency_stddev_ms"], 0.0)
+        self.assertEqual(empty_tel["http_latency_cv"], 0.0)
+        self.assertEqual(empty_tel["http_latency_sample_count"], 0)
+
+        # Record samples: 10ms, 20ms, 30ms -> Mean = 20ms, Var = (100 + 0 + 100)/3 = 66.6667ms^2, StdDev = 8.165ms
+        self.client._record_http_latency(10.0)
+        self.client._record_http_latency(20.0)
+        self.client._record_http_latency(30.0)
+
+        var_tel = self.client.get_http_latency_variance_telemetry()
+        self.assertAlmostEqual(var_tel["http_latency_variance_ms2"], 66.6667, places=3)
+        self.assertAlmostEqual(var_tel["http_latency_stddev_ms"], 8.165, places=3)
+        self.assertGreater(var_tel["http_latency_cv"], 0.0)
+        self.assertEqual(var_tel["http_latency_sample_count"], 3)
+
+        hist = self.client.get_http_latency_histogram()
+        self.assertIn("http_latency_variance_ms2", hist)
+        self.assertIn("http_latency_stddev_ms", hist)
+        self.assertIn("http_latency_cv", hist)
+
+        diag = self.client.get_request_diagnostics()
+        self.assertIn("http_latency_variance_ms2", diag)
+        self.assertIn("http_latency_stddev_ms", diag)
+
 if __name__ == '__main__':
     unittest.main()
 

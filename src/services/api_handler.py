@@ -3,6 +3,7 @@ LCU API Handler
 Manages communication with the League of Legends Client Update (LCU).
 """
 import base64
+import math
 import random
 import sys
 import threading
@@ -241,8 +242,33 @@ class LCUClient:
             calc_timeout_s = round((p95_ms / 1000.0) * 3.0 + 0.5, 2)
             return max(1.5, min(calc_timeout_s, 8.0))
 
+    def get_http_latency_variance_telemetry(self) -> Dict[str, Any]:
+        """Task 172: Returns automated HTTP client request latency variance, standard deviation, and CV telemetry."""
+        with self._http_latency_lock:
+            samples = self._http_latency_samples.copy()
+
+        if not samples:
+            return {
+                "http_latency_variance_ms2": 0.0,
+                "http_latency_stddev_ms": 0.0,
+                "http_latency_cv": 0.0,
+                "http_latency_sample_count": 0,
+            }
+
+        avg = sum(samples) / len(samples)
+        variance = sum((x - avg) ** 2 for x in samples) / len(samples)
+        stddev = math.sqrt(variance)
+        cv = round(stddev / avg, 4) if avg > 0 else 0.0
+
+        return {
+            "http_latency_variance_ms2": round(variance, 4),
+            "http_latency_stddev_ms": round(stddev, 4),
+            "http_latency_cv": cv,
+            "http_latency_sample_count": len(samples),
+        }
+
     def get_http_latency_histogram(self) -> Dict[str, Any]:
-        """Returns LCU response latency histogram buckets and statistics."""
+        """Task 172: Returns LCU response latency histogram buckets, variance metrics, and statistics."""
         with self._http_latency_lock:
             samples = self._http_latency_samples.copy()
             buckets = self._http_latency_buckets.copy()
@@ -259,7 +285,9 @@ class LCUClient:
             p50 = p95 = p99 = avg = 0.0
 
         adaptive_timeout = self.get_adaptive_http_timeout()
-        return {
+        var_meta = self.get_http_latency_variance_telemetry()
+
+        res = {
             "sample_count": len(samples),
             "buckets": buckets,
             "min_latency_ms": round(min_ms, 2),
@@ -270,6 +298,8 @@ class LCUClient:
             "p99_latency_ms": round(p99, 2),
             "adaptive_timeout_s": adaptive_timeout,
         }
+        res.update(var_meta)
+        return res
 
     def connect(self, silent=False) -> bool:
         """Attempts to read the lockfile and establish connection details."""
@@ -647,6 +677,8 @@ class LCUClient:
         hist = self.get_http_latency_histogram()
         diag["avg_latency_ms"] = hist["avg_latency_ms"]
         diag["p95_latency_ms"] = hist["p95_latency_ms"]
+        diag["http_latency_variance_ms2"] = hist.get("http_latency_variance_ms2", 0.0)
+        diag["http_latency_stddev_ms"] = hist.get("http_latency_stddev_ms", 0.0)
         return diag
 
     # ─────────── WEBSOCKET PUBLISH / SUBSCRIBE ───────────
