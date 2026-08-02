@@ -226,6 +226,14 @@ class AssetManager:
         self._champ_search_count: int = 0
         self._champ_search_total_latency_ms: float = 0.0
 
+        # Task 161: Benchmark and optimize champion search index fuzzy matching query latency
+        self._champ_search_fuzzy_count: int = 0
+        self._champ_search_fuzzy_hits: int = 0
+        self._champ_search_fuzzy_misses: int = 0
+        self._champ_search_fuzzy_cache: OrderedDict = OrderedDict()
+        self._champ_search_fuzzy_cache_max: int = 100
+        self._champ_search_fuzzy_total_latency_ms: float = 0.0
+
         # Bolt: Use a PriorityQueue + Daemon Threads to prevent thread explosion during high load
         # while ensuring high-priority UI requests preempt low-priority background pre-loads.
         self._download_queue = queue.PriorityQueue()
@@ -418,28 +426,36 @@ class AssetManager:
                 Logger.warning("asset_manager.py", f"Failed to remove file {path}: {e}")
 
     def _build_champ_search_index(self) -> None:
-        """Task 158: Rebuilds pre-normalized champion search index for fast filtered queries."""
+        """Task 158 & 161: Rebuilds pre-normalized champion search index with initials and pre-computed search features."""
         with self._lock:
             search_list = []
             for cid, key_str in self.id_to_key.items():
                 name = self.champ_data.get(key_str, {}).get("name", key_str)
                 tags = self.id_to_tags.get(cid, ())
                 roles = self.champ_roles.get(cid, ())
+                words = [w for w in name.lower().replace("'", "").replace("&", "").split() if w]
+                initials = "".join(w[0] for w in words) if words else ""
                 search_list.append({
                     "id": cid,
                     "key": key_str,
                     "name": name,
                     "lower_key": key_str.lower(),
                     "lower_name": name.lower(),
+                    "initials": initials,
                     "tags": tags,
                     "roles": roles,
                 })
             self._champ_search_index = search_list
 
     def search_champions(
-        self, query: str = "", role: Optional[str] = None, tag: Optional[str] = None, limit: int = 20
+        self,
+        query: str = "",
+        role: Optional[str] = None,
+        tag: Optional[str] = None,
+        limit: int = 20,
+        enable_fuzzy: bool = True,
     ) -> List[Dict[str, Any]]:
-        """Task 158: Fast indexed champion search filtering by name/key substring, role, and tag."""
+        """Task 158 & 161: Fast indexed champion search with fuzzy matching query latency benchmarking & optimization."""
         t_start = time.perf_counter()
         q_clean = query.strip().lower() if query else ""
         role_clean = role.strip().upper() if role else None
@@ -462,10 +478,69 @@ class AssetManager:
             if len(results) >= limit:
                 break
 
+        # Task 161: Fuzzy matching fallback if substring yields no results
+        is_fuzzy = False
+        if not results and q_clean and enable_fuzzy and len(q_clean) >= 2:
+            cache_key = f"fuzzy_{q_clean}_{role_clean}_{tag_clean}_{limit}"
+            with self._lock:
+                if cache_key in self._champ_search_fuzzy_cache:
+                    self._champ_search_fuzzy_hits += 1
+                    self._champ_search_fuzzy_count += 1
+                    cached_res = self._champ_search_fuzzy_cache.pop(cache_key)
+                    self._champ_search_fuzzy_cache[cache_key] = cached_res
+                    dur_ms = (time.perf_counter() - t_start) * 1000.0
+                    self._champ_search_fuzzy_total_latency_ms += dur_ms
+                    return cached_res
+                self._champ_search_fuzzy_misses += 1
+                is_fuzzy = True
+
+            scored_matches = []
+            for entry in index_copy:
+                if role_clean and role_clean not in entry["roles"]:
+                    continue
+                if tag_clean and tag_clean not in entry["tags"]:
+                    continue
+
+                score = 0
+                name_l = entry["lower_name"]
+                key_l = entry["lower_key"]
+                init_l = entry.get("initials", "")
+
+                if q_clean == name_l or q_clean == key_l:
+                    score = 100
+                elif name_l.startswith(q_clean) or key_l.startswith(q_clean):
+                    score = 95
+                elif init_l and init_l == q_clean:
+                    score = 90
+                elif q_clean in name_l or q_clean in key_l:
+                    score = 80
+                else:
+                    pos = 0
+                    for ch in name_l:
+                        if pos < len(q_clean) and ch == q_clean[pos]:
+                            pos += 1
+                    if pos == len(q_clean):
+                        score = 65
+
+                if score > 0:
+                    scored_matches.append((score, entry))
+
+            scored_matches.sort(key=lambda x: x[0], reverse=True)
+            fuzzy_res = [m[1] for m in scored_matches[:limit]]
+
+            with self._lock:
+                self._champ_search_fuzzy_cache[cache_key] = fuzzy_res
+                while len(self._champ_search_fuzzy_cache) > self._champ_search_fuzzy_cache_max:
+                    self._champ_search_fuzzy_cache.popitem(last=False)
+            results = fuzzy_res
+
         dur_ms = (time.perf_counter() - t_start) * 1000.0
         with self._lock:
             self._champ_search_count += 1
             self._champ_search_total_latency_ms += dur_ms
+            if is_fuzzy:
+                self._champ_search_fuzzy_count += 1
+                self._champ_search_fuzzy_total_latency_ms += dur_ms
 
         return results
 
@@ -484,6 +559,28 @@ class AssetManager:
                 "search_count": count,
                 "index_size": idx_len,
                 "total_latency_ms": round(tot_lat, 4),
+            }
+
+    def get_fuzzy_search_telemetry(self) -> Dict[str, Any]:
+        """Task 161: Returns champion search index fuzzy matching benchmark and latency telemetry."""
+        with self._lock:
+            count = self._champ_search_fuzzy_count
+            hits = self._champ_search_fuzzy_hits
+            misses = self._champ_search_fuzzy_misses
+            tot = hits + misses
+            hit_ratio = round(hits / tot, 4) if tot > 0 else 0.0
+            tot_lat = self._champ_search_fuzzy_total_latency_ms
+            avg_lat = round(tot_lat / max(1, count), 4) if count > 0 else 0.0
+            cache_len = len(self._champ_search_fuzzy_cache)
+
+            return {
+                "fuzzy_search_count": count,
+                "fuzzy_cache_hits": hits,
+                "fuzzy_cache_misses": misses,
+                "fuzzy_cache_hit_ratio": hit_ratio,
+                "fuzzy_cache_size": cache_len,
+                "avg_fuzzy_latency_ms": avg_lat,
+                "total_fuzzy_latency_ms": round(tot_lat, 4),
             }
 
 
@@ -1017,6 +1114,7 @@ class AssetManager:
             "splash_gc_metrics": self.get_splash_gc_metrics(),
             "disk_cache_scan_telemetry": self.get_disk_cache_scan_telemetry(),
             "champ_search_telemetry": self.get_champ_search_telemetry(),
+            "fuzzy_search_telemetry": self.get_fuzzy_search_telemetry(),
             "disk_cache": disk_stats,
         }
 

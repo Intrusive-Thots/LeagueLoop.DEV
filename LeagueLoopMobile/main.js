@@ -21,9 +21,14 @@ const UI = {
   },
   buttons: {
     connect: document.getElementById("btn-connect"),
+    autoDiscover: document.getElementById("btn-auto-discover"),
     disconnect: document.getElementById("btn-disconnect"),
     launch: document.getElementById("btn-launch"),
     queue: document.getElementById("btn-queue")
+  },
+  reconnect: {
+    banner: document.getElementById("reconnect-banner"),
+    text: document.getElementById("reconnect-text")
   },
   display: {
     error: document.getElementById("connect-error"),
@@ -90,6 +95,8 @@ const UI = {
     autoHover: document.getElementById("cfg-auto-hover"),
     arenaLock: document.getElementById("cfg-arena-lock"),
     arenaSynergy: document.getElementById("cfg-arena-synergy"),
+    soundAlerts: document.getElementById("cfg-sound-alerts"),
+    hapticAlerts: document.getElementById("cfg-haptic-alerts"),
     acceptDelay: document.getElementById("cfg-accept-delay"),
     acceptDelayVal: document.getElementById("accept-delay-val"),
     aramSearch: document.getElementById("aram-add-search"),
@@ -105,6 +112,232 @@ const UI = {
     btnLogout: document.getElementById("btn-account-logout")
   }
 };
+
+// ============================================
+// Web Audio & Haptic Notification Engine
+// ============================================
+class SoundEngine {
+  constructor() {
+    this.audioCtx = null;
+  }
+
+  init() {
+    if (!this.audioCtx && (window.AudioContext || window.webkitAudioContext)) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      this.audioCtx = new AudioContextClass();
+    }
+    if (this.audioCtx && this.audioCtx.state === 'suspended') {
+      this.audioCtx.resume();
+    }
+  }
+
+  isSoundEnabled() {
+    const el = document.getElementById("cfg-sound-alerts");
+    return el ? el.checked : true;
+  }
+
+  isHapticEnabled() {
+    const el = document.getElementById("cfg-haptic-alerts");
+    return el ? el.checked : true;
+  }
+
+  vibrate(pattern) {
+    if (this.isHapticEnabled() && navigator.vibrate) {
+      try {
+        navigator.vibrate(pattern);
+      } catch (e) {}
+    }
+  }
+
+  playTone(freq, type, duration, delay = 0) {
+    if (!this.isSoundEnabled()) return;
+    this.init();
+    if (!this.audioCtx) return;
+
+    try {
+      const osc = this.audioCtx.createOscillator();
+      const gain = this.audioCtx.createGain();
+
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, this.audioCtx.currentTime + delay);
+
+      gain.gain.setValueAtTime(0.001, this.audioCtx.currentTime + delay);
+      gain.gain.exponentialRampToValueAtTime(0.2, this.audioCtx.currentTime + delay + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.audioCtx.currentTime + delay + duration);
+
+      osc.connect(gain);
+      gain.connect(this.audioCtx.destination);
+
+      osc.start(this.audioCtx.currentTime + delay);
+      osc.stop(this.audioCtx.currentTime + delay + duration + 0.05);
+    } catch (e) {
+      console.warn("Audio playback error", e);
+    }
+  }
+
+  playMatchFound() {
+    // High-attention dual chime: 880Hz -> 1046.5Hz
+    this.playTone(880, 'sine', 0.25, 0);
+    this.playTone(1046.5, 'sine', 0.45, 0.2);
+    this.vibrate([200, 100, 200]);
+  }
+
+  playYourTurn() {
+    // Upbeat turn notification chime: 523.25Hz -> 659.25Hz
+    this.playTone(523.25, 'triangle', 0.2, 0);
+    this.playTone(659.25, 'sine', 0.35, 0.15);
+    this.vibrate([150, 80, 150]);
+  }
+}
+
+const sounds = new SoundEngine();
+document.addEventListener('click', () => sounds.init(), { once: true });
+document.addEventListener('touchstart', () => sounds.init(), { once: true });
+
+// ============================================
+// Offline Cache Manager
+// ============================================
+const OfflineCache = {
+  save(key, val) {
+    try {
+      localStorage.setItem(`leagueloop_cache_${key}`, JSON.stringify(val));
+    } catch (e) {}
+  },
+  get(key, fallback = null) {
+    try {
+      const data = localStorage.getItem(`leagueloop_cache_${key}`);
+      return data ? JSON.parse(data) : fallback;
+    } catch (e) {
+      return fallback;
+    }
+  }
+};
+
+// ============================================
+// Auto-Discovery Engine
+// ============================================
+async function discoverDesktopServer() {
+  const btn = UI.buttons.autoDiscover;
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = "🔍 Scanning...";
+  }
+  addLog("Scanning local subnets for LeagueLoop Desktop...");
+
+  const candidates = ["127.0.0.1", "localhost"];
+  const savedIp = localStorage.getItem("leagueloop_ip");
+  if (savedIp) candidates.unshift(savedIp);
+
+  const subnets = ["192.168.1", "192.168.0", "10.0.0"];
+  for (const sub of subnets) {
+    for (let i = 1; i <= 50; i++) {
+      candidates.push(`${sub}.${i}`);
+    }
+  }
+
+  let foundIp = null;
+  const batchSize = 10;
+  for (let i = 0; i < candidates.length; i += batchSize) {
+    const batch = candidates.slice(i, i + batchSize);
+    const promises = batch.map(ip => {
+      return new Promise(resolve => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 600);
+        fetch(`http://${ip}:8337/status`, { signal: controller.signal })
+          .then(res => {
+            clearTimeout(timeoutId);
+            if (res.ok) resolve(ip);
+            else resolve(null);
+          })
+          .catch(() => {
+            clearTimeout(timeoutId);
+            resolve(null);
+          });
+      });
+    });
+
+    const results = await Promise.all(promises);
+    foundIp = results.find(r => r !== null);
+    if (foundIp) break;
+  }
+
+  if (foundIp) {
+    UI.inputs.ip.value = foundIp;
+    addLog(`Auto-Discovered Desktop Server at ${foundIp}`);
+    if (btn) {
+      btn.innerText = "✓ Found!";
+      setTimeout(() => { btn.disabled = false; btn.innerText = "🔍 Auto Discover"; }, 2000);
+    }
+    UI.buttons.connect.click();
+  } else {
+    addLog("Auto-Discovery finished. No desktop server responded on port 8337.");
+    if (btn) {
+      btn.innerText = "❌ Not Found";
+      setTimeout(() => { btn.disabled = false; btn.innerText = "🔍 Auto Discover"; }, 2000);
+    }
+  }
+}
+
+// ============================================
+// Auto-Reconnect & Exponential Jitter Backoff
+// ============================================
+let isReconnecting = false;
+let reconnectAttempts = 0;
+let reconnectTimer = null;
+let lastPhaseState = "None";
+let lastMyTurnState = false;
+
+function scheduleReconnect() {
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  isReconnecting = true;
+  reconnectAttempts++;
+
+  const baseDelay = Math.min(15000, Math.pow(2, reconnectAttempts - 1) * 1000);
+  const jitter = baseDelay * (Math.random() * 0.4 - 0.2);
+  const delayMs = Math.max(1000, Math.round(baseDelay + jitter));
+  const delaySec = Math.round(delayMs / 1000);
+
+  if (UI.reconnect && UI.reconnect.banner) UI.reconnect.banner.classList.remove("hidden");
+  if (UI.reconnect && UI.reconnect.text) UI.reconnect.text.innerText = `Offline — Reconnecting in ${delaySec}s... (#${reconnectAttempts})`;
+
+  renderCachedFallback();
+
+  reconnectTimer = setTimeout(async () => {
+    try {
+      await fetchStatus();
+    } catch (e) {
+      scheduleReconnect();
+    }
+  }, delayMs);
+}
+
+function handleConnectionRestored() {
+  if (isReconnecting) {
+    isReconnecting = false;
+    reconnectAttempts = 0;
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    if (UI.reconnect && UI.reconnect.banner) UI.reconnect.banner.classList.add("hidden");
+    addLog("Connection restored.");
+  }
+}
+
+function renderCachedFallback() {
+  const cachedSummoner = OfflineCache.get("summoner");
+  if (cachedSummoner && UI.display.summonerName && UI.display.summonerName.innerText === "LEAGUELOOP") {
+    UI.display.summonerName.innerText = `${cachedSummoner.summoner_name} (Cached)`;
+  }
+  const cachedModes = OfflineCache.get("queue_modes");
+  if (cachedModes && UI.lobby.selectMode && UI.lobby.selectMode.options.length === 0) {
+    queueModes = cachedModes;
+    UI.lobby.selectMode.innerHTML = Object.keys(queueModes).map(m => `<option value="${m}">${m}</option>`).join("");
+  }
+}
+
+window.addEventListener('online', () => {
+  addLog("Network reconnection detected. Polling immediately...");
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  fetchStatus();
+});
 
 const spellsList = [
   { id: 4, name: "Flash", icon: "⚡" },
@@ -159,6 +392,10 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+if (UI.buttons.autoDiscover) {
+  UI.buttons.autoDiscover.addEventListener("click", discoverDesktopServer);
+}
+
 UI.buttons.connect.addEventListener("click", async () => {
   const ip = UI.inputs.ip.value.trim() || "127.0.0.1";
   baseUrl = `http://${ip}:8337`;
@@ -203,6 +440,7 @@ async function initData() {
     if (qRes.ok) {
       const qData = await qRes.json();
       queueModes = qData.modes;
+      OfflineCache.save("queue_modes", queueModes);
       if (UI.lobby.selectMode) {
         UI.lobby.selectMode.innerHTML = Object.keys(queueModes).map(m => `
           <option value="${m}">${m}</option>
@@ -213,6 +451,7 @@ async function initData() {
     const cRes = await fetch(`${baseUrl}/config`);
     if (cRes.ok) {
       configData = await cRes.json();
+      OfflineCache.save("config", configData);
       updateConfigUI();
     }
 
@@ -515,17 +754,25 @@ async function fetchStatus() {
     const res = await fetch(`${baseUrl}/status`);
     if (!res.ok) throw new Error("Offline");
     
+    handleConnectionRestored();
+
     const data = await res.json();
     const phase = data.phase || "None";
     
-    // Check for phase transitions
+    // Check for phase transitions & sound alerts
     if (phase !== currentPhase) {
       currentPhase = phase;
       adjustPollingInterval(phase);
     }
+
+    if (phase === "ReadyCheck" && lastPhaseState !== "ReadyCheck") {
+      sounds.playMatchFound();
+    }
+    lastPhaseState = phase;
     
-    // Render Summoner Card
+    // Render Summoner Card & cache
     if (data.summoner) {
+      OfflineCache.save("summoner", data.summoner);
       if (UI.display.summonerName) UI.display.summonerName.innerText = data.summoner.summoner_name;
       const rankText = data.summoner.tier !== "UNRANKED" 
         ? `${data.summoner.tier} ${data.summoner.rank} (${data.summoner.lp} LP)` 
@@ -607,6 +854,7 @@ async function fetchStatus() {
       UI.display.statusIcon.style.color = "var(--error)";
       UI.display.statusIcon.innerText = "● Offline";
     }
+    scheduleReconnect();
   }
 }
 
@@ -633,6 +881,11 @@ async function fetchChampSelectStatus() {
       if (UI.draft.phaseTitle) UI.draft.phaseTitle.innerText = `${currentActionType.toUpperCase()} PHASE`;
       
       const isMyTurn = data.currentAction ? data.currentAction.isMyTurn : false;
+      if (isMyTurn && !lastMyTurnState) {
+        sounds.playYourTurn();
+      }
+      lastMyTurnState = isMyTurn;
+
       if (UI.draft.phaseSub) {
         UI.draft.phaseSub.innerText = isMyTurn ? "YOUR TURN" : "Waiting for other players...";
         UI.draft.phaseSub.style.color = isMyTurn ? "var(--accent-hextech)" : "var(--text-muted)";

@@ -16,8 +16,10 @@ OutputDir=dist
 OutputBaseFilename=LeagueLoop_Installer
 SetupIconFile=assets\app.ico
 UninstallDisplayIcon={app}\LeagueLoop.exe
-Compression=lzma2
+Compression=lzma2/ultra64
 SolidCompression=yes
+LZMADictionarySize=65536
+LZMAUseSeparateProcess=yes
 ArchitecturesInstallIn64BitMode=x64
 WizardStyle=modern
 

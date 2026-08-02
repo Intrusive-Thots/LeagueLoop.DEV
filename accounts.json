@@ -1,43 +1,30 @@
 {
     "accounts": [
         {
+            "label": "5",
+            "username": "themalcolm5",
+            "password_enc": "AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAASmuB7IZ6zk2UxWCHqas4PwAAAAAmAAAATABlAGEAZwB1AGUATABvAG8AcAAgAEEAYwBjAG8AdQBuAHQAAAAQZgAAAAEAACAAAABGh7kThlMh+D/FEXbK5xYKJ7gNRT/FajOdD5OLvdswlgAAAAAOgAAAAAIAACAAAABaaE7Em+BAjXDeY1YXwGEf/uisGN8LBEspJ10RV3z4JxAAAAA04MzgJvlykAU7N1Qa0nLTQAAAAHudpTXD5gcoG2byf0XbOU5FmdJjtTc0A4HRc8S4ZXI6vNAJPcHCVo0L9nfI5sCNByZYAScE/JqS1tC5Ap9CY9k=",
+            "tagline": "",
+            "region": "NA1",
+            "last_used": "2026-08-02T15:38:39.726936",
+            "wallet": {
+                "be": 0,
+                "rp": 0
+            },
+            "is_default": false
+        },
+        {
             "label": "MAIN",
             "username": "themalcolm3",
-            "password_enc": "AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAAFAQMDTX/n02qnpQJamOcFQAAAAAmAAAATABlAGEAZwB1AGUATABvAG8AcAAgAEEAYwBjAG8AdQBuAHQAAAAQZgAAAAEAACAAAAAXdR1gPNVxD9c3AwCFwKbL4Xuk7amCvs2fx5lhbxqqNgAAAAAOgAAAAAIAACAAAAAQ8/YcSFwTOiDIaNcXKDk3yhYv/yc5RhHppoS1FlQ9yhAAAABMPuyFFrQva6r//P7ia7tnQAAAAOaZjz4rEvi34MRJ4GUw3Zhcm6I+3yequNnlWRjHf/dhQREsW0WZ9tE/QaBUpoZDVNPRWwjrkiEBzu2klh2F6YA=",
+            "password_enc": "AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAASmuB7IZ6zk2UxWCHqas4PwAAAAAmAAAATABlAGEAZwB1AGUATABvAG8AcAAgAEEAYwBjAG8AdQBuAHQAAAAQZgAAAAEAACAAAABr9TCFyaoukuir1WWVWQUbxAV1o9o+aKuki1joI5qGGwAAAAAOgAAAAAIAACAAAADz+fB0srHy+8ceh7eELUBMMBDVFzztIBimYSgbUTZh9BAAAAAwKfakf1QPp3zX8tdyjKZWQAAAAFdhvAq3pkAkCM+OF3qmM1d2IMHISHEGe2daq03ZETeYTFPRm73zeW63hkjocCy+s0zZKmnVWIYtwWJA6STjRRk=",
             "tagline": "",
             "region": "NA1",
-            "last_used": null,
+            "last_used": "2026-08-02T10:01:24.445525",
             "wallet": {
                 "be": 0,
                 "rp": 0
             },
-            "is_default": false
-        },
-        {
-            "label": "Yanaervis",
-            "username": "Yanaervis",
-            "password_enc": "AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAAFAQMDTX/n02qnpQJamOcFQAAAAAmAAAATABlAGEAZwB1AGUATABvAG8AcAAgAEEAYwBjAG8AdQBuAHQAAAAQZgAAAAEAACAAAABtFb4Fs4aWlDU+k+dPVMRnh/+rDtUM7hpkVUin6m4bMAAAAAAOgAAAAAIAACAAAAB/B0srS4EEi91Ss8mGZwlDDxf2UKBax8f/9X+mWnYJ3xAAAACRLONXZyHjh/GyPGcq2Y1bQAAAAINiSGqVYQ+o1Q1FVtwpfkUNoxg6YhGhHLQ/8CP55jQHM+BkbEVeVGm8ROPFnNVrvcw6mdqpAQjknPSWEkhxGR0=",
-            "tagline": "",
-            "region": "NA1",
-            "last_used": null,
-            "wallet": {
-                "be": 0,
-                "rp": 0
-            },
-            "is_default": false
-        },
-        {
-            "label": "Smurf Account",
-            "username": "TestUser",
-            "password_enc": "DPAPI:AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAAFAQMDTX/n02qnpQJamOcFQAAAAAmAAAATABlAGEAZwB1AGUATABvAG8AcAAgAEEAYwBjAG8AdQBuAHQAAAAQZgAAAAEAACAAAAC6fU1zy3/+52CeMaajqkHw6KtNOAwCiKjLD3PEsWrfMwAAAAAOgAAAAAIAACAAAAA8zzj+NTuPjRqWKfgEfiAhSsegO/G6HaOu3vzzfG5E7xAAAABdvlNsfPul077rtrLeINxqQAAAAMnBjnLBuF+5rHX308xhKLop9ipFsQ+9CVE66gn6WmISG0a10qNXBjtLPbjbUKpfNUUq71VX6e2qziKdubT9ono=",
-            "tagline": "",
-            "region": "NA1",
-            "last_used": null,
-            "wallet": {
-                "be": 0,
-                "rp": 0
-            },
-            "is_default": false
+            "is_default": true
         }
     ],
     "active_account_idx": 0

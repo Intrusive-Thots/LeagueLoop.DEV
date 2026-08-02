@@ -24,5 +24,21 @@ class TestTokenLoader(unittest.TestCase):
         self.assertEqual(tokens.tokens, DEFAULT_TOKENS)
         mock_file.assert_called_once()
 
+    def test_theme_memory_optimization(self):
+        tokens = DesignTokens()
+        tokens.get("colors", "background", "app")
+        diag = tokens.optimize_theme_memory()
+        self.assertTrue(diag["memory_optimized"])
+        self.assertEqual(diag["lru_get_memoized_currsize"], 0)
+
+    def test_get_theme_memory_footprint(self):
+        tokens = DesignTokens()
+        tokens.get("colors.background.panel")
+        diag = tokens.get_theme_memory_footprint()
+        self.assertIn("lru_get_memoized_currsize", diag)
+        self.assertIn("lru_get_memoized_hits", diag)
+        self.assertIn("lru_parse_keys_currsize", diag)
+        self.assertTrue(diag["memory_optimized"])
+
 if __name__ == '__main__':
     unittest.main()

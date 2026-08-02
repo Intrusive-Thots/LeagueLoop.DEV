@@ -1,3 +1,0 @@
-"""
-Champions specific UI components.
-"""

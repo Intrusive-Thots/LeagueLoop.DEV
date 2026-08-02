@@ -14,10 +14,10 @@
             "overlay": "rgba(0,0,0,0.6)"
         },
         "text": {
-            "primary": "#F8F6F0",
-            "secondary": "#F0C674",
-            "muted": "#A8B8CC",
-            "disabled": "#708090"
+            "primary": "#F0E6D2",
+            "secondary": "#C8AA6E",
+            "muted": "#6C757D",
+            "disabled": "#3A4654"
         },
         "accent": {
             "primary": "#C8AA6E",
@@ -57,14 +57,6 @@
             "#00000000"
         ]
     },
-    "shadows": {
-        "small": "0 2px 4px rgba(0,0,0,0.4)",
-        "medium": "0 4px 8px rgba(0,0,0,0.45)",
-        "large": "0 8px 16px rgba(0,0,0,0.5)",
-        "floating_window": "0 12px 32px rgba(0,0,0,0.6)",
-        "popup": "0 6px 20px rgba(0,0,0,0.5)",
-        "context_menu": "0 4px 12px rgba(0,0,0,0.5)"
-    },
     "elevation": {
         "level0": {
             "shadow": "none",
@@ -88,11 +80,11 @@
         }
     },
     "radius": {
-        "xs": 4,
-        "sm": 8,
-        "md": 12,
-        "lg": 16,
-        "xl": 16,
+        "xs": 2,
+        "sm": 3,
+        "md": 6,
+        "lg": 14,
+        "xl": 18,
         "pill": 999
     },
     "spacing": {
@@ -101,8 +93,7 @@
         "md": 12,
         "lg": 16,
         "xl": 24,
-        "xxl": 32,
-        "xxxl": 48
+        "xxl": 32
     },
     "borders": {
         "subtle": "1px solid #1E2328",
@@ -138,43 +129,30 @@
         }
     },
     "animations": {
-        "fade": {
-            "duration": 150,
-            "easing": "cubic-bezier(0.4, 0, 0.2, 1)"
-        },
-        "slide": {
-            "duration": 200,
-            "offset_px": 20,
-            "easing": "cubic-bezier(0, 0, 0.2, 1)"
-        },
-        "scale": {
-            "duration": 150,
-            "start_scale": 0.95,
-            "easing": "cubic-bezier(0.34, 1.56, 0.64, 1)"
-        },
-        "hover_lift": {
-            "duration": 120,
-            "lift_px": 2,
+        "hover": {
             "scale": 1.02,
-            "easing": "ease-out"
+            "duration": 120
         },
-        "button_press": {
-            "duration": 80,
+        "press": {
             "scale": 0.97,
-            "easing": "ease-in-out"
+            "duration": 80
         },
-        "window_open": {
-            "duration": 250,
-            "easing": "cubic-bezier(0.16, 1, 0.3, 1)"
+        "float": {
+            "offset": 4,
+            "duration": 200
         },
-        "tooltip": {
-            "duration": 100,
-            "delay_ms": 300,
-            "easing": "ease-out"
+        "fade": {
+            "duration": 160
         },
-        "notification": {
-            "duration": 300,
-            "easing": "cubic-bezier(0.175, 0.885, 0.32, 1.275)"
+        "card_float": {
+            "lift_px": 2,
+            "duration": 150,
+            "border_glow": "#C8A45D40"
+        },
+        "focus_ring": {
+            "color": "#3FA9F5",
+            "width": 2,
+            "duration": 100
         }
     },
     "icons": {
@@ -183,47 +161,12 @@
         "glow_intensity": 0.6
     },
     "typography": {
-        "font_primary": "Segoe UI",
+        "font_primary": "Spiegel",
         "font_secondary": "Beaufort for LoL",
         "weights": {
-            "regular": "normal",
-            "medium": "normal",
-            "bold": "bold"
-        },
-        "h1": {
-            "family": "Beaufort for LoL",
-            "size": 24,
-            "weight": "bold"
-        },
-        "h2": {
-            "family": "Beaufort for LoL",
-            "size": 18,
-            "weight": "bold"
-        },
-        "h3": {
-            "family": "Beaufort for LoL",
-            "size": 14,
-            "weight": "bold"
-        },
-        "body": {
-            "family": "Segoe UI",
-            "size": 12,
-            "weight": "normal"
-        },
-        "caption": {
-            "family": "Segoe UI",
-            "size": 11,
-            "weight": "normal"
-        },
-        "small": {
-            "family": "Segoe UI",
-            "size": 10,
-            "weight": "normal"
-        },
-        "numeric": {
-            "family": "Segoe UI",
-            "size": 13,
-            "weight": "bold"
+            "regular": 400,
+            "medium": 500,
+            "bold": 700
         }
     }
 }

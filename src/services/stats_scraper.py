@@ -1,10 +1,8 @@
 """
 Provides static and dynamic data related to champions and game stats.
 """
-import threading
 import time
 import requests
-import re
 from concurrent.futures import ThreadPoolExecutor
 from utils.logger import Logger
 
@@ -83,7 +81,6 @@ _QUEUE_DATASET_MAP = {
     1300: BASELINE_QUICKPLAY_WINRATES,  # Nexus Blitz
     1020: BASELINE_QUICKPLAY_WINRATES,  # One For All
     1400: BASELINE_QUICKPLAY_WINRATES,  # Ultimate Spellbook
-    1900: BASELINE_RANKED_WINRATES,     # League Classic
 }
 
 
@@ -195,14 +192,17 @@ class StatsScraper:
         dataset = _QUEUE_DATASET_MAP.get(queue_id, BASELINE_ARAM_WINRATES)
         self.win_rates = dict(dataset)
         # Update self.mode string so is_offline returns accurate results
-        _QUEUE_MODE_NAMES = {
-            450: "ARAM", 2400: "ARAM Mayhem", 420: "Ranked Solo/Duo",
-            440: "Ranked Flex", 400: "Draft Pick", 1700: "Arena", 1710: "Arena 3v6",
-            490: "Quickplay", 900: "URF", 1010: "ARURF",
-            1300: "Nexus Blitz", 1020: "One For All", 1400: "Ultimate Spellbook",
-            1900: "League Classic",
-        }
-        self.mode = _QUEUE_MODE_NAMES.get(queue_id, self.mode)
+        try:
+            from services.queue_manager import resolve_mode_name
+            self.mode = resolve_mode_name(queue_id)
+        except Exception:
+            _QUEUE_MODE_NAMES = {
+                450: "ARAM", 2400: "ARAM Mayhem", 420: "Ranked Solo/Duo",
+                440: "Ranked Flex", 400: "Draft Pick", 1700: "Arena", 1710: "Arena 3v6",
+                490: "Quickplay", 900: "URF", 1010: "ARURF",
+                1300: "Nexus Blitz", 1020: "One For All", 1400: "Ultimate Spellbook",
+            }
+            self.mode = _QUEUE_MODE_NAMES.get(queue_id, self.mode)
         self._fetch_live_data_background(self.mode)
 
     def get_winrate(self, champ_name):
@@ -219,12 +219,3 @@ class StatsScraper:
     def is_offline(self) -> bool:
         """Dynamically returns True if operating on local fallback data."""
         return self.mode not in self.live_winrates
-
-
-_instance = None
-
-def get_stats_scraper(mode="ARAM") -> StatsScraper:
-    global _instance
-    if _instance is None:
-        _instance = StatsScraper(mode)
-    return _instance

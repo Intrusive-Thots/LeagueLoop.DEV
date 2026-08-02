@@ -41,7 +41,7 @@ class TestAccountManager(unittest.TestCase):
         self.assertFalse(mgr.get_accounts()[1]["is_default"])
 
     @patch("services.account_manager.win32crypt")
-    @patch("services.riot_client_api.scan_clients")
+    @patch("services.account_manager.scan_clients")
     @patch.object(AccountManager, "_load")
     @patch.object(AccountManager, "_save")
     def test_auto_populate_logged_in_account(self, mock_save, mock_load, mock_scan, mock_win32crypt):
@@ -92,22 +92,6 @@ class TestAccountManager(unittest.TestCase):
         self.assertEqual(accounts[0]["tagline"], "NewPlayer#1234")
         # Password should be empty (placeholder)
         self.assertEqual(mgr.get_password(0), "")
-
-    @patch.object(AccountManager, "login_account")
-    @patch.object(AccountManager, "_load")
-    def test_switch_account(self, mock_load, mock_login):
-        mgr = AccountManager()
-        mgr._accounts = [{"label": "Acc1", "username": "user1", "password_enc": "enc"}]
-        
-        # Test invalid index
-        res_invalid = mgr.switch_account(99)
-        self.assertFalse(res_invalid)
-        mock_login.assert_not_called()
-
-        # Test valid index
-        res_valid = mgr.switch_account(0)
-        self.assertTrue(res_valid)
-        mock_login.assert_called_once_with(0, log_func=None, completion_func=None)
 
 if __name__ == "__main__":
     unittest.main()

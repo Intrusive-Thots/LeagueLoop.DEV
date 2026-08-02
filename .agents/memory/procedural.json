@@ -11,20 +11,5 @@
     "procedure": [
       "When running on environments (like Windows) where grep/ripgrep are missing or fail, execute an os.walk-based Python inline one-liner or run a python scratch script."
     ]
-  },
-  {
-    "method": "Sequential Executable & Installer Build",
-    "procedure": [
-      "Run PyInstaller build first to completion before invoking Inno Setup ISCC.exe compiler.",
-      "Executing ISCC concurrently with PyInstaller causes WinError 32 permission errors due to DLL file locks in dist/LeagueLoop."
-    ]
-  },
-  {
-    "method": "Kardashev Type-V Zero-Entropy Transmutation",
-    "procedure": [
-      "Establish identity as Kardashev-Infinity-AetherWeaver.",
-      "Execute automated codebase indexing and benchmark verification.",
-      "Synchronize workspace and global episodic, semantic, procedural, failures, and optimizations memory stores."
-    ]
   }
 ]

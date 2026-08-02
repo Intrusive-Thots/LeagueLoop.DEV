@@ -28,15 +28,35 @@
     "learned_knowledge": "When an active client session is detected, if the account's Riot ID or tagline is not found in the local database, a placeholder account entry is created with an empty password. In the UI, this displays as a warning button (⚠️ Update) which links directly to the credentials edit form."
   },
   {
-    "concept": "PySide6 Migration & Page Transitions",
-    "learned_knowledge": "Migrated the entire LeagueLoop user interface from CustomTkinter to PySide6. The main app is now a headless coordinator that communicates purely via EventBus. Layout pages (Dashboard, Friends, Champions, Settings, and Play) are stacked using QStackedWidget. Clean fade transitions are achieved using QGraphicsOpacityEffect with QPropertyAnimation, and status badges are updated thread-safely via QMetaObject.invokeMethod."
+    "concept": "EventBus Listener Unbinding & Lifecycles",
+    "learned_knowledge": "Adding _EventBus.off(event_name, callback) allows dynamic components and UI widgets to safely clean up their event subscriptions, avoiding memory leaks and dangling callback execution when views are unmounted or re-rendered."
   },
   {
-    "concept": "Reorderable Grid Drag & Dynamic Filters",
-    "learned_knowledge": "Dynamic drag-to-rearrange grids map global drag positions to local grid dimensions to calculate index target destinations. When role filters, search constraints, or custom sort orderings are active, drag reordering is disabled to prevent logical index collision with the underlying model list."
+    "concept": "BaseHTTPRequestHandler Test Harness for Local API",
+    "learned_knowledge": "Testing standard library BaseHTTPRequestHandler implementations can be achieved cleanly without launching network sockets by creating an in-memory DummyAPIHandler subclass with BytesIO buffers for rfile and wfile and a MockServer object."
   },
   {
-    "concept": "PyInstaller Multi-Qt Bindings Conflict Resolution",
-    "learned_knowledge": "When PyInstaller compiles an environment containing multiple Qt binding packages (e.g. PyQt5, PyQt6, PySide6), libraries like 'qtpy' trigger auto-detection hooks that default to PyQt5. This causes conflicts when PySide6 hooks are run. Adding ['PyQt5', 'PyQt6'] to the PyInstaller spec 'excludes' list resolves this and ensures clean PySide6 compilation."
+    "concept": "Inertial Scroll Velocity Decay & Color Math Caching",
+    "learned_knowledge": "Smooth scrolling in CTkScrollableFrame uses mousewheel delta normalized against speed multipliers and frame-by-frame exponential velocity decay (default 0.85). UI theme color utilities use functools.lru_cache for hex_to_rgb, interpolate_color, lighten_color, and darken_color to avoid main-thread string parsing bottlenecks during hover and press state re-renders."
+  },
+  {
+    "concept": "WAMP Anomaly Alerting & High-Resolution Splash Art Eviction",
+    "learned_knowledge": "LCU WAMP event telemetry tracks event throughput (eps) alongside latency anomaly detection (>100ms threshold) and active event burst detection (>=25 eps or >=10 eps during anomaly). High-resolution splash art previews (1920x1080) are managed in a separate OrderedDict LRU memory cache with a max_splash_icons = 15 limit, allowing explicit eviction via evict_splash_art_memory() to manage RAM footprint during high champ select churn."
+  },
+  {
+    "concept": "Structured Health Monitoring & Priority Asset Queueing",
+    "learned_knowledge": "The local REST server provides /healthz for detailed telemetry monitoring including uptime_seconds, lcu_connected status, automation loop state, and current LCU phase. AssetManager uses Python's queue.PriorityQueue to organize asynchronous worker thread jobs, allowing low-priority background preload tasks (priority 10) during champion select rolls without starving high-priority user interface image loads."
+  },
+  {
+    "concept": "WebSocket Exponential Jitter Backoff & Auto-Pruning Asset Caching",
+    "learned_knowledge": "LCUClient WebSocket reconnects use exponential backoff (1s base up to 30s max) scaled by random jitter factor (0.8x-1.2x) to prevent thundering herd connections during LCU client restarts. AssetManager automatically evaluates disk cache file counts and total byte size during champion select asset pre-fetches, dynamically auto-pruning stale cache files when soft thresholds (350 files / 35MB) are breached."
+  },
+  {
+    "concept": "Connection Drop Diagnostics, Event Loop Telemetry & Theme RAM Optimization",
+    "learned_knowledge": "LCUClient records connection drop history, timestamps, and failure reasons via _record_connection_drop(), alongside event loop dispatch latency tracking (_event_loop_latency_ms) and active connection uptime calculations. DesignTokens optimizes active UI theme memory using sys.intern string interning for token keys, values, and path components, providing optimize_theme_memory() and get_theme_memory_footprint() to prevent string object duplication in RAM."
+  },
+  {
+    "concept": "Dynamic Network Throttle, Pre-Serialized JSON & Adaptive HTTP Timeout",
+    "learned_knowledge": "LCUClient uses dynamic network drop tracking within 15s windows to throttle rapid reconnect attempts when network adapters flap, while recording HTTP request latency histograms (_http_latency_samples, _http_latency_buckets) to dynamically adjust HTTP request timeouts based on p95 latency statistics. LeagueLoopAPIHandler uses static pre-serialized byte buffers (_HEALTH_OK_BYTES, _QUEUE_MODES_BYTES) for zero-allocation JSON responses, and AssetManager manages champion skin icon previews in a dedicated OrderedDict LRU memory cache with a max_skin_icons = 80 limit."
   }
 ]

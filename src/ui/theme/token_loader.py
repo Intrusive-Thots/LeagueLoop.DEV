@@ -1,9 +1,3 @@
-"""
-UI Design Tokens Loader Module for LeagueLoop.
-
-Loads design tokens (colors, typography, radii, spacing) from design_tokens.json.
-"""
-
 import json
 import os
 import sys
@@ -43,16 +37,31 @@ DEFAULT_TOKENS = {
     }
 }
 
+def _intern_tokens(obj):
+    """Recursively intern strings in dict keys and values to reduce RAM footprint."""
+    if isinstance(obj, dict):
+        new_dict = {}
+        for k, v in obj.items():
+            key = sys.intern(k) if isinstance(k, str) else k
+            new_dict[key] = _intern_tokens(v)
+        return new_dict
+    elif isinstance(obj, list):
+        return [_intern_tokens(i) for i in obj]
+    elif isinstance(obj, str):
+        return sys.intern(obj)
+    return obj
+
 class DesignTokens:
     def __init__(self):
         try:
             if os.path.exists(TOKEN_PATH):
                 with open(TOKEN_PATH, "r") as f:
-                    self.tokens = json.load(f)
+                    raw_tokens = json.load(f)
+                    self.tokens = _intern_tokens(raw_tokens)
             else:
-                self.tokens = DEFAULT_TOKENS
+                self.tokens = _intern_tokens(DEFAULT_TOKENS)
         except (FileNotFoundError, json.JSONDecodeError):
-            self.tokens = DEFAULT_TOKENS
+            self.tokens = _intern_tokens(DEFAULT_TOKENS)
 
 
     @staticmethod
@@ -62,7 +71,9 @@ class DesignTokens:
         parsed = []
         for k in keys:
             if isinstance(k, str) and "." in k:
-                parsed.extend(k.split("."))
+                parsed.extend([sys.intern(x) for x in k.split(".")])
+            elif isinstance(k, str):
+                parsed.append(sys.intern(k))
             else:
                 parsed.append(k)
         return tuple(parsed)
@@ -100,17 +111,23 @@ class DesignTokens:
             return default
         return val
 
-    def get_shadow(self, name: str, default: str = "") -> str:
-        return self.get("shadows", name, default=default)
+    def optimize_theme_memory(self):
+        """Optimizes RAM memory footprint of active theme dictionaries by interning strings and clearing LRU caches."""
+        self.tokens = _intern_tokens(self.tokens)
+        self._parse_keys.cache_clear()
+        self._get_memoized.cache_clear()
+        return self.get_theme_memory_footprint()
 
-    def get_animation(self, name: str, default: dict = None) -> dict:
-        return self.get("animations", name, default=default or {})
-
-    def get_gradient(self, name: str, default: list = None) -> list:
-        return self.get("gradients", name, default=default or [])
-
-    def spacing(self, multiplier: int = 1) -> int:
-        """Returns 8px based spacing value (e.g. spacing(2) -> 16px)."""
-        return 8 * multiplier
+    def get_theme_memory_footprint(self):
+        """Returns memory usage diagnostics for active theme dictionaries and caches."""
+        get_memo_info = self._get_memoized.cache_info()
+        parse_keys_info = self._parse_keys.cache_info()
+        return {
+            "lru_get_memoized_currsize": get_memo_info.currsize,
+            "lru_get_memoized_hits": get_memo_info.hits,
+            "lru_parse_keys_currsize": parse_keys_info.currsize,
+            "tokens_keys_count": len(self.tokens) if isinstance(self.tokens, dict) else 0,
+            "memory_optimized": True
+        }
 
 TOKENS = DesignTokens()

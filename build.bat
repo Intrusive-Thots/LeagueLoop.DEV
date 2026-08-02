@@ -34,7 +34,7 @@ echo.
 echo  [2/4] Building LeagueLoop executable...
 echo        This will take a moment, gathering all dependencies...
 echo.
-pyinstaller --clean -y LeagueLoop.spec
+.venv\Scripts\pyinstaller.exe --clean -y LeagueLoop.spec
 echo.
 
 if not exist dist\LeagueLoop\LeagueLoop.exe (

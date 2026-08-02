@@ -3,14 +3,14 @@ LCU API Handler
 Manages communication with the League of Legends Client Update (LCU).
 """
 import base64
-import os
+import random
 import sys
 import threading
 import time
-from typing import Dict, Optional
+import zlib
+from typing import Any, Dict, Optional
 from concurrent.futures import ThreadPoolExecutor
 
-import psutil
 import requests
 import urllib3
 import warnings
@@ -21,7 +21,6 @@ from websockets.exceptions import ConnectionClosed
 
 from utils.logger import Logger
 from utils.client_detector import scan_clients
-from services.lcu_transport import LCUTransport
 
 
 class LCUClient:
@@ -33,14 +32,19 @@ class LCUClient:
     def __init__(self):
         """Initializes the LCUClient with default values."""
         self._lock = threading.Lock()
-        self.transport = LCUTransport()
         self.port: Optional[str] = None
         self.auth_token: Optional[str] = None
         self.protocol: str = "https"
         self.base_url: Optional[str] = None
         self.is_connected: bool = False
         self.headers: Dict[str, str] = {}
-        self.session = self.transport.session
+        self.session = requests.Session()
+        self.session.verify = False
+        
+        # 3.2 Connection pooling
+        adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=10, max_retries=1)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
         
         self._client_pid: Optional[int] = None
         
@@ -65,24 +69,268 @@ class LCUClient:
         self._ws_connection = None
         self._ws_executor = ThreadPoolExecutor(max_workers=4)
 
+        # Task 127: Automated WS reconnection exponential backoff & jitter
+        self._ws_reconnect_backoff = 1.0
+        self._ws_max_backoff = 30.0
+
+        # Task 130: Dynamic websocket heartbeat check & stale ping timeout reset
+        self._ws_last_msg_timestamp = time.time()
+        self._ws_stale_timeout_s = 45.0
+        self._ws_stale_reset_count = 0
+
+        # Task 133: Automated connection drop diagnostics & event loop latency telemetry logging
+        self._connection_drop_count = 0
+        self._last_drop_reason = ""
+        self._drop_history = []
+        self._last_connected_timestamp = 0.0
+        self._event_loop_latency_ms = 0.0
+
+        # Task 136: Dynamic websocket reconnect rate throttling during network adapter state changes
+        self._network_drop_timestamps = []
+        self._network_adapter_changes = 0
+        self._network_throttle_active = False
+        self._network_throttle_backoff_floor = 5.0
+
+        # Telemetry & Anomaly Alerting for WS event latency & throughput
+        self._ws_telemetry_lock = threading.Lock()
+        self._ws_latency_samples = []
+        self._ws_event_count = 0
+        self._ws_last_latency_ms = 0.0
+        self._ws_event_timestamps = []
+        self._ws_start_time = time.time()
+        self._ws_anomaly_count = 0
+        self._ws_anomaly_threshold_ms = 100.0
+        self._ws_burst_alert_active = False
+
+        # Task 145: Automated WS payload compression analysis & memory footprint reporting
+        self._ws_total_payload_bytes = 0
+        self._ws_last_payload_bytes = 0
+        self._ws_max_payload_bytes = 0
+        self._ws_compressed_bytes_est = 0
+        self._ws_payload_samples = []
+        self._ws_last_compression_ratio = 1.0
+        self._ws_payload_memory_kb = 0.0
+
+        # Task 148: Automated WS payload deserialization latency profiling
+        self._ws_deser_latency_samples = []
+        self._ws_last_deser_latency_ms = 0.0
+        self._ws_min_deser_latency_ms = float("inf")
+        self._ws_max_deser_latency_ms = 0.0
+        self._ws_deser_latency_buckets = {
+            "<0.1ms": 0,
+            "0.1-0.5ms": 0,
+            "0.5-1.0ms": 0,
+            "1.0-5.0ms": 0,
+            ">5.0ms": 0,
+        }
+        self._ws_deser_count = 0
+
+        # Task 160: Automated websocket JSON deserialization memory pool recycling
+        self._ws_deser_pool = []
+        self._ws_deser_pool_max_size = 50
+        self._ws_deser_recycle_hits = 0
+        self._ws_deser_recycle_misses = 0
+        self._ws_deser_bytes_recycled = 0
+
+        # Task 157: Automated websocket subscription filter performance metrics & dispatch latency telemetry
+        self._ws_dispatch_count: int = 0
+        self._ws_total_dispatched_callbacks: int = 0
+        self._ws_dispatch_total_latency_ms: float = 0.0
+        self._ws_max_dispatch_latency_ms: float = 0.0
+
+        # Request Diagnostics & Throttling Metrics
+        self._req_diag_lock = threading.Lock()
+        self._total_requests_count = 0
+        self._rate_limit_throttle_count = 0
+        self._total_throttle_sleep_s = 0.0
+        self._offline_retry_queued_count = 0
+        self._offline_retry_executed_count = 0
+        # Task 154: Automated offline request retry queue telemetry & execution success diagnostics
+        self._offline_retry_success_count: int = 0
+        self._offline_retry_fail_count: int = 0
+        self._offline_retry_dropped_count: int = 0
+        self._http_429_count = 0
+        self._http_5xx_count = 0
+        self._http_retry_count = 0
+        self._http_max_retries = 3
+        self._http_error_count = 0
+
+        # Task 151: Automated HTTP response status distribution diagnostics & 4xx/5xx error telemetry logging
+        self._http_status_codes: Dict[int, int] = {}
+        self._http_2xx_count: int = 0
+        self._http_3xx_count: int = 0
+        self._http_4xx_count: int = 0
+        self._recent_http_errors: list = []
+        self._max_recent_http_errors: int = 50
+
+        # Task 139: Adaptive HTTP client timeout adjustment based on LCU response latency histograms
+        self._http_latency_lock = threading.Lock()
+        self._http_latency_samples = []
+        self._http_latency_buckets = {
+            "<10ms": 0,
+            "10-50ms": 0,
+            "50-100ms": 0,
+            "100-200ms": 0,
+            "200-500ms": 0,
+            ">500ms": 0,
+        }
+        self._http_min_latency_ms = float("inf")
+        self._http_max_latency_ms = 0.0
+        self._http_default_timeout_s = 2.0
+
         # Do NOT connect immediately to avoid blocking UI startup.
         # Connection is handled by the background loop in main.py.
 
+    def _record_http_latency(self, latency_ms: float) -> None:
+        """Records HTTP request latency into sliding window sample array and histogram buckets."""
+        with self._http_latency_lock:
+            self._http_latency_samples.append(latency_ms)
+            if len(self._http_latency_samples) > 200:
+                self._http_latency_samples.pop(0)
+
+            if latency_ms < self._http_min_latency_ms:
+                self._http_min_latency_ms = latency_ms
+            if latency_ms > self._http_max_latency_ms:
+                self._http_max_latency_ms = latency_ms
+
+            if latency_ms < 10.0:
+                self._http_latency_buckets["<10ms"] += 1
+            elif latency_ms < 50.0:
+                self._http_latency_buckets["10-50ms"] += 1
+            elif latency_ms < 100.0:
+                self._http_latency_buckets["50-100ms"] += 1
+            elif latency_ms < 200.0:
+                self._http_latency_buckets["100-200ms"] += 1
+            elif latency_ms < 500.0:
+                self._http_latency_buckets["200-500ms"] += 1
+            else:
+                self._http_latency_buckets[">500ms"] += 1
+
+    def get_adaptive_http_timeout(self) -> float:
+        """Calculates dynamic adaptive HTTP timeout based on LCU response latency histograms."""
+        with self._http_latency_lock:
+            if len(self._http_latency_samples) < 5:
+                return self._http_default_timeout_s
+
+            sorted_samples = sorted(self._http_latency_samples)
+            idx_95 = int(len(sorted_samples) * 0.95)
+            p95_ms = sorted_samples[min(idx_95, len(sorted_samples) - 1)]
+
+            calc_timeout_s = round((p95_ms / 1000.0) * 3.0 + 0.5, 2)
+            return max(1.5, min(calc_timeout_s, 8.0))
+
+    def get_http_latency_histogram(self) -> Dict[str, Any]:
+        """Returns LCU response latency histogram buckets and statistics."""
+        with self._http_latency_lock:
+            samples = self._http_latency_samples.copy()
+            buckets = self._http_latency_buckets.copy()
+            min_ms = self._http_min_latency_ms if self._http_min_latency_ms != float("inf") else 0.0
+            max_ms = self._http_max_latency_ms
+
+        if samples:
+            sorted_s = sorted(samples)
+            p50 = sorted_s[int(len(sorted_s) * 0.50)]
+            p95 = sorted_s[min(int(len(sorted_s) * 0.95), len(sorted_s) - 1)]
+            p99 = sorted_s[min(int(len(sorted_s) * 0.99), len(sorted_s) - 1)]
+            avg = sum(samples) / len(samples)
+        else:
+            p50 = p95 = p99 = avg = 0.0
+
+        adaptive_timeout = self.get_adaptive_http_timeout()
+        return {
+            "sample_count": len(samples),
+            "buckets": buckets,
+            "min_latency_ms": round(min_ms, 2),
+            "max_latency_ms": round(max_ms, 2),
+            "avg_latency_ms": round(avg, 2),
+            "p50_latency_ms": round(p50, 2),
+            "p95_latency_ms": round(p95, 2),
+            "p99_latency_ms": round(p99, 2),
+            "adaptive_timeout_s": adaptive_timeout,
+        }
+
     def connect(self, silent=False) -> bool:
-        """Attempts to read the lockfile and establish connection details via LCUTransport."""
+        """Attempts to read the lockfile and establish connection details."""
         with self._lock:
-            if self.is_connected and self.transport.is_connected:
+            # Atomic check: If we connected while waiting for lock, return success
+            if self.is_connected:
                 return True
 
-            connected = self.transport.connect(silent=silent)
-            self.is_connected = connected
-            if connected:
-                self.port = self.transport.port
-                self.auth_token = self.transport.auth_token
-                self.base_url = self.transport.base_url
-                self.headers = self.transport.headers
-                self.session = self.transport.session
-            return connected
+            try:
+                # Check connection throttling and sleep/wake gaps
+                now = time.time()
+                if self._last_scan_time > 0 and (now - self._last_scan_time) > 15.0:
+                    Logger.info("LCU", "System sleep/wake gap detected (>15s). Resetting backoff strategy.")
+                    self._backoff = 1.0
+                    self._last_scan_time = 0.0
+                    try:
+                        from core.events import EventBus
+                        EventBus.emit("lcu_sleep_wake_recovery", True)
+                    except Exception:
+                        pass
+
+                if now - self._last_scan_time < self._backoff:
+                    return False
+                self._last_scan_time = now
+
+                # Use unified client scanner
+                clients = scan_clients()
+                league_info = clients.get("league", {})
+                
+                if not league_info.get("connected"):
+                    if not silent:
+                        Logger.debug("LCU", "League Client not found or not connected.")
+                    if self.is_connected:
+                        from core.events import EventBus
+                        EventBus.emit("lcu_connected", False)
+                    self.is_connected = False
+                    self._backoff = min(self._backoff * 1.2, 2.0)
+                    return False
+
+                self.port = league_info["port"]
+                self.auth_token = league_info["token"]
+                self._client_pid = league_info["pid"]
+
+                if self.port and self.auth_token:
+                    auth_str = f"riot:{self.auth_token}"
+                    b64_auth = base64.b64encode(auth_str.encode()).decode()
+                    self.headers = {
+                        "Authorization": f"Basic {b64_auth}",
+                        "Content-Type": "application/json",
+                        "Accept": "application/json",
+                    }
+                    self.session.headers.update(self.headers)
+                    self.base_url = f"https://127.0.0.1:{self.port}"
+                    self.is_connected = True
+                    self._last_connected_timestamp = time.time()
+                    self._backoff = 1.0  # Reset backoff on success
+                    from core.events import EventBus
+                    EventBus.emit("lcu_connected", True)
+                    Logger.debug("LCU", f"Connected to port {self.port}")
+                    return True
+
+                Logger.debug("LCU", "Found League Client but credentials are missing.")
+
+            except Exception as e:
+                Logger.error("LCU", f"Connection Error: {e}")
+                if self.is_connected:
+                    from core.events import EventBus
+                    EventBus.emit("lcu_connected", False)
+                self.is_connected = False
+
+            return False
+
+    def reset_sleep_wake_backoff(self) -> None:
+        """Resets reconnection backoff and scanning throttle after system sleep or wake events."""
+        with self._lock:
+            self._backoff = 1.0
+            self._last_scan_time = 0.0
+            Logger.info("LCU", "Sleep/wake backoff reset executed.")
+            try:
+                from core.events import EventBus
+                EventBus.emit("lcu_sleep_wake_recovery", True)
+            except Exception:
+                pass
 
     def request(
         self,
@@ -90,8 +338,6 @@ class LCUClient:
         endpoint: str,
         data: Optional[Dict] = None,
         silent: bool = False,
-        *args,
-        **kwargs,
     ) -> Optional[requests.Response]:
         """Generic wrapper for LCU requests."""
         if not self.is_connected:
@@ -101,6 +347,11 @@ class LCUClient:
                     # Item #179: Cap queue size to prevent unbounded growth
                     if len(self._offline_queue) < self._offline_queue_max:
                         self._offline_queue.append((method, endpoint, data))
+                        with self._req_diag_lock:
+                            self._offline_retry_queued_count += 1
+                    else:
+                        with self._req_diag_lock:
+                            self._offline_retry_dropped_count += 1
                 return None
 
         # Flush 3.5 Offline Retry Queue on successful connection
@@ -108,9 +359,11 @@ class LCUClient:
             oq = self._offline_queue.copy()
             self._offline_queue.clear()
         if oq:
+            with self._req_diag_lock:
+                self._offline_retry_executed_count += len(oq)
             # Item #177: Use bounded executor instead of spawning raw threads
             for m, e, d in oq:
-                self._ws_executor.submit(self.request, m, e, d, True)
+                self._ws_executor.submit(self._execute_offline_retry, m, e, d)
 
         # 3.3 Strict Token Bucket Rate-Limiter
         # Item #178: Calculate sleep time inside lock, but sleep outside to prevent deadlock
@@ -126,19 +379,203 @@ class LCUClient:
             else:
                 self._tokens -= 1.0
         if sleep_time > 0:
+            with self._req_diag_lock:
+                self._rate_limit_throttle_count += 1
+                self._total_throttle_sleep_s += sleep_time
             time.sleep(sleep_time)
 
+        with self._req_diag_lock:
+            self._total_requests_count += 1
+
+        url = f"{self.base_url}{endpoint}"
         t_start = time.time()
-        response = self.transport.request(method=method, endpoint=endpoint, data=data, silent=silent, *args, **kwargs)
-        dur = time.time() - t_start
+        max_attempts = self._http_max_retries
 
-        if response is None:
-            self.is_connected = self.transport.is_connected
-            return None
+        for attempt in range(max_attempts):
+            try:
+                if not silent and attempt == 0:
+                    Logger.debug("LCU", f"REQ -> {method} {endpoint}")
+                
+                # TRACE payload format
+                if endpoint == "/lol-lobby/v2/lobby" and method == "POST":
+                    Logger.debug("LCU_TRACE", f"DATA TYPE: {type(data)} | RAW: {data}")
+                    
+                adaptive_timeout = self.get_adaptive_http_timeout()
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
+                    response = self.session.request(
+                        method=method,
+                        url=url,
+                        json=data,
+                        verify=False,
+                        timeout=adaptive_timeout,
+                    )
 
-        if not silent:
-            Logger.debug("LCU", f"RES <- {response.status_code} [{dur:.3f}s] {endpoint}")
-        return response
+                dur = time.time() - t_start
+                self._record_http_latency(dur * 1000.0)
+                self._record_http_status_code(response.status_code, method, endpoint)
+
+                if response.status_code == 429:
+                    if not silent:
+                        Logger.warning("LCU", f"HTTP 429 Rate Limit response on {endpoint}")
+                elif 500 <= response.status_code <= 599:
+                    if attempt < max_attempts - 1:
+                        with self._req_diag_lock:
+                            self._http_retry_count += 1
+                        base_delay = 0.05 * (2 ** attempt)
+                        jitter = random.uniform(0.01, 0.04)
+                        retry_delay = base_delay + jitter
+                        if not silent:
+                            Logger.warning("LCU", f"HTTP {response.status_code} Transient Server Error on {endpoint}. Retrying attempt {attempt + 1}/{max_attempts} after {retry_delay:.3f}s jitter backoff...")
+                        time.sleep(retry_delay)
+                        continue
+
+                if not silent:
+                    Logger.debug(
+                        "LCU", f"RES <- {response.status_code} [{dur:.3f}s] {endpoint}"
+                    )
+                return response
+            except requests.exceptions.ConnectionError:
+                dur = time.time() - t_start
+                self._record_http_latency(dur * 1000.0)
+                with self._req_diag_lock:
+                    self._http_error_count += 1
+                # Expected when the game is closed or restarting
+                self.is_connected = False
+                return None
+            except requests.exceptions.ReadTimeout:
+                # Expected for long-polling endpoints
+                return None
+            except requests.RequestException as e:
+                with self._req_diag_lock:
+                    self._http_error_count += 1
+                dur = time.time() - t_start
+                self._record_http_latency(dur * 1000.0)
+                Logger.error("LCU", f"FAIL [{dur:.3f}s] {endpoint} : {e}")
+                # Connection lost?
+                self.is_connected = False
+                return None
+
+        return None
+
+    def _record_http_status_code(self, status_code: int, method: str, endpoint: str) -> None:
+        """Task 151: Records HTTP response status code distribution and logs 4xx/5xx error telemetry."""
+        with self._req_diag_lock:
+            self._http_status_codes[status_code] = self._http_status_codes.get(status_code, 0) + 1
+            if 200 <= status_code <= 299:
+                self._http_2xx_count += 1
+            elif 300 <= status_code <= 399:
+                self._http_3xx_count += 1
+            elif 400 <= status_code <= 499:
+                self._http_4xx_count += 1
+                if status_code == 429:
+                    self._http_429_count += 1
+            elif 500 <= status_code <= 599:
+                self._http_5xx_count += 1
+
+            if status_code >= 400:
+                err_entry = {
+                    "timestamp": time.time(),
+                    "method": method,
+                    "endpoint": endpoint,
+                    "status_code": status_code,
+                }
+                self._recent_http_errors.append(err_entry)
+                if len(self._recent_http_errors) > self._max_recent_http_errors:
+                    self._recent_http_errors.pop(0)
+                Logger.warning("LCU_TELEMETRY", f"HTTP {status_code} Error on {method} {endpoint}")
+
+    def get_http_status_telemetry(self) -> Dict[str, Any]:
+        """Task 151: Returns automated HTTP response status distribution diagnostics & error telemetry."""
+        with self._req_diag_lock:
+            dist = {str(k): v for k, v in sorted(self._http_status_codes.items())}
+            total_reqs = self._total_requests_count
+            err_count = self._http_4xx_count + self._http_5xx_count + self._http_error_count
+            err_rate = round((err_count / max(1, total_reqs)) * 100.0, 2)
+            recent_errs = list(self._recent_http_errors)
+
+            return {
+                "total_requests": total_reqs,
+                "status_code_distribution": dist,
+                "http_2xx_count": self._http_2xx_count,
+                "http_3xx_count": self._http_3xx_count,
+                "http_4xx_count": self._http_4xx_count,
+                "http_5xx_count": self._http_5xx_count,
+                "http_429_count": self._http_429_count,
+                "http_error_count": self._http_error_count,
+                "http_error_rate_pct": err_rate,
+                "recent_errors_count": len(recent_errs),
+                "recent_errors": recent_errs,
+            }
+
+    def _execute_offline_retry(self, method: str, endpoint: str, data: Optional[Dict]) -> None:
+        """Task 154: Helper to execute an offline queued retry request and log success/fail telemetry."""
+        res = self.request(method, endpoint, data, silent=True)
+        with self._req_diag_lock:
+            if res is not None and 200 <= res.status_code <= 299:
+                self._offline_retry_success_count += 1
+            else:
+                self._offline_retry_fail_count += 1
+
+    def get_offline_retry_telemetry(self) -> Dict[str, Any]:
+        """Task 154: Returns automated offline request retry queue telemetry & execution success diagnostics."""
+        with self._req_diag_lock:
+            queued = self._offline_retry_queued_count
+            executed = self._offline_retry_executed_count
+            succeeded = self._offline_retry_success_count
+            failed = self._offline_retry_fail_count
+            dropped = self._offline_retry_dropped_count
+            curr_len = len(self._offline_queue)
+            success_rate_pct = round((succeeded / max(1, executed)) * 100.0, 2) if executed > 0 else 0.0
+
+            return {
+                "current_queue_len": curr_len,
+                "max_queue_len": self._offline_queue_max,
+                "queued_count": queued,
+                "executed_count": executed,
+                "success_count": succeeded,
+                "fail_count": failed,
+                "dropped_count": dropped,
+                "execution_success_rate_pct": success_rate_pct,
+            }
+
+    def get_request_diagnostics(self) -> Dict[str, Any]:
+        """Returns rate-limit throttle & retry status diagnostics for LCU HTTP requests."""
+        with self._req_diag_lock:
+            dist = {str(k): v for k, v in sorted(self._http_status_codes.items())}
+            total_reqs = self._total_requests_count
+            err_count = self._http_4xx_count + self._http_5xx_count + self._http_error_count
+            err_rate = round((err_count / max(1, total_reqs)) * 100.0, 2)
+            executed = self._offline_retry_executed_count
+            succeeded = self._offline_retry_success_count
+            success_rate_pct = round((succeeded / max(1, executed)) * 100.0, 2) if executed > 0 else 0.0
+
+            diag = {
+                "total_requests": total_reqs,
+                "status_code_distribution": dist,
+                "http_2xx_count": self._http_2xx_count,
+                "http_3xx_count": self._http_3xx_count,
+                "http_4xx_count": self._http_4xx_count,
+                "http_5xx_count": self._http_5xx_count,
+                "http_error_rate_pct": err_rate,
+                "rate_limit_throttles": self._rate_limit_throttle_count,
+                "total_throttle_sleep_s": round(self._total_throttle_sleep_s, 3),
+                "offline_retry_queued": self._offline_retry_queued_count,
+                "offline_retry_executed": self._offline_retry_executed_count,
+                "offline_retry_success_count": self._offline_retry_success_count,
+                "offline_retry_fail_count": self._offline_retry_fail_count,
+                "offline_retry_dropped_count": self._offline_retry_dropped_count,
+                "offline_retry_success_rate_pct": success_rate_pct,
+                "http_429_count": self._http_429_count,
+                "http_retry_count": self._http_retry_count,
+                "http_error_count": self._http_error_count,
+                "offline_queue_current_len": len(self._offline_queue),
+                "adaptive_timeout_s": self.get_adaptive_http_timeout(),
+            }
+        hist = self.get_http_latency_histogram()
+        diag["avg_latency_ms"] = hist["avg_latency_ms"]
+        diag["p95_latency_ms"] = hist["p95_latency_ms"]
+        return diag
 
     # ─────────── WEBSOCKET PUBLISH / SUBSCRIBE ───────────
 
@@ -198,6 +635,10 @@ class LCUClient:
             try:
                 with ws_connect(uri, ssl=ctx, additional_headers=headers) as ws:
                     self._ws_connection = ws
+                    self._ws_reconnect_backoff = 1.0  # Reset backoff on successful connection
+                    self._ws_last_msg_timestamp = time.time()
+                    with self._ws_telemetry_lock:
+                        self._network_throttle_active = False
                     Logger.debug("LCU_WS", "WebSocket connected.")
                     
                     # Re-subscribe to all existing subscriptions
@@ -210,18 +651,38 @@ class LCUClient:
                                 Logger.debug("LCU_WS", f"WS subscribe send failed: {e}")
 
                     while self._ws_should_run:
-                        # Item #180: Use timeout to prevent blocking forever on stale connections
+                        # Item #180 & Task 130: Timeout and dynamic heartbeat stale ping reset
                         try:
-                            message = ws.recv(timeout=30)
+                            message = ws.recv(timeout=15)
+                            self._ws_last_msg_timestamp = time.time()
                         except TimeoutError:
+                            stale_age = time.time() - self._ws_last_msg_timestamp
+                            if stale_age >= self._ws_stale_timeout_s:
+                                Logger.warning(
+                                    "LCU_WS",
+                                    f"Stale WebSocket connection ping timeout ({stale_age:.1f}s >= {self._ws_stale_timeout_s}s without messages). Resetting connection."
+                                )
+                                self._ws_stale_reset_count += 1
+                                self._record_connection_drop(f"Stale WS ping timeout ({stale_age:.1f}s)")
+                                try:
+                                    ws.close()
+                                except Exception:
+                                    pass
+                                break
                             continue
                         if not message:
                             continue
                             
+                        self._record_ws_payload_metrics(message)
+                        t_loop_start = time.perf_counter()
+                        t_recv = time.perf_counter()
                         # WAMP v1 is JSON array
                         try:
                             # [8, "OnJsonApiEvent...", payload]
+                            t_deser_start = time.perf_counter()
                             data = json.loads(message)
+                            deser_latency_ms = (time.perf_counter() - t_deser_start) * 1000.0
+                            self._record_ws_deser_telemetry(deser_latency_ms)
                             if isinstance(data, list) and len(data) >= 3 and data[0] == 8:
                                 event_name = data[1]
                                 payload = data[2]
@@ -245,6 +706,7 @@ class LCUClient:
                                     if "OnJsonApiEvent" in self._subscriptions:
                                         callbacks.extend(self._subscriptions["OnJsonApiEvent"])
                                 
+                                t_dispatch_start = time.perf_counter()
                                 for cb in callbacks:
                                     try:
                                         # Run callback in bounded pool so we don't stall the websocket
@@ -252,15 +714,345 @@ class LCUClient:
                                     except Exception as e:
                                         Logger.error("LCU_WS", f"Callback error in {event_name}: {e}")
 
+                                dispatch_latency_ms = (time.perf_counter() - t_dispatch_start) * 1000.0
+                                self._record_ws_dispatch_telemetry(event_name, len(callbacks), dispatch_latency_ms)
+
+                                # Record event latency telemetry
+                                latency_ms = (time.perf_counter() - t_recv) * 1000.0
+                                self._record_ws_telemetry(event_name, latency_ms)
+
                         except json.JSONDecodeError:
                             pass
                         except Exception as e:
                             Logger.error("LCU_WS", f"Message parse error: {e}")
 
-            except ConnectionClosed:
-                Logger.debug("LCU_WS", "WebSocket closed normally or by server.")
+                        # Task 133: Record event loop processing latency
+                        loop_dur_ms = (time.perf_counter() - t_loop_start) * 1000.0
+                        with self._ws_telemetry_lock:
+                            self._event_loop_latency_ms = round(loop_dur_ms, 3)
+
+            except ConnectionClosed as e:
+                self._record_connection_drop(f"WebSocket ConnectionClosed: {e}")
+                Logger.debug("LCU_WS", f"WebSocket closed normally or by server: {e}")
             except Exception as e:
+                self._record_connection_drop(f"WebSocket connection failure: {e}")
                 Logger.debug("LCU_WS", f"WebSocket connection failed: {e}")
             
             self._ws_connection = None
-            time.sleep(3)  # Reconnect delay
+            # Task 127: Exponential backoff with random jitter for WS reconnection
+            jitter = random.uniform(0.8, 1.2)
+            sleep_duration = min(self._ws_reconnect_backoff * jitter, self._ws_max_backoff)
+            Logger.debug("LCU_WS", f"WebSocket reconnecting in {sleep_duration:.2f}s (backoff={self._ws_reconnect_backoff:.1f}s)...")
+            time.sleep(sleep_duration)
+            self._ws_reconnect_backoff = min(self._ws_reconnect_backoff * 2.0, self._ws_max_backoff)
+
+    def _record_connection_drop(self, reason: str):
+        """Records connection drop diagnostics and evaluates network adapter state flap throttling."""
+        now = time.time()
+        with self._ws_telemetry_lock:
+            self._connection_drop_count += 1
+            self._last_drop_reason = reason
+            self._drop_history.append((now, reason))
+            if len(self._drop_history) > 20:
+                self._drop_history.pop(0)
+
+            # Task 136: Track drops within a 15-second window for adapter flap detection
+            self._network_drop_timestamps.append(now)
+            cutoff = now - 15.0
+            while self._network_drop_timestamps and self._network_drop_timestamps[0] < cutoff:
+                self._network_drop_timestamps.pop(0)
+
+            if len(self._network_drop_timestamps) >= 3:
+                self._network_throttle_active = True
+                self._ws_reconnect_backoff = max(self._ws_reconnect_backoff, self._network_throttle_backoff_floor)
+                Logger.warning(
+                    "LCU_NETWORK_THROTTLE",
+                    f"Rapid connection drops detected ({len(self._network_drop_timestamps)} drops in 15s). Enabling network adapter reconnect rate throttling (backoff floor={self._network_throttle_backoff_floor}s)."
+                )
+
+            Logger.info("LCU_DIAGNOSTICS", f"Connection drop recorded: {reason} (Total drops: {self._connection_drop_count})")
+
+    def notify_network_state_change(self, state_info: str = "adapter_changed") -> None:
+        """Notifies LCUClient of an OS or adapter-level network transition to dynamically adjust reconnect rate throttling."""
+        with self._ws_telemetry_lock:
+            self._network_adapter_changes += 1
+            self._record_connection_drop(f"Network adapter state change: {state_info}")
+
+    def _record_ws_payload_metrics(self, raw_message: Any) -> None:
+        """Task 145: Records payload compression analysis and memory footprint metrics for incoming WS messages."""
+        if not raw_message:
+            return
+        msg_bytes = raw_message.encode("utf-8") if isinstance(raw_message, str) else bytes(raw_message)
+        payload_bytes = len(msg_bytes)
+
+        with self._ws_telemetry_lock:
+            self._ws_total_payload_bytes += payload_bytes
+            self._ws_last_payload_bytes = payload_bytes
+            if payload_bytes > self._ws_max_payload_bytes:
+                self._ws_max_payload_bytes = payload_bytes
+
+            self._ws_payload_samples.append(payload_bytes)
+            if len(self._ws_payload_samples) > 200:
+                self._ws_payload_samples.pop(0)
+
+            # Compression analysis using zlib compression estimation
+            try:
+                comp_len = len(zlib.compress(msg_bytes, level=1))
+            except Exception:
+                comp_len = payload_bytes
+            self._ws_compressed_bytes_est += comp_len
+            self._ws_last_compression_ratio = round(payload_bytes / max(comp_len, 1), 2)
+
+            # Memory footprint of payload samples container
+            self._ws_payload_memory_kb = round(sys.getsizeof(self._ws_payload_samples) / 1024.0, 3)
+
+    def get_ws_payload_telemetry(self) -> Dict[str, Any]:
+        """Task 145: Returns automated payload compression ratio and memory footprint analysis metrics."""
+        with self._ws_telemetry_lock:
+            samples = self._ws_payload_samples.copy()
+            total_bytes = self._ws_total_payload_bytes
+            last_bytes = self._ws_last_payload_bytes
+            max_bytes = self._ws_max_payload_bytes
+            comp_bytes = self._ws_compressed_bytes_est
+            last_ratio = self._ws_last_compression_ratio
+            mem_kb = self._ws_payload_memory_kb
+
+        avg_bytes = round(sum(samples) / len(samples), 2) if samples else 0.0
+        overall_ratio = round(total_bytes / max(comp_bytes, 1), 2) if comp_bytes > 0 else 1.0
+
+        return {
+            "total_payload_bytes": total_bytes,
+            "last_payload_bytes": last_bytes,
+            "max_payload_bytes": max_bytes,
+            "avg_payload_bytes": avg_bytes,
+            "last_compression_ratio": last_ratio,
+            "overall_compression_ratio": overall_ratio,
+            "payload_sample_count": len(samples),
+            "payload_memory_kb": mem_kb,
+            "payload_memory_mb": round(mem_kb / 1024.0, 4),
+        }
+
+    def _record_ws_deser_telemetry(self, deser_latency_ms: float) -> None:
+        """Task 148: Records WebSocket message payload deserialization latency samples and histogram metrics."""
+        with self._ws_telemetry_lock:
+            self._ws_deser_count += 1
+            self._ws_last_deser_latency_ms = round(deser_latency_ms, 4)
+            self._ws_deser_latency_samples.append(deser_latency_ms)
+            if len(self._ws_deser_latency_samples) > 200:
+                self._ws_deser_latency_samples.pop(0)
+
+            if deser_latency_ms < self._ws_min_deser_latency_ms:
+                self._ws_min_deser_latency_ms = deser_latency_ms
+            if deser_latency_ms > self._ws_max_deser_latency_ms:
+                self._ws_max_deser_latency_ms = deser_latency_ms
+
+            if deser_latency_ms < 0.1:
+                self._ws_deser_latency_buckets["<0.1ms"] += 1
+            elif deser_latency_ms < 0.5:
+                self._ws_deser_latency_buckets["0.1-0.5ms"] += 1
+            elif deser_latency_ms < 1.0:
+                self._ws_deser_latency_buckets["0.5-1.0ms"] += 1
+            elif deser_latency_ms < 5.0:
+                self._ws_deser_latency_buckets["1.0-5.0ms"] += 1
+            else:
+                self._ws_deser_latency_buckets[">5.0ms"] += 1
+
+    def get_ws_deser_telemetry(self) -> Dict[str, Any]:
+        """Task 148: Returns automated WS payload deserialization latency profiling metrics."""
+        with self._ws_telemetry_lock:
+            samples = self._ws_deser_latency_samples.copy()
+            buckets = self._ws_deser_latency_buckets.copy()
+            last_ms = self._ws_last_deser_latency_ms
+            min_ms = round(self._ws_min_deser_latency_ms, 4) if self._ws_min_deser_latency_ms != float("inf") else 0.0
+            max_ms = round(self._ws_max_deser_latency_ms, 4)
+            count = self._ws_deser_count
+
+        if samples:
+            sorted_s = sorted(samples)
+            p50 = round(sorted_s[int(len(sorted_s) * 0.50)], 4)
+            p95 = round(sorted_s[min(int(len(sorted_s) * 0.95), len(sorted_s) - 1)], 4)
+            p99 = round(sorted_s[min(int(len(sorted_s) * 0.99), len(sorted_s) - 1)], 4)
+            avg = round(sum(samples) / len(samples), 4)
+        else:
+            p50 = p95 = p99 = avg = 0.0
+
+        return {
+            "deser_count": count,
+            "last_deser_latency_ms": last_ms,
+            "avg_deser_latency_ms": avg,
+            "p50_deser_latency_ms": p50,
+            "p95_deser_latency_ms": p95,
+            "p99_deser_latency_ms": p99,
+            "min_deser_latency_ms": min_ms,
+            "max_deser_latency_ms": max_ms,
+            "deser_histogram_buckets": buckets,
+            "deser_sample_count": len(samples),
+        }
+
+    def _acquire_deser_buffer(self) -> Dict[str, Any]:
+        """Task 160: Acquires a recycled dictionary buffer from the deserialization pool or creates a new dictionary."""
+        with self._ws_telemetry_lock:
+            if self._ws_deser_pool:
+                self._ws_deser_recycle_hits += 1
+                buf = self._ws_deser_pool.pop()
+                buf.clear()
+                return buf
+            else:
+                self._ws_deser_recycle_misses += 1
+                return {}
+
+    def _recycle_deser_buffer(self, obj: Any) -> None:
+        """Task 160: Recycles a dictionary object back into the deserialization pool if capacity permits."""
+        if isinstance(obj, dict):
+            with self._ws_telemetry_lock:
+                if len(self._ws_deser_pool) < self._ws_deser_pool_max_size:
+                    obj.clear()
+                    self._ws_deser_pool.append(obj)
+                    self._ws_deser_bytes_recycled += sys.getsizeof(obj)
+
+    def clear_ws_deser_pool(self) -> None:
+        """Task 160: Clears the recycled JSON deserialization memory pool."""
+        with self._ws_telemetry_lock:
+            self._ws_deser_pool.clear()
+
+    def get_ws_deser_pool_telemetry(self) -> Dict[str, Any]:
+        """Task 160: Returns automated websocket JSON deserialization memory pool recycling metrics."""
+        with self._ws_telemetry_lock:
+            pool_size = len(self._ws_deser_pool)
+            hits = self._ws_deser_recycle_hits
+            misses = self._ws_deser_recycle_misses
+            tot = hits + misses
+            hit_ratio = round(hits / tot, 4) if tot > 0 else 0.0
+            bytes_rec = self._ws_deser_bytes_recycled
+            pool_mem_kb = round(sys.getsizeof(self._ws_deser_pool) / 1024.0, 3)
+
+            return {
+                "deser_pool_size": pool_size,
+                "deser_pool_max_size": self._ws_deser_pool_max_size,
+                "deser_recycle_hits": hits,
+                "deser_recycle_misses": misses,
+                "deser_recycle_hit_ratio": hit_ratio,
+                "deser_bytes_recycled": bytes_rec,
+                "deser_pool_memory_kb": pool_mem_kb,
+            }
+
+    def _record_ws_dispatch_telemetry(self, event_name: str, callbacks_count: int, dispatch_latency_ms: float) -> None:
+        """Task 157: Records websocket subscription filter performance metrics & callback dispatch telemetry."""
+        with self._ws_telemetry_lock:
+            self._ws_dispatch_count += 1
+            self._ws_total_dispatched_callbacks += callbacks_count
+            self._ws_dispatch_total_latency_ms += dispatch_latency_ms
+            if dispatch_latency_ms > self._ws_max_dispatch_latency_ms:
+                self._ws_max_dispatch_latency_ms = dispatch_latency_ms
+
+    def get_ws_dispatch_telemetry(self) -> Dict[str, Any]:
+        """Task 157: Returns automated websocket subscription filter performance metrics & dispatch latency telemetry."""
+        with self._ws_telemetry_lock:
+            count = self._ws_dispatch_count
+            total_cbs = self._ws_total_dispatched_callbacks
+            tot_lat = self._ws_dispatch_total_latency_ms
+            avg_lat = round(tot_lat / max(1, count), 3) if count > 0 else 0.0
+            avg_cbs = round(total_cbs / max(1, count), 2) if count > 0 else 0.0
+            max_lat = round(self._ws_max_dispatch_latency_ms, 3)
+
+        with self._lock:
+            active_filters = len(self._subscriptions)
+            total_listeners = sum(len(cbs) for cbs in self._subscriptions.values())
+
+        return {
+            "active_subscription_filters": active_filters,
+            "total_registered_listeners": total_listeners,
+            "dispatch_event_count": count,
+            "dispatched_callbacks_count": total_cbs,
+            "avg_dispatched_callbacks_per_event": avg_cbs,
+            "avg_dispatch_latency_ms": avg_lat,
+            "max_dispatch_latency_ms": max_lat,
+        }
+
+    def _record_ws_telemetry(self, event_name: str, latency_ms: float):
+        """Records websocket message processing latency and throughput telemetry with burst anomaly detection."""
+        now = time.time()
+        is_anomaly = False
+        with self._ws_telemetry_lock:
+            self._ws_event_count += 1
+            self._ws_last_latency_ms = latency_ms
+            self._ws_latency_samples.append(latency_ms)
+            if len(self._ws_latency_samples) > 200:
+                self._ws_latency_samples.pop(0)
+            self._ws_event_timestamps.append(now)
+            cutoff = now - 10.0
+            while self._ws_event_timestamps and self._ws_event_timestamps[0] < cutoff:
+                self._ws_event_timestamps.pop(0)
+
+            # Latency anomaly evaluation
+            is_anomaly = latency_ms > self._ws_anomaly_threshold_ms
+            recent_count = len(self._ws_event_timestamps)
+            # Active burst alert when high event throughput coincides with latency anomalies
+            self._ws_burst_alert_active = (recent_count >= 25) or (is_anomaly and recent_count >= 10)
+
+            if is_anomaly:
+                self._ws_anomaly_count += 1
+                Logger.warning(
+                    "LCU_WS_ANOMALY",
+                    f"Latency anomaly detected on {event_name}: {latency_ms:.2f}ms (threshold: {self._ws_anomaly_threshold_ms}ms)"
+                )
+
+        if latency_ms > 50.0 and not is_anomaly:
+            Logger.warning("LCU_WS_PERF", f"High event latency on {event_name}: {latency_ms:.2f}ms")
+
+    def get_ws_telemetry(self) -> Dict[str, Any]:
+        """Returns telemetry performance metrics and WAMP throughput for LCU websocket event processing."""
+        now = time.time()
+        payload_meta = self.get_ws_payload_telemetry()
+        deser_meta = self.get_ws_deser_telemetry()
+        deser_pool_meta = self.get_ws_deser_pool_telemetry()
+        dispatch_meta = self.get_ws_dispatch_telemetry()
+        with self._ws_telemetry_lock:
+            cutoff = now - 10.0
+            while self._ws_event_timestamps and self._ws_event_timestamps[0] < cutoff:
+                self._ws_event_timestamps.pop(0)
+
+            cutoff_drop = now - 15.0
+            while self._network_drop_timestamps and self._network_drop_timestamps[0] < cutoff_drop:
+                self._network_drop_timestamps.pop(0)
+            recent_drops_15s = len(self._network_drop_timestamps)
+            
+            recent_count = len(self._ws_event_timestamps)
+            rolling_throughput_eps = round(recent_count / 10.0, 2)
+            
+            elapsed = max(now - self._ws_start_time, 0.001)
+            overall_throughput_eps = round(self._ws_event_count / elapsed, 2)
+            last_msg_age_s = round(now - self._ws_last_msg_timestamp, 2) if self._ws_connection else 0.0
+
+            uptime_s = round(now - self._last_connected_timestamp, 2) if self.is_connected and self._last_connected_timestamp > 0 else 0.0
+
+            res = {
+                "total_events": self._ws_event_count,
+                "last_latency_ms": round(self._ws_last_latency_ms, 3) if self._ws_latency_samples else 0.0,
+                "avg_latency_ms": round(sum(self._ws_latency_samples) / len(self._ws_latency_samples), 3) if self._ws_latency_samples else 0.0,
+                "max_latency_ms": round(max(self._ws_latency_samples), 3) if self._ws_latency_samples else 0.0,
+                "min_latency_ms": round(min(self._ws_latency_samples), 3) if self._ws_latency_samples else 0.0,
+                "sample_count": len(self._ws_latency_samples),
+                "throughput_eps": rolling_throughput_eps,
+                "overall_throughput_eps": overall_throughput_eps,
+                "throughput_window_s": 10.0,
+                "anomaly_count": self._ws_anomaly_count,
+                "anomaly_threshold_ms": self._ws_anomaly_threshold_ms,
+                "burst_alert_active": self._ws_burst_alert_active,
+                "reconnect_backoff_s": round(self._ws_reconnect_backoff, 2),
+                "last_msg_age_s": last_msg_age_s,
+                "stale_reset_count": self._ws_stale_reset_count,
+                "stale_timeout_s": self._ws_stale_timeout_s,
+                "connection_drop_count": self._connection_drop_count,
+                "last_drop_reason": self._last_drop_reason,
+                "event_loop_latency_ms": self._event_loop_latency_ms,
+                "connection_uptime_s": uptime_s,
+                "network_throttle_active": self._network_throttle_active,
+                "network_adapter_changes": self._network_adapter_changes,
+                "recent_drops_15s": recent_drops_15s,
+            }
+            res.update(payload_meta)
+            res.update(deser_meta)
+            res.update(deser_pool_meta)
+            res.update(dispatch_meta)
+            return res

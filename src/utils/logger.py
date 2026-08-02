@@ -1,15 +1,12 @@
 """
 Logger Module
 Handles application logging to file and console using standard logging module.
-Includes global unhandled exception hooks for Python, threads, and PySide6/Qt.
 """
 import logging
 import os
-import sys
-import tempfile
-import traceback
-import threading
 from logging.handlers import RotatingFileHandler
+
+import tempfile
 
 # Resolve a writable log directory — prefer %LOCALAPPDATA%/LeagueLoop, fall back to TEMP
 _appdata = os.environ.get("LOCALAPPDATA", os.path.join(os.path.expanduser("~"), "AppData", "Local"))
@@ -17,6 +14,7 @@ _log_dir = os.path.join(_appdata, "LeagueLoop")
 
 try:
     os.makedirs(_log_dir, exist_ok=True)
+    # Quick write-test
     _test_path = os.path.join(_log_dir, ".logtest")
     with open(_test_path, "w") as _f:
         _f.write("ok")
@@ -26,7 +24,7 @@ except Exception:
     os.makedirs(_log_dir, exist_ok=True)
 
 # Set up the Python rotating file logger
-_log_format = '[%(asctime)s.%(msecs)03d] [%(levelname)s] [%(threadName)s] %(message)s'
+_log_format = '[%(asctime)s.%(msecs)03d] [%(threadName)s] %(message)s'
 _date_format = '%H:%M:%S'
 
 formatter = logging.Formatter(_log_format, datefmt=_date_format)
@@ -35,84 +33,33 @@ formatter = logging.Formatter(_log_format, datefmt=_date_format)
 _logger = logging.getLogger("LeagueLoop")
 _logger.setLevel(logging.DEBUG)
 
-class SafeStreamHandler(logging.StreamHandler):
-    """StreamHandler that swallows I/O errors on closed streams during process teardown."""
-    def emit(self, record):
-        try:
-            super().emit(record)
-        except Exception:
-            pass
-
-    def handleError(self, record):
-        try:
-            super().handleError(record)
-        except Exception:
-            pass
-
-
-class SafeRotatingFileHandler(RotatingFileHandler):
-    """RotatingFileHandler that safely handles write/close errors during teardown."""
-    def emit(self, record):
-        try:
-            super().emit(record)
-        except Exception:
-            pass
-
-    def handleError(self, record):
-        try:
-            super().handleError(record)
-        except Exception:
-            pass
-
-
 if not _logger.handlers:
     # File Handler - ALL Logs (5MB max size, keeps 3 backups)
-    debug_log_path = os.path.join(_log_dir, 'debug.log')
-    file_handler = SafeRotatingFileHandler(
-        debug_log_path, maxBytes=5*1024*1024, backupCount=3, encoding='utf-8'
+    file_handler = RotatingFileHandler(
+        os.path.join(_log_dir, 'debug.log'), maxBytes=5*1024*1024, backupCount=3, encoding='utf-8'
     )
     file_handler.setFormatter(formatter)
     
     # Error File Handler - ERROR/CRITICAL Logs Only
-    error_log_path = os.path.join(_log_dir, 'error.log')
-    error_handler = SafeRotatingFileHandler(
-        error_log_path, maxBytes=2*1024*1024, backupCount=2, encoding='utf-8'
+    error_handler = RotatingFileHandler(
+        os.path.join(_log_dir, 'error.log'), maxBytes=2*1024*1024, backupCount=2, encoding='utf-8'
     )
     error_handler.setLevel(logging.ERROR)
     error_handler.setFormatter(formatter)
     
     # Console Handler
-    console_handler = SafeStreamHandler()
+    console_handler = logging.StreamHandler()
     console_handler.setFormatter(logging.Formatter('%(message)s'))
     
     _logger.addHandler(file_handler)
     _logger.addHandler(error_handler)
     _logger.addHandler(console_handler)
 
-
 class Logger:
-    """Provides thread-safe logging access and exception management."""
+    """Provides standard logging access."""
     
     _logs = []
     MAX_LOGS = 1000
-
-    @classmethod
-    def get_log_dir(cls) -> str:
-        """Returns the absolute path to the log directory."""
-        return _log_dir
-
-    @classmethod
-    def clear_logs(cls):
-        """Clears in-memory logs and truncates error.log and debug.log disk files."""
-        cls._logs.clear()
-        for filename in ("error.log", "debug.log"):
-            filepath = os.path.join(_log_dir, filename)
-            if os.path.exists(filepath):
-                try:
-                    with open(filepath, "w", encoding="utf-8") as f:
-                        f.write("")
-                except Exception:
-                    pass
 
     @classmethod
     def _prune(cls):
@@ -156,18 +103,6 @@ class Logger:
         cls._add_log("ERROR", tag, msg)
 
     @classmethod
-    def exception(cls, tag, msg, exc=None):
-        """Log an error with full stack trace."""
-        tb_str = ""
-        if exc is not None:
-            tb_str = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-        else:
-            tb_str = traceback.format_exc()
-        full_msg = f"{msg}\n{tb_str}".strip()
-        _logger.error(f"[{tag}] {full_msg}")
-        cls._add_log("ERROR", tag, full_msg)
-
-    @classmethod
     def info(cls, tag, msg):
         """Log an info message."""
         _logger.info(f"[{tag}] {msg}")
@@ -178,37 +113,3 @@ class Logger:
         """Log a warning message."""
         _logger.warning(f"[{tag}] {msg}")
         cls._add_log("WARNING", tag, msg)
-
-
-def _handle_uncaught_python_exception(exc_type, exc_value, exc_traceback):
-    """Global sys.excepthook to log uncaught main thread exceptions."""
-    if issubclass(exc_type, KeyboardInterrupt):
-        sys.__excepthook__(exc_type, exc_value, exc_traceback)
-        return
-    tb = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
-    Logger.error("CRASH_HOOK", f"Uncaught Main Thread Exception: {exc_value}\n{tb}")
-    try:
-        from utils.crash_reporter import CrashReporter
-        CrashReporter.generate_report(exc_type, exc_value, exc_traceback, thread_name="MainThread")
-    except Exception:
-        pass
-
-
-def _handle_uncaught_thread_exception(args):
-    """Global threading.excepthook to log uncaught background thread exceptions."""
-    tb = "".join(traceback.format_exception(args.exc_type, args.exc_value, args.exc_traceback))
-    thread_name = args.thread.name if args.thread else "UnknownThread"
-    Logger.error("THREAD_CRASH", f"Uncaught Exception in [{thread_name}]: {args.exc_value}\n{tb}")
-    try:
-        from utils.crash_reporter import CrashReporter
-        CrashReporter.generate_report(args.exc_type, args.exc_value, args.exc_traceback, thread_name=thread_name)
-    except Exception:
-        pass
-
-
-def setup_exception_hooks():
-    """Installs global exception handlers for main thread, worker threads, and Qt."""
-    sys.excepthook = _handle_uncaught_python_exception
-    if hasattr(threading, "excepthook"):
-        threading.excepthook = _handle_uncaught_thread_exception
-    Logger.info("Logger", f"Global exception logging hooks installed. Log dir: {_log_dir}")

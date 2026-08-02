@@ -1,9 +1,3 @@
-"""
-State Manager Module for LeagueLoop.
-
-Subscribes to EventBus events and updates global application state in real-time.
-"""
-
 from core.state import State
 from core.events import EventBus
 

@@ -1,252 +1,96 @@
 <div align="center">
   <img src="assets/app.png" alt="LeagueLoop Icon" width="128"/>
-  <h1>LeagueLoop.DEV</h1>
-  <p><strong>High-Performance League of Legends Automation | PySide6 | LCU API</strong></p>
-  
-  [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-  [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-  [![PySide6](https://img.shields.io/badge/PySide6-6.11.0-green.svg)](https://doc.qt.io/qtforpython-6/)
-  [![Tests](https://img.shields.io/badge/tests-164%20passing-brightgreen.svg)](tests/)
-  
-  <p>
-    <a href="#features">Features</a> •
-    <a href="#quick-start">Quick Start</a> •
-    <a href="#documentation">Documentation</a> •
-    <a href="#performance">Performance</a> •
-    <a href="#legal">Legal</a>
-  </p>
+  <h1>LeagueLoop-Lock</h1>
+  <p><strong>Advanced Automation, Overlaid Elegance, and Ultimate Matchmaking Control for League of Legends</strong></p>
 </div>
 
 ---
 
 ## ⚡ Overview
 
-**LeagueLoop** is an autonomous, high-performance League of Legends companion client built with Python and **PySide6**. It operates alongside the Riot Client and League Client Update (LCU) API to automate repetitive workflows and optimize your matchmaking experience.
+**LeagueLoop** is an autonomous League of Legends companion client written natively in Python utilizing **CustomTkinter** for a deeply modern, high-performance overlay experience. Operating seamlessly alongside the Riot Client and League Client Update (LCU), LeagueLoop bypasses repetitive UI workflows to get you into the Rift effortlessly.
 
-### Why LeagueLoop?
-- 🚀 **Zero UI Friction**: Bypass manual clicks and navigate directly into games
-- 🎯 **Precision Automation**: Configurable auto-accept, champion select assistance, and dodge management
-- 🔐 **Secure Account Management**: Encrypted credential storage with one-click account switching
-- 📱 **Remote API Control**: Built-in REST API (port 8337) for mobile integration
-- 🎨 **Modern Qt Interface**: Frameless Riot-inspired design with vector icons and real-time LCU WebSocket feedback
+Whether you're dodging queues, insta-locking ARAM priorities, or managing your automated lobby status, LeagueLoop provides a beautifully crafted control panel packed with highly responsive macros and logic.
 
----
-
-## 🔥 Key Features
-
-### 🤖 Automation Engine
-
-| Feature | Description |
-|---------|-------------|
-| **Auto-Accept** | Automatically accept ready checks with configurable delay (ms precision) |
-| **Priority Sniper** | Insta-lock priority champions with role-based filtering |
-| **Draft Assistant** | Real-time draft analysis, teammate respect algorithms, arena synergy picks |
-| **Dodge & Requeue** | Intelligent lobby dodging with automatic re-queue logic |
-| **Chat Warden** | Monitor lobby chat for toxic keywords and automate responses |
-| **Auto-Honor** | Post-game automatic teammate honoring and stats skipping |
-| **Auto-Launch** | Detect and launch League Client when disconnected |
-
-### 💼 Account & Session Management
-
-- **Multi-Account Manager**: Save unlimited Riot accounts with encrypted credentials
-- **One-Click Switching**: Instant account swapping without manual login
-- **Session Persistence**: Maintain automation state across client restarts
-- **Credential Encryption**: AES-256 encrypted storage for sensitive data
-
-### 🎨 PySide6 Desktop Shell
-
-- **Frameless Window**: Win32 custom window controls with Riot design tokens
-- **Vector Graphics**: High-DPI `VectorIconPainter` for crisp scaling
-- **Docking Support**: Snap alongside League Client with intelligent positioning
-- **Dark/Light Themes**: Runtime theme switching with persistent preferences
-- **System Tray Integration**: Minimize to tray with global hotkey support
-
-### 🔌 Developer Features
-
-- **EventBus Architecture**: Thread-safe pub/sub messaging across all services
-- **REST API Server**: HTTP endpoints on port 8337 for remote control
-- **WebSocket Streaming**: Real-time LCU event subscriptions
-- **Rotating Logs**: Automatic `debug.log`/`error.log` rotation with in-app viewer
-- **Global Exception Handling**: `sys.excepthook`, `threading.excepthook`, `faulthandler`
-
----
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- **Windows 10/11** (required for LCU API access)
-- **Python 3.11+** (tested with 3.11.x)
-- **League of Legends** (installed and updated)
-- **Git** (for cloning repository)
-
-### Installation
-
-```powershell
-# 1. Clone Repository
-git clone https://github.com/Intrusive-Thots/LeagueLoop.DEV.git
-cd LeagueLoop.DEV
-
-# 2. Create & Activate Virtual Environment
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-
-# 3. Install Dependencies
-pip install -r requirements.txt
-
-# 4. Launch Development Build
-.\launch_dev.bat
-```
-
-### Running Tests
-
-```powershell
-# Activate environment first
-.\.venv\Scripts\Activate.ps1
-
-# Set PYTHONPATH
-$env:PYTHONPATH="src"
-
-# Run full test suite (164 tests)
-python -m pytest tests/ -v
-
-# Run with coverage report
-python -m pytest tests/ --cov=src --cov-report=html
-```
-
----
-
-## 📚 Documentation
-
-Comprehensive guides are available in the [`docs/`](docs/) directory:
-
-| Document | Description |
-|----------|-------------|
-| [🏗️ Architecture](docs/architecture.md) | Core engine loops, PySide6 UI shell, service layer, EventBus mappings |
-| [🛠️ Development](docs/development.md) | Setup instructions, venv configuration, debugging, testing |
-| [🔧 Troubleshooting](docs/troubleshooting.md) | Client detection, LCU self-healing, log analysis, common errors |
-| [🗺️ Roadmap](docs/roadmap.md) | Sprint planning, completed milestones, upcoming features |
-| [📋 Improvement Plan](docs/improvement_plan.md) | 16-phase architectural refactoring & modernization strategy |
-
----
-
-## ⚡ Performance Optimizations
-
-LeagueLoop is engineered for minimal overhead and maximum responsiveness:
-
-### 🎯 Runtime Performance
-
-| Optimization | Impact | Implementation |
-|--------------|--------|----------------|
-| **Async LCU Communication** | <10ms API latency | `aiohttp` async HTTP + `websocket-client` |
-| **Thread-Safe EventBus** | Zero lock contention | Producer-consumer queues with batch processing |
-| **Lazy Asset Loading** | 60% faster startup | On-demand champion/rune image caching |
-| **Connection Pooling** | 3x faster repeated calls | Persistent HTTPS sessions with LCU |
-| **Exponential Backoff** | Graceful degradation | Smart reconnect logic (1s → 30s max) |
-
-### 🧠 Memory Efficiency
-
-- **Reference Counting**: Automatic cleanup of LCU event handlers
-- **Weak References**: Prevent circular dependencies in service layer
-- **Object Pooling**: Reusable DTO objects for frequent LCU payloads
-- **GC Tuning**: Optimized garbage collection thresholds for GUI thread
-
-### 📊 Benchmark Targets
-
-| Metric | Target | Current |
-|--------|--------|---------|
-| Startup Time | <2s | ~1.8s |
-| Ready Check Response | <100ms | ~45ms |
-| Champion Select Action | <200ms | ~120ms |
-| Memory Footprint | <150MB | ~120MB |
-| CPU Idle Usage | <1% | ~0.3% |
-
-### 🔧 Performance Tips
-
-1. **Disable Unused Services**: Turn off Discord RPC, stats scraper if not needed
-2. **Limit Log Verbosity**: Use `INFO` level in production, `DEBUG` only for troubleshooting
-3. **Asset Cache**: Pre-load champion images once per session
-4. **WebSocket Subscriptions**: Only subscribe to required LCU endpoints
-
----
-
-## 🏗️ Project Structure
-
-```
-LeagueLoop.DEV/
-├── src/
-│   ├── core/               # Application lifecycle, EventBus, state management
-│   ├── services/           # LCU integration, automation engine, API server
-│   │   └── automation/     # Gameflow phase handlers (ready_check, champ_select, etc.)
-│   ├── ui/
-│   │   └── qt/             # PySide6 widgets, pages, viewmodels
-│   ├── database/           # SQLite ORM, migrations, repositories
-│   └── utils/              # Logging, config, crypto, helpers
-├── tests/                  # 164 unit/integration tests
-├── docs/                   # Architecture, development, troubleshooting guides
-├── assets/                 # Images, icons, champion data, templates
-├── memory/                 # Self-improvement metadata (episodic, procedural)
-├── self_improving/         # Automated analysis, test runner, repo indexer
-└── LeagueLoopMobile/       # Capacitor-based mobile companion app
-```
-
----
-
-## 🧪 Testing & Quality
-
-- **164 Passing Tests**: Comprehensive coverage across all services
-- **CI/CD Pipeline**: GitHub Actions automated testing on every push
-- **Code Quality**: `pytest`, `coverage.py`, `vulture` for dead code detection
-- **Test Categories**:
-  - Unit tests (services, utilities, models)
-  - Integration tests (LCU mock, API routes)
-  - UI tests (PySide6 page rendering, widget interactions)
-
----
-
-## 🔐 Security
-
-- **Credential Encryption**: AES-256 encrypted account storage
-- **No Data Exfiltration**: All operations run locally; no external telemetry
-- **Secure Defaults**: Conservative automation settings out-of-the-box
-- **Audit Logging**: All account switches and automation actions logged
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please follow these steps:
-
-1. **Fork the Repository**
-2. **Create Feature Branch**: `git checkout -b feature/amazing-feature`
-3. **Run Tests**: Ensure all 164 tests pass
-4. **Commit Changes**: Use conventional commits (`feat:`, `fix:`, `docs:`, etc.)
-5. **Push & PR**: Submit pull request with clear description
-
----
-
-## ⚖️ Legal & Disclaimer
-
-**LeagueLoop** was created under [Riot Games' Third-Party Developer Policy](https://developer.riotgames.com/policies/general) using assets owned by Riot Games. 
-
-- ❌ **Riot Games does NOT endorse or sponsor this project**
-- ⚠️ **Using LCU Automation is at your own risk**
-- 🚫 **The creator is NOT liable for account suspensions, bans, or system issues**
-
-**Fair Play Notice**: This tool automates UI interactions via the official LCU API. It does NOT inject code, modify game files, or provide competitive advantages beyond queue management and champion selection assistance.
-
----
-
-## 📬 Support & Community
-
-- **Issues**: [GitHub Issues](https://github.com/Intrusive-Thots/LeagueLoop.DEV/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/Intrusive-Thots/LeagueLoop.DEV/discussions)
-- **Logs Location**: `%APPDATA%\LeagueLoop\logs\` (use in-app "Open Logs Folder" button)
-
----
+## Screenshots
 
 <div align="center">
-  <sub>Built with ❤️ by the LeagueLoop.DEV Team</sub>
-  <br/>
-  <sub>Version 2.0.0 | Last Updated: 2025</sub>
+  <table>
+    <tr>
+      <td align="center"><img src="assets/screenshots/lobby_idle.png" alt="Lobby — Idle" width="220"/><br/><sub>Lobby — Idle</sub></td>
+      <td align="center"><img src="assets/screenshots/connected.png" alt="Connected" width="220"/><br/><sub>Connected &amp; Ready</sub></td>
+    </tr>
+    <tr>
+      <td align="center"><img src="assets/screenshots/champ_select.png" alt="Champ Select" width="220"/><br/><sub>Champ Select — Live Drafting</sub></td>
+      <td align="center"><img src="assets/screenshots/mode_picker.png" alt="Mode Picker" width="220"/><br/><sub>Queue Mode Selector</sub></td>
+    </tr>
+  </table>
 </div>
+
+---
+
+## 🔥 Features At A Glance
+
+### 1. **Complete Automation Engine**
+- **Auto-Accept Match**: Never miss a queue pop.
+- **Priority Sniper & Auto-Pick**: Configure backup roles, custom bans, and insta-lock logic.
+- **Draft Assistant (Role Enforcer)**: Role-based auto-hovering and banning for Ranked/Draft. Includes a teammate respect algorithm that dodges teammate hovers during the ban phase!
+- **Arena Synergy Picker (V5)**: Rebuilt from the ground up for instantaneous one-click pair creation and streamlined Card Container aesthetics. Complete with Auto-Ban integration.
+- **ARAM Mayhem Prioritization**: Drag-and-drop or select from your customized `ARAM List`. Ships with a default list consisting of top-played ARAM monsters *(Nautilus, Xerath, Heimerdinger, Master Yi, Veigar, etc.)*.
+- **Event-Driven Architecture**: Fully thread-safe, zero-blocking API backend powered by real-time WebSocket subscriptions. No UI freezes, no missed queue pops.
+- **Auto-Honor System**: Instantly honor friends or top-performers algorithmically via LCU APIs.
+- **Auto-Join VIP Lobbies**: Automatically inject yourself into trusted lobbies.
+
+### 2. **Beautiful, Real-Time Overlay UI**
+- **Dynamic Friendlist**: Glowing indicators for active players with direct Auto-Join injection. Profile icons and LCU states sync live.
+- **Status Magic**: Inject a `Custom Status` into your LoL Client from the UI.
+- **Micro-Animations & Feedback**: Granular visual feedback for every user-interacted component.
+
+### 3. **The "Orb" (Compact Mode)**
+- Tired of huge windows during drafting? A single click (or shortcut) morphs LeagueLoop into a glowing, draggable **Orb** that stays above your client natively via Win32 OS-level injection hooks.
+
+
+---
+
+## 🛠 Prerequisites
+
+- Windows 10/11
+- Official Riot Client and League of Legends Installed.
+- Python 3.10+ (If running from source)
+
+---
+
+## 📦 Installation & Setup
+
+You can run LeagueLoop without compiling anything by downloading the setup file:
+
+1. Download the latest **[LeagueLoop_Installer.exe](https://github.com/Intrusive-Thots/LeagueLoop-Installer)** from the Installer repo.
+2. Run the installer and launch **LeagueLoop**.
+3. **Optional:** Adjust the hotkeys inside the settings modal to your preference.
+
+### Building from Source
+
+To construct a new executable instance using the bundled PyInstaller and InnoSetup automation scripts:
+
+```bash
+# Clone Repository
+git clone https://github.com/Intrusive-Thots/LeagueLoop-Lock.git
+cd LeagueLoop-Lock
+
+# Install Dependencies
+pip install -r requirements.txt
+
+# Run Development Server Native
+python -m src.core.main
+```
+
+Then, you can utilize the internal build scripts *(assuming InnoSetup is installed at standard paths)*:
+```bash
+pyinstaller LeagueLoop.spec --clean -y
+ISCC.exe "installer.iss"
+```
+
+---
+
+## ⚙ Legal & Disclaimer
+_LeagueLoop was created under Riot Games' policy using assets owned by Riot Games. Riot Games does not endorse or sponsor this project. The creator is **NOT** liable for any account suspensions, system issues, or penalties incurred while using this software. Using LCU Automation is done entirely at your own risk._

@@ -24,5 +24,18 @@
       "polling_overhead": "Adaptive dynamic polling: 500ms in ReadyCheck/ChampSelect (ultra fast responsiveness), 1500ms in Lobby/Idle, and 4000ms in In-Game (reduced network & battery drain)."
     },
     "impact": "Eliminated UI latency in time-sensitive draft screens while reducing mobile battery consumption by over 60% during active gameplay."
+  },
+  {
+    "timestamp": "2026-08-01T00:48:30Z",
+    "feature": "LCU HTTP Diagnostics & Asset Memory Summary Engine",
+    "before_metrics": {
+      "request_diagnostics": "No rate-limit, offline retry, or 429 status code tracking.",
+      "memory_diagnostics": "Only separate disk/splash counters, no holistic RAM footprint summary."
+    },
+    "after_metrics": {
+      "request_diagnostics": "Thread-safe tracking of total requests, rate-limit throttles, throttle duration, offline retries, and HTTP 429 rate limit responses.",
+      "memory_diagnostics": "Integrated RAM and disk cache memory usage summary logging with estimated footprint calculation in get_memory_summary_diagnostics."
+    },
+    "impact": "Provides full diagnostic visibility into network request rate limiting and RAM/disk cache utilization for local API clients and automated monitoring."
   }
 ]

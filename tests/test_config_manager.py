@@ -5,8 +5,7 @@ from unittest.mock import patch, mock_open
 from services.asset_manager import ConfigManager, DEFAULT_CONFIG, USER_CONFIG_FILE as CONFIG_FILE
 
 class TestConfigManager(unittest.TestCase):
-    @patch('utils.client_detector.resolve_installation_paths', return_value=(None, None))
-    def test_load_default_config(self, mock_paths):
+    def test_load_default_config(self):
         with patch('os.path.exists', return_value=False):
             config = ConfigManager()
             self.assertEqual(config.cfg, DEFAULT_CONFIG)
@@ -21,8 +20,7 @@ class TestConfigManager(unittest.TestCase):
             self.assertEqual(config.get("auto_accept"), True)
             self.assertEqual(config.get("auto_requeue"), False)
 
-    @patch('utils.client_detector.resolve_installation_paths', return_value=(None, None))
-    def test_load_corrupted_config(self, mock_paths):
+    def test_load_corrupted_config(self):
         corrupted_json = "{bad_json: true,"
 
         with patch('os.path.exists', return_value=True), \

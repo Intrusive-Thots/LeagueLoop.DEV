@@ -23,13 +23,20 @@
             <input type="text" id="ip-input" placeholder="192.168.1.50" value="" />
             <span class="port-suffix">:8337</span>
           </div>
-          <button id="btn-connect" class="btn-primary glow">Initialize Link</button>
+          <div class="connect-actions">
+            <button id="btn-connect" class="btn-primary glow">Initialize Link</button>
+            <button id="btn-auto-discover" class="btn-secondary">🔍 Auto Discover</button>
+          </div>
           <p id="connect-error" class="error-text hidden">Connection Failed. Verify IP & Firewall.</p>
         </div>
       </div>
 
       <!-- Main Dashboard Screen -->
       <div id="dashboard-screen" class="screen hidden">
+        <div id="reconnect-banner" class="reconnect-banner hidden">
+          <span class="pulse-dot"></span>
+          <span id="reconnect-text">Offline — Reconnecting in 3s...</span>
+        </div>
         <header class="header glass-bar">
           <div class="header-profile" id="btn-profile-accounts">
             <div class="profile-icon-wrapper">
@@ -285,6 +292,28 @@
                   </div>
                   <label class="switch">
                     <input type="checkbox" id="cfg-arena-synergy">
+                    <span class="slider round"></span>
+                  </label>
+                </div>
+
+                <div class="toggle-row">
+                  <div>
+                    <h4>Audio Alerts</h4>
+                    <p class="desc">Chime tones on match found & pick turns.</p>
+                  </div>
+                  <label class="switch">
+                    <input type="checkbox" id="cfg-sound-alerts" checked>
+                    <span class="slider round"></span>
+                  </label>
+                </div>
+
+                <div class="toggle-row">
+                  <div>
+                    <h4>Haptic Vibrations</h4>
+                    <p class="desc">Vibrate phone on critical notifications.</p>
+                  </div>
+                  <label class="switch">
+                    <input type="checkbox" id="cfg-haptic-alerts" checked>
                     <span class="slider round"></span>
                   </label>
                 </div>
