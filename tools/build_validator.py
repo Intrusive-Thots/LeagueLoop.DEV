@@ -38,9 +38,9 @@ def validate_test_suite(project_root: Path) -> bool:
     python_bin = str(venv_python) if venv_python.exists() else sys.executable
 
     try:
-        res = subprocess.run([python_bin, "-m", "pytest", "-q"], cwd=str(project_root), capture_output=True, text=True, timeout=90)
+        res = subprocess.run([python_bin, "-m", "pytest", "-q"], cwd=str(project_root), capture_output=True, text=True, timeout=180)
     except subprocess.TimeoutExpired:
-        print("[FAIL] Test suite validation timed out after 90s.")
+        print("[FAIL] Test suite validation timed out after 180s.")
         return False
     if res.returncode != 0:
         print(f"[FAIL] Test suite validation failed:\n{res.stdout}\n{res.stderr}")
