@@ -170,6 +170,13 @@ class LCUClient:
         self._http_max_retries = 3
         self._http_error_count = 0
 
+        # Task 181: Automated HTTP request retry exponential backoff jitter entropy telemetry
+        self._http_retry_jitter_samples: list = []
+        self._http_retry_jitter_samples_max: int = 200
+        self._http_retry_jitter_entropy_bits: float = 0.0
+        self._http_retry_jitter_min_s: float = float("inf")
+        self._http_retry_jitter_max_s: float = 0.0
+
         # Task 151: Automated HTTP response status distribution diagnostics & 4xx/5xx error telemetry logging
         self._http_status_codes: Dict[int, int] = {}
         self._http_2xx_count: int = 0
@@ -355,6 +362,57 @@ class LCUClient:
             "http_latency_kurtosis": round(kurtosis, 4),
             "http_latency_excess_kurtosis": round(excess_kurtosis, 4),
             "sample_count": n,
+        }
+
+    def _record_http_retry_jitter(self, jitter_s: float) -> None:
+        """Task 181: Records HTTP request retry exponential backoff jitter sample and calculates Shannon entropy telemetry."""
+        with self._req_diag_lock:
+            self._http_retry_jitter_samples.append(jitter_s)
+            if len(self._http_retry_jitter_samples) > self._http_retry_jitter_samples_max:
+                self._http_retry_jitter_samples.pop(0)
+
+            if jitter_s < self._http_retry_jitter_min_s:
+                self._http_retry_jitter_min_s = jitter_s
+            if jitter_s > self._http_retry_jitter_max_s:
+                self._http_retry_jitter_max_s = jitter_s
+
+            samples = self._http_retry_jitter_samples
+            n = len(samples)
+            if n < 2:
+                self._http_retry_jitter_entropy_bits = 0.0
+                return
+
+            buckets = [0] * 10
+            for j in samples:
+                idx = min(9, max(0, int((j - 0.01) / 0.003)))
+                buckets[idx] += 1
+
+            entropy = 0.0
+            for count in buckets:
+                if count > 0:
+                    p = count / n
+                    entropy -= p * math.log2(p)
+
+            self._http_retry_jitter_entropy_bits = round(entropy, 4)
+
+    def get_http_retry_jitter_entropy_telemetry(self) -> Dict[str, Any]:
+        """Task 181: Returns automated HTTP request retry exponential backoff jitter entropy telemetry."""
+        with self._req_diag_lock:
+            samples = self._http_retry_jitter_samples.copy()
+            entropy = self._http_retry_jitter_entropy_bits
+            min_s = round(self._http_retry_jitter_min_s, 4) if self._http_retry_jitter_min_s != float("inf") else 0.0
+            max_s = round(self._http_retry_jitter_max_s, 4)
+            retries = self._http_retry_count
+
+        avg_s = round(sum(samples) / len(samples), 4) if samples else 0.0
+
+        return {
+            "http_retry_jitter_samples_count": len(samples),
+            "http_retry_jitter_entropy_bits": entropy,
+            "http_retry_jitter_min_s": min_s,
+            "http_retry_jitter_max_s": max_s,
+            "http_retry_jitter_avg_s": avg_s,
+            "http_retry_count": retries,
         }
 
     def get_http_latency_histogram(self) -> Dict[str, Any]:
@@ -570,6 +628,7 @@ class LCUClient:
                             self._http_retry_count += 1
                         base_delay = 0.05 * (2 ** attempt)
                         jitter = random.uniform(0.01, 0.04)
+                        self._record_http_retry_jitter(jitter)
                         retry_delay = base_delay + jitter
                         if not silent:
                             Logger.warning("LCU", f"HTTP {response.status_code} Transient Server Error on {endpoint}. Retrying attempt {attempt + 1}/{max_attempts} after {retry_delay:.3f}s jitter backoff...")
@@ -773,6 +832,7 @@ class LCUClient:
         diag["p95_latency_ms"] = hist["p95_latency_ms"]
         diag["http_latency_variance_ms2"] = hist.get("http_latency_variance_ms2", 0.0)
         diag["http_latency_stddev_ms"] = hist.get("http_latency_stddev_ms", 0.0)
+        diag.update(self.get_http_retry_jitter_entropy_telemetry())
         return diag
 
     # ─────────── WEBSOCKET PUBLISH / SUBSCRIBE ───────────

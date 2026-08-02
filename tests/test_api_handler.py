@@ -335,6 +335,26 @@ class TestLCUClient(unittest.TestCase):
         self.assertIn("http_latency_ci_lower_ms", hist)
         self.assertIn("http_latency_ci_upper_ms", hist)
 
+    def test_http_retry_jitter_entropy_telemetry(self):
+        """Test automated HTTP request retry exponential backoff jitter entropy telemetry for Task 181."""
+        empty_tel = self.client.get_http_retry_jitter_entropy_telemetry()
+        self.assertEqual(empty_tel["http_retry_jitter_samples_count"], 0)
+        self.assertEqual(empty_tel["http_retry_jitter_entropy_bits"], 0.0)
+
+        # Record multiple jitter samples
+        self.client._record_http_retry_jitter(0.015)
+        self.client._record_http_retry_jitter(0.025)
+        self.client._record_http_retry_jitter(0.035)
+
+        tel = self.client.get_http_retry_jitter_entropy_telemetry()
+        self.assertEqual(tel["http_retry_jitter_samples_count"], 3)
+        self.assertGreater(tel["http_retry_jitter_entropy_bits"], 0.0)
+        self.assertEqual(tel["http_retry_jitter_min_s"], 0.015)
+        self.assertEqual(tel["http_retry_jitter_max_s"], 0.035)
+
+        diag = self.client.get_request_diagnostics()
+        self.assertIn("http_retry_jitter_entropy_bits", diag)
+
 if __name__ == '__main__':
     unittest.main()
 

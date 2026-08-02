@@ -435,6 +435,38 @@ class TestAssetManager(unittest.TestCase):
         self.assets.clear_splash_search_slice_pool()
         self.assertEqual(len(self.assets._splash_search_slice_pool), 0)
 
+    def test_item_build_search_slice_tuple_memory_pooling(self):
+        """Verify benchmark and optimization of memory pooling for champion item build recommendation search query slice tuple creation for Task 182."""
+        self.assets.id_to_key = {266: "Aatrox", 103: "Ahri"}
+        self.assets.champ_data = {"Aatrox": {"name": "Aatrox", "tags": ["Fighter"]}, "Ahri": {"name": "Ahri", "tags": ["Mage"]}}
+        self.assets._build_champ_search_index()
+
+        initial_tel = self.assets.get_item_build_search_slice_pool_telemetry()
+        self.assertEqual(initial_tel["item_build_slice_recycle_hits"], 0)
+        self.assertEqual(initial_tel["item_build_slice_recycle_misses"], 0)
+
+        # First query builds and caches item build slice tuple
+        builds1 = self.assets.search_item_build_recommendations(query="aatrox", limit=10)
+        tel1 = self.assets.get_item_build_search_slice_pool_telemetry()
+        self.assertEqual(tel1["item_build_slice_recycle_misses"], 1)
+        self.assertEqual(tel1["item_build_slice_recycle_hits"], 0)
+
+        # Repeated query accesses pooled item build slice tuple
+        builds2 = self.assets.search_item_build_recommendations(query="aatrox", limit=10)
+        tel2 = self.assets.get_item_build_search_slice_pool_telemetry()
+        self.assertEqual(tel2["item_build_slice_recycle_hits"], 1)
+        self.assertGreater(tel2["item_build_slice_recycle_hit_ratio"], 0.0)
+        self.assertGreater(tel2["item_build_slice_bytes_recycled"], 0)
+        self.assertEqual(builds1, builds2)
+
+        summary = self.assets.get_memory_summary_diagnostics()
+        self.assertIn("item_build_search_slice_pool_telemetry", summary)
+        self.assertEqual(summary["item_build_search_slice_pool_telemetry"]["item_build_slice_recycle_hits"], 1)
+
+        # Clear pool
+        self.assets.clear_item_build_search_slice_pool()
+        self.assertEqual(len(self.assets._item_build_search_slice_pool), 0)
+
 if __name__ == '__main__':
     unittest.main()
 
