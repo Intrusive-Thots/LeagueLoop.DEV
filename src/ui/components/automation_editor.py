@@ -20,9 +20,13 @@ class AutomationEditor(ctk.CTkToplevel):
 
         # ── Window Setup ──
         self.title(f"Edit: {self._get_display_name()}")
+        try:
+            self.overrideredirect(True)
+        except Exception:
+            pass
         self.geometry("380x480")
         self.resizable(False, False)
-        self.configure(fg_color=get_color("colors.background.app", "#0A1428"))
+        self.configure(fg_color=get_color("colors.accent.gold", "#C8AA6E"))
         
         # Center on parent
         self.transient(master.winfo_toplevel())
@@ -41,6 +45,25 @@ class AutomationEditor(ctk.CTkToplevel):
         except Exception:
             pass
 
+    def _setup_drag(self, widget):
+        """Allow window dragging via the header bar."""
+        self._drag_x = 0
+        self._drag_y = 0
+
+        def _on_start(e):
+            self._drag_x = e.x
+            self._drag_y = e.y
+
+        def _on_motion(e):
+            dx = e.x - self._drag_x
+            dy = e.y - self._drag_y
+            new_x = self.winfo_x() + dx
+            new_y = self.winfo_y() + dy
+            self.geometry(f"+{new_x}+{new_y}")
+
+        widget.bind("<ButtonPress-1>", _on_start)
+        widget.bind("<B1-Motion>", _on_motion)
+
     def _get_display_name(self):
         names = {
             "auto_accept": "Auto Accept",
@@ -56,8 +79,18 @@ class AutomationEditor(ctk.CTkToplevel):
         return names.get(self._automation_key, self._automation_key)
 
     def _build_ui(self):
+        # Outer Gold Border Frame
+        self.outer_frame = ctk.CTkFrame(
+            self,
+            fg_color=get_color("colors.background.app", "#0A1428"),
+            border_width=1,
+            border_color=get_color("colors.accent.gold", "#C8AA6E"),
+            corner_radius=0
+        )
+        self.outer_frame.pack(fill="both", expand=True)
+
         # ── Header ──
-        header = ctk.CTkFrame(self, fg_color=get_color("colors.background.card", "#1E2328"), height=50)
+        header = ctk.CTkFrame(self.outer_frame, fg_color=get_color("colors.background.card", "#1E2328"), height=46, corner_radius=0)
         header.pack(fill="x", padx=0, pady=0)
         header.pack_propagate(False)
 
@@ -78,9 +111,11 @@ class AutomationEditor(ctk.CTkToplevel):
             command=self._on_cancel, cursor="hand2"
         ).pack(side="right", padx=SPACING_SM)
 
+        self._setup_drag(header)
+
         # ── Body ──
         self.body = ctk.CTkScrollableFrame(
-            self, fg_color="transparent",
+            self.outer_frame, fg_color="transparent",
             scrollbar_button_color=get_color("colors.text.disabled"),
             scrollbar_button_hover_color=get_color("colors.text.muted"),
         )
@@ -101,7 +136,7 @@ class AutomationEditor(ctk.CTkToplevel):
             ).pack(pady=SPACING_MD)
 
         # ── Footer ──
-        footer = ctk.CTkFrame(self, fg_color="transparent", height=50)
+        footer = ctk.CTkFrame(self.outer_frame, fg_color="transparent", height=50)
         footer.pack(fill="x", padx=SPACING_MD, pady=(0, SPACING_MD))
 
         ctk.CTkButton(

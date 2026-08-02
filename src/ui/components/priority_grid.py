@@ -539,7 +539,7 @@ class PriorityIconGrid(ctk.CTkFrame):
             lbl.bind("<Leave>", _on_leave)
             
             # Drag-and-drop bindings replace cell click and shift-click
-            lbl.bind("<ButtonPress-1>", lambda e, idx=i, label=lbl, c=cell: self._on_drag_start(e, idx, label, c))
+            lbl.bind("<ButtonPress-1>", lambda e=None, idx=i, label=lbl, c=cell: self._on_drag_start(e, idx, label, c))
             lbl.bind("<B1-Motion>", self._on_drag_motion)
             lbl.bind("<ButtonRelease-1>", self._on_drag_release)
 
@@ -665,7 +665,13 @@ class PriorityIconGrid(ctk.CTkFrame):
             self.btn_edit.configure(text="Done", text_color=get_color("colors.state.danger", "#ff4444"))
             # Staged reveal: sweep gold borders across grid cells before showing edit bar
             self._sweep_edit_borders(entering=True)
-            self.edit_bar.pack(fill="x", padx=16, pady=(0, 8), before=self.scroll)
+            try:
+                if hasattr(self, "scroll") and self.scroll.winfo_manager():
+                    self.edit_bar.pack(fill="x", padx=16, pady=(0, 8), before=self.scroll)
+                else:
+                    self.edit_bar.pack(fill="x", padx=16, pady=(0, 8))
+            except Exception:
+                self.edit_bar.pack(fill="x", padx=16, pady=(0, 8))
             # Smooth fade-in for the edit bar
             self._fade_widget(self.edit_bar, fade_in=True)
             self._sync_edit_bar_state()
