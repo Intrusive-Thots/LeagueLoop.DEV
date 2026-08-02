@@ -26,83 +26,63 @@ _paths_resolved = False
 
 def resolve_installation_paths() -> Tuple[Optional[str], Optional[str]]:
     """
-    Resolves official installation directories and executable locations for
-    both the League of Legends Client and the Riot Client.
+    Parses RiotClientInstalls.json to resolve installation directories.
     Returns: (league_install_path, riot_install_path)
     """
     global _league_install_path, _riot_install_path, _paths_resolved
-    if _paths_resolved and _league_install_path and _riot_install_path:
+    if _paths_resolved:
         return _league_install_path, _riot_install_path
 
-    # 1. Parse RiotClientInstalls.json
+    # Try standard paths for RiotClientInstalls.json
     paths_to_try = [
         os.path.join(os.environ.get("ProgramData", "C:\\ProgramData"), "Riot Games", "RiotClientInstalls.json"),
         os.path.join(os.environ.get("ALLUSERSPROFILE", "C:\\ProgramData"), "Riot Games", "RiotClientInstalls.json"),
     ]
 
     for p in paths_to_try:
-        if os.path.exists(p) and os.path.getsize(p) > 2:
+        if os.path.exists(p):
             try:
                 with open(p, "r", encoding="utf-8") as f:
                     data = json.load(f)
 
+                # Resolve Riot Client executable and its directory
                 rc_path = data.get("rc_default") or data.get("rc_live")
                 if rc_path:
+                    # Convert to standard Windows backslashes
                     rc_path = os.path.normpath(rc_path)
                     _riot_install_path = os.path.dirname(rc_path)
+                    Logger.debug("Detector", f"Resolved Riot Client path: {_riot_install_path}")
 
+                # Resolve League of Legends install path
+                # Prefer paths that actually exist on disk and belong to the
+                # current user to avoid matching stale entries left by old
+                # installs, other user profiles, or disconnected drives.
                 assoc = data.get("associated_client", {})
+                user_profile = os.environ.get("USERPROFILE", "").replace("\\", "/").rstrip("/").lower()
+                best_path: Optional[str] = None
+                best_is_user = False
                 for game_path in assoc.keys():
-                    if "league of legends" in game_path.lower():
-                        _league_install_path = os.path.normpath(game_path)
-                        break
+                    if "league of legends" not in game_path.lower():
+                        continue
+                    norm = os.path.normpath(game_path)
+                    exists = os.path.isdir(norm)
+                    is_user = user_profile and game_path.replace("\\", "/").rstrip("/").lower().startswith(user_profile)
+                    # Pick this path if it's the first valid one, or if it
+                    # belongs to the current user and the previous best didn't.
+                    if best_path is None or (exists and (not best_is_user and is_user)):
+                        best_path = norm
+                        best_is_user = is_user
+                if best_path:
+                    _league_install_path = best_path
+                    Logger.debug("Detector", f"Resolved League path: {_league_install_path}")
+
+                _paths_resolved = True
+                return _league_install_path, _riot_install_path
             except Exception as e:
-                Logger.debug("Detector", f"Failed parsing RiotClientInstalls.json: {e}")
+                Logger.error("Detector", f"Failed to parse installs JSON at {p}: {e}")
 
-    # 2. Registry Lookup Fallback
-    try:
-        import winreg
-        for hkey in [winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE]:
-            if not _league_install_path:
-                try:
-                    key = winreg.OpenKey(hkey, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Riot Game league_of_legends.live")
-                    val, _ = winreg.QueryValueEx(key, "InstallLocation")
-                    if val and os.path.exists(val):
-                        _league_install_path = os.path.normpath(val)
-                except Exception:
-                    pass
-
-            if not _riot_install_path:
-                try:
-                    key = winreg.OpenKey(hkey, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Riot Game riot_client.live")
-                    val, _ = winreg.QueryValueEx(key, "UninstallString")
-                    if val:
-                        clean_p = val.split('"')[1] if '"' in val else val.split(' ')[0]
-                        if os.path.exists(clean_p):
-                            _riot_install_path = os.path.dirname(os.path.normpath(clean_p))
-                except Exception:
-                    pass
-    except Exception:
-        pass
-
-    # 3. Common Drive Root Scanning Fallback
-    drives = ["C:", "D:", "E:", "F:", "G:"]
-    if not _league_install_path:
-        for d in drives:
-            candidate = os.path.join(d + "\\", "Riot Games", "League of Legends")
-            if os.path.exists(os.path.join(candidate, "LeagueClient.exe")):
-                _league_install_path = candidate
-                break
-
-    if not _riot_install_path:
-        for d in drives:
-            candidate = os.path.join(d + "\\", "Riot Games", "Riot Client")
-            if os.path.exists(os.path.join(candidate, "RiotClientServices.exe")):
-                _riot_install_path = candidate
-                break
-
+    # Fallback to defaults if parsing fails
     _paths_resolved = True
-    Logger.debug("Detector", f"Resolved paths - League: {_league_install_path}, Riot: {_riot_install_path}")
     return _league_install_path, _riot_install_path
 
 def get_league_lockfile() -> Tuple[Optional[str], Optional[str]]:
@@ -263,121 +243,3 @@ def scan_clients(force: bool = False) -> Dict[str, Dict]:
         "riot": riot_data
     }
     return _cached_results
-
-_game_running_cache: Optional[bool] = None
-_last_game_check = 0.0
-_cached_game_pid: Optional[int] = None
-
-def is_game_running() -> bool:
-    """Unified check if League of Legends.exe (the game) is running with caching."""
-    global _game_running_cache, _last_game_check, _cached_game_pid
-    now = time.time()
-    
-    # 1. Fast-path: check cached PID
-    if _cached_game_pid is not None:
-        try:
-            p = psutil.Process(_cached_game_pid)
-            if p.is_running() and p.name().lower() == "league of legends.exe":
-                return True
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-            pass
-        _cached_game_pid = None
-        
-    # 2. Throttle scan to once per 2 seconds
-    if _last_game_check > 0 and (now - _last_game_check < 2.0):
-        return bool(_game_running_cache)
-        
-    _last_game_check = now
-    _game_running_cache = False
-    
-    try:
-        for p in psutil.process_iter(attrs=["pid", "name"]):
-            try:
-                pname = p.info.get("name")
-                if pname and pname.lower() == "league of legends.exe":
-                    _cached_game_pid = p.info.get("pid")
-                    _game_running_cache = True
-                    break
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, KeyError):
-                continue
-    except Exception as e:
-        Logger.debug("Detector", f"Process scan for game failed: {e}")
-        
-    return _game_running_cache
-
-
-def safe_launch_exe(exe_path: str, args_str: str = "") -> bool:
-    """Helper to safely launch an executable on Windows with UAC elevation fallback."""
-    if not os.path.exists(exe_path):
-        return False
-
-    import subprocess
-    try:
-        cmd = [exe_path]
-        if args_str:
-            cmd.extend(args_str.split())
-        subprocess.Popen(cmd)
-        return True
-    except (OSError, PermissionError) as e:
-        Logger.debug("Detector", f"Popen failed ({e}), trying ShellExecuteW...")
-    except Exception as e:
-        Logger.debug("Detector", f"Popen error: {e}")
-
-    try:
-        import ctypes
-        res = ctypes.windll.shell32.ShellExecuteW(None, "open", exe_path, args_str or None, None, 1)
-        if res > 32:
-            return True
-    except Exception as e:
-        Logger.debug("Detector", f"ShellExecuteW 'open' failed: {e}")
-
-    try:
-        import ctypes
-        res = ctypes.windll.shell32.ShellExecuteW(None, "runas", exe_path, args_str or None, None, 1)
-        if res > 32:
-            return True
-    except Exception as e:
-        Logger.error("Detector", f"ShellExecuteW 'runas' failed for {exe_path}: {e}")
-
-    return False
-
-
-def launch_league_client() -> Tuple[bool, str]:
-    """
-    Launches the League of Legends Client / Riot Client if not already running.
-    Returns: (success: bool, message: str)
-    """
-    scan = scan_clients(force=True)
-    if scan.get("league", {}).get("connected"):
-        return True, "League Client is already running!"
-
-    league_path, riot_path = resolve_installation_paths()
-
-    # 1. Try launching Riot Client with League launch command
-    if riot_path:
-        rc_exe = os.path.join(riot_path, "RiotClientServices.exe")
-        if os.path.exists(rc_exe):
-            if safe_launch_exe(rc_exe, "--launch-product=league_of_legends --launch-patchline=live"):
-                Logger.info("Detector", f"Launched League via RiotClientServices.exe at {rc_exe}")
-                return True, "Launching League of Legends via Riot Client..."
-
-    # 2. Try launching LeagueClient.exe directly
-    if league_path:
-        league_exe = os.path.join(league_path, "LeagueClient.exe")
-        if os.path.exists(league_exe):
-            if safe_launch_exe(league_exe):
-                Logger.info("Detector", f"Launched LeagueClient.exe directly at {league_exe}")
-                return True, "Launching LeagueClient.exe..."
-
-    # 3. Fallback standard default paths
-    fallback_paths = [
-        "C:\\Riot Games\\Riot Client\\RiotClientServices.exe",
-        "C:\\Riot Games\\League of Legends\\LeagueClient.exe",
-    ]
-    for p in fallback_paths:
-        if os.path.exists(p):
-            args_str = "--launch-product=league_of_legends --launch-patchline=live" if "RiotClientServices" in p else ""
-            if safe_launch_exe(p, args_str):
-                return True, f"Launched client from fallback path: {p}"
-
-    return False, "Could not find Riot Client or League of Legends installation path."
