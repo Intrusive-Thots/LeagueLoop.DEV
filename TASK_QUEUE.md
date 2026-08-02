@@ -123,8 +123,14 @@
 - [x] **Task 174**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 192 tests passing in 0.48s).
 
 ## Upcoming Autonomous Improvement Tasks
-- [ ] **Task 175**: Implement automated HTTP client response latency standard error & confidence interval metrics in `LCUClient`.
-- [ ] **Task 176**: Benchmark and optimize memory pooling for champion skin preview search query slice tuple creation in `AssetManager`.
-- [ ] **Task 177**: Maintain continuous system-wide health and build readiness validation.
+- [x] **Task 175**: Implement automated HTTP client response latency standard error & confidence interval metrics in `LCUClient` (`get_http_latency_confidence_interval_telemetry`, `http_latency_stderr_ms`, `http_latency_ci_margin_ms`).
+- [x] **Task 176**: Benchmark and optimize memory pooling for champion skin preview search query slice tuple creation in `AssetManager` (`_acquire_skin_search_slice_tuple`, `search_skin_previews`, `get_skin_search_slice_pool_telemetry`).
+- [x] **Task 177**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 194 tests passing in 0.49s).
+
+## Upcoming Autonomous Improvement Tasks
+- [ ] **Task 178**: Implement automated HTTP client request latency skewness & kurtosis statistical telemetry in `LCUClient`.
+- [ ] **Task 179**: Benchmark and optimize memory pooling for champion splash art filter query result slice tuple creation in `AssetManager`.
+- [ ] **Task 180**: Maintain continuous system-wide health and build readiness validation.
+
 
 

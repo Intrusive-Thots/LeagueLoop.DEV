@@ -307,6 +307,35 @@ class TestLCUClient(unittest.TestCase):
         self.assertIn("http_latency_variance_ms2", diag)
         self.assertIn("http_latency_stddev_ms", diag)
 
+    def test_http_latency_confidence_interval_telemetry(self):
+        """Test automated HTTP client response latency standard error & confidence interval metrics for Task 175."""
+        empty_ci = self.client.get_http_latency_confidence_interval_telemetry()
+        self.assertEqual(empty_ci["http_latency_mean_ms"], 0.0)
+        self.assertEqual(empty_ci["http_latency_stderr_ms"], 0.0)
+        self.assertEqual(empty_ci["http_latency_ci_margin_ms"], 0.0)
+        self.assertEqual(empty_ci["confidence_level"], 0.95)
+        self.assertEqual(empty_ci["sample_count"], 0)
+
+        # Record latency samples: 10ms, 20ms, 30ms -> Mean = 20ms, Sample StdDev = sqrt(100) = 10.0, StdErr = 10 / sqrt(3) = 5.7735
+        self.client._record_http_latency(10.0)
+        self.client._record_http_latency(20.0)
+        self.client._record_http_latency(30.0)
+
+        ci_tel = self.client.get_http_latency_confidence_interval_telemetry(0.95)
+        self.assertEqual(ci_tel["sample_count"], 3)
+        self.assertAlmostEqual(ci_tel["http_latency_mean_ms"], 20.0, places=2)
+        self.assertAlmostEqual(ci_tel["http_latency_stderr_ms"], 5.7735, places=3)
+        self.assertGreater(ci_tel["http_latency_ci_margin_ms"], 0.0)
+        self.assertLessEqual(ci_tel["http_latency_ci_lower_ms"], 20.0)
+        self.assertGreaterEqual(ci_tel["http_latency_ci_upper_ms"], 20.0)
+
+        hist = self.client.get_http_latency_histogram()
+        self.assertIn("http_latency_stderr_ms", hist)
+        self.assertIn("http_latency_ci_margin_ms", hist)
+        self.assertIn("http_latency_ci_lower_ms", hist)
+        self.assertIn("http_latency_ci_upper_ms", hist)
+
 if __name__ == '__main__':
     unittest.main()
+
 

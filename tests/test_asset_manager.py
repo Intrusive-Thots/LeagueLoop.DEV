@@ -371,8 +371,41 @@ class TestAssetManager(unittest.TestCase):
         self.assets.clear_search_slice_pool()
         self.assertEqual(len(self.assets._champ_search_slice_pool), 0)
 
+    def test_skin_search_slice_tuple_memory_pooling(self):
+        """Verify benchmark and optimization of memory pooling for champion skin preview search query slice tuple creation for Task 176."""
+        self.assets.id_to_key = {266: "Aatrox", 103: "Ahri"}
+        self.assets.champ_data = {"Aatrox": {"name": "Aatrox"}, "Ahri": {"name": "Ahri"}}
+        self.assets._build_champ_search_index()
+
+        initial_tel = self.assets.get_skin_search_slice_pool_telemetry()
+        self.assertEqual(initial_tel["skin_slice_recycle_hits"], 0)
+        self.assertEqual(initial_tel["skin_slice_recycle_misses"], 0)
+
+        # First query builds and caches skin preview slice tuple
+        skins1 = self.assets.search_skin_previews(query="aatrox", limit=10)
+        tel1 = self.assets.get_skin_search_slice_pool_telemetry()
+        self.assertEqual(tel1["skin_slice_recycle_misses"], 1)
+        self.assertEqual(tel1["skin_slice_recycle_hits"], 0)
+
+        # Repeated query accesses pooled skin preview slice tuple
+        skins2 = self.assets.search_skin_previews(query="aatrox", limit=10)
+        tel2 = self.assets.get_skin_search_slice_pool_telemetry()
+        self.assertEqual(tel2["skin_slice_recycle_hits"], 1)
+        self.assertGreater(tel2["skin_slice_recycle_hit_ratio"], 0.0)
+        self.assertGreater(tel2["skin_slice_bytes_recycled"], 0)
+        self.assertEqual(skins1, skins2)
+
+        summary = self.assets.get_memory_summary_diagnostics()
+        self.assertIn("skin_search_slice_pool_telemetry", summary)
+        self.assertEqual(summary["skin_search_slice_pool_telemetry"]["skin_slice_recycle_hits"], 1)
+
+        # Clear pool
+        self.assets.clear_skin_search_slice_pool()
+        self.assertEqual(len(self.assets._skin_search_slice_pool), 0)
+
 if __name__ == '__main__':
     unittest.main()
+
 
 
 

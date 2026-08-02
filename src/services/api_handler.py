@@ -267,8 +267,58 @@ class LCUClient:
             "http_latency_sample_count": len(samples),
         }
 
+    def get_http_latency_confidence_interval_telemetry(self, confidence_level: float = 0.95) -> Dict[str, Any]:
+        """Task 175: Returns automated HTTP client response latency standard error and confidence interval metrics."""
+        with self._http_latency_lock:
+            samples = self._http_latency_samples.copy()
+
+        if not samples:
+            return {
+                "http_latency_mean_ms": 0.0,
+                "http_latency_stderr_ms": 0.0,
+                "http_latency_ci_margin_ms": 0.0,
+                "http_latency_ci_lower_ms": 0.0,
+                "http_latency_ci_upper_ms": 0.0,
+                "confidence_level": confidence_level,
+                "sample_count": 0,
+            }
+
+        n = len(samples)
+        mean = sum(samples) / n
+        if n > 1:
+            variance = sum((x - mean) ** 2 for x in samples) / (n - 1)
+            stddev = math.sqrt(variance)
+            stderr = stddev / math.sqrt(n)
+        else:
+            variance = 0.0
+            stddev = 0.0
+            stderr = 0.0
+
+        if confidence_level >= 0.99:
+            z = 2.576
+        elif confidence_level >= 0.95:
+            z = 1.960
+        elif confidence_level >= 0.90:
+            z = 1.645
+        else:
+            z = 1.000
+
+        ci_margin = z * stderr
+        ci_lower = max(0.0, mean - ci_margin)
+        ci_upper = mean + ci_margin
+
+        return {
+            "http_latency_mean_ms": round(mean, 4),
+            "http_latency_stderr_ms": round(stderr, 4),
+            "http_latency_ci_margin_ms": round(ci_margin, 4),
+            "http_latency_ci_lower_ms": round(ci_lower, 4),
+            "http_latency_ci_upper_ms": round(ci_upper, 4),
+            "confidence_level": confidence_level,
+            "sample_count": n,
+        }
+
     def get_http_latency_histogram(self) -> Dict[str, Any]:
-        """Task 172: Returns LCU response latency histogram buckets, variance metrics, and statistics."""
+        """Task 172 & 175: Returns LCU response latency histogram buckets, variance metrics, confidence intervals, and statistics."""
         with self._http_latency_lock:
             samples = self._http_latency_samples.copy()
             buckets = self._http_latency_buckets.copy()
@@ -286,6 +336,7 @@ class LCUClient:
 
         adaptive_timeout = self.get_adaptive_http_timeout()
         var_meta = self.get_http_latency_variance_telemetry()
+        ci_meta = self.get_http_latency_confidence_interval_telemetry()
 
         res = {
             "sample_count": len(samples),
@@ -299,6 +350,7 @@ class LCUClient:
             "adaptive_timeout_s": adaptive_timeout,
         }
         res.update(var_meta)
+        res.update(ci_meta)
         return res
 
     def connect(self, silent=False) -> bool:
