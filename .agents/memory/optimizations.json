@@ -50,5 +50,18 @@
       "search_slice_pooling": "Thread-safe search result slice tuple memory pool (_acquire_search_slice_tuple) with hit ratio and recycled memory telemetry."
     },
     "impact": "Reduces heap object allocation overhead on repeated champion search queries while providing statistical dispersion metrics for network latency monitoring."
+  },
+  {
+    "timestamp": "2026-08-02T22:29:00Z",
+    "feature": "HTTP Latency Confidence Intervals/Skewness/Kurtosis & Skin/Splash Search Slice Tuple Memory Pooling",
+    "before_metrics": {
+      "http_latency_stats": "Only variance and standard deviation tracked without confidence intervals, skewness, or kurtosis.",
+      "skin_splash_slice_pooling": "Skin preview and splash art filter searches allocated fresh result tuple objects on every query repetition."
+    },
+    "after_metrics": {
+      "http_latency_stats": "Automated standard error, 95% confidence intervals, skewness, kurtosis, and excess kurtosis statistical telemetry.",
+      "skin_splash_slice_pooling": "Thread-safe memory pooling for skin preview (_acquire_skin_search_slice_tuple) and splash art filter (_acquire_splash_search_slice_tuple) result slice tuples."
+    },
+    "impact": "Eliminates GC allocation overhead during frequent skin/splash query filtering and provides higher-order statistical shape analysis for LCU HTTP network latency distributions."
   }
 ]
