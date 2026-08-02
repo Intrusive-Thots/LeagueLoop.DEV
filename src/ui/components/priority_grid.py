@@ -27,6 +27,20 @@ DEL_BG     = get_color("colors.state.danger.muted", "#4d1111")
 
 _CLEAN_TRANS = str.maketrans("", "", " '.")
 
+CHAMPION_ALIASES = {
+    "tf": "Twisted Fate", "mf": "Miss Fortune", "ww": "Warwick", "j4": "Jarvan IV",
+    "asol": "Aurelion Sol", "yi": "Master Yi", "kog": "Kog'Maw", "noc": "Nocturne",
+    "heimer": "Heimerdinger", "cass": "Cassiopeia", "kat": "Katarina", "trist": "Tristana",
+    "blitz": "Blitzcrank", "cho": "Cho'Gath", "mundo": "Dr. Mundo", "eve": "Evelynn",
+    "gp": "Gangplank", "heka": "Hecarim", "ksante": "K'Sante", "lb": "LeBlanc",
+    "lee": "Lee Sin", "liss": "Lissandra", "malz": "Malzahar", "morg": "Morgana",
+    "naut": "Nautilus", "panth": "Pantheon", "pant": "Pantheon", "reksai": "Rek'Sai",
+    "rene": "Renekton", "renek": "Renekton", "sej": "Sejuani", "tahm": "Tahm Kench",
+    "kench": "Tahm Kench", "trynd": "Tryndamere", "vel": "Vel'Koz", "vlad": "Vladimir",
+    "voli": "Volibear", "xin": "Xin Zhao", "zil": "Zilean", "fiddle": "Fiddlesticks",
+    "fiddles": "Fiddlesticks"
+}
+
 
 class PriorityIconGrid(ctk.CTkFrame):
     """Icon grid with collapse, add, edit (select → ▲▼⤒ reorder + multi-delete)."""
@@ -86,14 +100,20 @@ class PriorityIconGrid(ctk.CTkFrame):
         return known
 
     def _resolve_champion_name(self, raw):
-        # ⚡ Bolt: Fast-path string manipulation optimization.
-        # Attempt an exact match first using .get() to avoid string allocation overhead
-        # from .translate() and .lower() when the input is already clean.
-        res = self._known_champions.get(raw)
+        if not raw:
+            return None
+        raw_clean = raw.strip()
+        alias_target = CHAMPION_ALIASES.get(raw_clean.lower())
+        if alias_target:
+            res = self._known_champions.get(alias_target.lower())
+            if res:
+                return res
+
+        res = self._known_champions.get(raw_clean)
         if res:
             return res
 
-        normalized = raw.translate(_CLEAN_TRANS).lower()
+        normalized = raw_clean.translate(_CLEAN_TRANS).lower()
         return self._known_champions.get(normalized)
 
     @staticmethod
@@ -1088,53 +1108,146 @@ class PriorityIconGrid(ctk.CTkFrame):
             self.suggestions_frame.pack_forget()
             return
 
-        # Find matches (fuzzy search logic)
+        # Special command secret "all"
+        if query == "all":
+            self.suggestions_frame.pack(fill="x", pady=(4, 0))
+            card = ctk.CTkFrame(
+                self.suggestions_frame,
+                fg_color=get_color("colors.background.card", "#192230"),
+                border_width=1,
+                border_color=get_color("colors.accent.gold", "#C8AA6E"),
+                corner_radius=6,
+                height=32
+            )
+            card.pack(fill="x", pady=2)
+            card.pack_propagate(False)
+
+            ctk.CTkLabel(
+                card, text="✨ Add All Champions to ARAM List",
+                font=get_font("caption", "bold"),
+                text_color=get_color("colors.accent.gold", "#C8AA6E")
+            ).pack(side="left", padx=8)
+
+            btn = ctk.CTkButton(
+                card, text="Add All", width=60, height=22,
+                corner_radius=4, font=get_font("caption", "bold"),
+                fg_color=get_color("colors.accent.primary"),
+                hover_color=get_color("colors.state.hover"),
+                command=self._commit_add, cursor="hand2"
+            )
+            btn.pack(side="right", padx=6)
+            return
+
+        # Alias match
+        alias_champ = CHAMPION_ALIASES.get(query)
         matches = []
+        if alias_champ and alias_champ.lower() in self._known_champions:
+            matches.append(self._known_champions[alias_champ.lower()])
+
+        # Starts-with matches
         for champ_lower, champ in self._search_cache:
             if champ_lower.startswith(query):
                 matches.append(champ)
-            elif query in champ_lower:
+
+        # Substring matches
+        for champ_lower, champ in self._search_cache:
+            if query in champ_lower:
                 matches.append(champ)
 
-        # Deduplicate and sort starts-with matches first
         unique_matches = list(dict.fromkeys(matches))
 
         if not unique_matches:
             self.suggestions_frame.pack_forget()
             return
 
-        # Display top 3 matches
         self.suggestions_frame.pack(fill="x", pady=(4, 0))
+        plist = self._get_priority_list()
+        plist_lower = [p.lower() for p in plist]
 
-        for i, champ in enumerate(unique_matches[:3]):
-            # Display name directly uses the correctly-cased real name from the dictionary
-            display_name = champ
-
-            pill = ctk.CTkButton(
-                self.suggestions_frame, text=display_name, width=0, height=20,
-                corner_radius=10, font=get_font("caption"),
-                fg_color=get_color("colors.background.card"),
-                border_width=1, border_color=get_color("colors.accent.gold", "#C8AA6E"),
-                hover_color=get_color("colors.state.hover"),
-                text_color=get_color("colors.text.primary"),
-                command=lambda c=display_name, raw=champ: self._select_suggestion(c, raw), cursor="hand2",
+        for champ in unique_matches[:4]:
+            card = ctk.CTkFrame(
+                self.suggestions_frame,
+                fg_color=get_color("colors.background.card", "#192230"),
+                border_width=1,
+                border_color="#253245",
+                corner_radius=6,
+                height=36
             )
-            pill.pack(side="left", padx=(0, 4))
+            card.pack(fill="x", pady=2)
+            card.pack_propagate(False)
 
-    def _select_suggestion(self, display_name, raw_name):
-        # Briefly pulse the input field color to confirm selection
+            # Icon
+            icon_lbl = ctk.CTkLabel(card, text="", width=28, height=28, fg_color="transparent")
+            icon_lbl.pack(side="left", padx=(6, 8), pady=4)
+
+            def _update_card_icon(img, lbl=icon_lbl):
+                try:
+                    if lbl.winfo_exists():
+                        lbl.configure(image=img, text="")
+                except Exception:
+                    pass
+
+            self.assets.get_icon_async("champion", champ, _update_card_icon, size=(28, 28), widget=icon_lbl)
+
+            # Name
+            name_lbl = ctk.CTkLabel(
+                card, text=champ,
+                font=get_font("body", "bold"),
+                text_color=get_color("colors.text.primary", "#F0E6D2"),
+                anchor="w"
+            )
+            name_lbl.pack(side="left", fill="x", expand=True)
+
+            is_already_added = champ.lower() in plist_lower
+
+            if is_already_added:
+                status_lbl = ctk.CTkLabel(
+                    card, text="✓ Added",
+                    font=get_font("caption"),
+                    text_color=get_color("colors.text.muted", "#5B5A56")
+                )
+                status_lbl.pack(side="right", padx=8)
+            else:
+                add_btn = ctk.CTkButton(
+                    card, text="+ Add", width=50, height=24,
+                    corner_radius=4, font=get_font("caption", "bold"),
+                    fg_color=get_color("colors.accent.primary"),
+                    hover_color=get_color("colors.state.hover"),
+                    command=lambda c=champ: self._select_suggestion(c),
+                    cursor="hand2"
+                )
+                add_btn.pack(side="right", padx=6)
+
+            # Click anywhere on card to select
+            if not is_already_added:
+                card.bind("<Button-1>", lambda e, c=champ: self._select_suggestion(c))
+                name_lbl.bind("<Button-1>", lambda e, c=champ: self._select_suggestion(c))
+                icon_lbl.bind("<Button-1>", lambda e, c=champ: self._select_suggestion(c))
+                card.configure(cursor="hand2")
+                name_lbl.configure(cursor="hand2")
+                icon_lbl.configure(cursor="hand2")
+
+    def _select_suggestion(self, champ_name):
+        plist = self._get_priority_list()
+        champ_real = self._resolve_champion_name(champ_name) or champ_name
+        if champ_real not in plist:
+            plist.append(champ_real)
+            self._save_priority_list(plist)
+            self._render_grid()
+            try:
+                ToastManager.get_instance().show(f"Added {champ_real} to ARAM List!", icon="✅", theme="success")
+            except Exception:
+                pass
+
         self.add_entry.delete(0, "end")
-        self.add_entry.insert(0, display_name)
-        self.add_entry.configure(border_color=get_color("colors.accent.primary"))
-
-        # Hide suggestions but wait for animation to finish before committing
-        self.suggestions_frame.pack_forget()
-
-        def finalize():
-            self.add_entry.configure(border_color=get_color("colors.border.subtle"))
-            self._commit_add()
-
-        self.after(200, finalize)
+        try:
+            self.suggestions_frame.pack_forget()
+        except Exception:
+            pass
+        try:
+            self.add_entry.focus_set()
+        except Exception:
+            pass
 
     def _show_add_input(self):
         """Expand the ARAM list if collapsed and focus the always-visible add entry."""

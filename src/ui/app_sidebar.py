@@ -436,6 +436,15 @@ class SidebarWidget(ctk.CTkFrame):
 
         # Build quick automation icons row below Find Match
         self._build_quick_automation_icon_bar()
+
+        # Ensure bi-directional trace updates for all automation variables
+        for _v in [self.var_accept, self.var_priority, self.var_auto_join, self.var_auto_honor,
+                   self.var_skip_stats, self.var_auto_runes, self.var_auto_skin,
+                   self.var_auto_add_played, self.var_auto_ban]:
+            try:
+                _v.trace_add("write", lambda *args: self._update_all_quick_icons())
+            except Exception:
+                pass
         
         # (Divider removed — card containers provide visual separation)
 
