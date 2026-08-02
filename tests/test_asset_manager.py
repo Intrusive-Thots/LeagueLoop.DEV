@@ -467,6 +467,34 @@ class TestAssetManager(unittest.TestCase):
         self.assets.clear_item_build_search_slice_pool()
         self.assertEqual(len(self.assets._item_build_search_slice_pool), 0)
 
+    def test_rune_page_search_slice_tuple_pooling(self):
+        """Task 185: Test champion rune page recommendation search query result slice tuple memory recycling and telemetry."""
+        initial_tel = self.assets.get_rune_page_search_slice_pool_telemetry()
+        self.assertEqual(initial_tel["rune_page_slice_recycle_hits"], 0)
+        self.assertEqual(initial_tel["rune_page_slice_recycle_misses"], 0)
+
+        # Initial query creates slice tuple (miss)
+        runes1 = self.assets.search_rune_page_recommendations(query="aatrox", limit=10)
+        tel1 = self.assets.get_rune_page_search_slice_pool_telemetry()
+        self.assertEqual(tel1["rune_page_slice_recycle_misses"], 1)
+        self.assertEqual(tel1["rune_page_slice_recycle_hits"], 0)
+
+        # Repeated query accesses pooled rune page slice tuple (hit)
+        runes2 = self.assets.search_rune_page_recommendations(query="aatrox", limit=10)
+        tel2 = self.assets.get_rune_page_search_slice_pool_telemetry()
+        self.assertEqual(tel2["rune_page_slice_recycle_hits"], 1)
+        self.assertGreater(tel2["rune_page_slice_recycle_hit_ratio"], 0.0)
+        self.assertGreater(tel2["rune_page_slice_bytes_recycled"], 0)
+        self.assertEqual(runes1, runes2)
+
+        summary = self.assets.get_memory_summary_diagnostics()
+        self.assertIn("rune_page_search_slice_pool_telemetry", summary)
+        self.assertEqual(summary["rune_page_search_slice_pool_telemetry"]["rune_page_slice_recycle_hits"], 1)
+
+        # Clear pool
+        self.assets.clear_rune_page_search_slice_pool()
+        self.assertEqual(len(self.assets._rune_page_search_slice_pool), 0)
+
 if __name__ == '__main__':
     unittest.main()
 

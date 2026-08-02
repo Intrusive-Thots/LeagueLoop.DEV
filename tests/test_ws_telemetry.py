@@ -403,6 +403,32 @@ def test_lcu_client_http_latency_skewness_kurtosis_telemetry():
     assert "http_latency_kurtosis" in diag
 
 
+def test_lcu_client_http_retry_jitter_percentiles_telemetry():
+    client = LCUClient()
+    initial = client.get_http_retry_jitter_percentiles_telemetry()
+    assert initial["sample_count"] == 0
+    assert initial["http_retry_jitter_p50_s"] == 0.0
+
+    for jitter in [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.10]:
+        client._record_http_retry_jitter(jitter)
+
+    meta = client.get_http_retry_jitter_percentiles_telemetry()
+    assert meta["sample_count"] == 10
+    assert meta["http_retry_jitter_p25_s"] > 0.0
+    assert meta["http_retry_jitter_p50_s"] > 0.0
+    assert meta["http_retry_jitter_p75_s"] >= meta["http_retry_jitter_p25_s"]
+    assert meta["http_retry_jitter_iqr_s"] >= 0.0
+
+    entropy_meta = client.get_http_retry_jitter_entropy_telemetry()
+    assert "http_retry_jitter_p50_s" in entropy_meta
+    assert "http_retry_jitter_iqr_s" in entropy_meta
+
+    diag = client.get_request_diagnostics()
+    assert "http_retry_jitter_p50_s" in diag
+    assert "http_retry_jitter_iqr_s" in diag
+
+
+
 
 
 
