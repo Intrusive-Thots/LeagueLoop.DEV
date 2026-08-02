@@ -1077,80 +1077,87 @@ class AutomationEngine:
 
     def leave_friend_lobby_and_cooldown(self, friend_name: Optional[str] = None) -> bool:
         """
-        If currently in a friend's lobby or auto-joined lobby, leaves the lobby and
-        places a 5-minute auto-join cooldown on all friends in that lobby so auto-join
-        does not immediately pull the user back into their party.
-        Returns True if a friend's lobby was left.
+        Leaves any current lobby and places a 5-minute auto-join cooldown on all friends/party IDs,
+        pausing auto-join for 30 seconds so match search and lobby creation can complete undisturbed.
         """
+        now = time.time()
         if getattr(self, "_auto_joined_friends_cooldown", None) is None:
             self._auto_joined_friends_cooldown = {}
 
-        # Temporarily pause auto-joining for 15 seconds to allow queue setup / search creation
-        self._pause_auto_join_until = time.time() + 15.0
+        # 1. Immediately pause auto-join for 30 seconds
+        self._pause_auto_join_until = now + 30.0
 
-        if not self.lcu or not getattr(self.lcu, "is_connected", False):
-            return False
+        # 2. Immediately collect current auto-joined friend and party_id for 5-minute cooldown
+        current_friend = getattr(self, "_current_auto_joined_friend", None)
+        current_party_id = getattr(self, "_current_auto_joined_party_id", None)
 
-        try:
-            my_res = self.lcu.request("GET", "/lol-lobby/v2/lobby", silent=True)
-            if not my_res or my_res.status_code != 200:
-                self._current_auto_joined_friend = None
-                self._current_auto_joined_party_id = None
-                return False
+        friends_to_cooldown = set()
+        if friend_name:
+            fn = friend_name.strip().lower()
+            friends_to_cooldown.add(fn)
+            friends_to_cooldown.add(fn.split("#")[0])
 
-            my_lobby = my_res.json()
-            local_member = my_lobby.get("localMember", {})
-            local_puuid = local_member.get("puuid")
-            local_id = local_member.get("summonerId")
-            is_leader = local_member.get("isLeader", False)
-            members = my_lobby.get("members", [])
+        if current_friend:
+            cf = current_friend.strip().lower()
+            friends_to_cooldown.add(cf)
+            friends_to_cooldown.add(cf.split("#")[0])
 
-            # Collect names of all friends in the lobby to put on 5-minute cooldown
-            friends_to_cooldown = set()
-            if friend_name:
-                friends_to_cooldown.add(friend_name.strip().lower())
-                friends_to_cooldown.add(friend_name.strip().lower().split("#")[0])
-            if getattr(self, "_current_auto_joined_friend", None):
-                friends_to_cooldown.add(self._current_auto_joined_friend.strip().lower())
-                friends_to_cooldown.add(self._current_auto_joined_friend.strip().lower().split("#")[0])
+        if current_party_id:
+            friends_to_cooldown.add(current_party_id.strip().lower())
 
-            for m in members:
-                m_puuid = m.get("puuid")
-                m_id = m.get("summonerId")
-                if (local_puuid and m_puuid == local_puuid) or (local_id and m_id == local_id):
-                    continue
-                g_name = (m.get("gameName") or m.get("summonerName") or m.get("name") or "").strip()
-                g_tag = (m.get("gameTag") or "").strip()
-                if g_name:
-                    friends_to_cooldown.add(g_name.lower())
-                    if g_tag:
-                        friends_to_cooldown.add(f"{g_name}#{g_tag}".lower())
+        # Check LCU lobby for additional members and party ID
+        if self.lcu and getattr(self.lcu, "is_connected", False):
+            try:
+                my_res = self.lcu.request("GET", "/lol-lobby/v2/lobby", silent=True)
+                if my_res and my_res.status_code == 200:
+                    my_lobby = my_res.json()
+                    p_id = my_lobby.get("partyId")
+                    if p_id:
+                        friends_to_cooldown.add(p_id.strip().lower())
 
-            is_friends_lobby = bool(friends_to_cooldown) or (not is_leader) or (len(members) > 1)
+                    local_member = my_lobby.get("localMember", {})
+                    local_puuid = local_member.get("puuid")
+                    local_id = local_member.get("summonerId")
+                    members = my_lobby.get("members", [])
 
-            if is_friends_lobby:
-                now = time.time()
-                for fn in friends_to_cooldown:
-                    if fn:
-                        self._auto_joined_friends_cooldown[fn] = now + 300.0  # 5 minutes
+                    for m in members:
+                        m_puuid = m.get("puuid")
+                        m_id = m.get("summonerId")
+                        if (local_puuid and m_puuid == local_puuid) or (local_id and m_id == local_id):
+                            continue
+                        g_name = (m.get("gameName") or m.get("summonerName") or m.get("name") or "").strip()
+                        g_tag = (m.get("gameTag") or "").strip()
+                        if g_name:
+                            friends_to_cooldown.add(g_name.lower())
+                            if g_tag:
+                                friends_to_cooldown.add(f"{g_name}#{g_tag}".lower())
+            except Exception as e:
+                Logger.debug("Auto", f"Lobby member check error: {e}")
 
-                if friends_to_cooldown:
-                    names_str = ", ".join(sorted(friends_to_cooldown))
-                    self._log(f"Paused auto-joining {names_str} for 5 minutes.")
-                    Logger.info("AutoJoin", f"Applied 5-minute auto-join cooldown to: {names_str}")
+        # Lock in 5-minute cooldown for all identifiers
+        for fn in friends_to_cooldown:
+            if fn:
+                self._auto_joined_friends_cooldown[fn] = now + 300.0  # 5 minutes
 
+        self._current_auto_joined_friend = None
+        self._current_auto_joined_party_id = None
+
+        # Execute lobby leaves
+        if self.lcu and getattr(self.lcu, "is_connected", False):
+            try:
                 self.lcu.request("DELETE", "/lol-lobby/v2/lobby/matchmaking/search", silent=True)
                 time.sleep(0.15)
                 self.lcu.request("DELETE", "/lol-lobby/v2/lobby", silent=True)
-                time.sleep(0.2)
+                time.sleep(0.25)
+            except Exception:
+                pass
 
-                self._current_auto_joined_friend = None
-                self._current_auto_joined_party_id = None
-                return True
-        except Exception as e:
-            Logger.debug("Auto", f"Error leaving friend lobby: {e}")
+        if friends_to_cooldown:
+            names_str = ", ".join(sorted(friends_to_cooldown))
+            self._log(f"Paused auto-joining {names_str} for 5 minutes.")
+            Logger.info("AutoJoin", f"Applied 5-minute auto-join cooldown to: {names_str}")
 
-        return False
+        return True
 
     def reset_auto_join_cooldowns(self, name: Optional[str] = None) -> None:
         """Clears 5-minute auto-join cooldown timers for a specific friend or all friends."""
@@ -1247,24 +1254,25 @@ class AutomationEngine:
             game_tag = f.get("gameTag", "")
             combo_name = f"{game_name}#{game_tag}" if game_tag else game_name
 
-            # Check if friend or any variation is on 5-minute cooldown
-            on_cooldown = False
-            for name_variant in (raw_name, base_name, game_name.lower(), combo_name.lower()):
-                if name_variant in self._auto_joined_friends_cooldown:
-                    if now < self._auto_joined_friends_cooldown[name_variant]:
-                        on_cooldown = True
-                        break
-
-            if on_cooldown:
-                continue
-
             lol = f.get("lol", {})
             if lol.get("ptyType") == "open":
                 pty_str = lol.get("pty", "")
                 if pty_str:
                     try:
                         pty_data = json.loads(pty_str)
-                        party_id = pty_data.get("partyId")
+                        party_id = pty_data.get("partyId", "")
+
+                        # Check if friend, combo name, or party_id is on 5-minute cooldown
+                        on_cooldown = False
+                        for name_variant in (raw_name, base_name, game_name.lower(), combo_name.lower(), party_id.lower() if party_id else ""):
+                            if name_variant and name_variant in self._auto_joined_friends_cooldown:
+                                if now < self._auto_joined_friends_cooldown[name_variant]:
+                                    on_cooldown = True
+                                    break
+
+                        if on_cooldown:
+                            continue
+
                         if party_id:
                             # Check if we are already in this specific party
                             my_res = self.lcu.request("GET", "/lol-lobby/v2/lobby")
