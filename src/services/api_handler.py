@@ -473,8 +473,31 @@ class LCUClient:
             "sample_count": n,
         }
 
+    def get_http_retry_jitter_variance_telemetry(self) -> Dict[str, Any]:
+        """Task 190: Returns automated HTTP request retry exponential backoff jitter variance & standard deviation telemetry."""
+        with self._req_diag_lock:
+            samples = self._http_retry_jitter_samples.copy()
+
+        if not samples or len(samples) < 2:
+            return {
+                "http_retry_jitter_variance": 0.0,
+                "http_retry_jitter_stddev_ms": 0.0,
+                "sample_count": len(samples),
+            }
+
+        n = len(samples)
+        mean = sum(samples) / n
+        variance = sum((x - mean) ** 2 for x in samples) / n
+        stddev = math.sqrt(variance)
+
+        return {
+            "http_retry_jitter_variance": round(variance, 6),
+            "http_retry_jitter_stddev_ms": round(stddev * 1000.0, 4),
+            "sample_count": n,
+        }
+
     def get_http_retry_jitter_entropy_telemetry(self) -> Dict[str, Any]:
-        """Task 181, 184 & 187: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness & kurtosis telemetry."""
+        """Task 181, 184, 187 & 190: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance & standard deviation telemetry."""
         with self._req_diag_lock:
             samples = self._http_retry_jitter_samples.copy()
             entropy = self._http_retry_jitter_entropy_bits
@@ -485,6 +508,7 @@ class LCUClient:
         avg_s = round(sum(samples) / len(samples), 4) if samples else 0.0
         perc_meta = self.get_http_retry_jitter_percentiles_telemetry()
         shape_meta = self.get_http_retry_jitter_skewness_kurtosis_telemetry()
+        var_meta = self.get_http_retry_jitter_variance_telemetry()
 
         res = {
             "http_retry_jitter_samples_count": len(samples),
@@ -496,6 +520,7 @@ class LCUClient:
         }
         res.update(perc_meta)
         res.update(shape_meta)
+        res.update(var_meta)
         return res
 
     def get_http_latency_histogram(self) -> Dict[str, Any]:

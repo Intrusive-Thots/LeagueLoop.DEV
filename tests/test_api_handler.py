@@ -355,6 +355,32 @@ class TestLCUClient(unittest.TestCase):
         diag = self.client.get_request_diagnostics()
         self.assertIn("http_retry_jitter_entropy_bits", diag)
 
+    def test_http_retry_jitter_variance_telemetry(self):
+        """Test automated HTTP request retry exponential backoff jitter variance & stddev telemetry for Task 190."""
+        empty_tel = self.client.get_http_retry_jitter_variance_telemetry()
+        self.assertEqual(empty_tel["sample_count"], 0)
+        self.assertEqual(empty_tel["http_retry_jitter_variance"], 0.0)
+        self.assertEqual(empty_tel["http_retry_jitter_stddev_ms"], 0.0)
+
+        # Single sample -> not enough for variance
+        self.client._record_http_retry_jitter(0.02)
+        single_tel = self.client.get_http_retry_jitter_variance_telemetry()
+        self.assertEqual(single_tel["sample_count"], 1)
+        self.assertEqual(single_tel["http_retry_jitter_variance"], 0.0)
+
+        # Additional samples
+        self.client._record_http_retry_jitter(0.04)
+        self.client._record_http_retry_jitter(0.06)
+
+        var_tel = self.client.get_http_retry_jitter_variance_telemetry()
+        self.assertEqual(var_tel["sample_count"], 3)
+        self.assertGreater(var_tel["http_retry_jitter_variance"], 0.0)
+        self.assertGreater(var_tel["http_retry_jitter_stddev_ms"], 0.0)
+
+        entropy_tel = self.client.get_http_retry_jitter_entropy_telemetry()
+        self.assertIn("http_retry_jitter_variance", entropy_tel)
+        self.assertIn("http_retry_jitter_stddev_ms", entropy_tel)
+
 if __name__ == '__main__':
     unittest.main()
 

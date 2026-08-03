@@ -523,6 +523,34 @@ class TestAssetManager(unittest.TestCase):
         self.assets.clear_spell_ability_search_slice_pool()
         self.assertEqual(len(self.assets._spell_ability_search_slice_pool), 0)
 
+    def test_counters_recommendations_memory_pooling(self):
+        """Task 191: Test champion counters recommendation search query result slice tuple memory recycling and telemetry."""
+        initial_tel = self.assets.get_counters_search_slice_pool_telemetry()
+        self.assertEqual(initial_tel["counters_slice_recycle_hits"], 0)
+        self.assertEqual(initial_tel["counters_slice_recycle_misses"], 0)
+
+        # Initial query creates slice tuple (miss)
+        counters1 = self.assets.search_counters_recommendations(query="ahri", limit=10)
+        tel1 = self.assets.get_counters_search_slice_pool_telemetry()
+        self.assertEqual(tel1["counters_slice_recycle_misses"], 1)
+        self.assertEqual(tel1["counters_slice_recycle_hits"], 0)
+
+        # Repeated query accesses pooled counters slice tuple (hit)
+        counters2 = self.assets.search_counters_recommendations(query="ahri", limit=10)
+        tel2 = self.assets.get_counters_search_slice_pool_telemetry()
+        self.assertEqual(tel2["counters_slice_recycle_hits"], 1)
+        self.assertGreater(tel2["counters_slice_recycle_hit_ratio"], 0.0)
+        self.assertGreater(tel2["counters_slice_bytes_recycled"], 0)
+        self.assertEqual(counters1, counters2)
+
+        summary = self.assets.get_memory_summary_diagnostics()
+        self.assertIn("counters_search_slice_pool_telemetry", summary)
+        self.assertEqual(summary["counters_search_slice_pool_telemetry"]["counters_slice_recycle_hits"], 1)
+
+        # Clear pool
+        self.assets.clear_counters_search_slice_pool()
+        self.assertEqual(len(self.assets._counters_search_slice_pool), 0)
+
 if __name__ == '__main__':
     unittest.main()
 
