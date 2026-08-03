@@ -68,7 +68,7 @@ class LCUClient:
         self._ws_thread = None
         self._ws_should_run = False
         self._ws_connection = None
-        self._ws_executor = ThreadPoolExecutor(max_workers=4)
+        self._ws_executor = None
 
         # Task 127: Automated WS reconnection exponential backoff & jitter
         self._ws_reconnect_backoff = 1.0
@@ -1114,6 +1114,12 @@ class LCUClient:
                 self._ws_connection.close()
             except Exception as e:
                 Logger.debug("LCU_WS", f"WS close error (safe to ignore): {e}")
+        if self._ws_executor:
+            try:
+                self._ws_executor.shutdown(wait=False)
+            except Exception:
+                pass
+            self._ws_executor = None
         # Item #181: Join thread with timeout for clean shutdown
         if self._ws_thread and self._ws_thread.is_alive():
             self._ws_thread.join(timeout=3)
@@ -1225,9 +1231,11 @@ class LCUClient:
                                         callbacks.extend(self._subscriptions["OnJsonApiEvent"])
                                 
                                 t_dispatch_start = time.perf_counter()
-                                for cb in callbacks:
+                                 for cb in callbacks:
                                     try:
                                         # Run callback in bounded pool so we don't stall the websocket
+                                        if self._ws_executor is None:
+                                            self._ws_executor = ThreadPoolExecutor(max_workers=4)
                                         self._ws_executor.submit(cb, event_name, payload)
                                     except Exception as e:
                                         Logger.error("LCU_WS", f"Callback error in {event_name}: {e}")
