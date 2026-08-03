@@ -381,7 +381,30 @@ class TestLCUClient(unittest.TestCase):
         self.assertIn("http_retry_jitter_variance", entropy_tel)
         self.assertIn("http_retry_jitter_stddev_ms", entropy_tel)
 
+    def test_http_retry_jitter_geometric_harmonic_means_telemetry(self):
+        """Test automated HTTP request retry exponential backoff jitter geometric mean & harmonic mean telemetry for Task 202."""
+        empty_tel = self.client.get_http_retry_jitter_geometric_harmonic_means_telemetry()
+        self.assertEqual(empty_tel["sample_count"], 0)
+        self.assertEqual(empty_tel["http_retry_jitter_geometric_mean_s"], 0.0)
+        self.assertEqual(empty_tel["http_retry_jitter_harmonic_mean_s"], 0.0)
+
+        # Record multiple positive jitter samples: 0.02, 0.04, 0.08
+        self.client._record_http_retry_jitter(0.02)
+        self.client._record_http_retry_jitter(0.04)
+        self.client._record_http_retry_jitter(0.08)
+
+        tel = self.client.get_http_retry_jitter_geometric_harmonic_means_telemetry()
+        self.assertEqual(tel["sample_count"], 3)
+        self.assertGreater(tel["http_retry_jitter_geometric_mean_s"], 0.0)
+        self.assertGreater(tel["http_retry_jitter_harmonic_mean_s"], 0.0)
+        self.assertLessEqual(tel["http_retry_jitter_harmonic_mean_s"], tel["http_retry_jitter_geometric_mean_s"])
+
+        entropy_tel = self.client.get_http_retry_jitter_entropy_telemetry()
+        self.assertIn("http_retry_jitter_geometric_mean_s", entropy_tel)
+        self.assertIn("http_retry_jitter_harmonic_mean_s", entropy_tel)
+
 if __name__ == '__main__':
     unittest.main()
+
 
 

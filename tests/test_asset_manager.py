@@ -635,8 +635,37 @@ class TestAssetManager(unittest.TestCase):
         self.assets.clear_ban_priority_search_slice_pool()
         self.assertEqual(len(self.assets._ban_priority_search_slice_pool), 0)
 
+    def test_lane_matchups_recommendations_memory_pooling(self):
+        """Task 203: Test champion lane matchups recommendation search query result slice tuple memory recycling and telemetry."""
+        initial_tel = self.assets.get_lane_matchups_search_slice_pool_telemetry()
+        self.assertEqual(initial_tel["lane_matchups_slice_recycle_hits"], 0)
+        self.assertEqual(initial_tel["lane_matchups_slice_recycle_misses"], 0)
+
+        # Initial query creates slice tuple (miss)
+        matchups1 = self.assets.search_lane_matchups_recommendations(query="ahri", limit=10)
+        tel1 = self.assets.get_lane_matchups_search_slice_pool_telemetry()
+        self.assertEqual(tel1["lane_matchups_slice_recycle_misses"], 1)
+        self.assertEqual(tel1["lane_matchups_slice_recycle_hits"], 0)
+
+        # Repeated query accesses pooled lane matchups slice tuple (hit)
+        matchups2 = self.assets.search_lane_matchups_recommendations(query="ahri", limit=10)
+        tel2 = self.assets.get_lane_matchups_search_slice_pool_telemetry()
+        self.assertEqual(tel2["lane_matchups_slice_recycle_hits"], 1)
+        self.assertGreater(tel2["lane_matchups_slice_recycle_hit_ratio"], 0.0)
+        self.assertGreater(tel2["lane_matchups_slice_bytes_recycled"], 0)
+        self.assertEqual(matchups1, matchups2)
+
+        summary = self.assets.get_memory_summary_diagnostics()
+        self.assertIn("lane_matchups_search_slice_pool_telemetry", summary)
+        self.assertEqual(summary["lane_matchups_search_slice_pool_telemetry"]["lane_matchups_slice_recycle_hits"], 1)
+
+        # Clear pool
+        self.assets.clear_lane_matchups_search_slice_pool()
+        self.assertEqual(len(self.assets._lane_matchups_search_slice_pool), 0)
+
 if __name__ == '__main__':
     unittest.main()
+
 
 
 
