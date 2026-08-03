@@ -827,7 +827,11 @@ class LCUClient:
                 self._offline_retry_executed_count += len(oq)
             # Item #177: Use bounded executor instead of spawning raw threads
             for m, e, d in oq:
-                self._ws_executor.submit(self._execute_offline_retry, m, e, d)
+                if self._ws_executor:
+                    self._ws_executor.submit(self._execute_offline_retry, m, e, d)
+                else:
+                    t = threading.Thread(target=self._execute_offline_retry, args=(m, e, d), daemon=True)
+                    t.start()
 
         # 3.3 Strict Token Bucket Rate-Limiter
         # Item #178: Calculate sleep time inside lock, but sleep outside to prevent deadlock
@@ -1231,7 +1235,7 @@ class LCUClient:
                                         callbacks.extend(self._subscriptions["OnJsonApiEvent"])
                                 
                                 t_dispatch_start = time.perf_counter()
-                                 for cb in callbacks:
+                                for cb in callbacks:
                                     try:
                                         # Run callback in bounded pool so we don't stall the websocket
                                         if self._ws_executor is None:
