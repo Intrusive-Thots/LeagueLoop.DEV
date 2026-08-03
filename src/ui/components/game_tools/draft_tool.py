@@ -145,3 +145,13 @@ class DraftTool(ctk.CTkFrame):
         """Safely revert save button text after flash."""
         if self.winfo_exists() and self.btn_save.winfo_exists():
             self.btn_save.configure(text=text, fg_color=color)
+
+    def destroy(self):
+        if getattr(self, "_revert_timer", None) is not None:
+            try:
+                self.after_cancel(self._revert_timer)
+                self._revert_timer = None
+            except Exception:
+                pass
+        super().destroy()
+

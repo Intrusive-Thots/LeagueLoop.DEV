@@ -112,7 +112,17 @@ class LolToggle(tk.Canvas):
                 
             self._current_x += diff * 0.3
             self.coords(self.knob_id, self._current_x, 2, self._current_x + 12, 14)
-            self.after(8, step_animation)
+            self._anim_job = self.after(8, step_animation)
             
         step_animation()
+
+    def destroy(self):
+        if getattr(self, "_anim_job", None) is not None:
+            try:
+                self.after_cancel(self._anim_job)
+                self._anim_job = None
+            except Exception:
+                pass
+        super().destroy()
+
 

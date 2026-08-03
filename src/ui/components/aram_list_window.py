@@ -198,9 +198,12 @@ class AramListWindow(ctk.CTkToplevel):
             time.sleep(0.5)
 
     def _on_close(self):
+        self.destroy()
+
+    def destroy(self):
         self._tracking_active = False
         AramListWindow._instance = None
-        self.destroy()
+        super().destroy()
 
     @classmethod
     def open_window(cls, master, config, assets):

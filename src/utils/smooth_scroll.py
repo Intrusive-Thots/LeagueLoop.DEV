@@ -45,16 +45,22 @@ def apply_smooth_scroll(scrollable_frame: ctk.CTkScrollableFrame, speed: float =
             state["animating"] = False
             return
 
+        if not scrollable_frame.winfo_exists():
+            state["animating"] = False
+            return
+
         try:
             # Get the canvas from the scrollable frame
             canvas = scrollable_frame._parent_canvas
             if canvas.winfo_exists():
-                canvas.yview_scroll(int(velocity * 100), "units") if abs(velocity) > 0.01 else None
-                # Move by fractional amount for smooth feel
+                # Move by fractional amount for smooth feel without redundant discrete jumps
                 current = canvas.yview()
                 new_pos = current[0] + velocity
                 new_pos = max(0.0, min(1.0, new_pos))
                 canvas.yview_moveto(new_pos)
+            else:
+                state["animating"] = False
+                return
         except Exception:
             state["animating"] = False
             return
@@ -64,7 +70,7 @@ def apply_smooth_scroll(scrollable_frame: ctk.CTkScrollableFrame, speed: float =
 
         # Schedule next frame (~16ms for 60fps)
         try:
-            scrollable_frame.after(16, _animate_scroll)
+            state["after_id"] = scrollable_frame.after(16, _animate_scroll)
         except Exception:
             state["animating"] = False
 

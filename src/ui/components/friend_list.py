@@ -283,9 +283,9 @@ class FriendPriorityList(ctk.CTkFrame):
             except Exception:
                 return
             self._initial_fetch(force=True)
-            self.after(self._refresh_interval_ms, _tick)
+            self._refresh_timer = self.after(self._refresh_interval_ms, _tick)
         
-        self.after(self._refresh_interval_ms, _tick)
+        self._refresh_timer = self.after(self._refresh_interval_ms, _tick)
 
     def _process_friends(self, friends):
         """Sort + render friends data (callable from any thread)."""
@@ -490,3 +490,18 @@ class FriendPriorityList(ctk.CTkFrame):
                 ToastManager.get_instance().show("Automation engine not available.", icon="⚠️", theme="error")
             except Exception:
                 pass
+
+    def destroy(self):
+        try:
+            from core.events import EventBus
+            EventBus.off("friends_event", self._on_friends_event)
+        except Exception:
+            pass
+        if getattr(self, "_refresh_timer", None) is not None:
+            try:
+                self.after_cancel(self._refresh_timer)
+                self._refresh_timer = None
+            except Exception:
+                pass
+        super().destroy()
+

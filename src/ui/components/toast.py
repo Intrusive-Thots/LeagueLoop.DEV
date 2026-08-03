@@ -70,7 +70,7 @@ class Toast(ctk.CTkFrame):
         self._confetti_job = None
 
         # Start dismissal timer
-        self.after(self.duration, self.dismiss)
+        self._dismiss_job = self.after(self.duration, self.dismiss)
 
         # Cleanup on destroy
         self.bind("<Destroy>", lambda e: self._cleanup_confetti() if getattr(e, "widget", None) == self else None, add="+")
@@ -211,6 +211,17 @@ class Toast(ctk.CTkFrame):
             except Exception:
                 pass
         self._particles.clear()
+
+    def destroy(self):
+        if getattr(self, "_dismiss_job", None) is not None:
+            try:
+                self.after_cancel(self._dismiss_job)
+                self._dismiss_job = None
+            except Exception:
+                pass
+        self._cleanup_confetti()
+        super().destroy()
+
 
 class ToastManager:
     """
