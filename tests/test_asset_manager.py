@@ -551,6 +551,34 @@ class TestAssetManager(unittest.TestCase):
         self.assets.clear_counters_search_slice_pool()
         self.assertEqual(len(self.assets._counters_search_slice_pool), 0)
 
+    def test_synergy_recommendations_memory_pooling(self):
+        """Task 194: Test champion synergy recommendations search query result slice tuple memory recycling and telemetry."""
+        initial_tel = self.assets.get_synergy_search_slice_pool_telemetry()
+        self.assertEqual(initial_tel["synergy_slice_recycle_hits"], 0)
+        self.assertEqual(initial_tel["synergy_slice_recycle_misses"], 0)
+
+        # Initial query creates slice tuple (miss)
+        synergies1 = self.assets.search_synergy_recommendations(query="ahri", limit=10)
+        tel1 = self.assets.get_synergy_search_slice_pool_telemetry()
+        self.assertEqual(tel1["synergy_slice_recycle_misses"], 1)
+        self.assertEqual(tel1["synergy_slice_recycle_hits"], 0)
+
+        # Repeated query accesses pooled synergy slice tuple (hit)
+        synergies2 = self.assets.search_synergy_recommendations(query="ahri", limit=10)
+        tel2 = self.assets.get_synergy_search_slice_pool_telemetry()
+        self.assertEqual(tel2["synergy_slice_recycle_hits"], 1)
+        self.assertGreater(tel2["synergy_slice_recycle_hit_ratio"], 0.0)
+        self.assertGreater(tel2["synergy_slice_recycle_bytes_recycled"], 0)
+        self.assertEqual(synergies1, synergies2)
+
+        summary = self.assets.get_memory_summary_diagnostics()
+        self.assertIn("synergy_search_slice_pool_telemetry", summary)
+        self.assertEqual(summary["synergy_search_slice_pool_telemetry"]["synergy_slice_recycle_hits"], 1)
+
+        # Clear pool
+        self.assets.clear_synergy_search_slice_pool()
+        self.assertEqual(len(self.assets._synergy_search_slice_pool), 0)
+
 if __name__ == '__main__':
     unittest.main()
 
