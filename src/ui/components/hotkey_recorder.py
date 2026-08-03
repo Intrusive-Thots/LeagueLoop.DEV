@@ -203,6 +203,13 @@ class HotkeyRecorder(ctk.CTkButton):
             except Exception:
                 pass
 
+        if getattr(self, "_pulse_job", None) is not None:
+            try:
+                self.after_cancel(self._pulse_job)
+                self._pulse_job = None
+            except Exception:
+                pass
+
         if not hasattr(self, "_font") or not self.winfo_exists():
             return
 

@@ -165,7 +165,7 @@ class SidebarWidget(ctk.CTkFrame):
             # Pack based on tab
             if tab_name == "Accounts":
                 if getattr(self, "accounts_tool", None):
-                    self.accounts_tool.pack(fill="x", pady=(0, SECTION_GAP))
+                    self.accounts_tool.pack(fill="both", expand=True, pady=(0, SECTION_GAP))
                     if not getattr(self.accounts_tool, "_expanded", False):
                         self.accounts_tool._toggle_collapse()
                 self.spacer.pack(fill="both", expand=True)

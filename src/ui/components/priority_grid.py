@@ -1067,6 +1067,7 @@ class PriorityIconGrid(ctk.CTkFrame):
 
         if not self._parsed_import:
             ToastManager.get_instance().show("No valid champions found in clipboard.", icon="❌", theme="error")
+            self._close_import()
             return
 
         # Show container
