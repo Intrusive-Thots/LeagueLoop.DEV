@@ -615,8 +615,33 @@ class LCUClient:
             "sample_count": n,
         }
 
+    def get_http_retry_jitter_geometric_harmonic_means_telemetry(self) -> Dict[str, Any]:
+        """Task 202: Returns automated HTTP request retry exponential backoff jitter geometric mean & harmonic mean telemetry."""
+        with self._req_diag_lock:
+            samples = [x for x in self._http_retry_jitter_samples if x > 0]
+
+        if not samples:
+            return {
+                "http_retry_jitter_geometric_mean_s": 0.0,
+                "http_retry_jitter_harmonic_mean_s": 0.0,
+                "sample_count": 0,
+            }
+
+        n = len(samples)
+        log_sum = sum(math.log(x) for x in samples)
+        geo_mean = math.exp(log_sum / n)
+
+        recip_sum = sum(1.0 / x for x in samples)
+        harm_mean = n / recip_sum if recip_sum > 0 else 0.0
+
+        return {
+            "http_retry_jitter_geometric_mean_s": round(geo_mean, 6),
+            "http_retry_jitter_harmonic_mean_s": round(harm_mean, 6),
+            "sample_count": n,
+        }
+
     def get_http_retry_jitter_entropy_telemetry(self) -> Dict[str, Any]:
-        """Task 181, 184, 187, 190, 193, 196 & 199: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, confidence interval, and margin of error telemetry."""
+        """Task 181, 184, 187, 190, 193, 196, 199 & 202: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, confidence interval, margin of error, geometric mean, and harmonic mean telemetry."""
         with self._req_diag_lock:
             samples = self._http_retry_jitter_samples.copy()
             entropy = self._http_retry_jitter_entropy_bits
@@ -631,6 +656,7 @@ class LCUClient:
         range_meta = self.get_http_retry_jitter_range_telemetry()
         ci_meta = self.get_http_retry_jitter_confidence_interval_telemetry()
         moe_meta = self.get_http_retry_jitter_margin_of_error_telemetry()
+        geo_harm_meta = self.get_http_retry_jitter_geometric_harmonic_means_telemetry()
 
         res = {
             "http_retry_jitter_samples_count": len(samples),
@@ -646,6 +672,7 @@ class LCUClient:
         res.update(range_meta)
         res.update(ci_meta)
         res.update(moe_meta)
+        res.update(geo_harm_meta)
         return res
 
     def get_http_latency_histogram(self) -> Dict[str, Any]:

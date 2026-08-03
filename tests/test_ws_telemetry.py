@@ -523,6 +523,26 @@ def test_lcu_client_http_retry_jitter_margin_of_error_telemetry():
     assert "http_retry_jitter_relative_moe_pct" in entropy_meta
 
 
+def test_lcu_client_http_retry_jitter_geometric_harmonic_means_telemetry():
+    client = LCUClient()
+    initial = client.get_http_retry_jitter_geometric_harmonic_means_telemetry()
+    assert initial["http_retry_jitter_geometric_mean_s"] == 0.0
+    assert initial["http_retry_jitter_harmonic_mean_s"] == 0.0
+    assert initial["sample_count"] == 0
+
+    with client._req_diag_lock:
+        client._http_retry_jitter_samples = [0.01, 0.02, 0.05, 0.08, 0.12, 0.15, 0.20]
+
+    meta = client.get_http_retry_jitter_geometric_harmonic_means_telemetry()
+    assert meta["sample_count"] == 7
+    assert meta["http_retry_jitter_geometric_mean_s"] > 0.0
+    assert meta["http_retry_jitter_harmonic_mean_s"] > 0.0
+
+    entropy_meta = client.get_http_retry_jitter_entropy_telemetry()
+    assert "http_retry_jitter_geometric_mean_s" in entropy_meta
+    assert "http_retry_jitter_harmonic_mean_s" in entropy_meta
+
+
 
 
 
