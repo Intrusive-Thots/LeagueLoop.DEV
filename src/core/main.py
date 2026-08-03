@@ -575,12 +575,17 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
             except Exception:
                 return False
 
-        # All known window titles for Riot/League client windows
-        _CLIENT_TITLES = {"league of legends", "riot client"}
+        # Window titles grouped by priority — League Client first, Riot Client as fallback
+        _LEAGUE_TITLES = {"league of legends"}
+        _RIOT_TITLES = {"riot client"}
+        _CLIENT_TITLES = _LEAGUE_TITLES | _RIOT_TITLES
 
         def find_client_hwnd():
+            """Two-pass window search: prioritize League Client, fall back to Riot Client."""
             try:
-                target_hwnd = [0]
+                league_hwnd = [0]
+                riot_hwnd = [0]
+
                 def enum_callback(h, extra):
                     if not user32.IsWindowVisible(h):
                         return True  # Skip invisible windows
@@ -589,14 +594,21 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                         buf = ctypes.create_unicode_buffer(length + 1)
                         user32.GetWindowTextW(h, buf, length + 1)
                         title = buf.value.lower().strip()
-                        if title in _CLIENT_TITLES:
+                        if title in _LEAGUE_TITLES:
                             if is_client_window(h):
-                                target_hwnd[0] = h
-                                return False  # Stop enumeration
+                                league_hwnd[0] = h
+                                return False  # League Client found — stop immediately
+                        elif title in _RIOT_TITLES:
+                            if riot_hwnd[0] == 0 and is_client_window(h):
+                                riot_hwnd[0] = h
+                                # Don't stop — keep looking for a League Client window
                     return True
+
                 WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.wintypes.BOOL, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
                 user32.EnumWindows(WNDENUMPROC(enum_callback), 0)
-                return target_hwnd[0]
+
+                # Prefer League Client; fall back to Riot Client
+                return league_hwnd[0] if league_hwnd[0] != 0 else riot_hwnd[0]
             except Exception:
                 return 0
 
@@ -632,7 +644,22 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
 
                 # Sync state with League/Riot Client (no bypass during game)
                 if last_hwnd != 0 and user32.IsWindow(last_hwnd) and is_client_window(last_hwnd):
-                    hwnd = last_hwnd
+                    # If currently latched to a Riot Client, re-scan in case League Client appeared
+                    _is_riot_hwnd = False
+                    try:
+                        _len = user32.GetWindowTextLengthW(last_hwnd)
+                        if _len > 0:
+                            _buf = ctypes.create_unicode_buffer(_len + 1)
+                            user32.GetWindowTextW(last_hwnd, _buf, _len + 1)
+                            _is_riot_hwnd = _buf.value.lower().strip() in _RIOT_TITLES
+                    except Exception:
+                        pass
+                    if _is_riot_hwnd:
+                        # Re-scan: if a League Client window now exists, switch to it
+                        better = find_client_hwnd()
+                        hwnd = better if better != 0 else last_hwnd
+                    else:
+                        hwnd = last_hwnd
                 else:
                     hwnd = find_client_hwnd()
 
