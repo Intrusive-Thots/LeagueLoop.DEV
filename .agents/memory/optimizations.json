@@ -63,5 +63,18 @@
       "skin_splash_slice_pooling": "Thread-safe memory pooling for skin preview (_acquire_skin_search_slice_tuple) and splash art filter (_acquire_splash_search_slice_tuple) result slice tuples."
     },
     "impact": "Eliminates GC allocation overhead during frequent skin/splash query filtering and provides higher-order statistical shape analysis for LCU HTTP network latency distributions."
+  },
+  {
+    "timestamp": "2026-08-03T01:15:00Z",
+    "feature": "HTTP Retry Jitter Statistical Telemetry & Lane Matchups Search Slice Tuple Memory Pooling",
+    "before_metrics": {
+      "retry_jitter_telemetry": "HTTP request retries occurred with unmonitored backoff jitter distributions.",
+      "lane_matchups_slice_pooling": "Lane matchups recommendation query filter searches allocated fresh result tuple objects on every query repetition."
+    },
+    "after_metrics": {
+      "retry_jitter_telemetry": "Automated entropy (bits), percentiles (p25-p99), skewness/kurtosis, variance, range, confidence intervals, MOE, geometric mean, and harmonic mean telemetry.",
+      "lane_matchups_slice_pooling": "Thread-safe memory pooling for lane matchups recommendation search query result slice tuples (_acquire_lane_matchups_search_slice_tuple)."
+    },
+    "impact": "Eliminates GC allocation overhead during repeated lane matchups query filtering and provides statistical characterization of network retry exponential backoff jitter."
   }
 ]
