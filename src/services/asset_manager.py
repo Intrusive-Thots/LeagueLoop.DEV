@@ -1463,6 +1463,10 @@ class AssetManager:
                 "summoner_spell_slice_pool_memory_kb": mem_kb,
             }
 
+    _acquire_spell_recommendations_search_slice_tuple = _acquire_summoner_spell_search_slice_tuple
+    clear_spell_recommendations_search_slice_pool = clear_summoner_spell_search_slice_pool
+    get_spell_recommendations_search_slice_pool_telemetry = get_summoner_spell_search_slice_pool_telemetry
+
     def search_summoner_spell_recommendations(
         self,
         query: str = "",
