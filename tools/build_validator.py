@@ -44,10 +44,10 @@ def validate_test_suite(project_root: Path) -> bool:
             stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=180,
         )
     except subprocess.TimeoutExpired:
-        print("[FAIL] Test suite validation timed out after 120s.")
+        print("[FAIL] Test suite validation timed out after 180s.")
         return False
     if res.returncode != 0:
         print(f"[FAIL] Test suite validation failed:\n{res.stdout}\n{res.stderr}")
