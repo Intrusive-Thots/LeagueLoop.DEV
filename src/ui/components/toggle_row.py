@@ -36,19 +36,18 @@ class ToggleRow(ctk.CTkFrame):
         if tooltip_text:
             CTkTooltip(self.text_label, tooltip_text)
         
-        # Prominent Edit button (always visible if on_edit is provided)
+        # Borderless gear icon — no square box, transparent background
         self.btn_edit = ctk.CTkButton(
-            self, text="⚙", width=28, height=22,
-            corner_radius=4, font=get_font("body", "bold"),
-            fg_color="#1A2332",
-            border_width=1,
-            border_color=get_color("colors.accent.gold", "#C8AA6E"),
+            self, text="⚙", width=22, height=22,
+            corner_radius=6, font=("Segoe UI Symbol", 15),
+            fg_color="transparent",
+            border_width=0,
             text_color=get_color("colors.accent.gold", "#C8AA6E"),
-            hover_color="#2A3447",
+            hover_color="#1A2332",
             command=self._handle_edit, cursor="hand2"
         )
         if self._on_edit:
-            self.btn_edit.pack(side="left", padx=(8, 0))
+            self.btn_edit.pack(side="left", padx=(6, 0))
             self.text_label.bind("<Button-1>", lambda e: self._handle_edit())
             self.text_label.configure(cursor="hand2")
         
@@ -104,17 +103,23 @@ class ToggleRow(ctk.CTkFrame):
         self._update_icon_state()
     
     def _update_icon_state(self):
-        """Switch between color (animated) and grayscale icon based on toggle state."""
+        """Switch between color (animated) and grayscale icon based on toggle state.
+        Also updates the gear button color to match the ON/OFF state."""
         if not self.winfo_exists():
             return
         
         is_on = self._variable.get() if self._variable else False
+        gold = get_color("colors.accent.gold", "#C8AA6E")
+        muted = get_color("colors.text.muted", "#5B5A56")
         
         if is_on:
             # Show color icon and start pulse
             if self._color_image:
                 self.icon_label.configure(image=self._color_image)
             self.text_label.configure(text_color=get_color("colors.text.primary", "#F0E6D2"))
+            # Gear icon gets gold color when ON
+            if self._on_edit and self.btn_edit.winfo_exists():
+                self.btn_edit.configure(text_color=gold)
             self._start_pulse()
         else:
             # Show grayscale icon and stop pulse
@@ -123,7 +128,10 @@ class ToggleRow(ctk.CTkFrame):
                 self.icon_label.configure(image=self._gray_image)
             elif self._color_image:
                 self.icon_label.configure(image=self._color_image)
-            self.text_label.configure(text_color=get_color("colors.text.muted", "#5B5A56"))
+            self.text_label.configure(text_color=muted)
+            # Gear icon grays out when OFF
+            if self._on_edit and self.btn_edit.winfo_exists():
+                self.btn_edit.configure(text_color=muted)
     
     def _start_pulse(self):
         """Subtle pulse animation on the icon when automation is ON."""
@@ -185,3 +193,4 @@ class ToggleRow(ctk.CTkFrame):
         """Clean up pulse animation on destroy."""
         self._stop_pulse()
         super().destroy()
+
