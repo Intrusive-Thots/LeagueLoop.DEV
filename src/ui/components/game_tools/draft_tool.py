@@ -98,7 +98,7 @@ class DraftTool(ctk.CTkFrame):
     def _toggle_collapse(self):
         self._expanded = not self._expanded
         if self._expanded:
-            self.body.pack(fill="x", pady=(SPACING_SM, SPACING_MD), padx=SPACING_MD)
+            self.body.pack(fill="both", expand=True, pady=(SPACING_SM, SPACING_MD), padx=SPACING_MD)
             self.lbl_section.configure(text="▼  DRAFT ASSISTANT")
         else:
             self.body.pack_forget()

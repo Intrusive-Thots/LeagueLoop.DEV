@@ -247,13 +247,13 @@ class AccountsTool(ctk.CTkFrame):
             self.list_frame._scrollbar.configure(width=6)
         except Exception:
             pass
-        self.list_frame.pack(fill="x")
+        self.list_frame.pack(fill="both", expand=True)
 
     # ─────────── Collapse ───────────
     def _toggle_collapse(self):
         self._expanded = not self._expanded
         if self._expanded:
-            self.body.pack(fill="x", pady=(SPACING_SM, SPACING_MD), padx=SPACING_MD)
+            self.body.pack(fill="both", expand=True, pady=(SPACING_SM, SPACING_MD), padx=SPACING_MD)
             self.lbl_section.configure(text="▼  ACCOUNTS")
             # Try to detect which account is active
             self._detect_active()
@@ -276,7 +276,7 @@ class AccountsTool(ctk.CTkFrame):
 
         self.list_frame.pack_forget()
         self.form_container.pack(fill="x", padx=4, pady=(4, 0))
-        self.list_frame.pack(fill="x")
+        self.list_frame.pack(fill="both", expand=True)
         self.entry_label.focus_set()
 
     def _show_edit_form(self, idx):
@@ -306,7 +306,7 @@ class AccountsTool(ctk.CTkFrame):
 
         self.list_frame.pack_forget()
         self.form_container.pack(fill="x", padx=4, pady=(4, 0))
-        self.list_frame.pack(fill="x")
+        self.list_frame.pack(fill="both", expand=True)
         self.entry_label.focus_set()
 
     def _clear_form(self):
