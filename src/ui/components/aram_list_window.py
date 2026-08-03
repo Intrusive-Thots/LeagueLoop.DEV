@@ -10,17 +10,20 @@ import customtkinter as ctk
 from ui.components.factory import get_color, get_font
 from ui.components.priority_grid import PriorityIconGrid
 
-_CLIENT_TITLES = {"league of legends", "riot client"}
+_LEAGUE_TITLES = {"league of legends"}
+_RIOT_TITLES = {"riot client"}
+_CLIENT_TITLES = _LEAGUE_TITLES | _RIOT_TITLES
 
 
 def _get_league_client_rect():
-    """Find position and dimensions of the League Client window (thread-safe)."""
+    """Find position and dimensions of the League Client window (thread-safe, prioritizing League over Riot)."""
     try:
         user32 = getattr(ctypes.windll, "user32", None)
         if not user32:
             return None
 
-        target_hwnd = [0]
+        league_hwnd = [0]
+        riot_hwnd = [0]
         def enum_callback(h, extra):
             if not user32.IsWindowVisible(h):
                 return True
@@ -29,14 +32,17 @@ def _get_league_client_rect():
                 buf = ctypes.create_unicode_buffer(length + 1)
                 user32.GetWindowTextW(h, buf, length + 1)
                 title = buf.value.lower().strip()
-                if title in _CLIENT_TITLES:
-                    target_hwnd[0] = h
+                if title in _LEAGUE_TITLES:
+                    league_hwnd[0] = h
                     return False
+                elif title in _RIOT_TITLES:
+                    if riot_hwnd[0] == 0:
+                        riot_hwnd[0] = h
             return True
 
         WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.wintypes.BOOL, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
         user32.EnumWindows(WNDENUMPROC(enum_callback), 0)
-        hwnd = target_hwnd[0]
+        hwnd = league_hwnd[0] if league_hwnd[0] != 0 else riot_hwnd[0]
 
         if hwnd != 0 and user32.IsWindow(hwnd) and user32.IsWindowVisible(hwnd):
             rect = ctypes.wintypes.RECT()
@@ -156,9 +162,6 @@ class AramListWindow(ctk.CTkToplevel):
         try:
             if self.winfo_exists():
                 self.geometry(f"{drawer_w}x{drawer_h}+{target_x}+{target_y}")
-                if hasattr(self, "grid_widget"):
-                    icons_per_row = max(4, (drawer_w - 48) // 52)
-                    self.grid_widget.set_icons_per_row(icons_per_row)
         except Exception:
             pass
 

@@ -334,7 +334,7 @@ class PriorityIconGrid(ctk.CTkFrame):
             corner_radius=get_radius("sm"), font=get_font("body"),
             fg_color="transparent", hover_color=get_color("colors.state.danger", "#e81123"),
             text_color=get_color("colors.text.muted"),
-            command=lambda: self.import_container.pack_forget(), cursor="hand2",
+            command=self._close_import, cursor="hand2",
             ).pack(side="right")
 
         self.btn_import_apply = ctk.CTkButton(
@@ -694,7 +694,7 @@ class PriorityIconGrid(ctk.CTkFrame):
     def _toggle_collapse(self):
         self._expanded = not self._expanded
         if self._expanded:
-            self.body.pack(fill="x", pady=(4, 0))
+            self.body.pack(fill="both", expand=True, pady=(SPACING_SM, SPACING_MD), padx=SPACING_MD)
             self.lbl_section.configure(text="▼  ARAM LIST")
         else:
             self.body.pack_forget()
@@ -1105,12 +1105,20 @@ class PriorityIconGrid(ctk.CTkFrame):
                 text_color=_color_text_primary
             ).pack(padx=8, pady=2)
 
+    def _close_import(self):
+        self.import_container.pack_forget()
+        if hasattr(self, "add_container") and not self.add_container.winfo_viewable():
+            try:
+                self.add_container.pack(fill="x", pady=(0, SPACING_SM))
+            except Exception:
+                pass
+
     def _commit_import(self):
         if not self._parsed_import:
             return
 
         self._save_priority_list(self._parsed_import)
-        self.import_container.pack_forget()
+        self._close_import()
         self._render_grid()
 
         ToastManager.get_instance().show(
