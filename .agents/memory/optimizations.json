@@ -76,5 +76,18 @@
       "lane_matchups_slice_pooling": "Thread-safe memory pooling for lane matchups recommendation search query result slice tuples (_acquire_lane_matchups_search_slice_tuple)."
     },
     "impact": "Eliminates GC allocation overhead during repeated lane matchups query filtering and provides statistical characterization of network retry exponential backoff jitter."
+  },
+  {
+    "timestamp": "2026-08-03T01:22:00Z",
+    "feature": "HTTP Retry Jitter Skewness/Kurtosis CI & Summoner Spell Search Slice Tuple Memory Pooling",
+    "before_metrics": {
+      "skewness_kurtosis_ci": "Skewness and kurtosis higher moments were measured without standard error bounds or margin of error confidence intervals.",
+      "summoner_spell_slice_pooling": "Summoner spell recommendation query filter searches allocated fresh result tuple objects on every query repetition."
+    },
+    "after_metrics": {
+      "skewness_kurtosis_ci": "Automated standard error and confidence interval telemetry for skewness and kurtosis (get_http_retry_jitter_skewness_kurtosis_ci_telemetry).",
+      "summoner_spell_slice_pooling": "Thread-safe memory pooling for summoner spell recommendation search query result slice tuples (_acquire_summoner_spell_search_slice_tuple)."
+    },
+    "impact": "Eliminates GC allocation overhead during repeated summoner spell query filtering and provides uncertainty bounds on higher-order shape parameters of retry backoff distributions."
   }
 ]
