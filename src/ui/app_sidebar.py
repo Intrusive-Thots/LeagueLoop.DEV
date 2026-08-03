@@ -173,6 +173,7 @@ class SidebarWidget(ctk.CTkFrame):
             elif tab_name == "Play":
                 self.session_frame.pack(fill="x", pady=(0, SECTION_GAP))
                 self.action_container.pack(fill="x", pady=(0, SECTION_GAP))
+                self.game_tool_container.pack(fill="x", pady=(0, SECTION_GAP))
                 
                 # Show tools in Play mode
                 if getattr(self, "friend_list", None):

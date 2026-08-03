@@ -141,3 +141,13 @@ class ChampionInput(ctk.CTkFrame):
         else:
             self.entry.configure(border_color="#e81123")
             self.after(800, lambda: self.entry.configure(border_color=get_color("colors.border.subtle")))
+
+    def destroy(self):
+        if getattr(self, "_debounce_timer", None) is not None:
+            try:
+                self.after_cancel(self._debounce_timer)
+                self._debounce_timer = None
+            except Exception:
+                pass
+        super().destroy()
+
