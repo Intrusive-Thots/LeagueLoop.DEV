@@ -2353,6 +2353,7 @@ class AssetManager:
             "draft_pick_search_slice_pool_telemetry": self.get_draft_pick_search_slice_pool_telemetry(),
             "ban_priority_search_slice_pool_telemetry": self.get_ban_priority_search_slice_pool_telemetry(),
             "lane_matchups_search_slice_pool_telemetry": self.get_lane_matchups_search_slice_pool_telemetry(),
+            "summoner_spell_search_slice_pool_telemetry": self.get_summoner_spell_search_slice_pool_telemetry(),
             "disk_cache": disk_stats,
         }
 
@@ -2395,4 +2396,120 @@ class AssetManager:
         stats = {
             "total_files": total_files,
             "total_bytes": total_bytes,
-            "total_mb": round
+            "total_mb": round(total_bytes / (1024 * 1024), 2),
+            "processed_count": processed_count,
+            "raw_image_count": raw_image_count,
+            "cache_dir": CACHE_DIR
+        }
+
+        with self._lock:
+            self._cached_disk_stats = stats
+            self._disk_stats_scan_timestamp = time.time()
+            self._disk_scan_count += 1
+            self._disk_scan_total_latency_ms += scan_dur_ms
+
+        return stats
+
+    def get_disk_cache_scan_telemetry(self) -> Dict[str, Any]:
+        """Task 155: Returns benchmark and optimization metrics for disk cache scanning performance."""
+        with self._lock:
+            scans = self._disk_scan_count
+            hits = self._disk_scan_cache_hits
+            tot_lat = self._disk_scan_total_latency_ms
+            avg_lat = round(tot_lat / max(1, scans), 3) if scans > 0 else 0.0
+            return {
+                "disk_scan_count": scans,
+                "disk_scan_cache_hits": hits,
+                "avg_scan_latency_ms": avg_lat,
+                "scan_ttl_seconds": self._disk_stats_cache_ttl_s,
+            }
+
+    def clean_disk_cache(self, max_files: int = 500, max_bytes: int = 50 * 1024 * 1024, max_age_days: int = 14) -> Dict[str, Any]:
+        """
+        Benchmarks and executes disk cache cleanup strategy during high asset churn.
+        Removes oldest cache files if file count, total bytes, or max age thresholds are exceeded.
+        """
+        t_start = time.perf_counter()
+        removed_count = 0
+        freed_bytes = 0
+
+        if not os.path.exists(CACHE_DIR):
+            return {
+                "removed_files": 0,
+                "freed_bytes": 0,
+                "freed_mb": 0.0,
+                "duration_ms": round((time.perf_counter() - t_start) * 1000, 2)
+            }
+
+        now = time.time()
+        max_age_sec = max_age_days * 86400
+
+        files_info = []
+        for entry in os.scandir(CACHE_DIR):
+            if not entry.is_file():
+                continue
+            # Do not delete critical system metadata like version.txt
+            if entry.name in ("version.txt", "champion.json", "item.json", "meraki_champions.json"):
+                continue
+            try:
+                st = entry.stat()
+                files_info.append({
+                    "path": entry.path,
+                    "name": entry.name,
+                    "mtime": st.st_mtime,
+                    "size": st.st_size
+                })
+            except OSError:
+                continue
+
+        # Sort files by modification time (oldest first)
+        files_info.sort(key=lambda x: x["mtime"])
+
+        files_to_remove = set()
+
+        # 1. Remove expired files (older than max_age_days)
+        for f in files_info:
+            if (now - f["mtime"]) > max_age_sec:
+                files_to_remove.add(f["path"])
+
+        # 2. Prune oldest if total files exceeds max_files
+        remaining_files = [f for f in files_info if f["path"] not in files_to_remove]
+        if len(remaining_files) > max_files:
+            excess_count = len(remaining_files) - max_files
+            for f in remaining_files[:excess_count]:
+                files_to_remove.add(f["path"])
+
+        # 3. Prune oldest if total bytes exceeds max_bytes
+        remaining_files = [f for f in files_info if f["path"] not in files_to_remove]
+        current_size = sum(f["size"] for f in remaining_files)
+        if current_size > max_bytes:
+            for f in remaining_files:
+                if current_size <= max_bytes:
+                    break
+                files_to_remove.add(f["path"])
+                current_size -= f["size"]
+
+        # Execute removal
+        for path in files_to_remove:
+            try:
+                sz = os.path.getsize(path)
+                os.remove(path)
+                removed_count += 1
+                freed_bytes += sz
+            except OSError as e:
+                Logger.warning("AssetManager", f"Failed to prune cache file {path}: {e}")
+
+        duration_ms = round((time.perf_counter() - t_start) * 1000, 2)
+        Logger.info("AssetManager", f"Cache cleanup pruned {removed_count} files ({freed_bytes / (1024*1024):.2f} MB) in {duration_ms}ms.")
+
+        with self._lock:
+            self._cached_disk_stats = None
+
+        return {
+            "removed_files": removed_count,
+            "freed_bytes": freed_bytes,
+            "freed_mb": round(freed_bytes / (1024 * 1024), 2),
+            "duration_ms": duration_ms
+        }
+
+

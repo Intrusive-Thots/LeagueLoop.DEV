@@ -543,6 +543,36 @@ def test_lcu_client_http_retry_jitter_geometric_harmonic_means_telemetry():
     assert "http_retry_jitter_harmonic_mean_s" in entropy_meta
 
 
+def test_lcu_client_http_retry_jitter_skewness_kurtosis_ci_telemetry():
+    client = LCUClient()
+    initial = client.get_http_retry_jitter_skewness_kurtosis_ci_telemetry()
+    assert initial["http_retry_jitter_skewness_stderr"] == 0.0
+    assert initial["http_retry_jitter_skewness_ci_margin"] == 0.0
+    assert initial["http_retry_jitter_skewness_ci95_lower"] == 0.0
+    assert initial["http_retry_jitter_kurtosis_stderr"] == 0.0
+    assert initial["http_retry_jitter_kurtosis_ci_margin"] == 0.0
+    assert initial["http_retry_jitter_kurtosis_ci95_upper"] == 0.0
+    assert initial["sample_count"] == 0
+
+    with client._req_diag_lock:
+        client._http_retry_jitter_samples = [0.01, 0.02, 0.05, 0.08, 0.12, 0.15, 0.20]
+
+    meta = client.get_http_retry_jitter_skewness_kurtosis_ci_telemetry()
+    assert meta["sample_count"] == 7
+    assert meta["http_retry_jitter_skewness_stderr"] > 0.0
+    assert meta["http_retry_jitter_skewness_ci_margin"] > 0.0
+    assert "http_retry_jitter_skewness_ci95_lower" in meta
+    assert meta["http_retry_jitter_kurtosis_stderr"] > 0.0
+    assert meta["http_retry_jitter_kurtosis_ci_margin"] > 0.0
+    assert "http_retry_jitter_kurtosis_ci95_upper" in meta
+
+    entropy_meta = client.get_http_retry_jitter_entropy_telemetry()
+    assert "http_retry_jitter_skewness_stderr" in entropy_meta
+    assert "http_retry_jitter_kurtosis_ci_margin" in entropy_meta
+    assert "http_retry_jitter_skewness_ci95_lower" in entropy_meta
+
+
+
 
 
 

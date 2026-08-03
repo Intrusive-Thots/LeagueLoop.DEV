@@ -649,8 +649,12 @@ class LCUClient:
             return {
                 "http_retry_jitter_skewness_stderr": 0.0,
                 "http_retry_jitter_skewness_ci_margin": 0.0,
+                "http_retry_jitter_skewness_ci95_lower": 0.0,
+                "http_retry_jitter_skewness_ci95_upper": 0.0,
                 "http_retry_jitter_kurtosis_stderr": 0.0,
                 "http_retry_jitter_kurtosis_ci_margin": 0.0,
+                "http_retry_jitter_kurtosis_ci95_lower": 0.0,
+                "http_retry_jitter_kurtosis_ci95_upper": 0.0,
                 "confidence_level": confidence_level,
                 "sample_count": len(samples),
             }
@@ -671,11 +675,19 @@ class LCUClient:
         skew_margin = z * skew_stderr
         kurt_margin = z * kurt_stderr
 
+        shape_meta = self.get_http_retry_jitter_skewness_kurtosis_telemetry()
+        skew = shape_meta.get("http_retry_jitter_skewness", 0.0)
+        kurt = shape_meta.get("http_retry_jitter_kurtosis", 0.0)
+
         return {
             "http_retry_jitter_skewness_stderr": round(skew_stderr, 4),
             "http_retry_jitter_skewness_ci_margin": round(skew_margin, 4),
+            "http_retry_jitter_skewness_ci95_lower": round(skew - skew_margin, 4),
+            "http_retry_jitter_skewness_ci95_upper": round(skew + skew_margin, 4),
             "http_retry_jitter_kurtosis_stderr": round(kurt_stderr, 4),
             "http_retry_jitter_kurtosis_ci_margin": round(kurt_margin, 4),
+            "http_retry_jitter_kurtosis_ci95_lower": round(kurt - kurt_margin, 4),
+            "http_retry_jitter_kurtosis_ci95_upper": round(kurt + kurt_margin, 4),
             "confidence_level": confidence_level,
             "sample_count": n,
         }
