@@ -39,7 +39,7 @@ def validate_test_suite(project_root: Path) -> bool:
 
     try:
         res = subprocess.run(
-            [python_bin, "-m", "pytest", "-q", "--disable-warnings"],
+            [python_bin, "-m", "pytest", "-q", "--disable-warnings", "--no-cov"],
             cwd=str(project_root),
             stdin=subprocess.DEVNULL,
             capture_output=True,
