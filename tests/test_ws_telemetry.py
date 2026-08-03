@@ -503,6 +503,26 @@ def test_lcu_client_http_retry_jitter_confidence_interval_telemetry():
     assert "http_retry_jitter_stderr_ms" in entropy_meta
 
 
+def test_lcu_client_http_retry_jitter_margin_of_error_telemetry():
+    client = LCUClient()
+    initial = client.get_http_retry_jitter_margin_of_error_telemetry()
+    assert initial["http_retry_jitter_moe_ms"] == 0.0
+    assert initial["http_retry_jitter_relative_moe_pct"] == 0.0
+    assert initial["sample_count"] == 0
+
+    with client._req_diag_lock:
+        client._http_retry_jitter_samples = [0.01, 0.02, 0.05, 0.08, 0.12, 0.15, 0.20]
+
+    meta = client.get_http_retry_jitter_margin_of_error_telemetry()
+    assert meta["sample_count"] == 7
+    assert meta["http_retry_jitter_moe_ms"] > 0.0
+    assert meta["http_retry_jitter_relative_moe_pct"] > 0.0
+
+    entropy_meta = client.get_http_retry_jitter_entropy_telemetry()
+    assert "http_retry_jitter_moe_ms" in entropy_meta
+    assert "http_retry_jitter_relative_moe_pct" in entropy_meta
+
+
 
 
 

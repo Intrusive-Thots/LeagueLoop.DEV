@@ -576,8 +576,47 @@ class LCUClient:
             "sample_count": n,
         }
 
+    def get_http_retry_jitter_margin_of_error_telemetry(self, confidence_level: float = 0.95) -> Dict[str, Any]:
+        """Task 199: Returns automated HTTP request retry exponential backoff jitter margin of error percentiles telemetry."""
+        with self._req_diag_lock:
+            samples = self._http_retry_jitter_samples.copy()
+
+        if not samples or len(samples) < 2:
+            return {
+                "http_retry_jitter_moe_ms": 0.0,
+                "http_retry_jitter_relative_moe_pct": 0.0,
+                "confidence_level": confidence_level,
+                "sample_count": len(samples),
+            }
+
+        n = len(samples)
+        mean_s = sum(samples) / n
+        variance = sum((x - mean_s) ** 2 for x in samples) / (n - 1)
+        stddev_s = math.sqrt(variance)
+        stderr_s = stddev_s / math.sqrt(n)
+
+        if confidence_level >= 0.99:
+            z = 2.576
+        elif confidence_level >= 0.95:
+            z = 1.960
+        elif confidence_level >= 0.90:
+            z = 1.645
+        else:
+            z = 1.000
+
+        moe_s = z * stderr_s
+        moe_ms = moe_s * 1000.0
+        rel_moe = round((moe_s / mean_s) * 100.0, 4) if mean_s > 0 else 0.0
+
+        return {
+            "http_retry_jitter_moe_ms": round(moe_ms, 4),
+            "http_retry_jitter_relative_moe_pct": rel_moe,
+            "confidence_level": confidence_level,
+            "sample_count": n,
+        }
+
     def get_http_retry_jitter_entropy_telemetry(self) -> Dict[str, Any]:
-        """Task 181, 184, 187, 190, 193 & 196: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, and confidence interval telemetry."""
+        """Task 181, 184, 187, 190, 193, 196 & 199: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, confidence interval, and margin of error telemetry."""
         with self._req_diag_lock:
             samples = self._http_retry_jitter_samples.copy()
             entropy = self._http_retry_jitter_entropy_bits
@@ -591,6 +630,7 @@ class LCUClient:
         var_meta = self.get_http_retry_jitter_variance_telemetry()
         range_meta = self.get_http_retry_jitter_range_telemetry()
         ci_meta = self.get_http_retry_jitter_confidence_interval_telemetry()
+        moe_meta = self.get_http_retry_jitter_margin_of_error_telemetry()
 
         res = {
             "http_retry_jitter_samples_count": len(samples),
@@ -605,6 +645,7 @@ class LCUClient:
         res.update(var_meta)
         res.update(range_meta)
         res.update(ci_meta)
+        res.update(moe_meta)
         return res
 
     def get_http_latency_histogram(self) -> Dict[str, Any]:
