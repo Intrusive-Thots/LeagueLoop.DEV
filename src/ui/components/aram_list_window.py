@@ -1,11 +1,8 @@
 """
 ARAM Top Drawer Window — Sleek top drawer panel for managing the ARAM Champion Priority List.
-Drops down from the top edge of the League of Legends client window.
 Dynamic column count scales automatically based on the client's width.
 """
 import ctypes
-import threading
-import time
 import customtkinter as ctk
 from ui.components.factory import get_color, get_font
 from ui.components.priority_grid import PriorityIconGrid
@@ -65,8 +62,6 @@ class AramListWindow(ctk.CTkToplevel):
         super().__init__(master, **kwargs)
         self.config = config
         self.assets = assets
-        self._tracking_active = True
-        self._last_geo = None
 
         self.title("Queqq — ARAM Priority List Drawer")
         self.overrideredirect(True)
@@ -80,13 +75,10 @@ class AramListWindow(ctk.CTkToplevel):
         self._build_ui()
         self._setup_dragging()
 
-        # Initial positioning snapped to League Client top edge
-        self.after(50, self._sync_position_with_client)
+        # Set initial geometry without continuous locking
+        self.after(50, self._set_initial_geometry)
         self.bind("<Configure>", self._on_resize)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
-
-        # Background thread to keep top drawer attached to League Client top edge
-        threading.Thread(target=self._client_tracking_loop, daemon=True).start()
 
     def _build_ui(self):
         # Outer Gold Border Container
@@ -165,8 +157,8 @@ class AramListWindow(ctk.CTkToplevel):
         except Exception:
             pass
 
-    def _sync_position_with_client(self):
-        """Snap top-drawer geometry to match the width and top edge of the League Client window."""
+    def _set_initial_geometry(self):
+        """Set initial geometry when opened without continuously locking to the client window."""
         rect = _get_league_client_rect()
         if rect:
             cx, cy, cw, ch = rect
@@ -174,34 +166,12 @@ class AramListWindow(ctk.CTkToplevel):
             drawer_h = min(300, max(220, ch // 3))
             self._apply_geometry(drawer_w, drawer_h, cx, cy)
         else:
-            self._apply_geometry(1000, 280, 100, 100)
-
-    def _client_tracking_loop(self):
-        """Background thread to keep drawer attached to top of League Client."""
-        while getattr(self, "_tracking_active", False):
-            try:
-                rect = _get_league_client_rect()
-                if rect:
-                    cx, cy, cw, ch = rect
-                    drawer_w = max(500, cw)
-                    drawer_h = min(300, max(220, ch // 3))
-                    target_geo = (drawer_w, drawer_h, cx, cy)
-                else:
-                    target_geo = (1000, 280, 100, 100)
-
-                if target_geo != self._last_geo and self.winfo_exists():
-                    self._last_geo = target_geo
-                    w, h, x, y = target_geo
-                    self.after(0, lambda w=w, h=h, x=x, y=y: self._apply_geometry(w, h, x, y))
-            except Exception:
-                pass
-            time.sleep(0.5)
+            self._apply_geometry(800, 280, 200, 150)
 
     def _on_close(self):
         self.destroy()
 
     def destroy(self):
-        self._tracking_active = False
         AramListWindow._instance = None
         super().destroy()
 
