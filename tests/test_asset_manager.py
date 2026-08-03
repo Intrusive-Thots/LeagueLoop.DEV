@@ -568,7 +568,7 @@ class TestAssetManager(unittest.TestCase):
         tel2 = self.assets.get_synergy_search_slice_pool_telemetry()
         self.assertEqual(tel2["synergy_slice_recycle_hits"], 1)
         self.assertGreater(tel2["synergy_slice_recycle_hit_ratio"], 0.0)
-        self.assertGreater(tel2["synergy_slice_recycle_bytes_recycled"], 0)
+        self.assertGreater(tel2["synergy_slice_bytes_recycled"], 0)
         self.assertEqual(synergies1, synergies2)
 
         summary = self.assets.get_memory_summary_diagnostics()
