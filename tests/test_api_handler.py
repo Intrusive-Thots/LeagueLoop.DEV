@@ -422,6 +422,35 @@ class TestLCUClient(unittest.TestCase):
         self.assertIn("http_retry_jitter_geometric_mean_s", entropy_tel)
         self.assertIn("http_retry_jitter_harmonic_mean_s", entropy_tel)
 
+    def test_http_retry_jitter_rse_variance_ratio_telemetry(self):
+        """Test automated HTTP request retry exponential backoff jitter relative standard error & variance ratio telemetry for Task 208."""
+        empty_tel = self.client.get_http_retry_jitter_rse_variance_ratio_telemetry()
+        self.assertEqual(empty_tel["sample_count"], 0)
+        self.assertEqual(empty_tel["http_retry_jitter_rse_pct"], 0.0)
+        self.assertEqual(empty_tel["http_retry_jitter_variance_ratio"], 0.0)
+        self.assertEqual(empty_tel["http_retry_jitter_signal_to_noise_ratio"], 0.0)
+
+        # Single sample
+        self.client._record_http_retry_jitter(0.02)
+        single_tel = self.client.get_http_retry_jitter_rse_variance_ratio_telemetry()
+        self.assertEqual(single_tel["sample_count"], 1)
+        self.assertEqual(single_tel["http_retry_jitter_rse_pct"], 0.0)
+
+        # Multiple samples
+        self.client._record_http_retry_jitter(0.04)
+        self.client._record_http_retry_jitter(0.06)
+
+        tel = self.client.get_http_retry_jitter_rse_variance_ratio_telemetry()
+        self.assertEqual(tel["sample_count"], 3)
+        self.assertGreater(tel["http_retry_jitter_rse_pct"], 0.0)
+        self.assertGreater(tel["http_retry_jitter_variance_ratio"], 0.0)
+        self.assertGreater(tel["http_retry_jitter_signal_to_noise_ratio"], 0.0)
+
+        entropy_tel = self.client.get_http_retry_jitter_entropy_telemetry()
+        self.assertIn("http_retry_jitter_rse_pct", entropy_tel)
+        self.assertIn("http_retry_jitter_variance_ratio", entropy_tel)
+        self.assertIn("http_retry_jitter_signal_to_noise_ratio", entropy_tel)
+
 if __name__ == '__main__':
     unittest.main()
 

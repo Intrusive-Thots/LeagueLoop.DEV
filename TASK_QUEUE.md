@@ -178,8 +178,14 @@
 - [x] **Task 207**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 215 tests passing in 1.45s).
 
 ## Upcoming Autonomous Improvement Tasks
-- [ ] **Task 208**: Implement automated HTTP request retry exponential backoff jitter relative standard error & variance ratio telemetry in `LCUClient`.
-- [ ] **Task 209**: Benchmark and optimize memory pooling for champion skill order recommendations search query slice tuple creation in `AssetManager`.
-- [ ] **Task 210**: Maintain continuous system-wide health and build readiness validation.
+- [x] **Task 208**: Implement automated HTTP request retry exponential backoff jitter relative standard error & variance ratio telemetry in `LCUClient` (`get_http_retry_jitter_rse_variance_ratio_telemetry`, `http_retry_jitter_rse_pct`, `http_retry_jitter_variance_ratio`, `http_retry_jitter_signal_to_noise_ratio`).
+- [x] **Task 209**: Benchmark and optimize memory pooling for champion skill order recommendations search query slice tuple creation in `AssetManager` (`_acquire_skill_order_search_slice_tuple`, `search_skill_order_recommendations`, `get_skill_order_search_slice_pool_telemetry`).
+- [x] **Task 210**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 185 tests passing in 1.20s).
+
+## Upcoming Autonomous Improvement Tasks
+- [ ] **Task 211**: Implement automated HTTP request retry exponential backoff jitter coefficient of variation & Fano factor confidence interval telemetry in `LCUClient` (`get_http_retry_jitter_cv_fano_ci_telemetry`).
+- [ ] **Task 212**: Benchmark and optimize memory pooling for champion starting items recommendations search query slice tuple creation in `AssetManager` (`_acquire_starting_items_search_slice_tuple`, `search_starting_items_recommendations`, `get_starting_items_search_slice_pool_telemetry`).
+- [ ] **Task 213**: Maintain continuous system-wide health and build readiness validation.
+
 
 

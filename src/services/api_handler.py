@@ -730,8 +730,46 @@ class LCUClient:
             "sample_count": n,
         }
 
+    def get_http_retry_jitter_rse_variance_ratio_telemetry(self) -> Dict[str, Any]:
+        """Task 208: Returns automated HTTP request retry exponential backoff jitter relative standard error & variance ratio telemetry."""
+        with self._req_diag_lock:
+            samples = self._http_retry_jitter_samples.copy()
+
+        if not samples or len(samples) < 2:
+            return {
+                "http_retry_jitter_rse_pct": 0.0,
+                "http_retry_jitter_variance_ratio": 0.0,
+                "http_retry_jitter_signal_to_noise_ratio": 0.0,
+                "sample_count": len(samples),
+            }
+
+        n = len(samples)
+        mean_s = sum(samples) / n
+        if mean_s == 0:
+            return {
+                "http_retry_jitter_rse_pct": 0.0,
+                "http_retry_jitter_variance_ratio": 0.0,
+                "http_retry_jitter_signal_to_noise_ratio": 0.0,
+                "sample_count": n,
+            }
+
+        variance_s = sum((x - mean_s) ** 2 for x in samples) / (n - 1)
+        stddev_s = math.sqrt(variance_s)
+        stderr_s = stddev_s / math.sqrt(n)
+
+        rse_pct = (stderr_s / mean_s) * 100.0
+        var_ratio = variance_s / mean_s
+        snr = mean_s / stddev_s if stddev_s > 0 else 0.0
+
+        return {
+            "http_retry_jitter_rse_pct": round(rse_pct, 4),
+            "http_retry_jitter_variance_ratio": round(var_ratio, 6),
+            "http_retry_jitter_signal_to_noise_ratio": round(snr, 4),
+            "sample_count": n,
+        }
+
     def get_http_retry_jitter_entropy_telemetry(self) -> Dict[str, Any]:
-        """Task 181, 184, 187, 190, 193, 196, 199, 202 & 205: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, confidence interval, margin of error, geometric mean, harmonic mean, and skewness/kurtosis confidence interval telemetry."""
+        """Task 181, 184, 187, 190, 193, 196, 199, 202, 205 & 208: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, confidence interval, margin of error, geometric mean, harmonic mean, skewness/kurtosis CI, and relative standard error/variance ratio telemetry."""
         with self._req_diag_lock:
             samples = self._http_retry_jitter_samples.copy()
             entropy = self._http_retry_jitter_entropy_bits
@@ -748,6 +786,7 @@ class LCUClient:
         moe_meta = self.get_http_retry_jitter_margin_of_error_telemetry()
         geo_harm_meta = self.get_http_retry_jitter_geometric_harmonic_means_telemetry()
         skew_kurt_ci_meta = self.get_http_retry_jitter_skewness_kurtosis_ci_telemetry()
+        rse_var_ratio_meta = self.get_http_retry_jitter_rse_variance_ratio_telemetry()
 
         res = {
             "http_retry_jitter_samples_count": len(samples),
@@ -765,6 +804,7 @@ class LCUClient:
         res.update(moe_meta)
         res.update(geo_harm_meta)
         res.update(skew_kurt_ci_meta)
+        res.update(rse_var_ratio_meta)
         return res
 
     def get_http_latency_histogram(self) -> Dict[str, Any]:

@@ -16,6 +16,12 @@ class DummyWidget:
         pass
     def pack_configure(self, *args, **kwargs):
         pass
+    def pack_forget(self, *args, **kwargs):
+        pass
+    def grid_forget(self, *args, **kwargs):
+        pass
+    def place_forget(self, *args, **kwargs):
+        pass
     def pack_propagate(self, *args, **kwargs):
         pass
     def grid_columnconfigure(self, *args, **kwargs):
@@ -48,6 +54,8 @@ class DummyWidget:
         pass
     def winfo_exists(self):
         return True
+    def winfo_children(self):
+        return []
     def winfo_width(self):
         return 800
     def winfo_height(self):
@@ -116,6 +124,8 @@ from ui.components.toast import Toast, ToastManager
 class TestUIComponents(unittest.TestCase):
 
     def setUp(self):
+        sys.modules['customtkinter'] = mock_ctk
+        sys.modules['tkinter'] = mock_tk
         self.mock_parent = DummyWidget()
 
     def test_lol_toggle_initialization(self):
@@ -223,6 +233,7 @@ class TestUIComponents(unittest.TestCase):
 
     def test_automation_editor_save(self):
         """Test AutomationEditor parameter saving for various automation keys."""
+        sys.modules.pop("ui.components.automation_editor", None)
         from ui.components.automation_editor import AutomationEditor
 
         mock_master = DummyWidget()
