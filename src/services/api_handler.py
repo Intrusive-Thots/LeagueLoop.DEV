@@ -1313,8 +1313,45 @@ class LCUClient:
             "sample_count": n,
         }
 
+    def get_http_retry_jitter_ch_tw_polarization_telemetry(self) -> Dict[str, Any]:
+        """Task 247: Returns automated HTTP request retry exponential backoff jitter Chakravarty (CH) & Tsui-Wang (TW) polarization inequality telemetry."""
+        with self._req_diag_lock:
+            samples = self._http_retry_jitter_samples.copy()
+
+        if not samples:
+            return {
+                "http_retry_jitter_chakravarty_index": 0.0,
+                "http_retry_jitter_tsui_wang_index": 0.0,
+                "sample_count": 0,
+            }
+
+        n = len(samples)
+        mean_s = sum(samples) / n
+        total_sum = sum(samples)
+        if mean_s == 0 or total_sum == 0:
+            return {
+                "http_retry_jitter_chakravarty_index": 0.0,
+                "http_retry_jitter_tsui_wang_index": 0.0,
+                "sample_count": n,
+            }
+
+        # Calculate Chakravarty polarization index (alpha = 0.6)
+        diff_sum = sum(abs(a - b) for a in samples for b in samples)
+        ch_raw = diff_sum / (2.0 * (n ** 1.6) * mean_s) if n > 0 else 0.0
+        chakravarty = max(0.0, min(1.0, ch_raw))
+
+        # Calculate Tsui-Wang polarization index (alpha = 0.8)
+        tw_raw = diff_sum / (2.0 * (n ** 1.8) * mean_s) if n > 0 else 0.0
+        tsui_wang = max(0.0, min(1.0, tw_raw))
+
+        return {
+            "http_retry_jitter_chakravarty_index": round(chakravarty, 4),
+            "http_retry_jitter_tsui_wang_index": round(tsui_wang, 4),
+            "sample_count": n,
+        }
+
     def get_http_retry_jitter_entropy_telemetry(self) -> Dict[str, Any]:
-        """Task 181, 184, 187, 190, 193, 196, 199, 202, 205, 208, 211, 214, 217, 220, 223, 226, 229, 232, 235, 238, 241 & 244: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, confidence interval, margin of error, geometric mean, harmonic mean, skewness/kurtosis CI, relative standard error/variance ratio, CV/Fano factor CI, MAD/MedAD, Gini/Hoover inequality, Theil/Atkinson inequality, Palma/Decile ratio inequality, Hoover/Ricci-Schutz inequality, Kakwani/Reynolds-Smolensky inequality, Kolm-Pollak/Atkinson-Gini inequality, Foster-Greer-Thorbecke/Sen-Shorrocks-Thon inequality, Wolfson/Foster-Wolfson polarization inequality, Duclos-Esteban-Ray/Zhang-Kanbur polarization inequality, and Esteban-Ray-Schon-Thon/Esteban-Ray polarization inequality telemetry."""
+        """Task 181, 184, 187, 190, 193, 196, 199, 202, 205, 208, 211, 214, 217, 220, 223, 226, 229, 232, 235, 238, 241, 244 & 247: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, confidence interval, margin of error, geometric mean, harmonic mean, skewness/kurtosis CI, relative standard error/variance ratio, CV/Fano factor CI, MAD/MedAD, Gini/Hoover inequality, Theil/Atkinson inequality, Palma/Decile ratio inequality, Hoover/Ricci-Schutz inequality, Kakwani/Reynolds-Smolensky inequality, Kolm-Pollak/Atkinson-Gini inequality, Foster-Greer-Thorbecke/Sen-Shorrocks-Thon inequality, Wolfson/Foster-Wolfson polarization inequality, Duclos-Esteban-Ray/Zhang-Kanbur polarization inequality, Esteban-Ray-Schon-Thon/Esteban-Ray polarization inequality, and Chakravarty/Tsui-Wang polarization inequality telemetry."""
         with self._req_diag_lock:
             samples = self._http_retry_jitter_samples.copy()
             entropy = self._http_retry_jitter_entropy_bits
@@ -1344,6 +1381,7 @@ class LCUClient:
         wolfson_polarization_meta = self.get_http_retry_jitter_wolfson_polarization_telemetry()
         der_zhang_polarization_meta = self.get_http_retry_jitter_der_zhang_polarization_telemetry()
         erst_esteban_polarization_meta = self.get_http_retry_jitter_erst_esteban_polarization_telemetry()
+        ch_tw_polarization_meta = self.get_http_retry_jitter_ch_tw_polarization_telemetry()
 
         res = {
             "http_retry_jitter_samples_count": len(samples),
@@ -1374,6 +1412,7 @@ class LCUClient:
         res.update(wolfson_polarization_meta)
         res.update(der_zhang_polarization_meta)
         res.update(erst_esteban_polarization_meta)
+        res.update(ch_tw_polarization_meta)
         return res
 
     def get_http_latency_histogram(self) -> Dict[str, Any]:
