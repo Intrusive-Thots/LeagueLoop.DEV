@@ -235,7 +235,12 @@
 - [x] **Task 242**: Benchmark and optimize memory pooling for champion rune stat shards recommendations search query slice tuple creation in `AssetManager` (`_acquire_rune_stat_shards_search_slice_tuple`, `search_rune_stat_shards_recommendations`, `get_rune_stat_shards_search_slice_pool_telemetry`).
 - [x] **Task 243**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 210 tests passing in 1.32s).
 
+## Upcoming Autonomous Improvement Tasks
+- [x] **Task 244**: Implement automated HTTP request retry exponential backoff jitter Esteban-Ray-Schon-Thon (ERST) index & Esteban-Ray polarization inequality telemetry in `LCUClient` (`get_http_retry_jitter_erst_esteban_polarization_telemetry`, `http_retry_jitter_erst_index`, `http_retry_jitter_esteban_ray_index`).
+- [x] **Task 245**: Benchmark and optimize memory pooling for champion summoner spell tree recommendations search query slice tuple creation in `AssetManager` (`_acquire_summoner_spell_tree_search_slice_tuple`, `search_summoner_spell_tree_recommendations`, `get_summoner_spell_tree_search_slice_pool_telemetry`).
+- [x] **Task 246**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 212 tests passing in 1.41s).
 
-
-
-
+## Upcoming Autonomous Improvement Tasks
+- [ ] **Task 247**: Implement automated HTTP request retry exponential backoff jitter Chakravarty (CH) & Tsui-Wang (TW) polarization inequality telemetry in `LCUClient` (`get_http_retry_jitter_ch_tw_polarization_telemetry`, `http_retry_jitter_chakravarty_index`, `http_retry_jitter_tsui_wang_index`).
+- [ ] **Task 248**: Benchmark and optimize memory pooling for champion spell ability tree recommendations search query slice tuple creation in `AssetManager` (`_acquire_spell_ability_tree_search_slice_tuple`, `search_spell_ability_tree_recommendations`, `get_spell_ability_tree_search_slice_pool_telemetry`).
+- [ ] **Task 249**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`).

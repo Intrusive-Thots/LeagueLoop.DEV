@@ -1027,6 +1027,34 @@ class TestAssetManager(unittest.TestCase):
         self.assets.clear_rune_stat_shards_search_slice_pool()
         self.assertEqual(len(self.assets._rune_stat_shards_search_slice_pool), 0)
 
+    def test_summoner_spell_tree_recommendations_memory_pooling(self):
+        """Task 245: Test champion summoner spell tree recommendations search query result slice tuple memory recycling and telemetry."""
+        initial_tel = self.assets.get_summoner_spell_tree_search_slice_pool_telemetry()
+        self.assertEqual(initial_tel["summoner_spell_tree_slice_recycle_hits"], 0)
+        self.assertEqual(initial_tel["summoner_spell_tree_slice_recycle_misses"], 0)
+
+        # Initial query creates slice tuple (miss)
+        spells1 = self.assets.search_summoner_spell_tree_recommendations(query="ahri", limit=10)
+        tel1 = self.assets.get_summoner_spell_tree_search_slice_pool_telemetry()
+        self.assertEqual(tel1["summoner_spell_tree_slice_recycle_misses"], 1)
+        self.assertEqual(tel1["summoner_spell_tree_slice_recycle_hits"], 0)
+
+        # Repeated query accesses pooled summoner spell tree slice tuple (hit)
+        spells2 = self.assets.search_summoner_spell_tree_recommendations(query="ahri", limit=10)
+        tel2 = self.assets.get_summoner_spell_tree_search_slice_pool_telemetry()
+        self.assertEqual(tel2["summoner_spell_tree_slice_recycle_hits"], 1)
+        self.assertGreater(tel2["summoner_spell_tree_slice_recycle_hit_ratio"], 0.0)
+        self.assertGreater(tel2["summoner_spell_tree_slice_bytes_recycled"], 0)
+        self.assertEqual(spells1, spells2)
+
+        summary = self.assets.get_memory_summary_diagnostics()
+        self.assertIn("summoner_spell_tree_search_slice_pool_telemetry", summary)
+        self.assertEqual(summary["summoner_spell_tree_search_slice_pool_telemetry"]["summoner_spell_tree_slice_recycle_hits"], 1)
+
+        # Clear pool
+        self.assets.clear_summoner_spell_tree_search_slice_pool()
+        self.assertEqual(len(self.assets._summoner_spell_tree_search_slice_pool), 0)
+
 if __name__ == '__main__':
     unittest.main()
 
