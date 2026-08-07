@@ -241,6 +241,17 @@
 - [x] **Task 246**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 212 tests passing in 1.41s).
 
 ## Upcoming Autonomous Improvement Tasks
-- [ ] **Task 247**: Implement automated HTTP request retry exponential backoff jitter Chakravarty (CH) & Tsui-Wang (TW) polarization inequality telemetry in `LCUClient` (`get_http_retry_jitter_ch_tw_polarization_telemetry`, `http_retry_jitter_chakravarty_index`, `http_retry_jitter_tsui_wang_index`).
-- [ ] **Task 248**: Benchmark and optimize memory pooling for champion spell ability tree recommendations search query slice tuple creation in `AssetManager` (`_acquire_spell_ability_tree_search_slice_tuple`, `search_spell_ability_tree_recommendations`, `get_spell_ability_tree_search_slice_pool_telemetry`).
-- [ ] **Task 249**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`).
+- [x] **Task 247**: Implement automated HTTP request retry exponential backoff jitter Chakravarty (CH) & Tsui-Wang (TW) polarization inequality telemetry in `LCUClient` (`get_http_retry_jitter_ch_tw_polarization_telemetry`, `http_retry_jitter_chakravarty_index`, `http_retry_jitter_tsui_wang_index`).
+- [x] **Task 248**: Benchmark and optimize memory pooling for champion spell ability tree recommendations search query slice tuple creation in `AssetManager` (`_acquire_spell_ability_tree_search_slice_tuple`, `search_spell_ability_tree_recommendations`, `get_spell_ability_tree_search_slice_pool_telemetry`).
+- [x] **Task 249**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 214 tests passing).
+
+## Upcoming Autonomous Improvement Tasks
+- [x] **Task 250**: Implement automated HTTP request retry exponential backoff jitter Wang-Tsui (WT) & Gradín (GR) polarization inequality telemetry in `LCUClient` (`get_http_retry_jitter_wt_gradin_polarization_telemetry`, `http_retry_jitter_wang_tsui_index`, `http_retry_jitter_gradin_index`).
+- [x] **Task 251**: Benchmark and optimize memory pooling for champion item upgrade tree recommendations search query slice tuple creation in `AssetManager` (`_acquire_item_upgrade_tree_search_slice_tuple`, `search_item_upgrade_tree_recommendations`, `get_item_upgrade_tree_search_slice_pool_telemetry`).
+- [x] **Task 252**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 216 tests passing in 1.39s).
+
+## Upcoming Autonomous Improvement Tasks
+- [ ] **Task 253**: Implement automated HTTP request retry exponential backoff jitter Foster-Wolfson (FW) & Wolfson II (W2) polarization inequality telemetry in `LCUClient` (`get_http_retry_jitter_fw_w2_polarization_telemetry`, `http_retry_jitter_foster_wolfson_ii_index`, `http_retry_jitter_wolfson_ii_index`).
+- [ ] **Task 254**: Benchmark and optimize memory pooling for champion item build tree recommendations search query slice tuple creation in `AssetManager` (`_acquire_item_build_tree_search_slice_tuple`, `search_item_build_tree_recommendations`, `get_item_build_tree_search_slice_pool_telemetry`).
+- [ ] **Task 255**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`).
+
