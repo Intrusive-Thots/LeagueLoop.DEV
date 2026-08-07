@@ -1,50 +1,7 @@
-__pycache__/
-*.py[cod]
-*$py.class
-.venv/
-env/
-venv/
-.env
-.DS_Store
-*.log
+```
+# Coverage reports
+.coverage
 
-cache/
-
-# Auto-generated Jules files (case-sensitivity collision on Windows)
-# .Jules/
-
-
-# Build artifacts
-build/
-dist/
-*.spec
-
-# Debug / scratch files
-out*.txt
-crash.log
-error.txt
-error.log
-debug.log
-test_stderr.txt
-
-# Config backups (keep only config.json)
-config_old.json
-config2.json
-config copy*.json
-
-# Ad-hoc scripts (not part of application)
-dump_q.py
-sys_test.py
-raw_lobby_test.py
-queues.json
-queues.txt
-benchmark*.py
-capture_queue.py
-fix_cursors.py
-mock_benchmark.py
-test_compile.py
-test_script.py
-test_runner.py
-run_tests_mocked.py
-launch_kopied.vbs
-skills.md
+# Dependencies
+*.txt
+```
