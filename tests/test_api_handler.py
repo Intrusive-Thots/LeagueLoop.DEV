@@ -510,6 +510,38 @@ class TestLCUClient(unittest.TestCase):
         self.assertIn("http_retry_jitter_mad_s", entropy_tel)
         self.assertIn("http_retry_jitter_medad_s", entropy_tel)
 
+    def test_http_retry_jitter_gini_hoover_telemetry(self):
+        """Task 217: Test automated HTTP request retry exponential backoff jitter Gini coefficient & Hoover index inequality telemetry."""
+        # Initial state (empty)
+        empty_tel = self.client.get_http_retry_jitter_gini_hoover_telemetry()
+        self.assertEqual(empty_tel["sample_count"], 0)
+        self.assertEqual(empty_tel["http_retry_jitter_gini_coefficient"], 0.0)
+        self.assertEqual(empty_tel["http_retry_jitter_hoover_index"], 0.0)
+        self.assertEqual(empty_tel["http_retry_jitter_relative_mean_difference"], 0.0)
+
+        # Single sample
+        self.client._record_http_retry_jitter(0.02)
+        single_tel = self.client.get_http_retry_jitter_gini_hoover_telemetry()
+        self.assertEqual(single_tel["sample_count"], 1)
+        self.assertEqual(single_tel["http_retry_jitter_gini_coefficient"], 0.0)
+        self.assertEqual(single_tel["http_retry_jitter_hoover_index"], 0.0)
+
+        # Multiple samples with variance
+        self.client._record_http_retry_jitter(0.04)
+        self.client._record_http_retry_jitter(0.06)
+
+        tel = self.client.get_http_retry_jitter_gini_hoover_telemetry()
+        self.assertEqual(tel["sample_count"], 3)
+        self.assertGreater(tel["http_retry_jitter_gini_coefficient"], 0.0)
+        self.assertGreater(tel["http_retry_jitter_hoover_index"], 0.0)
+        self.assertGreater(tel["http_retry_jitter_relative_mean_difference"], 0.0)
+        self.assertAlmostEqual(tel["http_retry_jitter_relative_mean_difference"], 2.0 * tel["http_retry_jitter_gini_coefficient"], places=4)
+
+        entropy_tel = self.client.get_http_retry_jitter_entropy_telemetry()
+        self.assertIn("http_retry_jitter_gini_coefficient", entropy_tel)
+        self.assertIn("http_retry_jitter_hoover_index", entropy_tel)
+        self.assertIn("http_retry_jitter_relative_mean_difference", entropy_tel)
+
 if __name__ == '__main__':
     unittest.main()
 

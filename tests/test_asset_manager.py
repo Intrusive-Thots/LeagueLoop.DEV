@@ -775,6 +775,34 @@ class TestAssetManager(unittest.TestCase):
         self.assets.clear_core_items_search_slice_pool()
         self.assertEqual(len(self.assets._core_items_search_slice_pool), 0)
 
+    def test_situational_items_recommendations_memory_pooling(self):
+        """Task 218: Test champion situational items recommendations search query result slice tuple memory recycling and telemetry."""
+        initial_tel = self.assets.get_situational_items_search_slice_pool_telemetry()
+        self.assertEqual(initial_tel["situational_items_slice_recycle_hits"], 0)
+        self.assertEqual(initial_tel["situational_items_slice_recycle_misses"], 0)
+
+        # Initial query creates slice tuple (miss)
+        items1 = self.assets.search_situational_items_recommendations(query="ahri", limit=10)
+        tel1 = self.assets.get_situational_items_search_slice_pool_telemetry()
+        self.assertEqual(tel1["situational_items_slice_recycle_misses"], 1)
+        self.assertEqual(tel1["situational_items_slice_recycle_hits"], 0)
+
+        # Repeated query accesses pooled situational items slice tuple (hit)
+        items2 = self.assets.search_situational_items_recommendations(query="ahri", limit=10)
+        tel2 = self.assets.get_situational_items_search_slice_pool_telemetry()
+        self.assertEqual(tel2["situational_items_slice_recycle_hits"], 1)
+        self.assertGreater(tel2["situational_items_slice_recycle_hit_ratio"], 0.0)
+        self.assertGreater(tel2["situational_items_slice_bytes_recycled"], 0)
+        self.assertEqual(items1, items2)
+
+        summary = self.assets.get_memory_summary_diagnostics()
+        self.assertIn("situational_items_search_slice_pool_telemetry", summary)
+        self.assertEqual(summary["situational_items_search_slice_pool_telemetry"]["situational_items_slice_recycle_hits"], 1)
+
+        # Clear pool
+        self.assets.clear_situational_items_search_slice_pool()
+        self.assertEqual(len(self.assets._situational_items_search_slice_pool), 0)
+
 if __name__ == '__main__':
     unittest.main()
 
