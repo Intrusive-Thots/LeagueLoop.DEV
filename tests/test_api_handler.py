@@ -253,20 +253,21 @@ class TestLCUClient(unittest.TestCase):
         self.assertIn("dispatched_callbacks_count", ws_meta)
 
     def test_http_status_distribution_anomaly_threshold_alerts(self):
-        """Test automated HTTP response status distribution anomaly threshold alerts for Task 169."""
+        """Test sliding-window HTTP anomaly alerts (no spam on successful 200s)."""
         initial_telemetry = self.client.get_http_status_anomaly_telemetry()
         self.assertEqual(initial_telemetry["http_status_anomaly_count"], 0)
         self.assertFalse(initial_telemetry["http_status_anomaly_active"])
         self.assertIn("http_anomaly_error_rate_threshold_pct", initial_telemetry)
 
-        # Simulate normal 200 responses
+        # Simulate normal 200 responses — must never flag anomaly
         for _ in range(10):
             self.client._record_http_status_code(200, "GET", "/lol-summoner/v1/current-summoner")
 
         tel_200 = self.client.get_http_status_anomaly_telemetry()
         self.assertFalse(tel_200["http_status_anomaly_active"])
+        self.assertEqual(tel_200["http_status_anomaly_count"], 0)
 
-        # Trigger HTTP 5xx anomaly threshold
+        # Trigger HTTP 5xx anomaly threshold (5 hard fails)
         for _ in range(5):
             self.client._record_http_status_code(500, "POST", "/lol-lobby/v2/lobby")
 
@@ -275,9 +276,27 @@ class TestLCUClient(unittest.TestCase):
         self.assertGreater(tel_500["http_status_anomaly_count"], 0)
         self.assertIsNotNone(tel_500["last_http_status_anomaly"])
 
+        # Successful 200s after failures must not re-alert / keep counting spam
+        before = tel_500["http_status_anomaly_count"]
+        for _ in range(20):
+            self.client._record_http_status_code(200, "GET", "/lol-gameflow/v1/gameflow-phase")
+        tel_after_ok = self.client.get_http_status_anomaly_telemetry()
+        self.assertEqual(tel_after_ok["http_status_anomaly_count"], before)
+        self.assertFalse(tel_after_ok["http_status_anomaly_active"])
+
         full_status_telemetry = self.client.get_http_status_telemetry()
         self.assertIn("http_status_anomaly_active", full_status_telemetry)
         self.assertIn("http_status_anomaly_count", full_status_telemetry)
+
+    def test_in_game_mode_ws_stale_timeout(self):
+        """In-game mode raises WS stale timeout so quiet LCU periods don't reconnect-storm."""
+        base = self.client._effective_ws_stale_timeout()
+        self.client.set_in_game_mode(True)
+        self.assertTrue(self.client._in_game_mode)
+        self.assertGreater(self.client._effective_ws_stale_timeout(), base)
+        self.client.set_in_game_mode(False)
+        self.assertFalse(self.client._in_game_mode)
+        self.assertEqual(self.client._effective_ws_stale_timeout(), base)
 
     def test_http_latency_variance_telemetry(self):
         """Test HTTP request latency variance calculation & telemetry for Task 172."""

@@ -20,9 +20,16 @@ TICK_SLEEP_DEFAULT = 3.0
 TICK_SLEEP_CHAMPSELECT = 1.0
 TICK_SLEEP_READYCHECK = 1.0
 TICK_SLEEP_LOBBY = 2.0
-TICK_SLEEP_INGAME = 30.0
+# In-game: rare LCU polls only (phase exit detection). Heavy polling hurts the CEF client.
+TICK_SLEEP_INGAME = 45.0
 TICK_SLEEP_SPECTATING = 15.0
 TICK_SLEEP_SPECTATING_MAX = 30.0
+# LCU WebSocket: allow long quiet periods while the game is running
+LCU_WS_STALE_TIMEOUT_S = 45.0
+LCU_WS_STALE_TIMEOUT_INGAME_S = 180.0
+# HTTP anomaly alerts: sliding window (not lifetime cumulative)
+LCU_HTTP_ANOMALY_WINDOW_S = 120.0
+LCU_HTTP_ANOMALY_LOG_COOLDOWN_S = 60.0
 GEOMETRY_THRESHOLD = 2             # pixels of movement before triggering geometry update
 PRIORITY_SWAP_COOLDOWN = 1.0       # seconds between priority sniper swaps
 

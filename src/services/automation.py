@@ -117,6 +117,12 @@ class AutomationEngine:
 
     def _on_ws_event(self, event_name, payload):
         """Called whenever the LCU pushes a state change we care about."""
+        # In-game: only wake on gameflow phase changes (e.g. EndOfGame).
+        # Friend list / lobby chatter must not force HTTP ticks mid-match.
+        if self.last_phase == "InProgress":
+            name = event_name or ""
+            if "gameflow-phase" not in name and "gameflow_phase" not in name:
+                return
         self._wake_event.set()
 
     def stop(self) -> None:
@@ -202,15 +208,24 @@ class AutomationEngine:
 
                     # Fire callbacks so the UI / window state stay accurate
                     wf = self.window_func
-                    if wf is not None and inferred_phase != self.last_phase:
+                    if inferred_phase != self.last_phase:
                         if inferred_phase == "InProgress":
                             # Prevent auto-hiding during a game
                             Logger.info("AutoLoop", "Game detected (process). Keeping window visible.")
+                            try:
+                                self.lcu.set_in_game_mode(True)
+                            except Exception:
+                                pass
                         elif self.last_phase == "InProgress":
-                            if self.config.get("stealth_mode", False):
-                                wf("restore_quiet")
-                            else:
-                                wf("restore")
+                            try:
+                                self.lcu.set_in_game_mode(False)
+                            except Exception:
+                                pass
+                            if wf is not None:
+                                if self.config.get("stealth_mode", False):
+                                    wf("restore_quiet")
+                                else:
+                                    wf("restore")
                             Logger.info("AutoLoop", "Game ended (process). Restoring.")
 
                     qf = self.queue_func
@@ -218,7 +233,7 @@ class AutomationEngine:
                         qf(inferred_phase, None)
 
                     self.last_phase = inferred_phase
-                    if self._stop_event.wait(2.0):
+                    if self._stop_event.wait(5.0 if game_alive else 2.0):
                         break
                 continue
 
@@ -250,18 +265,33 @@ class AutomationEngine:
                     break
 
     def _tick(self):
-        f_phase = self.executor.submit(self.lcu.request, "GET", "/lol-gameflow/v1/gameflow-phase", None, True)
-        
-        f_lobby = None
-        if self.last_phase in ("None", "EndOfGame", "Lobby", "Matchmaking"):
-            f_lobby = self.executor.submit(self.lcu.request, "GET", "/lol-lobby/v2/lobby", None, True)
+        # In-game: process check first; avoid hammering LCU HTTP every tick
+        if self.last_phase == "InProgress" and self._is_game_running():
+            phase = "InProgress"
+            f_lobby = None
+            f_session = None
+            # Lightweight phase probe only (no lobby/friends/session)
+            phase_req = self.lcu.request("GET", "/lol-gameflow/v1/gameflow-phase", None, True)
+            if phase_req and phase_req.status_code == 200:
+                try:
+                    polled = phase_req.json()
+                    if isinstance(polled, str) and polled:
+                        phase = polled
+                except Exception:
+                    pass
+        else:
+            f_phase = self.executor.submit(self.lcu.request, "GET", "/lol-gameflow/v1/gameflow-phase", None, True)
 
-        f_session = None
-        if self.last_phase in ("Matchmaking", "ReadyCheck", "ChampSelect"):
-            f_session = self.executor.submit(self.lcu.request, "GET", "/lol-champ-select/v1/session", None, True)
+            f_lobby = None
+            if self.last_phase in ("None", "EndOfGame", "Lobby", "Matchmaking", "PreEndOfGame", "WaitingForStats"):
+                f_lobby = self.executor.submit(self.lcu.request, "GET", "/lol-lobby/v2/lobby", None, True)
 
-        phase_req = f_phase.result()
-        phase = phase_req.json() if phase_req and phase_req.status_code == 200 else "None"
+            f_session = None
+            if self.last_phase in ("Matchmaking", "ReadyCheck", "ChampSelect"):
+                f_session = self.executor.submit(self.lcu.request, "GET", "/lol-champ-select/v1/session", None, True)
+
+            phase_req = f_phase.result()
+            phase = phase_req.json() if phase_req and phase_req.status_code == 200 else "None"
 
         # LCU Ghost ChampSelect Bug Fix: if gameflow says we're in ChampSelect but we have no session, we're actually in the Lobby
         if phase == "ChampSelect":
@@ -294,16 +324,31 @@ class AutomationEngine:
         # Auto-minimize/restore based on InProgress state
         wf = self.window_func
         is_first = getattr(self, "_is_first_tick", True)
-        if wf is not None and phase != self.last_phase:
+        if phase != self.last_phase:
             if phase == "InProgress":
                 # Prevent auto-hiding during a game
                 Logger.info("AutoLoop", "Game phase transition to InProgress. Keeping window visible.")
-            elif self.last_phase == "InProgress" and phase in ["EndOfGame", "Lobby", "None"]:
-                if self.config.get("stealth_mode", False):
-                    wf("restore_quiet")
-                else:
-                    wf("restore")
+                try:
+                    self.lcu.set_in_game_mode(True)
+                except Exception as e:
+                    Logger.debug("AutoLoop", f"set_in_game_mode(True) failed: {e}")
+            elif self.last_phase == "InProgress" and phase in ["EndOfGame", "Lobby", "None", "PreEndOfGame", "WaitingForStats"]:
+                try:
+                    self.lcu.set_in_game_mode(False)
+                except Exception as e:
+                    Logger.debug("AutoLoop", f"set_in_game_mode(False) failed: {e}")
+                if wf is not None:
+                    if self.config.get("stealth_mode", False):
+                        wf("restore_quiet")
+                    else:
+                        wf("restore")
                 self._game_pid = None
+
+        # Keep in-game flag consistent even if we entered via process inference
+        try:
+            self.lcu.set_in_game_mode(phase == "InProgress")
+        except Exception:
+            pass
 
         self.last_phase = phase
         self._is_first_tick = False
@@ -352,7 +397,8 @@ class AutomationEngine:
             sleep_time = max(5.0, TICK_SLEEP_LOBBY)
             self._spectate_start_time = None
         elif phase == "InProgress":
-            sleep_time = max(10.0, TICK_SLEEP_INGAME)
+            # Prefer WS phase events; HTTP is a slow safety net only
+            sleep_time = max(30.0, TICK_SLEEP_INGAME)
             self._spectate_start_time = None
         elif phase == "Spectating":
             now = time.time()

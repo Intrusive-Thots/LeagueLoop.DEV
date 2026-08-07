@@ -76,8 +76,16 @@ class LCUClient:
 
         # Task 130: Dynamic websocket heartbeat check & stale ping timeout reset
         self._ws_last_msg_timestamp = time.time()
-        self._ws_stale_timeout_s = 45.0
+        try:
+            from core.constants import LCU_WS_STALE_TIMEOUT_S, LCU_WS_STALE_TIMEOUT_INGAME_S
+            self._ws_stale_timeout_s = float(LCU_WS_STALE_TIMEOUT_S)
+            self._ws_stale_timeout_ingame_s = float(LCU_WS_STALE_TIMEOUT_INGAME_S)
+        except Exception:
+            self._ws_stale_timeout_s = 45.0
+            self._ws_stale_timeout_ingame_s = 180.0
         self._ws_stale_reset_count = 0
+        # When True (match in progress), back off HTTP/WS so we don't thrash the CEF client
+        self._in_game_mode: bool = False
 
         # Task 133: Automated connection drop diagnostics & event loop latency telemetry logging
         self._connection_drop_count = 0
@@ -186,12 +194,23 @@ class LCUClient:
         self._max_recent_http_errors: int = 50
 
         # Task 169: Automated HTTP response status distribution anomaly threshold alerts
+        # Use a sliding time window so old lockfile/connect failures stop spamming forever.
         self._http_anomaly_error_rate_threshold_pct: float = 15.0
         self._http_anomaly_5xx_count_threshold: int = 5
         self._http_anomaly_count: int = 0
         self._http_status_anomaly_active: bool = False
         self._http_status_anomaly_history: list = []
         self._http_status_anomaly_history_max: int = 50
+        try:
+            from core.constants import LCU_HTTP_ANOMALY_WINDOW_S, LCU_HTTP_ANOMALY_LOG_COOLDOWN_S
+            self._http_status_window_s = float(LCU_HTTP_ANOMALY_WINDOW_S)
+            self._http_anomaly_log_cooldown_s = float(LCU_HTTP_ANOMALY_LOG_COOLDOWN_S)
+        except Exception:
+            self._http_status_window_s = 120.0
+            self._http_anomaly_log_cooldown_s = 60.0
+        # (timestamp, is_error, is_5xx) samples for sliding-window error rate
+        self._http_status_window: list = []
+        self._last_http_anomaly_log_ts: float = 0.0
 
         # Task 139: Adaptive HTTP client timeout adjustment based on LCU response latency histograms
         self._http_latency_lock = threading.Lock()
@@ -210,6 +229,25 @@ class LCUClient:
 
         # Do NOT connect immediately to avoid blocking UI startup.
         # Connection is handled by the background loop in main.py.
+
+    def set_in_game_mode(self, active: bool) -> None:
+        """Enable lighter LCU traffic while League of Legends.exe match is running."""
+        active = bool(active)
+        if self._in_game_mode == active:
+            return
+        self._in_game_mode = active
+        # Refresh heartbeat so we don't immediately stale-reset on phase enter
+        self._ws_last_msg_timestamp = time.time()
+        Logger.info(
+            "LCU",
+            f"In-game mode {'ON' if active else 'OFF'} "
+            f"(WS stale timeout={self._effective_ws_stale_timeout():.0f}s)",
+        )
+
+    def _effective_ws_stale_timeout(self) -> float:
+        if self._in_game_mode:
+            return float(self._ws_stale_timeout_ingame_s)
+        return float(self._ws_stale_timeout_s)
 
     def _record_http_latency(self, latency_ms: float) -> None:
         """Records HTTP request latency into sliding window sample array and histogram buckets."""
@@ -961,19 +999,19 @@ class LCUClient:
             except requests.exceptions.ConnectionError:
                 dur = time.time() - t_start
                 self._record_http_latency(dur * 1000.0)
-                with self._req_diag_lock:
-                    self._http_error_count += 1
+                self._record_http_transport_failure(method, endpoint, "connection")
                 # Expected when the game is closed or restarting
                 self.is_connected = False
                 return None
             except requests.exceptions.ReadTimeout:
-                # Expected for long-polling endpoints
-                return None
-            except requests.RequestException as e:
-                with self._req_diag_lock:
-                    self._http_error_count += 1
+                # Expected for long-polling endpoints — do not treat as hard error spam
                 dur = time.time() - t_start
                 self._record_http_latency(dur * 1000.0)
+                return None
+            except requests.RequestException as e:
+                dur = time.time() - t_start
+                self._record_http_latency(dur * 1000.0)
+                self._record_http_transport_failure(method, endpoint, "request")
                 Logger.error("LCU", f"FAIL [{dur:.3f}s] {endpoint} : {e}")
                 # Connection lost?
                 self.is_connected = False
@@ -982,7 +1020,8 @@ class LCUClient:
         return None
 
     def _record_http_status_code(self, status_code: int, method: str, endpoint: str) -> None:
-        """Task 151 & 169: Records HTTP response status code distribution and evaluates status distribution anomaly threshold alerts."""
+        """Task 151 & 169: Records HTTP status codes; anomaly alerts use a sliding window (no 200 spam)."""
+        is_error = status_code >= 400
         with self._req_diag_lock:
             self._http_status_codes[status_code] = self._http_status_codes.get(status_code, 0) + 1
             if 200 <= status_code <= 299:
@@ -996,7 +1035,7 @@ class LCUClient:
             elif 500 <= status_code <= 599:
                 self._http_5xx_count += 1
 
-            if status_code >= 400:
+            if is_error:
                 err_entry = {
                     "timestamp": time.time(),
                     "method": method,
@@ -1008,31 +1047,90 @@ class LCUClient:
                     self._recent_http_errors.pop(0)
                 Logger.warning("LCU_TELEMETRY", f"HTTP {status_code} Error on {method} {endpoint}")
 
-            # Task 169: Automated HTTP status distribution anomaly threshold evaluation
-            total_reqs = self._total_requests_count
-            err_count = self._http_4xx_count + self._http_5xx_count + self._http_error_count
-            err_rate = round((err_count / max(1, total_reqs)) * 100.0, 2)
+            self._evaluate_http_status_anomaly(
+                is_error=is_error,
+                status_code=status_code,
+                method=method,
+                endpoint=endpoint,
+            )
 
-            is_rate_anomaly = total_reqs >= 5 and err_rate > self._http_anomaly_error_rate_threshold_pct
-            is_5xx_anomaly = self._http_5xx_count >= self._http_anomaly_5xx_count_threshold
+    def _record_http_transport_failure(self, method: str, endpoint: str, reason: str = "transport") -> None:
+        """Count connection/timeout failures in the sliding anomaly window without a status code."""
+        with self._req_diag_lock:
+            self._http_error_count += 1
+            self._evaluate_http_status_anomaly(
+                is_error=True,
+                status_code=0,
+                method=method,
+                endpoint=endpoint,
+                reason_override=f"Transport failure ({reason})",
+            )
 
-            if is_rate_anomaly or is_5xx_anomaly or status_code >= 500:
-                self._http_status_anomaly_active = True
-                self._http_anomaly_count += 1
-                reason = f"Error rate {err_rate}% exceeded threshold {self._http_anomaly_error_rate_threshold_pct}%" if is_rate_anomaly else f"HTTP 5xx count {self._http_5xx_count} reached threshold"
-                anomaly_entry = {
-                    "timestamp": time.time(),
-                    "status_code": status_code,
-                    "method": method,
-                    "endpoint": endpoint,
-                    "error_rate_pct": err_rate,
-                    "reason": reason,
-                }
-                self._http_status_anomaly_history.append(anomaly_entry)
-                if len(self._http_status_anomaly_history) > self._http_status_anomaly_history_max:
-                    self._http_status_anomaly_history.pop(0)
-                Logger.warning("LCU_HTTP_STATUS_ANOMALY", f"HTTP status anomaly threshold alert on {method} {endpoint} (status {status_code}): {reason}")
+    def _evaluate_http_status_anomaly(
+        self,
+        is_error: bool,
+        status_code: int,
+        method: str,
+        endpoint: str,
+        reason_override: Optional[str] = None,
+    ) -> None:
+        """Sliding-window error-rate alerts. Never alert solely because a 200 followed old failures."""
+        # Caller must hold _req_diag_lock
+        now = time.time()
+        is_5xx_sample = status_code >= 500
+        self._http_status_window.append((now, is_error, is_5xx_sample))
+        cutoff = now - self._http_status_window_s
+        self._http_status_window = [s for s in self._http_status_window if s[0] >= cutoff]
+
+        window_total = len(self._http_status_window)
+        window_errs = sum(1 for _, err, _ in self._http_status_window if err)
+        window_5xx = sum(1 for _, _, is5 in self._http_status_window if is5)
+        err_rate = round((window_errs / max(1, window_total)) * 100.0, 2)
+
+        is_rate_anomaly = window_total >= 10 and err_rate > self._http_anomaly_error_rate_threshold_pct
+        is_5xx_anomaly = window_5xx >= self._http_anomaly_5xx_count_threshold
+
+        # Only raise on a real failing sample, never on successful 2xx/3xx
+        hard_fail = status_code >= 500 or (status_code == 0 and is_error)
+        should_alert = hard_fail or (is_error and (is_rate_anomaly or is_5xx_anomaly))
+
+        if should_alert:
+            was_active = self._http_status_anomaly_active
+            self._http_status_anomaly_active = True
+            self._http_anomaly_count += 1
+            if reason_override:
+                reason = reason_override
+            elif is_rate_anomaly:
+                reason = (
+                    f"Sliding-window error rate {err_rate}% exceeded threshold "
+                    f"{self._http_anomaly_error_rate_threshold_pct}% "
+                    f"({window_errs}/{window_total} in {self._http_status_window_s:.0f}s)"
+                )
             else:
+                reason = f"HTTP 5xx count {window_5xx} reached threshold"
+
+            anomaly_entry = {
+                "timestamp": now,
+                "status_code": status_code,
+                "method": method,
+                "endpoint": endpoint,
+                "error_rate_pct": err_rate,
+                "reason": reason,
+            }
+            self._http_status_anomaly_history.append(anomaly_entry)
+            if len(self._http_status_anomaly_history) > self._http_status_anomaly_history_max:
+                self._http_status_anomaly_history.pop(0)
+
+            # Log once on transition, or at most once per cooldown while active
+            if (not was_active) or (now - self._last_http_anomaly_log_ts >= self._http_anomaly_log_cooldown_s):
+                self._last_http_anomaly_log_ts = now
+                Logger.warning(
+                    "LCU_HTTP_STATUS_ANOMALY",
+                    f"HTTP status anomaly on {method} {endpoint} (status {status_code}): {reason}",
+                )
+        else:
+            # Recover as soon as the sliding window looks healthy (successes dilute old failures)
+            if not is_rate_anomaly:
                 self._http_status_anomaly_active = False
 
     def get_http_status_anomaly_telemetry(self) -> Dict[str, Any]:
@@ -1240,11 +1338,16 @@ class LCUClient:
                             message = ws.recv(timeout=15)
                             self._ws_last_msg_timestamp = time.time()
                         except TimeoutError:
+                            stale_timeout = self._effective_ws_stale_timeout()
                             stale_age = time.time() - self._ws_last_msg_timestamp
-                            if stale_age >= self._ws_stale_timeout_s:
-                                Logger.warning(
+                            if stale_age >= stale_timeout:
+                                # In-game: LCU is often quiet for long stretches — log at debug to cut noise
+                                log_fn = Logger.debug if self._in_game_mode else Logger.warning
+                                log_fn(
                                     "LCU_WS",
-                                    f"Stale WebSocket connection ping timeout ({stale_age:.1f}s >= {self._ws_stale_timeout_s}s without messages). Resetting connection."
+                                    f"Stale WebSocket connection ping timeout "
+                                    f"({stale_age:.1f}s >= {stale_timeout:.1f}s without messages"
+                                    f"{', in-game' if self._in_game_mode else ''}). Resetting connection.",
                                 )
                                 self._ws_stale_reset_count += 1
                                 self._record_connection_drop(f"Stale WS ping timeout ({stale_age:.1f}s)")
@@ -1716,7 +1819,10 @@ class LCUClient:
                 "reconnect_backoff_s": round(self._ws_reconnect_backoff, 2),
                 "last_msg_age_s": last_msg_age_s,
                 "stale_reset_count": self._ws_stale_reset_count,
-                "stale_timeout_s": self._ws_stale_timeout_s,
+                "stale_timeout_s": self._effective_ws_stale_timeout(),
+                "stale_timeout_base_s": self._ws_stale_timeout_s,
+                "stale_timeout_ingame_s": self._ws_stale_timeout_ingame_s,
+                "in_game_mode": self._in_game_mode,
                 "connection_drop_count": self._connection_drop_count,
                 "last_drop_reason": self._last_drop_reason,
                 "event_loop_latency_ms": self._event_loop_latency_ms,

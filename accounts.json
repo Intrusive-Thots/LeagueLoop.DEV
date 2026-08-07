@@ -1,6 +1,19 @@
 {
     "accounts": [
         {
+            "label": "MAIN",
+            "username": "themalcolm3",
+            "password_enc": "AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAASmuB7IZ6zk2UxWCHqas4PwAAAAAmAAAATABlAGEAZwB1AGUATABvAG8AcAAgAEEAYwBjAG8AdQBuAHQAAAAQZgAAAAEAACAAAABr9TCFyaoukuir1WWVWQUbxAV1o9o+aKuki1joI5qGGwAAAAAOgAAAAAIAACAAAADz+fB0srHy+8ceh7eELUBMMBDVFzztIBimYSgbUTZh9BAAAAAwKfakf1QPp3zX8tdyjKZWQAAAAFdhvAq3pkAkCM+OF3qmM1d2IMHISHEGe2daq03ZETeYTFPRm73zeW63hkjocCy+s0zZKmnVWIYtwWJA6STjRRk=",
+            "tagline": "",
+            "region": "NA1",
+            "last_used": "2026-08-06T10:44:41.820091",
+            "wallet": {
+                "be": 0,
+                "rp": 0
+            },
+            "is_default": true
+        },
+        {
             "label": "5",
             "username": "themalcolm5",
             "password_enc": "AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAASmuB7IZ6zk2UxWCHqas4PwAAAAAmAAAATABlAGEAZwB1AGUATABvAG8AcAAgAEEAYwBjAG8AdQBuAHQAAAAQZgAAAAEAACAAAABGh7kThlMh+D/FEXbK5xYKJ7gNRT/FajOdD5OLvdswlgAAAAAOgAAAAAIAACAAAABaaE7Em+BAjXDeY1YXwGEf/uisGN8LBEspJ10RV3z4JxAAAAA04MzgJvlykAU7N1Qa0nLTQAAAAHudpTXD5gcoG2byf0XbOU5FmdJjtTc0A4HRc8S4ZXI6vNAJPcHCVo0L9nfI5sCNByZYAScE/JqS1tC5Ap9CY9k=",
@@ -12,19 +25,6 @@
                 "rp": 0
             },
             "is_default": false
-        },
-        {
-            "label": "MAIN",
-            "username": "themalcolm3",
-            "password_enc": "AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAASmuB7IZ6zk2UxWCHqas4PwAAAAAmAAAATABlAGEAZwB1AGUATABvAG8AcAAgAEEAYwBjAG8AdQBuAHQAAAAQZgAAAAEAACAAAABr9TCFyaoukuir1WWVWQUbxAV1o9o+aKuki1joI5qGGwAAAAAOgAAAAAIAACAAAADz+fB0srHy+8ceh7eELUBMMBDVFzztIBimYSgbUTZh9BAAAAAwKfakf1QPp3zX8tdyjKZWQAAAAFdhvAq3pkAkCM+OF3qmM1d2IMHISHEGe2daq03ZETeYTFPRm73zeW63hkjocCy+s0zZKmnVWIYtwWJA6STjRRk=",
-            "tagline": "",
-            "region": "NA1",
-            "last_used": "2026-08-02T10:01:24.445525",
-            "wallet": {
-                "be": 0,
-                "rp": 0
-            },
-            "is_default": true
         }
     ],
     "active_account_idx": 0
