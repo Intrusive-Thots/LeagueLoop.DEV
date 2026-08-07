@@ -1173,8 +1173,64 @@ class LCUClient:
             "sample_count": n,
         }
 
+    def get_http_retry_jitter_wolfson_polarization_telemetry(self) -> Dict[str, Any]:
+        """Task 238: Returns automated HTTP request retry exponential backoff jitter Wolfson index & Foster-Wolfson polarization inequality telemetry."""
+        with self._req_diag_lock:
+            samples = self._http_retry_jitter_samples.copy()
+
+        if not samples:
+            return {
+                "http_retry_jitter_wolfson_index": 0.0,
+                "http_retry_jitter_foster_wolfson_index": 0.0,
+                "sample_count": 0,
+            }
+
+        n = len(samples)
+        mean_s = sum(samples) / n
+        total_sum = sum(samples)
+        if mean_s == 0 or total_sum == 0:
+            return {
+                "http_retry_jitter_wolfson_index": 0.0,
+                "http_retry_jitter_foster_wolfson_index": 0.0,
+                "sample_count": n,
+            }
+
+        sorted_s = sorted(samples)
+        med_s = sorted_s[n // 2] if n % 2 != 0 else (sorted_s[n // 2 - 1] + sorted_s[n // 2]) / 2.0
+        if med_s == 0:
+            return {
+                "http_retry_jitter_wolfson_index": 0.0,
+                "http_retry_jitter_foster_wolfson_index": 0.0,
+                "sample_count": n,
+            }
+
+        # Calculate standard Gini
+        sum_i = sum((i + 1) * val for i, val in enumerate(sorted_s))
+        gini = (2.0 * sum_i / (n * total_sum)) - ((n + 1.0) / n)
+        gini = max(0.0, min(1.0, gini))
+
+        half_n = max(1, n // 2)
+        lower_half = sorted_s[:half_n]
+        upper_half = sorted_s[half_n:]
+        mu_l = sum(lower_half) / len(lower_half) if lower_half else 0.0
+        mu_h = sum(upper_half) / len(upper_half) if upper_half else 0.0
+
+        # Wolfson polarization index: W = ((2 * (mu_h - mu_l) / mean_s) - gini) * (mean_s / med_s)
+        w_val = ((2.0 * (mu_h - mu_l) / mean_s) - gini) * (mean_s / med_s)
+        wolfson = max(0.0, min(1.0, w_val))
+
+        # Foster-Wolfson polarization index: FW = (mu_h - mu_l) / med_s - (mean_s * gini) / med_s
+        fw_val = ((mu_h - mu_l) - (mean_s * gini)) / med_s
+        foster_wolfson = max(0.0, min(1.0, fw_val))
+
+        return {
+            "http_retry_jitter_wolfson_index": round(wolfson, 4),
+            "http_retry_jitter_foster_wolfson_index": round(foster_wolfson, 4),
+            "sample_count": n,
+        }
+
     def get_http_retry_jitter_entropy_telemetry(self) -> Dict[str, Any]:
-        """Task 181, 184, 187, 190, 193, 196, 199, 202, 205, 208, 211, 214, 217, 220, 223, 226, 229, 232 & 235: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, confidence interval, margin of error, geometric mean, harmonic mean, skewness/kurtosis CI, relative standard error/variance ratio, CV/Fano factor CI, MAD/MedAD, Gini/Hoover inequality, Theil/Atkinson inequality, Palma/Decile ratio inequality, Hoover/Ricci-Schutz inequality, Kakwani/Reynolds-Smolensky inequality, Kolm-Pollak/Atkinson-Gini inequality, and Foster-Greer-Thorbecke/Sen-Shorrocks-Thon inequality telemetry."""
+        """Task 181, 184, 187, 190, 193, 196, 199, 202, 205, 208, 211, 214, 217, 220, 223, 226, 229, 232, 235 & 238: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, confidence interval, margin of error, geometric mean, harmonic mean, skewness/kurtosis CI, relative standard error/variance ratio, CV/Fano factor CI, MAD/MedAD, Gini/Hoover inequality, Theil/Atkinson inequality, Palma/Decile ratio inequality, Hoover/Ricci-Schutz inequality, Kakwani/Reynolds-Smolensky inequality, Kolm-Pollak/Atkinson-Gini inequality, Foster-Greer-Thorbecke/Sen-Shorrocks-Thon inequality, and Wolfson/Foster-Wolfson polarization inequality telemetry."""
         with self._req_diag_lock:
             samples = self._http_retry_jitter_samples.copy()
             entropy = self._http_retry_jitter_entropy_bits
@@ -1201,6 +1257,7 @@ class LCUClient:
         kakwani_reynolds_meta = self.get_http_retry_jitter_kakwani_reynolds_telemetry()
         kolm_atkinson_gini_meta = self.get_http_retry_jitter_kolm_atkinson_gini_telemetry()
         fgt_sst_meta = self.get_http_retry_jitter_fgt_sst_telemetry()
+        wolfson_polarization_meta = self.get_http_retry_jitter_wolfson_polarization_telemetry()
 
         res = {
             "http_retry_jitter_samples_count": len(samples),
@@ -1228,6 +1285,7 @@ class LCUClient:
         res.update(kakwani_reynolds_meta)
         res.update(kolm_atkinson_gini_meta)
         res.update(fgt_sst_meta)
+        res.update(wolfson_polarization_meta)
         return res
 
     def get_http_latency_histogram(self) -> Dict[str, Any]:

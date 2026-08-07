@@ -225,6 +225,11 @@
 - [x] **Task 236**: Benchmark and optimize memory pooling for champion item build order recommendations search query slice tuple creation in `AssetManager` (`_acquire_item_build_order_search_slice_tuple`, `search_item_build_order_recommendations`, `get_item_build_order_search_slice_pool_telemetry`).
 - [x] **Task 237**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 206 tests passing in 1.42s).
 
+## Upcoming Autonomous Improvement Tasks
+- [x] **Task 238**: Implement automated HTTP request retry exponential backoff jitter Wolfson index & Foster-Wolfson polarization inequality telemetry in `LCUClient` (`get_http_retry_jitter_wolfson_polarization_telemetry`, `http_retry_jitter_wolfson_index`, `http_retry_jitter_foster_wolfson_index`).
+- [x] **Task 239**: Benchmark and optimize memory pooling for champion rune tree recommendations search query slice tuple creation in `AssetManager` (`_acquire_rune_tree_search_slice_tuple`, `search_rune_tree_recommendations`, `get_rune_tree_search_slice_pool_telemetry`).
+- [x] **Task 240**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 208 tests passing in 1.36s).
+
 
 
 
