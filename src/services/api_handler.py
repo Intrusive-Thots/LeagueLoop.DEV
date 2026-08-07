@@ -768,8 +768,88 @@ class LCUClient:
             "sample_count": n,
         }
 
+    def get_http_retry_jitter_cv_fano_ci_telemetry(self, confidence_level: float = 0.95) -> Dict[str, Any]:
+        """Task 211: Returns automated HTTP request retry exponential backoff jitter coefficient of variation & Fano factor confidence interval telemetry."""
+        with self._req_diag_lock:
+            samples = self._http_retry_jitter_samples.copy()
+
+        if not samples or len(samples) < 2:
+            return {
+                "http_retry_jitter_cv": 0.0,
+                "http_retry_jitter_cv_stderr": 0.0,
+                "http_retry_jitter_cv_ci_margin": 0.0,
+                "http_retry_jitter_cv_ci_lower": 0.0,
+                "http_retry_jitter_cv_ci_upper": 0.0,
+                "http_retry_jitter_fano": 0.0,
+                "http_retry_jitter_fano_stderr": 0.0,
+                "http_retry_jitter_fano_ci_margin": 0.0,
+                "http_retry_jitter_fano_ci_lower": 0.0,
+                "http_retry_jitter_fano_ci_upper": 0.0,
+                "confidence_level": confidence_level,
+                "sample_count": len(samples),
+            }
+
+        n = len(samples)
+        mean_s = sum(samples) / n
+        if mean_s == 0:
+            return {
+                "http_retry_jitter_cv": 0.0,
+                "http_retry_jitter_cv_stderr": 0.0,
+                "http_retry_jitter_cv_ci_margin": 0.0,
+                "http_retry_jitter_cv_ci_lower": 0.0,
+                "http_retry_jitter_cv_ci_upper": 0.0,
+                "http_retry_jitter_fano": 0.0,
+                "http_retry_jitter_fano_stderr": 0.0,
+                "http_retry_jitter_fano_ci_margin": 0.0,
+                "http_retry_jitter_fano_ci_lower": 0.0,
+                "http_retry_jitter_fano_ci_upper": 0.0,
+                "confidence_level": confidence_level,
+                "sample_count": n,
+            }
+
+        variance_s = sum((x - mean_s) ** 2 for x in samples) / (n - 1)
+        stddev_s = math.sqrt(variance_s)
+
+        cv = stddev_s / mean_s
+        cv_stderr = (cv / math.sqrt(2 * n)) * math.sqrt(1 + 2 * (cv ** 2))
+
+        fano = variance_s / mean_s
+        fano_stderr = fano * math.sqrt(2.0 / (n - 1))
+
+        if confidence_level >= 0.99:
+            z = 2.576
+        elif confidence_level >= 0.95:
+            z = 1.960
+        elif confidence_level >= 0.90:
+            z = 1.645
+        else:
+            z = 1.000
+
+        cv_margin = z * cv_stderr
+        cv_ci_lower = max(0.0, cv - cv_margin)
+        cv_ci_upper = cv + cv_margin
+
+        fano_margin = z * fano_stderr
+        fano_ci_lower = max(0.0, fano - fano_margin)
+        fano_ci_upper = fano + fano_margin
+
+        return {
+            "http_retry_jitter_cv": round(cv, 4),
+            "http_retry_jitter_cv_stderr": round(cv_stderr, 4),
+            "http_retry_jitter_cv_ci_margin": round(cv_margin, 4),
+            "http_retry_jitter_cv_ci_lower": round(cv_ci_lower, 4),
+            "http_retry_jitter_cv_ci_upper": round(cv_ci_upper, 4),
+            "http_retry_jitter_fano": round(fano, 4),
+            "http_retry_jitter_fano_stderr": round(fano_stderr, 4),
+            "http_retry_jitter_fano_ci_margin": round(fano_margin, 4),
+            "http_retry_jitter_fano_ci_lower": round(fano_ci_lower, 4),
+            "http_retry_jitter_fano_ci_upper": round(fano_ci_upper, 4),
+            "confidence_level": confidence_level,
+            "sample_count": n,
+        }
+
     def get_http_retry_jitter_entropy_telemetry(self) -> Dict[str, Any]:
-        """Task 181, 184, 187, 190, 193, 196, 199, 202, 205 & 208: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, confidence interval, margin of error, geometric mean, harmonic mean, skewness/kurtosis CI, and relative standard error/variance ratio telemetry."""
+        """Task 181, 184, 187, 190, 193, 196, 199, 202, 205, 208 & 211: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, confidence interval, margin of error, geometric mean, harmonic mean, skewness/kurtosis CI, relative standard error/variance ratio, and CV/Fano factor CI telemetry."""
         with self._req_diag_lock:
             samples = self._http_retry_jitter_samples.copy()
             entropy = self._http_retry_jitter_entropy_bits
@@ -787,6 +867,7 @@ class LCUClient:
         geo_harm_meta = self.get_http_retry_jitter_geometric_harmonic_means_telemetry()
         skew_kurt_ci_meta = self.get_http_retry_jitter_skewness_kurtosis_ci_telemetry()
         rse_var_ratio_meta = self.get_http_retry_jitter_rse_variance_ratio_telemetry()
+        cv_fano_ci_meta = self.get_http_retry_jitter_cv_fano_ci_telemetry()
 
         res = {
             "http_retry_jitter_samples_count": len(samples),
@@ -805,6 +886,7 @@ class LCUClient:
         res.update(geo_harm_meta)
         res.update(skew_kurt_ci_meta)
         res.update(rse_var_ratio_meta)
+        res.update(cv_fano_ci_meta)
         return res
 
     def get_http_latency_histogram(self) -> Dict[str, Any]:

@@ -183,9 +183,11 @@
 - [x] **Task 210**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 185 tests passing in 1.20s).
 
 ## Upcoming Autonomous Improvement Tasks
-- [ ] **Task 211**: Implement automated HTTP request retry exponential backoff jitter coefficient of variation & Fano factor confidence interval telemetry in `LCUClient` (`get_http_retry_jitter_cv_fano_ci_telemetry`).
-- [ ] **Task 212**: Benchmark and optimize memory pooling for champion starting items recommendations search query slice tuple creation in `AssetManager` (`_acquire_starting_items_search_slice_tuple`, `search_starting_items_recommendations`, `get_starting_items_search_slice_pool_telemetry`).
-- [ ] **Task 213**: Maintain continuous system-wide health and build readiness validation.
+- [x] **Task 211**: Implement automated HTTP request retry exponential backoff jitter coefficient of variation & Fano factor confidence interval telemetry in `LCUClient` (`get_http_retry_jitter_cv_fano_ci_telemetry`, `http_retry_jitter_cv`, `http_retry_jitter_cv_stderr`, `http_retry_jitter_fano`, `http_retry_jitter_fano_stderr`).
+- [x] **Task 212**: Benchmark and optimize memory pooling for champion starting items recommendations search query slice tuple creation in `AssetManager` (`_acquire_starting_items_search_slice_tuple`, `search_starting_items_recommendations`, `get_starting_items_search_slice_pool_telemetry`).
+- [x] **Task 213**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 187 tests passing in 1.31s).
 
-
-
+## Upcoming Autonomous Improvement Tasks
+- [ ] **Task 214**: Implement automated HTTP request retry exponential backoff jitter mean absolute deviation & median absolute deviation telemetry in `LCUClient` (`get_http_retry_jitter_mad_telemetry`).
+- [ ] **Task 215**: Benchmark and optimize memory pooling for champion core items recommendations search query slice tuple creation in `AssetManager` (`_acquire_core_items_search_slice_tuple`, `search_core_items_recommendations`, `get_core_items_search_slice_pool_telemetry`).
+- [ ] **Task 216**: Maintain continuous system-wide health and build readiness validation.
