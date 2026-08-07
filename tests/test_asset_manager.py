@@ -999,6 +999,34 @@ class TestAssetManager(unittest.TestCase):
         self.assets.clear_rune_tree_search_slice_pool()
         self.assertEqual(len(self.assets._rune_tree_search_slice_pool), 0)
 
+    def test_rune_stat_shards_recommendations_memory_pooling(self):
+        """Task 242: Test champion rune stat shards recommendations search query result slice tuple memory recycling and telemetry."""
+        initial_tel = self.assets.get_rune_stat_shards_search_slice_pool_telemetry()
+        self.assertEqual(initial_tel["rune_stat_shards_slice_recycle_hits"], 0)
+        self.assertEqual(initial_tel["rune_stat_shards_slice_recycle_misses"], 0)
+
+        # Initial query creates slice tuple (miss)
+        shards1 = self.assets.search_rune_stat_shards_recommendations(query="ahri", limit=10)
+        tel1 = self.assets.get_rune_stat_shards_search_slice_pool_telemetry()
+        self.assertEqual(tel1["rune_stat_shards_slice_recycle_misses"], 1)
+        self.assertEqual(tel1["rune_stat_shards_slice_recycle_hits"], 0)
+
+        # Repeated query accesses pooled rune stat shards slice tuple (hit)
+        shards2 = self.assets.search_rune_stat_shards_recommendations(query="ahri", limit=10)
+        tel2 = self.assets.get_rune_stat_shards_search_slice_pool_telemetry()
+        self.assertEqual(tel2["rune_stat_shards_slice_recycle_hits"], 1)
+        self.assertGreater(tel2["rune_stat_shards_slice_recycle_hit_ratio"], 0.0)
+        self.assertGreater(tel2["rune_stat_shards_slice_bytes_recycled"], 0)
+        self.assertEqual(shards1, shards2)
+
+        summary = self.assets.get_memory_summary_diagnostics()
+        self.assertIn("rune_stat_shards_search_slice_pool_telemetry", summary)
+        self.assertEqual(summary["rune_stat_shards_search_slice_pool_telemetry"]["rune_stat_shards_slice_recycle_hits"], 1)
+
+        # Clear pool
+        self.assets.clear_rune_stat_shards_search_slice_pool()
+        self.assertEqual(len(self.assets._rune_stat_shards_search_slice_pool), 0)
+
 if __name__ == '__main__':
     unittest.main()
 

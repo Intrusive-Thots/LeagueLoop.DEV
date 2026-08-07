@@ -230,6 +230,12 @@
 - [x] **Task 239**: Benchmark and optimize memory pooling for champion rune tree recommendations search query slice tuple creation in `AssetManager` (`_acquire_rune_tree_search_slice_tuple`, `search_rune_tree_recommendations`, `get_rune_tree_search_slice_pool_telemetry`).
 - [x] **Task 240**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 208 tests passing in 1.36s).
 
+## Upcoming Autonomous Improvement Tasks
+- [x] **Task 241**: Implement automated HTTP request retry exponential backoff jitter Duclos-Esteban-Ray (DER) index & Zhang-Kanbur polarization inequality telemetry in `LCUClient` (`get_http_retry_jitter_der_zhang_polarization_telemetry`, `http_retry_jitter_der_index`, `http_retry_jitter_zhang_kanbur_index`).
+- [x] **Task 242**: Benchmark and optimize memory pooling for champion rune stat shards recommendations search query slice tuple creation in `AssetManager` (`_acquire_rune_stat_shards_search_slice_tuple`, `search_rune_stat_shards_recommendations`, `get_rune_stat_shards_search_slice_pool_telemetry`).
+- [x] **Task 243**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 210 tests passing in 1.32s).
+
+
 
 
 

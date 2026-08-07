@@ -1229,8 +1229,55 @@ class LCUClient:
             "sample_count": n,
         }
 
+    def get_http_retry_jitter_der_zhang_polarization_telemetry(self) -> Dict[str, Any]:
+        """Task 241: Returns automated HTTP request retry exponential backoff jitter Duclos-Esteban-Ray (DER) index & Zhang-Kanbur polarization inequality telemetry."""
+        with self._req_diag_lock:
+            samples = self._http_retry_jitter_samples.copy()
+
+        if not samples:
+            return {
+                "http_retry_jitter_der_index": 0.0,
+                "http_retry_jitter_zhang_kanbur_index": 0.0,
+                "sample_count": 0,
+            }
+
+        n = len(samples)
+        mean_s = sum(samples) / n
+        total_sum = sum(samples)
+        if mean_s == 0 or total_sum == 0:
+            return {
+                "http_retry_jitter_der_index": 0.0,
+                "http_retry_jitter_zhang_kanbur_index": 0.0,
+                "sample_count": n,
+            }
+
+        # Calculate DER polarization index (alpha = 0.5)
+        # DER = sum_{i,j} |y_i - y_j| / (2 * n^1.5 * mean_s)
+        diff_sum = sum(abs(a - b) for a in samples for b in samples)
+        der_raw = diff_sum / (2.0 * (n ** 1.5) * mean_s) if n > 0 else 0.0
+        der = max(0.0, min(1.0, der_raw))
+
+        # Calculate Zhang-Kanbur polarization index
+        # ZK = (mu_h - mu_l) / (mu_h + mu_l)
+        sorted_s = sorted(samples)
+        half_n = max(1, n // 2)
+        lower_half = sorted_s[:half_n]
+        upper_half = sorted_s[half_n:]
+        mu_l = sum(lower_half) / len(lower_half) if lower_half else 0.0
+        mu_h = sum(upper_half) / len(upper_half) if upper_half else 0.0
+
+        zk_denom = mu_h + mu_l
+        zk_val = (mu_h - mu_l) / zk_denom if zk_denom > 0 else 0.0
+        zhang_kanbur = max(0.0, min(1.0, zk_val))
+
+        return {
+            "http_retry_jitter_der_index": round(der, 4),
+            "http_retry_jitter_zhang_kanbur_index": round(zhang_kanbur, 4),
+            "sample_count": n,
+        }
+
     def get_http_retry_jitter_entropy_telemetry(self) -> Dict[str, Any]:
-        """Task 181, 184, 187, 190, 193, 196, 199, 202, 205, 208, 211, 214, 217, 220, 223, 226, 229, 232, 235 & 238: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, confidence interval, margin of error, geometric mean, harmonic mean, skewness/kurtosis CI, relative standard error/variance ratio, CV/Fano factor CI, MAD/MedAD, Gini/Hoover inequality, Theil/Atkinson inequality, Palma/Decile ratio inequality, Hoover/Ricci-Schutz inequality, Kakwani/Reynolds-Smolensky inequality, Kolm-Pollak/Atkinson-Gini inequality, Foster-Greer-Thorbecke/Sen-Shorrocks-Thon inequality, and Wolfson/Foster-Wolfson polarization inequality telemetry."""
+        """Task 181, 184, 187, 190, 193, 196, 199, 202, 205, 208, 211, 214, 217, 220, 223, 226, 229, 232, 235, 238 & 241: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, confidence interval, margin of error, geometric mean, harmonic mean, skewness/kurtosis CI, relative standard error/variance ratio, CV/Fano factor CI, MAD/MedAD, Gini/Hoover inequality, Theil/Atkinson inequality, Palma/Decile ratio inequality, Hoover/Ricci-Schutz inequality, Kakwani/Reynolds-Smolensky inequality, Kolm-Pollak/Atkinson-Gini inequality, Foster-Greer-Thorbecke/Sen-Shorrocks-Thon inequality, Wolfson/Foster-Wolfson polarization inequality, and Duclos-Esteban-Ray/Zhang-Kanbur polarization inequality telemetry."""
         with self._req_diag_lock:
             samples = self._http_retry_jitter_samples.copy()
             entropy = self._http_retry_jitter_entropy_bits
@@ -1258,6 +1305,7 @@ class LCUClient:
         kolm_atkinson_gini_meta = self.get_http_retry_jitter_kolm_atkinson_gini_telemetry()
         fgt_sst_meta = self.get_http_retry_jitter_fgt_sst_telemetry()
         wolfson_polarization_meta = self.get_http_retry_jitter_wolfson_polarization_telemetry()
+        der_zhang_polarization_meta = self.get_http_retry_jitter_der_zhang_polarization_telemetry()
 
         res = {
             "http_retry_jitter_samples_count": len(samples),
@@ -1286,6 +1334,8 @@ class LCUClient:
         res.update(kolm_atkinson_gini_meta)
         res.update(fgt_sst_meta)
         res.update(wolfson_polarization_meta)
+        res.update(der_zhang_polarization_meta)
+        return res
         return res
 
     def get_http_latency_histogram(self) -> Dict[str, Any]:

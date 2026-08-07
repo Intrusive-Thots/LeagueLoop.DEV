@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.08.149] - 2026-08-07
+
+- **Duclos-Esteban-Ray (DER) & Zhang-Kanbur Polarization Telemetry**: Implemented `get_http_retry_jitter_der_zhang_polarization_telemetry()` in `LCUClient` (`src/services/api_handler.py`) to compute DER index and Zhang-Kanbur polarization inequality metrics on HTTP request retry exponential backoff jitter distributions.
+- **Champion Rune Stat Shards Recommendations Memory Pooling**: Implemented `_acquire_rune_stat_shards_search_slice_tuple()`, `search_rune_stat_shards_recommendations()`, and `get_rune_stat_shards_search_slice_pool_telemetry()` in `AssetManager` (`src/services/asset_manager.py`), enabling slice tuple memory recycling for rune stat shards queries.
+- **Expanded Test Suite & Pre-Flight Build Validation**: Added `test_http_retry_jitter_der_zhang_polarization_telemetry` in `tests/test_api_handler.py` and `test_rune_stat_shards_recommendations_memory_pooling` in `tests/test_asset_manager.py`, expanding test suite to 210 passing tests (`210 passed in 1.32s`) and passing `tools/build_validator.py` pre-flight verification.
+
 ## [1.07.153] - 2026-07-31
 
 - **WebSocket Subscription Dispatch Telemetry**: Implemented `_record_ws_dispatch_telemetry()` and `get_ws_dispatch_telemetry()` in `LCUClient` (`src/services/api_handler.py`) to track active filters, registered listeners, dispatched callbacks count, and average/max dispatch latency.
