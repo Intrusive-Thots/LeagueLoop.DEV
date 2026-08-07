@@ -197,3 +197,14 @@
 - [x] **Task 218**: Benchmark and optimize memory pooling for champion situational items recommendations search query slice tuple creation in `AssetManager` (`_acquire_situational_items_search_slice_tuple`, `search_situational_items_recommendations`, `get_situational_items_search_slice_pool_telemetry`).
 - [x] **Task 219**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 191 tests passing in 1.32s).
 
+## Upcoming Autonomous Improvement Tasks
+- [x] **Task 220**: Implement automated HTTP request retry exponential backoff jitter Theil index & Atkinson index inequality telemetry in `LCUClient` (`get_http_retry_jitter_theil_atkinson_telemetry`, `http_retry_jitter_theil_index`, `http_retry_jitter_atkinson_index`).
+- [x] **Task 221**: Benchmark and optimize memory pooling for champion skill leveling tree recommendations search query slice tuple creation in `AssetManager` (`_acquire_skill_leveling_tree_search_slice_tuple`, `search_skill_leveling_tree_recommendations`, `get_skill_leveling_tree_search_slice_pool_telemetry`).
+- [x] **Task 222**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 193 tests passing in 1.34s).
+
+## Upcoming Autonomous Improvement Tasks
+- [ ] **Task 223**: Implement automated HTTP request retry exponential backoff jitter Palma ratio & Decile ratio inequality telemetry in `LCUClient` (`get_http_retry_jitter_palma_decile_telemetry`, `http_retry_jitter_palma_ratio`, `http_retry_jitter_decile_ratio`).
+- [ ] **Task 224**: Benchmark and optimize memory pooling for champion skill priority recommendations search query slice tuple creation in `AssetManager` (`_acquire_skill_priority_search_slice_tuple`, `search_skill_priority_recommendations`, `get_skill_priority_search_slice_pool_telemetry`).
+- [ ] **Task 225**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, unit test suite verification).
+
+
