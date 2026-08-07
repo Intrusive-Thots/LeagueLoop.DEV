@@ -213,9 +213,9 @@
 - [x] **Task 228**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 198 tests passing in 1.29s).
 
 ## Upcoming Autonomous Improvement Tasks
-- [ ] **Task 229**: Implement automated HTTP request retry exponential backoff jitter Kakwani index & Reynolds-Smolensky inequality telemetry in `LCUClient` (`get_http_retry_jitter_kakwani_reynolds_telemetry`, `http_retry_jitter_kakwani_index`, `http_retry_jitter_reynolds_smolensky_index`).
-- [ ] **Task 230**: Benchmark and optimize memory pooling for champion summoner spell combos recommendations search query slice tuple creation in `AssetManager` (`_acquire_summoner_spell_combos_search_slice_tuple`, `search_summoner_spell_combos_recommendations`, `get_summoner_spell_combos_search_slice_pool_telemetry`).
-- [ ] **Task 231**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, unit test suite verification).
+- [x] **Task 229**: Implement automated HTTP request retry exponential backoff jitter Kakwani index & Reynolds-Smolensky inequality telemetry in `LCUClient` (`get_http_retry_jitter_kakwani_reynolds_telemetry`, `http_retry_jitter_kakwani_index`, `http_retry_jitter_reynolds_smolensky_index`).
+- [x] **Task 230**: Benchmark and optimize memory pooling for champion summoner spell combos recommendations search query slice tuple creation in `AssetManager` (`_acquire_summoner_spell_combos_search_slice_tuple`, `search_summoner_spell_combos_recommendations`, `get_summoner_spell_combos_search_slice_pool_telemetry`).
+- [x] **Task 231**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 201 tests passing in 1.40s).
 
 
 
