@@ -848,8 +848,54 @@ class LCUClient:
             "sample_count": n,
         }
 
+    def get_http_retry_jitter_mad_telemetry(self) -> Dict[str, Any]:
+        """Task 214: Returns automated HTTP request retry exponential backoff jitter mean absolute deviation & median absolute deviation telemetry."""
+        with self._req_diag_lock:
+            samples = self._http_retry_jitter_samples.copy()
+
+        if not samples:
+            return {
+                "http_retry_jitter_mad_s": 0.0,
+                "http_retry_jitter_mad_ms": 0.0,
+                "http_retry_jitter_relative_mad_pct": 0.0,
+                "http_retry_jitter_medad_s": 0.0,
+                "http_retry_jitter_medad_ms": 0.0,
+                "http_retry_jitter_normal_scaled_medad_s": 0.0,
+                "sample_count": 0,
+            }
+
+        n = len(samples)
+        mean_s = sum(samples) / n
+        mad_s = sum(abs(x - mean_s) for x in samples) / n
+        rel_mad_pct = (mad_s / mean_s * 100.0) if mean_s > 0 else 0.0
+
+        sorted_s = sorted(samples)
+        if n % 2 == 1:
+            median_s = sorted_s[n // 2]
+        else:
+            median_s = (sorted_s[n // 2 - 1] + sorted_s[n // 2]) / 2.0
+
+        abs_devs = sorted([abs(x - median_s) for x in samples])
+        dev_n = len(abs_devs)
+        if dev_n % 2 == 1:
+            medad_s = abs_devs[dev_n // 2]
+        else:
+            medad_s = (abs_devs[dev_n // 2 - 1] + abs_devs[dev_n // 2]) / 2.0
+
+        scaled_medad_s = 1.4826 * medad_s
+
+        return {
+            "http_retry_jitter_mad_s": round(mad_s, 6),
+            "http_retry_jitter_mad_ms": round(mad_s * 1000.0, 4),
+            "http_retry_jitter_relative_mad_pct": round(rel_mad_pct, 4),
+            "http_retry_jitter_medad_s": round(medad_s, 6),
+            "http_retry_jitter_medad_ms": round(medad_s * 1000.0, 4),
+            "http_retry_jitter_normal_scaled_medad_s": round(scaled_medad_s, 6),
+            "sample_count": n,
+        }
+
     def get_http_retry_jitter_entropy_telemetry(self) -> Dict[str, Any]:
-        """Task 181, 184, 187, 190, 193, 196, 199, 202, 205, 208 & 211: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, confidence interval, margin of error, geometric mean, harmonic mean, skewness/kurtosis CI, relative standard error/variance ratio, and CV/Fano factor CI telemetry."""
+        """Task 181, 184, 187, 190, 193, 196, 199, 202, 205, 208, 211 & 214: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, confidence interval, margin of error, geometric mean, harmonic mean, skewness/kurtosis CI, relative standard error/variance ratio, CV/Fano factor CI, and MAD/MedAD telemetry."""
         with self._req_diag_lock:
             samples = self._http_retry_jitter_samples.copy()
             entropy = self._http_retry_jitter_entropy_bits
@@ -868,6 +914,7 @@ class LCUClient:
         skew_kurt_ci_meta = self.get_http_retry_jitter_skewness_kurtosis_ci_telemetry()
         rse_var_ratio_meta = self.get_http_retry_jitter_rse_variance_ratio_telemetry()
         cv_fano_ci_meta = self.get_http_retry_jitter_cv_fano_ci_telemetry()
+        mad_meta = self.get_http_retry_jitter_mad_telemetry()
 
         res = {
             "http_retry_jitter_samples_count": len(samples),
@@ -887,6 +934,7 @@ class LCUClient:
         res.update(skew_kurt_ci_meta)
         res.update(rse_var_ratio_meta)
         res.update(cv_fano_ci_meta)
+        res.update(mad_meta)
         return res
 
     def get_http_latency_histogram(self) -> Dict[str, Any]:

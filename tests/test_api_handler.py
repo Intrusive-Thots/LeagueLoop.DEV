@@ -480,6 +480,36 @@ class TestLCUClient(unittest.TestCase):
         self.assertIn("http_retry_jitter_cv", entropy_tel)
         self.assertIn("http_retry_jitter_fano", entropy_tel)
 
+    def test_http_retry_jitter_mad_telemetry(self):
+        """Test automated HTTP request retry exponential backoff jitter MAD & MedAD telemetry for Task 214."""
+        empty_tel = self.client.get_http_retry_jitter_mad_telemetry()
+        self.assertEqual(empty_tel["sample_count"], 0)
+        self.assertEqual(empty_tel["http_retry_jitter_mad_s"], 0.0)
+        self.assertEqual(empty_tel["http_retry_jitter_medad_s"], 0.0)
+
+        # Single sample
+        self.client._record_http_retry_jitter(0.02)
+        single_tel = self.client.get_http_retry_jitter_mad_telemetry()
+        self.assertEqual(single_tel["sample_count"], 1)
+        self.assertEqual(single_tel["http_retry_jitter_mad_s"], 0.0)
+
+        # Multiple samples
+        self.client._record_http_retry_jitter(0.04)
+        self.client._record_http_retry_jitter(0.06)
+
+        tel = self.client.get_http_retry_jitter_mad_telemetry()
+        self.assertEqual(tel["sample_count"], 3)
+        self.assertGreater(tel["http_retry_jitter_mad_s"], 0.0)
+        self.assertGreater(tel["http_retry_jitter_mad_ms"], 0.0)
+        self.assertGreater(tel["http_retry_jitter_relative_mad_pct"], 0.0)
+        self.assertGreater(tel["http_retry_jitter_medad_s"], 0.0)
+        self.assertGreater(tel["http_retry_jitter_medad_ms"], 0.0)
+        self.assertGreater(tel["http_retry_jitter_normal_scaled_medad_s"], 0.0)
+
+        entropy_tel = self.client.get_http_retry_jitter_entropy_telemetry()
+        self.assertIn("http_retry_jitter_mad_s", entropy_tel)
+        self.assertIn("http_retry_jitter_medad_s", entropy_tel)
+
 if __name__ == '__main__':
     unittest.main()
 
