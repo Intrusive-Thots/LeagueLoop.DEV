@@ -251,7 +251,12 @@
 - [x] **Task 252**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 216 tests passing in 1.39s).
 
 ## Upcoming Autonomous Improvement Tasks
-- [ ] **Task 253**: Implement automated HTTP request retry exponential backoff jitter Foster-Wolfson (FW) & Wolfson II (W2) polarization inequality telemetry in `LCUClient` (`get_http_retry_jitter_fw_w2_polarization_telemetry`, `http_retry_jitter_foster_wolfson_ii_index`, `http_retry_jitter_wolfson_ii_index`).
-- [ ] **Task 254**: Benchmark and optimize memory pooling for champion item build tree recommendations search query slice tuple creation in `AssetManager` (`_acquire_item_build_tree_search_slice_tuple`, `search_item_build_tree_recommendations`, `get_item_build_tree_search_slice_pool_telemetry`).
-- [ ] **Task 255**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`).
+- [x] **Task 253**: Implement automated HTTP request retry exponential backoff jitter Foster-Wolfson (FW) & Wolfson II (W2) polarization inequality telemetry in `LCUClient` (`get_http_retry_jitter_fw_w2_polarization_telemetry`, `http_retry_jitter_foster_wolfson_ii_index`, `http_retry_jitter_wolfson_ii_index`).
+- [x] **Task 254**: Benchmark and optimize memory pooling for champion item build tree recommendations search query slice tuple creation in `AssetManager` (`_acquire_item_build_tree_search_slice_tuple`, `search_item_build_tree_recommendations`, `get_item_build_tree_search_slice_pool_telemetry`).
+- [x] **Task 255**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 218 tests passing in 1.26s).
+
+## Upcoming Autonomous Improvement Tasks
+- [ ] **Task 256**: Implement automated HTTP request retry exponential backoff jitter Wolfson III (W3) & Foster-Wolfson III (FW3) polarization inequality telemetry in `LCUClient` (`get_http_retry_jitter_w3_fw3_polarization_telemetry`, `http_retry_jitter_wolfson_iii_index`, `http_retry_jitter_foster_wolfson_iii_index`).
+- [ ] **Task 257**: Benchmark and optimize memory pooling for champion item path recommendations search query slice tuple creation in `AssetManager` (`_acquire_item_path_search_slice_tuple`, `search_item_path_recommendations`, `get_item_path_search_slice_pool_telemetry`).
+- [ ] **Task 258**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`).
 
