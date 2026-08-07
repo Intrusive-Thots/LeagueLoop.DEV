@@ -86,8 +86,19 @@
     },
     "after_metrics": {
       "skewness_kurtosis_ci": "Automated standard error and confidence interval telemetry for skewness and kurtosis (get_http_retry_jitter_skewness_kurtosis_ci_telemetry).",
-      "summoner_spell_slice_pooling": "Thread-safe memory pooling for summoner spell recommendation search query result slice tuples (_acquire_summoner_spell_search_slice_tuple)."
-    },
     "impact": "Eliminates GC allocation overhead during repeated summoner spell query filtering and provides uncertainty bounds on higher-order shape parameters of retry backoff distributions."
+  },
+  {
+    "timestamp": "2026-08-07T17:14:00Z",
+    "feature": "HTTP Retry Jitter Palma & Decile Inequality Telemetry & Skill Priority Search Slice Memory Pooling",
+    "before_metrics": {
+      "palma_decile_telemetry": "HTTP retry jitter backoff distributions were measured without Palma ratio or Decile ratio inequality metrics.",
+      "skill_priority_slice_pooling": "Skill priority recommendation query searches allocated fresh result tuple objects on every query repetition."
+    },
+    "after_metrics": {
+      "palma_decile_telemetry": "Automated Palma ratio and Decile ratio inequality telemetry tracking (get_http_retry_jitter_palma_decile_telemetry).",
+      "skill_priority_slice_pooling": "Thread-safe memory pooling for skill priority recommendation search query result slice tuples (_acquire_skill_priority_search_slice_tuple)."
+    },
+    "impact": "Eliminates heap allocation overhead during repeated skill priority recommendation queries and provides statistical inequality metrics for retry backoff jitter dispersion."
   }
 ]
