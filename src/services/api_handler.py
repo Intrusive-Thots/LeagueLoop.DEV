@@ -1123,8 +1123,58 @@ class LCUClient:
             "sample_count": n,
         }
 
+    def get_http_retry_jitter_fgt_sst_telemetry(self, alpha: float = 2.0) -> Dict[str, Any]:
+        """Task 235: Returns automated HTTP request retry exponential backoff jitter Foster-Greer-Thorbecke (FGT) index & Sen-Shorrocks-Thon (SST) inequality telemetry."""
+        with self._req_diag_lock:
+            samples = self._http_retry_jitter_samples.copy()
+
+        if not samples:
+            return {
+                "http_retry_jitter_fgt_index": 0.0,
+                "http_retry_jitter_sst_index": 0.0,
+                "sample_count": 0,
+            }
+
+        n = len(samples)
+        mean_s = sum(samples) / n
+        total_sum = sum(samples)
+        if mean_s == 0 or total_sum == 0:
+            return {
+                "http_retry_jitter_fgt_index": 0.0,
+                "http_retry_jitter_sst_index": 0.0,
+                "sample_count": n,
+            }
+
+        z = mean_s
+        gaps = [max(0.0, (z - x) / z) for x in samples]
+        fgt = sum(g**alpha for g in gaps) / n
+        fgt = max(0.0, min(1.0, fgt))
+
+        below = [g for g in gaps if g > 0]
+        if below:
+            p0 = len(below) / n
+            mu_p = sum(below) / len(below)
+            sorted_b = sorted(below)
+            sum_b = sum(sorted_b)
+            if sum_b > 0 and len(sorted_b) > 1:
+                sum_i_b = sum((i + 1) * val for i, val in enumerate(sorted_b))
+                g_p = (2.0 * sum_i_b / (len(sorted_b) * sum_b)) - ((len(sorted_b) + 1.0) / len(sorted_b))
+                g_p = max(0.0, min(1.0, g_p))
+            else:
+                g_p = 0.0
+            sst = p0 * mu_p * (1.0 + g_p)
+            sst = max(0.0, min(1.0, sst))
+        else:
+            sst = 0.0
+
+        return {
+            "http_retry_jitter_fgt_index": round(fgt, 4),
+            "http_retry_jitter_sst_index": round(sst, 4),
+            "sample_count": n,
+        }
+
     def get_http_retry_jitter_entropy_telemetry(self) -> Dict[str, Any]:
-        """Task 181, 184, 187, 190, 193, 196, 199, 202, 205, 208, 211, 214, 217, 220, 223, 226, 229 & 232: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, confidence interval, margin of error, geometric mean, harmonic mean, skewness/kurtosis CI, relative standard error/variance ratio, CV/Fano factor CI, MAD/MedAD, Gini/Hoover inequality, Theil/Atkinson inequality, Palma/Decile ratio inequality, Hoover/Ricci-Schutz inequality, Kakwani/Reynolds-Smolensky inequality, and Kolm-Pollak/Atkinson-Gini inequality telemetry."""
+        """Task 181, 184, 187, 190, 193, 196, 199, 202, 205, 208, 211, 214, 217, 220, 223, 226, 229, 232 & 235: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, confidence interval, margin of error, geometric mean, harmonic mean, skewness/kurtosis CI, relative standard error/variance ratio, CV/Fano factor CI, MAD/MedAD, Gini/Hoover inequality, Theil/Atkinson inequality, Palma/Decile ratio inequality, Hoover/Ricci-Schutz inequality, Kakwani/Reynolds-Smolensky inequality, Kolm-Pollak/Atkinson-Gini inequality, and Foster-Greer-Thorbecke/Sen-Shorrocks-Thon inequality telemetry."""
         with self._req_diag_lock:
             samples = self._http_retry_jitter_samples.copy()
             entropy = self._http_retry_jitter_entropy_bits
@@ -1150,6 +1200,7 @@ class LCUClient:
         hoover_ricci_meta = self.get_http_retry_jitter_hoover_ricci_telemetry()
         kakwani_reynolds_meta = self.get_http_retry_jitter_kakwani_reynolds_telemetry()
         kolm_atkinson_gini_meta = self.get_http_retry_jitter_kolm_atkinson_gini_telemetry()
+        fgt_sst_meta = self.get_http_retry_jitter_fgt_sst_telemetry()
 
         res = {
             "http_retry_jitter_samples_count": len(samples),
@@ -1176,6 +1227,7 @@ class LCUClient:
         res.update(hoover_ricci_meta)
         res.update(kakwani_reynolds_meta)
         res.update(kolm_atkinson_gini_meta)
+        res.update(fgt_sst_meta)
         return res
 
     def get_http_latency_histogram(self) -> Dict[str, Any]:

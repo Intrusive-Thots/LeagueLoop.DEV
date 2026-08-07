@@ -221,6 +221,9 @@
 - [x] **Task 232**: Implement automated HTTP request retry exponential backoff jitter Kolm-Pollak index & Atkinson-Gini inequality telemetry in `LCUClient` (`get_http_retry_jitter_kolm_atkinson_gini_telemetry`, `http_retry_jitter_kolm_pollak_index`, `http_retry_jitter_atkinson_gini_index`).
 - [x] **Task 233**: Benchmark and optimize memory pooling for champion skill build order recommendations search query slice tuple creation in `AssetManager` (`_acquire_skill_build_order_search_slice_tuple`, `search_skill_build_order_recommendations`, `get_skill_build_order_search_slice_pool_telemetry`).
 - [x] **Task 234**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 203 tests passing in 1.31s).
+- [x] **Task 235**: Implement automated HTTP request retry exponential backoff jitter Foster-Greer-Thorbecke (FGT) index & Sen-Shorrocks-Thon (SST) inequality telemetry in `LCUClient` (`get_http_retry_jitter_fgt_sst_telemetry`, `http_retry_jitter_fgt_index`, `http_retry_jitter_sst_index`).
+- [x] **Task 236**: Benchmark and optimize memory pooling for champion item build order recommendations search query slice tuple creation in `AssetManager` (`_acquire_item_build_order_search_slice_tuple`, `search_item_build_order_recommendations`, `get_item_build_order_search_slice_pool_telemetry`).
+- [x] **Task 237**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 206 tests passing in 1.42s).
 
 
 
