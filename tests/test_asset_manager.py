@@ -915,6 +915,34 @@ class TestAssetManager(unittest.TestCase):
         self.assets.clear_summoner_spell_combos_search_slice_pool()
         self.assertEqual(len(self.assets._summoner_spell_combos_search_slice_pool), 0)
 
+    def test_skill_build_order_recommendations_memory_pooling(self):
+        """Task 233: Test champion skill build order recommendations search query result slice tuple memory recycling and telemetry."""
+        initial_tel = self.assets.get_skill_build_order_search_slice_pool_telemetry()
+        self.assertEqual(initial_tel["skill_build_order_slice_recycle_hits"], 0)
+        self.assertEqual(initial_tel["skill_build_order_slice_recycle_misses"], 0)
+
+        # Initial query creates slice tuple (miss)
+        builds1 = self.assets.search_skill_build_order_recommendations(query="ahri", limit=10)
+        tel1 = self.assets.get_skill_build_order_search_slice_pool_telemetry()
+        self.assertEqual(tel1["skill_build_order_slice_recycle_misses"], 1)
+        self.assertEqual(tel1["skill_build_order_slice_recycle_hits"], 0)
+
+        # Repeated query accesses pooled skill build order slice tuple (hit)
+        builds2 = self.assets.search_skill_build_order_recommendations(query="ahri", limit=10)
+        tel2 = self.assets.get_skill_build_order_search_slice_pool_telemetry()
+        self.assertEqual(tel2["skill_build_order_slice_recycle_hits"], 1)
+        self.assertGreater(tel2["skill_build_order_slice_recycle_hit_ratio"], 0.0)
+        self.assertGreater(tel2["skill_build_order_slice_bytes_recycled"], 0)
+        self.assertEqual(builds1, builds2)
+
+        summary = self.assets.get_memory_summary_diagnostics()
+        self.assertIn("skill_build_order_search_slice_pool_telemetry", summary)
+        self.assertEqual(summary["skill_build_order_search_slice_pool_telemetry"]["skill_build_order_slice_recycle_hits"], 1)
+
+        # Clear pool
+        self.assets.clear_skill_build_order_search_slice_pool()
+        self.assertEqual(len(self.assets._skill_build_order_search_slice_pool), 0)
+
 if __name__ == '__main__':
     unittest.main()
 

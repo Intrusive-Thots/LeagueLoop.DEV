@@ -1080,8 +1080,51 @@ class LCUClient:
             "sample_count": n,
         }
 
+    def get_http_retry_jitter_kolm_atkinson_gini_telemetry(self, alpha: float = 1.0) -> Dict[str, Any]:
+        """Task 232: Returns automated HTTP request retry exponential backoff jitter Kolm-Pollak index & Atkinson-Gini inequality telemetry."""
+        with self._req_diag_lock:
+            samples = self._http_retry_jitter_samples.copy()
+
+        if not samples:
+            return {
+                "http_retry_jitter_kolm_pollak_index": 0.0,
+                "http_retry_jitter_atkinson_gini_index": 0.0,
+                "sample_count": 0,
+            }
+
+        n = len(samples)
+        mean_s = sum(samples) / n
+        total_sum = sum(samples)
+        if mean_s == 0 or total_sum == 0:
+            return {
+                "http_retry_jitter_kolm_pollak_index": 0.0,
+                "http_retry_jitter_atkinson_gini_index": 0.0,
+                "sample_count": n,
+            }
+
+        sorted_s = sorted(samples)
+        sum_i_x = sum((i + 1) * val for i, val in enumerate(sorted_s))
+        gini = (2.0 * sum_i_x / (n * total_sum)) - ((n + 1.0) / n)
+        gini = max(0.0, gini)
+
+        sqrt_sum = sum(math.sqrt(max(0.0, x)) for x in samples)
+        atkinson_mean = (sqrt_sum / n) ** 2
+        atkinson = max(0.0, min(1.0, 1.0 - (atkinson_mean / mean_s)))
+
+        exp_sum = sum(math.exp(alpha * (x - mean_s)) for x in samples)
+        kolm_pollak = (1.0 / alpha) * math.log(exp_sum / n) if alpha > 0 else 0.0
+        kolm_pollak = max(0.0, kolm_pollak)
+
+        atkinson_gini = max(0.0, gini * (1.0 - atkinson))
+
+        return {
+            "http_retry_jitter_kolm_pollak_index": round(kolm_pollak, 4),
+            "http_retry_jitter_atkinson_gini_index": round(atkinson_gini, 4),
+            "sample_count": n,
+        }
+
     def get_http_retry_jitter_entropy_telemetry(self) -> Dict[str, Any]:
-        """Task 181, 184, 187, 190, 193, 196, 199, 202, 205, 208, 211, 214, 217, 220, 223, 226 & 229: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, confidence interval, margin of error, geometric mean, harmonic mean, skewness/kurtosis CI, relative standard error/variance ratio, CV/Fano factor CI, MAD/MedAD, Gini/Hoover inequality, Theil/Atkinson inequality, Palma/Decile ratio inequality, Hoover/Ricci-Schutz inequality, and Kakwani/Reynolds-Smolensky inequality telemetry."""
+        """Task 181, 184, 187, 190, 193, 196, 199, 202, 205, 208, 211, 214, 217, 220, 223, 226, 229 & 232: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, confidence interval, margin of error, geometric mean, harmonic mean, skewness/kurtosis CI, relative standard error/variance ratio, CV/Fano factor CI, MAD/MedAD, Gini/Hoover inequality, Theil/Atkinson inequality, Palma/Decile ratio inequality, Hoover/Ricci-Schutz inequality, Kakwani/Reynolds-Smolensky inequality, and Kolm-Pollak/Atkinson-Gini inequality telemetry."""
         with self._req_diag_lock:
             samples = self._http_retry_jitter_samples.copy()
             entropy = self._http_retry_jitter_entropy_bits
@@ -1106,6 +1149,7 @@ class LCUClient:
         palma_decile_meta = self.get_http_retry_jitter_palma_decile_telemetry()
         hoover_ricci_meta = self.get_http_retry_jitter_hoover_ricci_telemetry()
         kakwani_reynolds_meta = self.get_http_retry_jitter_kakwani_reynolds_telemetry()
+        kolm_atkinson_gini_meta = self.get_http_retry_jitter_kolm_atkinson_gini_telemetry()
 
         res = {
             "http_retry_jitter_samples_count": len(samples),
@@ -1131,6 +1175,7 @@ class LCUClient:
         res.update(palma_decile_meta)
         res.update(hoover_ricci_meta)
         res.update(kakwani_reynolds_meta)
+        res.update(kolm_atkinson_gini_meta)
         return res
 
     def get_http_latency_histogram(self) -> Dict[str, Any]:

@@ -217,5 +217,11 @@
 - [x] **Task 230**: Benchmark and optimize memory pooling for champion summoner spell combos recommendations search query slice tuple creation in `AssetManager` (`_acquire_summoner_spell_combos_search_slice_tuple`, `search_summoner_spell_combos_recommendations`, `get_summoner_spell_combos_search_slice_pool_telemetry`).
 - [x] **Task 231**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 201 tests passing in 1.40s).
 
+## Upcoming Autonomous Improvement Tasks
+- [x] **Task 232**: Implement automated HTTP request retry exponential backoff jitter Kolm-Pollak index & Atkinson-Gini inequality telemetry in `LCUClient` (`get_http_retry_jitter_kolm_atkinson_gini_telemetry`, `http_retry_jitter_kolm_pollak_index`, `http_retry_jitter_atkinson_gini_index`).
+- [x] **Task 233**: Benchmark and optimize memory pooling for champion skill build order recommendations search query slice tuple creation in `AssetManager` (`_acquire_skill_build_order_search_slice_tuple`, `search_skill_build_order_recommendations`, `get_skill_build_order_search_slice_pool_telemetry`).
+- [x] **Task 234**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 203 tests passing in 1.31s).
+
+
 
 
