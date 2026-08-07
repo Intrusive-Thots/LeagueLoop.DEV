@@ -1009,8 +1009,40 @@ class LCUClient:
             "sample_count": n,
         }
 
+    def get_http_retry_jitter_hoover_ricci_telemetry(self) -> Dict[str, Any]:
+        """Task 226: Returns automated HTTP request retry exponential backoff jitter Hoover index & Ricci-Schutz inequality telemetry."""
+        with self._req_diag_lock:
+            samples = self._http_retry_jitter_samples.copy()
+
+        if not samples:
+            return {
+                "http_retry_jitter_hoover_index": 0.0,
+                "http_retry_jitter_ricci_schutz_index": 0.0,
+                "sample_count": 0,
+            }
+
+        n = len(samples)
+        mean_s = sum(samples) / n
+        total_sum = sum(samples)
+        if mean_s == 0 or total_sum == 0:
+            return {
+                "http_retry_jitter_hoover_index": 0.0,
+                "http_retry_jitter_ricci_schutz_index": 0.0,
+                "sample_count": n,
+            }
+
+        mad_sum = sum(abs(x - mean_s) for x in samples)
+        hoover = mad_sum / (2.0 * total_sum)
+        ricci_schutz = mad_sum / (2.0 * total_sum)
+
+        return {
+            "http_retry_jitter_hoover_index": round(hoover, 4),
+            "http_retry_jitter_ricci_schutz_index": round(ricci_schutz, 4),
+            "sample_count": n,
+        }
+
     def get_http_retry_jitter_entropy_telemetry(self) -> Dict[str, Any]:
-        """Task 181, 184, 187, 190, 193, 196, 199, 202, 205, 208, 211, 214, 217, 220 & 223: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, confidence interval, margin of error, geometric mean, harmonic mean, skewness/kurtosis CI, relative standard error/variance ratio, CV/Fano factor CI, MAD/MedAD, Gini/Hoover inequality, Theil/Atkinson inequality, and Palma/Decile ratio inequality telemetry."""
+        """Task 181, 184, 187, 190, 193, 196, 199, 202, 205, 208, 211, 214, 217, 220, 223 & 226: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, confidence interval, margin of error, geometric mean, harmonic mean, skewness/kurtosis CI, relative standard error/variance ratio, CV/Fano factor CI, MAD/MedAD, Gini/Hoover inequality, Theil/Atkinson inequality, Palma/Decile ratio inequality, and Hoover/Ricci-Schutz inequality telemetry."""
         with self._req_diag_lock:
             samples = self._http_retry_jitter_samples.copy()
             entropy = self._http_retry_jitter_entropy_bits
@@ -1033,6 +1065,7 @@ class LCUClient:
         gini_hoover_meta = self.get_http_retry_jitter_gini_hoover_telemetry()
         theil_atkinson_meta = self.get_http_retry_jitter_theil_atkinson_telemetry()
         palma_decile_meta = self.get_http_retry_jitter_palma_decile_telemetry()
+        hoover_ricci_meta = self.get_http_retry_jitter_hoover_ricci_telemetry()
 
         res = {
             "http_retry_jitter_samples_count": len(samples),
@@ -1056,6 +1089,7 @@ class LCUClient:
         res.update(gini_hoover_meta)
         res.update(theil_atkinson_meta)
         res.update(palma_decile_meta)
+        res.update(hoover_ricci_meta)
         return res
 
     def get_http_latency_histogram(self) -> Dict[str, Any]:
