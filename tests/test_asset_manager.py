@@ -1476,6 +1476,40 @@ class TestAssetManager(unittest.TestCase):
         self.assets.clear_item_luxury_build_search_slice_pool()
         self.assertEqual(len(self.assets._item_luxury_build_search_slice_pool), 0)
 
+    def test_item_situational_build_search_slice_pool_telemetry(self):
+        """Task 290: Test champion item situational build recommendations search query result slice tuple memory recycling and telemetry."""
+        initial_tel = self.assets.get_item_situational_build_search_slice_pool_telemetry()
+        self.assertEqual(initial_tel["item_situational_build_slice_recycle_hits"], 0)
+        self.assertEqual(initial_tel["item_situational_build_slice_recycle_misses"], 0)
+
+        # Mock index
+        self.assets.id_to_key = {103: "Ahri", 84: "Akali"}
+        self.assets.id_to_name = {103: "Ahri", 84: "Akali"}
+        self.assets._build_champ_search_index()
+
+        # Initial query creates slice tuple (miss)
+        sit1 = self.assets.search_item_situational_build_recommendations(query="ahri", limit=10)
+        tel1 = self.assets.get_item_situational_build_search_slice_pool_telemetry()
+        self.assertEqual(tel1["item_situational_build_slice_pool_size"], 1)
+        self.assertEqual(tel1["item_situational_build_slice_recycle_misses"], 1)
+        self.assertEqual(tel1["item_situational_build_slice_recycle_hits"], 0)
+
+        # Repeated query accesses pooled item situational build slice tuple (hit)
+        sit2 = self.assets.search_item_situational_build_recommendations(query="ahri", limit=10)
+        tel2 = self.assets.get_item_situational_build_search_slice_pool_telemetry()
+        self.assertEqual(tel2["item_situational_build_slice_recycle_hits"], 1)
+        self.assertGreater(tel2["item_situational_build_slice_recycle_hit_ratio"], 0.0)
+        self.assertGreater(tel2["item_situational_build_slice_bytes_recycled"], 0)
+        self.assertEqual(sit1, sit2)
+
+        summary = self.assets.get_memory_summary_diagnostics()
+        self.assertIn("item_situational_build_search_slice_pool_telemetry", summary)
+        self.assertEqual(summary["item_situational_build_search_slice_pool_telemetry"]["item_situational_build_slice_recycle_hits"], 1)
+
+        # Clear pool
+        self.assets.clear_item_situational_build_search_slice_pool()
+        self.assertEqual(len(self.assets._item_situational_build_search_slice_pool), 0)
+
 if __name__ == '__main__':
     unittest.main()
 
