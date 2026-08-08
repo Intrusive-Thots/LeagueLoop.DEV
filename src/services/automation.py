@@ -559,8 +559,13 @@ class AutomationEngine:
                 me = next((p for p in my_team if p.get("cellId") == local_cell_id), None)
                 my_champ_id = me.get("championId", 0) if me else 0
                 my_champ_name = self.assets.get_champ_name(my_champ_id) if my_champ_id else ""
-                bench_names = [self.assets.get_champ_name(c.get("championId")) for c in bench if c.get("championId")]
-                bench_names = [n for n in bench_names if n and n != str(c.get("championId"))]
+                bench_names = []
+                for c in bench:
+                    cid = c.get("championId")
+                    if cid:
+                        name = self.assets.get_champ_name(cid)
+                        if name and name != str(cid):
+                            bench_names.append(name)
                 if my_champ_name and my_champ_name != str(my_champ_id):
                     self._tracked_champ_select_data = {
                         "my_champ": my_champ_name,
