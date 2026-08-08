@@ -87,7 +87,7 @@ _QUEUE_DATASET_MAP = {
 class StatsScraper:
     """Provides base champion stats. Live web scraping legacy has been removed."""
 
-    def __init__(self, mode="ARAM", fetch_live=True):
+    def __init__(self, mode="ARAM", fetch_live=False):
         """Initializes the StatsScraper."""
         self.mode = mode
         self.fetch_live = fetch_live
@@ -121,11 +121,11 @@ class StatsScraper:
         """BeautifulSoup fallback scraper for community win rate data."""
         ml = str(mode).lower()
         if "aram" in ml:
-            url = "https://lolalytics.com/lol/tierlist/?tier=all&patch=30&mode=aram"
+            url = "https://lolalytics.com/lol/tierlist/aram/"
         elif "arena" in ml:
-            url = "https://lolalytics.com/lol/tierlist/?tier=all&patch=30&mode=arena"
+            url = "https://lolalytics.com/arena/"
         else:
-            url = "https://lolalytics.com/lol/tierlist/?tier=all&patch=30"
+            url = "https://lolalytics.com/lol/tierlist/"
 
         try:
             headers = {
