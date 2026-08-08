@@ -1408,6 +1408,40 @@ class TestAssetManager(unittest.TestCase):
         self.assets.clear_item_mythic_build_search_slice_pool()
         self.assertEqual(len(self.assets._item_mythic_build_search_slice_pool), 0)
 
+    def test_item_capstone_build_search_slice_pool_telemetry(self):
+        """Task 284: Test champion item capstone build recommendations search query result slice tuple memory recycling and telemetry."""
+        initial_tel = self.assets.get_item_capstone_build_search_slice_pool_telemetry()
+        self.assertEqual(initial_tel["item_capstone_build_slice_recycle_hits"], 0)
+        self.assertEqual(initial_tel["item_capstone_build_slice_recycle_misses"], 0)
+
+        # Mock index
+        self.assets.id_to_key = {103: "Ahri", 84: "Akali"}
+        self.assets.id_to_name = {103: "Ahri", 84: "Akali"}
+        self.assets._build_champ_search_index()
+
+        # Initial query creates slice tuple (miss)
+        capstone1 = self.assets.search_item_capstone_build_recommendations(query="ahri", limit=10)
+        tel1 = self.assets.get_item_capstone_build_search_slice_pool_telemetry()
+        self.assertEqual(tel1["item_capstone_build_slice_pool_size"], 1)
+        self.assertEqual(tel1["item_capstone_build_slice_recycle_misses"], 1)
+        self.assertEqual(tel1["item_capstone_build_slice_recycle_hits"], 0)
+
+        # Repeated query accesses pooled item capstone build slice tuple (hit)
+        capstone2 = self.assets.search_item_capstone_build_recommendations(query="ahri", limit=10)
+        tel2 = self.assets.get_item_capstone_build_search_slice_pool_telemetry()
+        self.assertEqual(tel2["item_capstone_build_slice_recycle_hits"], 1)
+        self.assertGreater(tel2["item_capstone_build_slice_recycle_hit_ratio"], 0.0)
+        self.assertGreater(tel2["item_capstone_build_slice_bytes_recycled"], 0)
+        self.assertEqual(capstone1, capstone2)
+
+        summary = self.assets.get_memory_summary_diagnostics()
+        self.assertIn("item_capstone_build_search_slice_pool_telemetry", summary)
+        self.assertEqual(summary["item_capstone_build_search_slice_pool_telemetry"]["item_capstone_build_slice_recycle_hits"], 1)
+
+        # Clear pool
+        self.assets.clear_item_capstone_build_search_slice_pool()
+        self.assertEqual(len(self.assets._item_capstone_build_search_slice_pool), 0)
+
 if __name__ == '__main__':
     unittest.main()
 

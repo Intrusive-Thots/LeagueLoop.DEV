@@ -1735,6 +1735,7 @@ class LCUClient:
         w9_fw9_polarization_meta = self.get_http_retry_jitter_w9_fw9_polarization_telemetry()
         w10_fw10_polarization_meta = self.get_http_retry_jitter_w10_fw10_polarization_telemetry()
         w11_fw11_polarization_meta = self.get_http_retry_jitter_w11_fw11_polarization_telemetry()
+        w12_fw12_polarization_meta = self.get_http_retry_jitter_w12_fw12_polarization_telemetry()
 
         res = {
             "http_retry_jitter_samples_count": len(samples),
@@ -1777,6 +1778,7 @@ class LCUClient:
         res.update(w9_fw9_polarization_meta)
         res.update(w10_fw10_polarization_meta)
         res.update(w11_fw11_polarization_meta)
+        res.update(w12_fw12_polarization_meta)
         return res
 
     def get_http_retry_jitter_w9_fw9_polarization_telemetry(self) -> Dict[str, Any]:
@@ -1887,6 +1889,43 @@ class LCUClient:
         return {
             "http_retry_jitter_wolfson_xi_index": round(wolfson_xi, 4),
             "http_retry_jitter_foster_wolfson_xi_index": round(foster_wolfson_xi, 4),
+            "sample_count": n,
+        }
+
+    def get_http_retry_jitter_w12_fw12_polarization_telemetry(self) -> Dict[str, Any]:
+        """Task 283: Returns automated HTTP request retry exponential backoff jitter Wolfson XII (W12) & Foster-Wolfson XII (FW12) polarization inequality telemetry."""
+        with self._req_diag_lock:
+            samples = self._http_retry_jitter_samples.copy()
+
+        if not samples:
+            return {
+                "http_retry_jitter_wolfson_xii_index": 0.0,
+                "http_retry_jitter_foster_wolfson_xii_index": 0.0,
+                "sample_count": 0,
+            }
+
+        n = len(samples)
+        mean_s = sum(samples) / n
+        total_sum = sum(samples)
+        if mean_s == 0 or total_sum == 0:
+            return {
+                "http_retry_jitter_wolfson_xii_index": 0.0,
+                "http_retry_jitter_foster_wolfson_xii_index": 0.0,
+                "sample_count": n,
+            }
+
+        diff_sum = sum(abs(a - b) for a in samples for b in samples)
+        # Calculate Wolfson XII polarization index (alpha = 2.9)
+        w12_raw = diff_sum / (2.0 * (n ** 3.9) * mean_s) if n > 0 else 0.0
+        wolfson_xii = max(0.0, min(1.0, w12_raw))
+
+        # Calculate Foster-Wolfson XII polarization index (alpha = 3.0)
+        fw12_raw = diff_sum / (2.0 * (n ** 4.0) * mean_s) if n > 0 else 0.0
+        foster_wolfson_xii = max(0.0, min(1.0, fw12_raw))
+
+        return {
+            "http_retry_jitter_wolfson_xii_index": round(wolfson_xii, 4),
+            "http_retry_jitter_foster_wolfson_xii_index": round(foster_wolfson_xii, 4),
             "sample_count": n,
         }
 
