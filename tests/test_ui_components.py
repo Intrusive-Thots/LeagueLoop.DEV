@@ -248,10 +248,18 @@ class TestUIComponents(unittest.TestCase):
             editor._delay_var = MagicMock()
             editor._honor_var = MagicMock()
             editor._vip_only_var = MagicMock()
-            editor._vip_list_var = MagicMock()
+
+            vip_list_mock = MagicMock()
+            vip_list_mock.get.return_value = "Faker"
+            editor._vip_list_var = vip_list_mock
+
             editor._runes_mode_var = MagicMock()
             editor._add_pos_var = MagicMock()
-            editor._ban_entries = [MagicMock()]
+
+            ban_entry_mock = MagicMock()
+            ban_entry_mock.get.return_value = "Yuumi"
+            editor._ban_entries = [ban_entry_mock]
+
             editor._respect_hovers_var = MagicMock()
 
             editor._on_save()
