@@ -37,10 +37,16 @@ def validate_test_suite(project_root: Path) -> bool:
     venv_python = project_root / ".venv" / "Scripts" / "python.exe"
     python_bin = str(venv_python) if venv_python.exists() else sys.executable
 
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(project_root / "src")
+    env["HEADLESS"] = "1"
+    env["PYTHONUNBUFFERED"] = "1"
+
     try:
         res = subprocess.run(
             [python_bin, "-m", "pytest", "-q", "--disable-warnings", "--no-cov"],
             cwd=str(project_root),
+            env=env,
             stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
