@@ -1577,6 +1577,39 @@ class TestAssetManager(unittest.TestCase):
         self.assets.clear_item_offensive_build_search_slice_pool()
         self.assertEqual(len(self.assets._item_offensive_build_search_slice_pool), 0)
 
+    def test_item_hybrid_build_search_slice_pool_telemetry(self):
+        """Task 299: Test champion item hybrid build search query slice tuple pooling and telemetry."""
+        initial_tel = self.assets.get_item_hybrid_build_search_slice_pool_telemetry()
+        self.assertEqual(initial_tel["item_hybrid_build_slice_recycle_hits"], 0)
+        self.assertEqual(initial_tel["item_hybrid_build_slice_recycle_misses"], 0)
+        self.assertEqual(initial_tel["item_hybrid_build_slice_pool_size"], 0)
+
+        self.assets.id_to_key = {103: "Ahri"}
+        self.assets.key_to_name = {"Ahri": "Ahri"}
+
+        # First query populates index & caches item hybrid build slice tuple (miss)
+        hyb1 = self.assets.search_item_hybrid_build_recommendations(query="ahri", limit=10)
+        tel1 = self.assets.get_item_hybrid_build_search_slice_pool_telemetry()
+        self.assertEqual(tel1["item_hybrid_build_slice_pool_size"], 1)
+        self.assertEqual(tel1["item_hybrid_build_slice_recycle_misses"], 1)
+        self.assertEqual(tel1["item_hybrid_build_slice_recycle_hits"], 0)
+
+        # Repeated query accesses pooled item hybrid build slice tuple (hit)
+        hyb2 = self.assets.search_item_hybrid_build_recommendations(query="ahri", limit=10)
+        tel2 = self.assets.get_item_hybrid_build_search_slice_pool_telemetry()
+        self.assertEqual(tel2["item_hybrid_build_slice_recycle_hits"], 1)
+        self.assertGreater(tel2["item_hybrid_build_slice_recycle_hit_ratio"], 0.0)
+        self.assertGreater(tel2["item_hybrid_build_slice_bytes_recycled"], 0)
+        self.assertEqual(hyb1, hyb2)
+
+        summary = self.assets.get_memory_summary_diagnostics()
+        self.assertIn("item_hybrid_build_search_slice_pool_telemetry", summary)
+        self.assertEqual(summary["item_hybrid_build_search_slice_pool_telemetry"]["item_hybrid_build_slice_recycle_hits"], 1)
+
+        # Clear pool
+        self.assets.clear_item_hybrid_build_search_slice_pool()
+        self.assertEqual(len(self.assets._item_hybrid_build_search_slice_pool), 0)
+
 if __name__ == '__main__':
     unittest.main()
 

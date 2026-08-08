@@ -195,5 +195,35 @@ class TestConfigManager(unittest.TestCase):
             mocked_file.assert_called_with(CONFIG_FILE + ".tmp", "w", encoding="utf-8")
 
 
+class TestBuildValidator(unittest.TestCase):
+    def test_verify_system_wide_health(self):
+        from tools import build_validator
+        health = build_validator.verify_system_wide_health()
+        self.assertIn("status", health)
+        self.assertIn("version", health)
+        self.assertIn("files_ok", health)
+        self.assertIn("test_environment_ok", health)
+        self.assertIn("duration_ms", health)
+
+    def test_get_build_validation_telemetry(self):
+        from tools import build_validator
+        telemetry = build_validator.get_build_validation_telemetry()
+        self.assertIn("validation_cycles_count", telemetry)
+        self.assertIn("passed_cycles_count", telemetry)
+        self.assertIn("failed_cycles_count", telemetry)
+        self.assertIn("pass_rate_pct", telemetry)
+
+    @patch('tools.build_validator.validate_test_suite', return_value=True)
+    def test_run_full_validation_cycle(self, mock_test_suite):
+        from tools import build_validator
+        res = build_validator.run_full_validation_cycle()
+        self.assertIn("passed", res)
+        self.assertIn("version", res)
+        self.assertIn("files_ok", res)
+        self.assertIn("tests_ok", res)
+        self.assertIn("telemetry", res)
+        self.assertTrue(res["tests_ok"])
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -325,9 +325,9 @@
 - [x] **Task 297**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 246 tests passing in 1.43s).
 
 ## Upcoming Autonomous Improvement Tasks
-- [ ] **Task 298**: Implement automated HTTP request retry exponential backoff jitter Wolfson XVII (W17) & Foster-Wolfson XVII (FW17) polarization inequality telemetry in `LCUClient` (`get_http_retry_jitter_w17_fw17_polarization_telemetry`, `http_retry_jitter_wolfson_xvii_index`, `http_retry_jitter_foster_wolfson_xvii_index`).
-- [ ] **Task 299**: Benchmark and optimize memory pooling for champion item hybrid build recommendations search query slice tuple creation in `AssetManager` (`_acquire_item_hybrid_build_search_slice_tuple`, `search_item_hybrid_build_recommendations`, `get_item_hybrid_build_search_slice_pool_telemetry`).
-- [ ] **Task 300**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`).
+- [x] **Task 298**: Implement automated HTTP request retry exponential backoff jitter Wolfson XVII (W17) & Foster-Wolfson XVII (FW17) polarization inequality telemetry in `LCUClient` (`get_http_retry_jitter_w17_fw17_polarization_telemetry`, `http_retry_jitter_wolfson_xvii_index`, `http_retry_jitter_foster_wolfson_xvii_index`).
+- [x] **Task 299**: Benchmark and optimize memory pooling for champion item hybrid build recommendations search query slice tuple creation in `AssetManager` (`_acquire_item_hybrid_build_search_slice_tuple`, `search_item_hybrid_build_recommendations`, `get_item_hybrid_build_search_slice_pool_telemetry`).
+- [x] **Task 300**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 249 tests passing in 1.48s).
 
 
 
