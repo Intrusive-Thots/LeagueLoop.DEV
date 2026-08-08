@@ -1316,6 +1316,35 @@ class TestAssetManager(unittest.TestCase):
         self.assets.clear_item_starter_build_search_slice_pool()
         self.assertEqual(len(self.assets._item_starter_build_search_slice_pool), 0)
 
+    def test_search_item_boots_build_recommendations_slice_tuple_pooling(self):
+        """Task 275: Test benchmark and optimization memory pooling for champion item boots build recommendations search query slice tuple creation."""
+        self.assets.id_to_key = {103: "Ahri", 84: "Akali"}
+        self.assets.id_to_name = {103: "Ahri", 84: "Akali"}
+        self.assets._build_champ_search_index()
+
+        # Initial query creates slice tuple (miss)
+        boots1 = self.assets.search_item_boots_build_recommendations(query="ahri", limit=10)
+        tel1 = self.assets.get_item_boots_build_search_slice_pool_telemetry()
+        self.assertEqual(tel1["item_boots_build_slice_pool_size"], 1)
+        self.assertEqual(tel1["item_boots_build_slice_recycle_misses"], 1)
+        self.assertEqual(tel1["item_boots_build_slice_recycle_hits"], 0)
+
+        # Repeated query accesses pooled item boots build slice tuple (hit)
+        boots2 = self.assets.search_item_boots_build_recommendations(query="ahri", limit=10)
+        tel2 = self.assets.get_item_boots_build_search_slice_pool_telemetry()
+        self.assertEqual(tel2["item_boots_build_slice_recycle_hits"], 1)
+        self.assertGreater(tel2["item_boots_build_slice_recycle_hit_ratio"], 0.0)
+        self.assertGreater(tel2["item_boots_build_slice_bytes_recycled"], 0)
+        self.assertEqual(boots1, boots2)
+
+        summary = self.assets.get_memory_summary_diagnostics()
+        self.assertIn("item_boots_build_search_slice_pool_telemetry", summary)
+        self.assertEqual(summary["item_boots_build_search_slice_pool_telemetry"]["item_boots_build_slice_recycle_hits"], 1)
+
+        # Clear pool
+        self.assets.clear_item_boots_build_search_slice_pool()
+        self.assertEqual(len(self.assets._item_boots_build_search_slice_pool), 0)
+
 if __name__ == '__main__':
     unittest.main()
 

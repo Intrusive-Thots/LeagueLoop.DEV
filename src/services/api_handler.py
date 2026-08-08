@@ -1693,7 +1693,7 @@ class LCUClient:
         }
 
     def get_http_retry_jitter_entropy_telemetry(self) -> Dict[str, Any]:
-        """Task 181, 184, 187, 190, 193, 196, 199, 202, 205, 208, 211, 214, 217, 220, 223, 226, 229, 232, 235, 238, 241, 244, 247, 250, 253, 256, 259, 262, 265, 268 & 271: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, confidence interval, margin of error, geometric mean, harmonic mean, skewness/kurtosis CI, relative standard error/variance ratio, CV/Fano factor CI, MAD/MedAD, Gini/Hoover inequality, Theil/Atkinson inequality, Palma/Decile ratio inequality, Hoover/Ricci-Schutz inequality, Kakwani/Reynolds-Smolensky inequality, Kolm-Pollak/Atkinson-Gini inequality, Foster-Greer-Thorbecke/Sen-Shorrocks-Thon inequality, Wolfson/Foster-Wolfson polarization inequality, Duclos-Esteban-Ray/Zhang-Kanbur polarization inequality, Esteban-Ray-Schon-Thon/Esteban-Ray polarization inequality, Chakravarty/Tsui-Wang polarization inequality, Wang-Tsui/Gradín polarization inequality, Foster-Wolfson (FW)/Wolfson II (W2) polarization inequality, Wolfson III (W3)/Foster-Wolfson III (FW3) polarization inequality, Foster-Wolfson IV (FW4)/Wolfson IV (W4) polarization inequality, Wolfson V (W5)/Foster-Wolfson V (FW5) polarization inequality, Wolfson VI (W6)/Foster-Wolfson VI (FW6) polarization inequality, Wolfson VII (W7)/Foster-Wolfson VII (FW7) polarization inequality, and Wolfson VIII (W8)/Foster-Wolfson VIII (FW8) polarization inequality telemetry."""
+        """Task 181, 184, 187, 190, 193, 196, 199, 202, 205, 208, 211, 214, 217, 220, 223, 226, 229, 232, 235, 238, 241, 244, 247, 250, 253, 256, 259, 262, 265, 268, 271 & 274: Returns automated HTTP request retry exponential backoff jitter entropy, percentiles, skewness, kurtosis, variance, standard deviation, range, confidence interval, margin of error, geometric mean, harmonic mean, skewness/kurtosis CI, relative standard error/variance ratio, CV/Fano factor CI, MAD/MedAD, Gini/Hoover inequality, Theil/Atkinson inequality, Palma/Decile ratio inequality, Hoover/Ricci-Schutz inequality, Kakwani/Reynolds-Smolensky inequality, Kolm-Pollak/Atkinson-Gini inequality, Foster-Greer-Thorbecke/Sen-Shorrocks-Thon inequality, Wolfson/Foster-Wolfson polarization inequality, Duclos-Esteban-Ray/Zhang-Kanbur polarization inequality, Esteban-Ray-Schon-Thon/Esteban-Ray polarization inequality, Chakravarty/Tsui-Wang polarization inequality, Wang-Tsui/Gradín polarization inequality, Foster-Wolfson (FW)/Wolfson II (W2) polarization inequality, Wolfson III (W3)/Foster-Wolfson III (FW3) polarization inequality, Foster-Wolfson IV (FW4)/Wolfson IV (W4) polarization inequality, Wolfson V (W5)/Foster-Wolfson V (FW5) polarization inequality, Wolfson VI (W6)/Foster-Wolfson VI (FW6) polarization inequality, Wolfson VII (W7)/Foster-Wolfson VII (FW7) polarization inequality, Wolfson VIII (W8)/Foster-Wolfson VIII (FW8) polarization inequality, and Wolfson IX (W9)/Foster-Wolfson IX (FW9) polarization inequality telemetry."""
         with self._req_diag_lock:
             samples = self._http_retry_jitter_samples.copy()
             entropy = self._http_retry_jitter_entropy_bits
@@ -1732,6 +1732,7 @@ class LCUClient:
         w6_fw6_polarization_meta = self.get_http_retry_jitter_w6_fw6_polarization_telemetry()
         w7_fw7_polarization_meta = self.get_http_retry_jitter_w7_fw7_polarization_telemetry()
         w8_fw8_polarization_meta = self.get_http_retry_jitter_w8_fw8_polarization_telemetry()
+        w9_fw9_polarization_meta = self.get_http_retry_jitter_w9_fw9_polarization_telemetry()
 
         res = {
             "http_retry_jitter_samples_count": len(samples),
@@ -1771,7 +1772,45 @@ class LCUClient:
         res.update(w6_fw6_polarization_meta)
         res.update(w7_fw7_polarization_meta)
         res.update(w8_fw8_polarization_meta)
+        res.update(w9_fw9_polarization_meta)
         return res
+
+    def get_http_retry_jitter_w9_fw9_polarization_telemetry(self) -> Dict[str, Any]:
+        """Task 274: Returns automated HTTP request retry exponential backoff jitter Wolfson IX (W9) & Foster-Wolfson IX (FW9) polarization inequality telemetry."""
+        with self._req_diag_lock:
+            samples = self._http_retry_jitter_samples.copy()
+
+        if not samples:
+            return {
+                "http_retry_jitter_wolfson_ix_index": 0.0,
+                "http_retry_jitter_foster_wolfson_ix_index": 0.0,
+                "sample_count": 0,
+            }
+
+        n = len(samples)
+        mean_s = sum(samples) / n
+        total_sum = sum(samples)
+        if mean_s == 0 or total_sum == 0:
+            return {
+                "http_retry_jitter_wolfson_ix_index": 0.0,
+                "http_retry_jitter_foster_wolfson_ix_index": 0.0,
+                "sample_count": n,
+            }
+
+        diff_sum = sum(abs(a - b) for a in samples for b in samples)
+        # Calculate Wolfson IX polarization index (alpha = 2.3)
+        w9_raw = diff_sum / (2.0 * (n ** 3.3) * mean_s) if n > 0 else 0.0
+        wolfson_ix = max(0.0, min(1.0, w9_raw))
+
+        # Calculate Foster-Wolfson IX polarization index (alpha = 2.4)
+        fw9_raw = diff_sum / (2.0 * (n ** 3.4) * mean_s) if n > 0 else 0.0
+        foster_wolfson_ix = max(0.0, min(1.0, fw9_raw))
+
+        return {
+            "http_retry_jitter_wolfson_ix_index": round(wolfson_ix, 4),
+            "http_retry_jitter_foster_wolfson_ix_index": round(foster_wolfson_ix, 4),
+            "sample_count": n,
+        }
 
     def get_http_latency_histogram(self) -> Dict[str, Any]:
         """Task 172, 175 & 178: Returns LCU response latency histogram buckets, variance metrics, confidence intervals, and skewness/kurtosis statistics."""
