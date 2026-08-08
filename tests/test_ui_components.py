@@ -242,6 +242,18 @@ class TestUIComponents(unittest.TestCase):
         keys_to_test = ["auto_accept", "auto_join", "auto_honor", "auto_runes", "auto_add_played", "auto_ban"]
         for key in keys_to_test:
             editor = AutomationEditor(mock_master, key, mock_config)
+
+            # Mock variables so hasattr checks pass
+            editor._show_icon_var = MagicMock()
+            editor._delay_var = MagicMock()
+            editor._honor_var = MagicMock()
+            editor._vip_only_var = MagicMock()
+            editor._vip_list_var = MagicMock()
+            editor._runes_mode_var = MagicMock()
+            editor._add_pos_var = MagicMock()
+            editor._ban_entries = [MagicMock()]
+            editor._respect_hovers_var = MagicMock()
+
             editor._on_save()
             # Verify that the save operation was triggered (config.set was called)
             mock_config.set.assert_called()
