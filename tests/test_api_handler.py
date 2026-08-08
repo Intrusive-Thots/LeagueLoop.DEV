@@ -910,6 +910,35 @@ class TestLCUClient(unittest.TestCase):
         self.assertIn("http_retry_jitter_wolfson_vi_index", entropy_tel)
         self.assertIn("http_retry_jitter_foster_wolfson_vi_index", entropy_tel)
 
+    def test_http_retry_jitter_w7_fw7_polarization_telemetry(self):
+        """Task 268: Test HTTP request retry exponential backoff jitter Wolfson VII (W7) & Foster-Wolfson VII (FW7) polarization inequality telemetry."""
+        empty_tel = self.client.get_http_retry_jitter_w7_fw7_polarization_telemetry()
+        self.assertEqual(empty_tel["sample_count"], 0)
+        self.assertEqual(empty_tel["http_retry_jitter_wolfson_vii_index"], 0.0)
+        self.assertEqual(empty_tel["http_retry_jitter_foster_wolfson_vii_index"], 0.0)
+
+        # Single sample
+        self.client._record_http_retry_jitter(0.02)
+        single_tel = self.client.get_http_retry_jitter_w7_fw7_polarization_telemetry()
+        self.assertEqual(single_tel["sample_count"], 1)
+        self.assertEqual(single_tel["http_retry_jitter_wolfson_vii_index"], 0.0)
+        self.assertEqual(single_tel["http_retry_jitter_foster_wolfson_vii_index"], 0.0)
+
+        # Multiple samples with variance
+        for val in [0.01, 0.02, 0.03, 0.04, 0.05, 0.10, 0.15, 0.20, 0.25, 0.50]:
+            self.client._record_http_retry_jitter(val)
+
+        tel = self.client.get_http_retry_jitter_w7_fw7_polarization_telemetry()
+        self.assertGreater(tel["sample_count"], 1)
+        self.assertGreaterEqual(tel["http_retry_jitter_wolfson_vii_index"], 0.0)
+        self.assertLessEqual(tel["http_retry_jitter_wolfson_vii_index"], 1.0)
+        self.assertGreaterEqual(tel["http_retry_jitter_foster_wolfson_vii_index"], 0.0)
+        self.assertLessEqual(tel["http_retry_jitter_foster_wolfson_vii_index"], 1.0)
+
+        entropy_tel = self.client.get_http_retry_jitter_entropy_telemetry()
+        self.assertIn("http_retry_jitter_wolfson_vii_index", entropy_tel)
+        self.assertIn("http_retry_jitter_foster_wolfson_vii_index", entropy_tel)
+
 if __name__ == '__main__':
     unittest.main()
 
