@@ -627,8 +627,23 @@ class PriorityIconGrid(ctk.CTkFrame):
         # Rich Stats — pull real winrate from StatsScraper
         winrate = 50.0
         try:
-            root = self.winfo_toplevel()
-            scraper = getattr(root, "scraper", None)
+            # Walk up the widget hierarchy to find an ancestor with a scraper
+            scraper = None
+            curr = self
+            while curr:
+                if hasattr(curr, "scraper") and curr.scraper:
+                    scraper = curr.scraper
+                    break
+                parent = getattr(curr, "master", None)
+                if not parent:
+                    try:
+                        parent_name = curr.winfo_parent()
+                        if parent_name:
+                            parent = curr.nametowidget(parent_name)
+                    except Exception:
+                        parent = None
+                curr = parent
+            
             if scraper:
                 winrate = scraper.get_winrate(name)
         except Exception:

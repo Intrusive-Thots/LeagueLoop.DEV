@@ -63,8 +63,9 @@ class AramListWindow(ctk.CTkToplevel):
         self.config = config
         self.assets = assets
 
-        self.title("Queqq — ARAM Priority List Drawer")
-        self.overrideredirect(True)
+        self.title("LeagueLoop — ARAM Priority List Editor")
+        self.overrideredirect(False)
+        self.resizable(True, True)
         self.configure(fg_color=get_color("colors.background.app", "#0A1428"))
 
         try:
@@ -98,7 +99,7 @@ class AramListWindow(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             self.header,
-            text="🎯 ARAM PRIORITY LIST — CLIENT TOP DRAWER",
+            text="🎯 ARAM PRIORITY LIST EDITOR",
             font=get_font("body", "bold"),
             text_color=get_color("colors.accent.gold", "#C8AA6E")
         ).pack(side="left", padx=12)
@@ -158,15 +159,30 @@ class AramListWindow(ctk.CTkToplevel):
             pass
 
     def _set_initial_geometry(self):
-        """Set initial geometry when opened without continuously locking to the client window."""
+        """Set initial geometry centered relative to the League client or master window."""
+        w, h = 800, 450
         rect = _get_league_client_rect()
         if rect:
             cx, cy, cw, ch = rect
-            drawer_w = max(500, cw)
-            drawer_h = min(300, max(220, ch // 3))
-            self._apply_geometry(drawer_w, drawer_h, cx, cy)
+            # Center relative to League Client
+            x = cx + (cw - w) // 2
+            y = cy + (ch - h) // 2
         else:
-            self._apply_geometry(800, 280, 200, 150)
+            # Fallback to centering relative to master window
+            try:
+                mw = self.master.winfo_width()
+                mh = self.master.winfo_height()
+                mx = self.master.winfo_rootx()
+                my = self.master.winfo_rooty()
+                x = mx + (mw - w) // 2
+                y = my + (mh - h) // 2
+            except Exception:
+                x, y = 200, 150
+        
+        # Ensure it is on screen / positive coordinates
+        if x < 0: x = 100
+        if y < 0: y = 100
+        self._apply_geometry(w, h, x, y)
 
     def _on_close(self):
         self.destroy()
