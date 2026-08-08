@@ -315,9 +315,14 @@
 - [x] **Task 291**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 242 tests passing in 1.44s).
 
 ## Upcoming Autonomous Improvement Tasks
-- [ ] **Task 292**: Implement automated HTTP request retry exponential backoff jitter Wolfson XV (W15) & Foster-Wolfson XV (FW15) polarization inequality telemetry in `LCUClient` (`get_http_retry_jitter_w15_fw15_polarization_telemetry`, `http_retry_jitter_wolfson_xv_index`, `http_retry_jitter_foster_wolfson_xv_index`).
-- [ ] **Task 293**: Benchmark and optimize memory pooling for champion item defensive build recommendations search query slice tuple creation in `AssetManager` (`_acquire_item_defensive_build_search_slice_tuple`, `search_item_defensive_build_recommendations`, `get_item_defensive_build_search_slice_pool_telemetry`).
-- [ ] **Task 294**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`).
+- [x] **Task 292**: Implement automated HTTP request retry exponential backoff jitter Wolfson XV (W15) & Foster-Wolfson XV (FW15) polarization inequality telemetry in `LCUClient` (`get_http_retry_jitter_w15_fw15_polarization_telemetry`, `http_retry_jitter_wolfson_xv_index`, `http_retry_jitter_foster_wolfson_xv_index`).
+- [x] **Task 293**: Benchmark and optimize memory pooling for champion item defensive build recommendations search query slice tuple creation in `AssetManager` (`_acquire_item_defensive_build_search_slice_tuple`, `search_item_defensive_build_recommendations`, `get_item_defensive_build_search_slice_pool_telemetry`).
+- [x] **Task 294**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`, 244 tests passing in 1.48s).
+
+## Upcoming Autonomous Improvement Tasks
+- [ ] **Task 295**: Implement automated HTTP request retry exponential backoff jitter Wolfson XVI (W16) & Foster-Wolfson XVI (FW16) polarization inequality telemetry in `LCUClient` (`get_http_retry_jitter_w16_fw16_polarization_telemetry`, `http_retry_jitter_wolfson_xvi_index`, `http_retry_jitter_foster_wolfson_xvi_index`).
+- [ ] **Task 296**: Benchmark and optimize memory pooling for champion item offensive build recommendations search query slice tuple creation in `AssetManager` (`_acquire_item_offensive_build_search_slice_tuple`, `search_item_offensive_build_recommendations`, `get_item_offensive_build_search_slice_pool_telemetry`).
+- [ ] **Task 297**: Maintain continuous system-wide health and build readiness validation (`tools/build_validator.py`).
 
 
 

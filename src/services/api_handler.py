@@ -1738,6 +1738,7 @@ class LCUClient:
         w12_fw12_polarization_meta = self.get_http_retry_jitter_w12_fw12_polarization_telemetry()
         w13_fw13_polarization_meta = self.get_http_retry_jitter_w13_fw13_polarization_telemetry()
         w14_fw14_polarization_meta = self.get_http_retry_jitter_w14_fw14_polarization_telemetry()
+        w15_fw15_polarization_meta = self.get_http_retry_jitter_w15_fw15_polarization_telemetry()
 
         res = {
             "http_retry_jitter_samples_count": len(samples),
@@ -1783,7 +1784,45 @@ class LCUClient:
         res.update(w12_fw12_polarization_meta)
         res.update(w13_fw13_polarization_meta)
         res.update(w14_fw14_polarization_meta)
+        res.update(w15_fw15_polarization_meta)
         return res
+
+    def get_http_retry_jitter_w15_fw15_polarization_telemetry(self) -> Dict[str, Any]:
+        """Task 292: Returns automated HTTP request retry exponential backoff jitter Wolfson XV (W15) & Foster-Wolfson XV (FW15) polarization inequality telemetry."""
+        with self._req_diag_lock:
+            samples = self._http_retry_jitter_samples.copy()
+
+        if not samples:
+            return {
+                "http_retry_jitter_wolfson_xv_index": 0.0,
+                "http_retry_jitter_foster_wolfson_xv_index": 0.0,
+                "sample_count": 0,
+            }
+
+        n = len(samples)
+        mean_s = sum(samples) / n
+        total_sum = sum(samples)
+        if mean_s == 0 or total_sum == 0:
+            return {
+                "http_retry_jitter_wolfson_xv_index": 0.0,
+                "http_retry_jitter_foster_wolfson_xv_index": 0.0,
+                "sample_count": n,
+            }
+
+        diff_sum = sum(abs(a - b) for a in samples for b in samples)
+        # Calculate Wolfson XV polarization index (alpha = 3.5)
+        w15_raw = diff_sum / (2.0 * (n ** 4.5) * mean_s) if n > 0 else 0.0
+        wolfson_xv = max(0.0, min(1.0, w15_raw))
+
+        # Calculate Foster-Wolfson XV polarization index (alpha = 3.6)
+        fw15_raw = diff_sum / (2.0 * (n ** 4.6) * mean_s) if n > 0 else 0.0
+        foster_wolfson_xv = max(0.0, min(1.0, fw15_raw))
+
+        return {
+            "http_retry_jitter_wolfson_xv_index": round(wolfson_xv, 4),
+            "http_retry_jitter_foster_wolfson_xv_index": round(foster_wolfson_xv, 4),
+            "sample_count": n,
+        }
 
     def get_http_retry_jitter_w9_fw9_polarization_telemetry(self) -> Dict[str, Any]:
         """Task 274: Returns automated HTTP request retry exponential backoff jitter Wolfson IX (W9) & Foster-Wolfson IX (FW9) polarization inequality telemetry."""
