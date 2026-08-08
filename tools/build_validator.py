@@ -49,32 +49,28 @@ def validate_version(project_root: Path) -> str:
 
 def validate_test_suite(project_root: Path) -> bool:
     print("Executing pre-build test validation suite...")
-    venv_python = project_root / ".venv" / "Scripts" / "python.exe"
-    python_bin = str(venv_python) if venv_python.exists() else sys.executable
-
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(project_root / "src")
-    env["HEADLESS"] = "1"
-    env["PYTHONUNBUFFERED"] = "1"
+    os.environ["HEADLESS"] = "1"
+    os.environ["PYTHONUNBUFFERED"] = "1"
+    src_dir = str(project_root / "src")
+    if src_dir not in sys.path:
+        sys.path.insert(0, src_dir)
 
     try:
-        res = subprocess.run(
-            [python_bin, "-m", "pytest", "-q", "--disable-warnings", "--no-cov"],
-            cwd=str(project_root),
-            env=env,
-            stdin=subprocess.DEVNULL,
-            capture_output=True,
-            text=True,
-            timeout=180,
-        )
-    except subprocess.TimeoutExpired:
-        print("[FAIL] Test suite validation timed out after 180s.")
+        import pytest
+        ret_code = pytest.main([
+            "-q",
+            "--disable-warnings",
+            "--no-cov",
+            str(project_root / "tests")
+        ])
+        if ret_code != 0:
+            print(f"[FAIL] Test suite validation failed with exit code {ret_code}.")
+            return False
+        print("[OK] All tests passed successfully.")
+        return True
+    except Exception as e:
+        print(f"[FAIL] Test suite validation error: {e}")
         return False
-    if res.returncode != 0:
-        print(f"[FAIL] Test suite validation failed:\n{res.stdout}\n{res.stderr}")
-        return False
-    print("[OK] All tests passed successfully.")
-    return True
 
 
 def validate_files(project_root: Path) -> bool:
