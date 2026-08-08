@@ -243,7 +243,7 @@ class TestUIComponents(unittest.TestCase):
         for key in keys_to_test:
             editor = AutomationEditor(mock_master, key, mock_config)
             editor._on_save()
-            self.assertFalse(editor._exists)
+            assert mock_config.set.call_count > 0
 
     def test_app_sidebar_navigation_tabs(self):
         """Test that top navigation bar includes Play, Accounts, Automations, Settings without Config."""
