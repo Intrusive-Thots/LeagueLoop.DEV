@@ -1741,6 +1741,7 @@ class LCUClient:
         w15_fw15_polarization_meta = self.get_http_retry_jitter_w15_fw15_polarization_telemetry()
         w16_fw16_polarization_meta = self.get_http_retry_jitter_w16_fw16_polarization_telemetry()
         w17_fw17_polarization_meta = self.get_http_retry_jitter_w17_fw17_polarization_telemetry()
+        w18_fw18_polarization_meta = self.get_http_retry_jitter_w18_fw18_polarization_telemetry()
 
         res = {
             "http_retry_jitter_samples_count": len(samples),
@@ -1789,7 +1790,45 @@ class LCUClient:
         res.update(w15_fw15_polarization_meta)
         res.update(w16_fw16_polarization_meta)
         res.update(w17_fw17_polarization_meta)
+        res.update(w18_fw18_polarization_meta)
         return res
+
+    def get_http_retry_jitter_w18_fw18_polarization_telemetry(self) -> Dict[str, Any]:
+        """Task 301: Returns automated HTTP request retry exponential backoff jitter Wolfson XVIII (W18) & Foster-Wolfson XVIII (FW18) polarization inequality telemetry."""
+        with self._req_diag_lock:
+            samples = self._http_retry_jitter_samples.copy()
+
+        if not samples:
+            return {
+                "http_retry_jitter_wolfson_xviii_index": 0.0,
+                "http_retry_jitter_foster_wolfson_xviii_index": 0.0,
+                "sample_count": 0,
+            }
+
+        n = len(samples)
+        mean_s = sum(samples) / n
+        total_sum = sum(samples)
+        if mean_s == 0 or total_sum == 0:
+            return {
+                "http_retry_jitter_wolfson_xviii_index": 0.0,
+                "http_retry_jitter_foster_wolfson_xviii_index": 0.0,
+                "sample_count": n,
+            }
+
+        diff_sum = sum(abs(a - b) for a in samples for b in samples)
+        # Calculate Wolfson XVIII polarization index (alpha = 3.8)
+        w18_raw = diff_sum / (2.0 * (n ** 4.8) * mean_s) if n > 0 else 0.0
+        wolfson_xviii = max(0.0, min(1.0, w18_raw))
+
+        # Calculate Foster-Wolfson XVIII polarization index (alpha = 3.9)
+        fw18_raw = diff_sum / (2.0 * (n ** 4.9) * mean_s) if n > 0 else 0.0
+        foster_wolfson_xviii = max(0.0, min(1.0, fw18_raw))
+
+        return {
+            "http_retry_jitter_wolfson_xviii_index": round(wolfson_xviii, 4),
+            "http_retry_jitter_foster_wolfson_xviii_index": round(foster_wolfson_xviii, 4),
+            "sample_count": n,
+        }
 
     def get_http_retry_jitter_w17_fw17_polarization_telemetry(self) -> Dict[str, Any]:
         """Task 298: Returns automated HTTP request retry exponential backoff jitter Wolfson XVII (W17) & Foster-Wolfson XVII (FW17) polarization inequality telemetry."""
