@@ -12,3 +12,17 @@
 3. **Installer Compilation**:
    - Do NOT run `build.bat`, PyInstaller, or any installer compilation commands automatically.
    - Installer builds are strictly triggered on explicit user request.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `Intrusive-Thots/LeagueLoop.DEV` (`origin`) via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five roles (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
