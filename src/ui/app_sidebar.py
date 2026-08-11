@@ -14,6 +14,7 @@ from ui.ui_shared import CTkTooltip  # type: ignore
 from ui.components.game_tools.arena_tool import ArenaTool  # type: ignore
 from ui.components.game_tools.accounts_tool import AccountsTool  # type: ignore
 from ui.components.game_tools.draft_tool import DraftTool  # type: ignore
+from ui.components.game_tools.loot_tool import LootTool  # type: ignore
 from ui.components.tab_bar import TabBar  # type: ignore
 from utils.smooth_scroll import apply_smooth_scroll
 
@@ -153,6 +154,7 @@ class SidebarWidget(ctk.CTkFrame):
             self.action_container.pack_forget()
             self.game_tool_container.pack_forget()
             if getattr(self, "accounts_tool", None): self.accounts_tool.pack_forget()
+            if getattr(self, "loot_tool", None): self.loot_tool.pack_forget()
             
             if getattr(self, "automations_scroll", None): self.automations_scroll.pack_forget()
             if getattr(self, "friend_list", None): self.friend_list.pack_forget()
@@ -178,6 +180,8 @@ class SidebarWidget(ctk.CTkFrame):
                 # Show tools in Play mode
                 if getattr(self, "friend_list", None):
                     self.friend_list.pack(fill="x", pady=(0, SECTION_GAP))
+                if getattr(self, "loot_tool", None):
+                    self.loot_tool.pack(fill="x", pady=(0, SECTION_GAP))
                 if getattr(self, "accounts_tool", None):
                     self.accounts_tool.pack(fill="x", pady=(0, SECTION_GAP))
                 self.spacer.pack(fill="both", expand=True)
@@ -464,6 +468,9 @@ class SidebarWidget(ctk.CTkFrame):
         
         # ── Friend Auto-Join List ──
         self.friend_list = FriendPriorityList(self.main_body, config=self.config, lcu=self.lcu)
+
+        # ── Loot Opener (chests / capsules / orbs) ──
+        self.loot_tool = LootTool(self.main_body, lcu=self.lcu)
 
         # ── Accounts Tool ──
         # Placeholder — instantiated properly once account_manager is injected from main.py
@@ -826,6 +833,13 @@ class SidebarWidget(ctk.CTkFrame):
 
         # Show/hide accounts tool and launch button based on login state
         self.update_accounts_tool_visibility(lcu_connected=connected)
+
+        # Refresh loot inventory when client comes online
+        if connected and getattr(self, "loot_tool", None):
+            try:
+                self.after(400, self.loot_tool.refresh)
+            except Exception:
+                pass
 
     def set_power_state(self, state: bool):
         """Pure visual/logical toggle without user-cancel side effects."""

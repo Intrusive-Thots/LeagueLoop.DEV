@@ -19,6 +19,7 @@ Background workers and logic operators communicating with local APIs and the int
 - **[`automation.py`](file:///c:/Users/Administrator/antigravity-worspaces-1/LeagueLoop/src/services/automation.py)**: The `AutomationEngine`. Monitors the LCU client status, handling auto-accept, bans, and champion select auto-picks.
 - **[`discord_rpc.py`](file:///c:/Users/Administrator/antigravity-worspaces-1/LeagueLoop/src/services/discord_rpc.py)**: Manages Discord Rich Presence status reflecting active gameflow queue phases in real-time.
 - **[`local_api.py`](file:///c:/Users/Administrator/antigravity-worspaces-1/LeagueLoop/src/services/local_api.py)**: Exposes a local HTTP server allowing the mobile companion app to query stats, view lobby state, swap bench champs, and toggle remote configs.
+- **[`loot_service.py`](file:///c:/Users/Administrator/antigravity-worspaces-1/LeagueLoop/src/services/loot_service.py)**: Bulk-opens LCU loot (chests, capsules, orbs, mystery boxes) via OPEN recipes; optional key-fragment forging.
 - **[`stats_scraper.py`](file:///c:/Users/Administrator/antigravity-worspaces-1/LeagueLoop/src/services/stats_scraper.py)**: Scrapes external champion analytics data (e.g., win rates and synergy recommendations).
 
 ## 📁 `src/ui/`
