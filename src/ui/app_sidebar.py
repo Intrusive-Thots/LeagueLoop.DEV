@@ -215,9 +215,18 @@ class SidebarWidget(ctk.CTkFrame):
         
         self.tab_bar = TabBar(
             self.tab_frame,
+            # Internal names stay full (switch_tab keys); short labels so all
+            # 5 tabs fit the ~280px sidebar without clipping Settings.
             tabs=["Play", "Loot", "Accounts", "Automations", "Settings"],
+            labels={
+                "Play": "Play",
+                "Loot": "Loot",
+                "Accounts": "Accts",
+                "Automations": "Auto",
+                "Settings": "Set",
+            },
             default_tab=None,
-            command=self.switch_tab
+            command=self.switch_tab,
         )
         self.tab_bar.pack(fill="x")
 
