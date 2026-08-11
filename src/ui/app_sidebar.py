@@ -191,7 +191,9 @@ class SidebarWidget(ctk.CTkFrame):
             elif tab_name == "Play":
                 self.session_frame.pack(fill="x", pady=(0, SECTION_GAP))
                 self.action_container.pack(fill="x", pady=(0, SECTION_GAP))
-                self.game_tool_container.pack(fill="x", pady=(0, SECTION_GAP))
+                # Only show game-tool host when Arena/Draft content is active —
+                # packing an empty container leaves a large dead gap under Find Match.
+                self._pack_game_tool_container_if_needed()
                 
                 # Show tools in Play mode
                 if getattr(self, "friend_list", None):
@@ -754,6 +756,41 @@ class SidebarWidget(ctk.CTkFrame):
 
 
 
+    def _game_tool_active(self) -> bool:
+        """True when a mode-specific tool is currently packed inside the host."""
+        for name in ("arena_tool", "draft_tool"):
+            tool = getattr(self, name, None)
+            if tool is not None:
+                try:
+                    if bool(tool.winfo_manager()):
+                        return True
+                except Exception:
+                    pass
+        return False
+
+    def _pack_game_tool_container_if_needed(self):
+        """Pack the game-tool host only when it has visible content (Play tab)."""
+        if not hasattr(self, "game_tool_container"):
+            return
+        if getattr(self, "_current_tab", None) != "Play":
+            return
+        try:
+            if self._game_tool_active():
+                if not bool(self.game_tool_container.winfo_manager()):
+                    # Insert under Find Match / action card, above friends/accounts/spacer
+                    kwargs = {"fill": "x", "pady": (0, SECTION_GAP)}
+                    if getattr(self, "friend_list", None) and bool(self.friend_list.winfo_manager()):
+                        kwargs["before"] = self.friend_list
+                    elif getattr(self, "accounts_tool", None) and bool(self.accounts_tool.winfo_manager()):
+                        kwargs["before"] = self.accounts_tool
+                    elif hasattr(self, "spacer") and bool(self.spacer.winfo_manager()):
+                        kwargs["before"] = self.spacer
+                    self.game_tool_container.pack(**kwargs)
+            else:
+                self.game_tool_container.pack_forget()
+        except Exception:
+            pass
+
     def _update_game_tool_visibility(self, mode):
         if hasattr(self, "arena_tool"):
             self.arena_tool.pack_forget()
@@ -766,6 +803,9 @@ class SidebarWidget(ctk.CTkFrame):
         elif mode in ["Draft Pick", "Ranked Solo/Duo", "Ranked Flex", "Quickplay"]:
             if hasattr(self, "draft_tool"):
                 self.draft_tool.pack(fill="x", pady=(0, SPACING_MD), padx=0)
+
+        # Keep host collapsed on ARAM / other modes so Play tab has no dead gap
+        self._pack_game_tool_container_if_needed()
 
     def _on_mode_change(self, new_mode):
         self.config.set("aram_mode", new_mode)
@@ -1394,7 +1434,12 @@ class SidebarWidget(ctk.CTkFrame):
                 self.play_again_button.pack_forget()
             
             if show_find_match and hasattr(self, "btn_find_match"):
-                self.btn_find_match.pack(fill="x", pady=0)
+                # Keep Find Match above the quick-icon row (pack order matters)
+                self.btn_find_match.pack_forget()
+                if hasattr(self, "quick_icon_bar") and bool(self.quick_icon_bar.winfo_manager()):
+                    self.btn_find_match.pack(fill="x", pady=0, before=self.quick_icon_bar)
+                else:
+                    self.btn_find_match.pack(fill="x", pady=0)
             elif not show_find_match and hasattr(self, "btn_find_match"):
                 self.btn_find_match.pack_forget()
 

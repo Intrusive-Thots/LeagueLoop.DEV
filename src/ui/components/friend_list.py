@@ -201,7 +201,7 @@ class FriendPriorityList(ctk.CTkFrame):
 
         # Scroll Area
         self.scroll = ctk.CTkScrollableFrame(
-            self.body, fg_color="transparent", height=220,
+            self.body, fg_color="transparent", height=140,
             scrollbar_button_color=get_color("colors.text.disabled"),
             scrollbar_button_hover_color=get_color("colors.text.muted"),
             scrollbar_fg_color="transparent",
