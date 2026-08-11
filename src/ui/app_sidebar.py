@@ -172,6 +172,22 @@ class SidebarWidget(ctk.CTkFrame):
                         self.accounts_tool._toggle_collapse()
                 self.spacer.pack(fill="both", expand=True)
 
+            elif tab_name == "Loot":
+                if getattr(self, "loot_tool", None):
+                    self.loot_tool.pack(fill="both", expand=True, pady=(0, SECTION_GAP))
+                    # Expand the collapsible card if collapsed
+                    try:
+                        ctrl = getattr(getattr(self.loot_tool, "card", None), "_toggle_controller", None)
+                        if ctrl is not None and not getattr(ctrl, "is_expanded", True):
+                            ctrl.toggle()
+                    except Exception:
+                        pass
+                    try:
+                        self.after(100, self.loot_tool.refresh)
+                    except Exception:
+                        pass
+                self.spacer.pack(fill="both", expand=True)
+
             elif tab_name == "Play":
                 self.session_frame.pack(fill="x", pady=(0, SECTION_GAP))
                 self.action_container.pack(fill="x", pady=(0, SECTION_GAP))
@@ -180,8 +196,6 @@ class SidebarWidget(ctk.CTkFrame):
                 # Show tools in Play mode
                 if getattr(self, "friend_list", None):
                     self.friend_list.pack(fill="x", pady=(0, SECTION_GAP))
-                if getattr(self, "loot_tool", None):
-                    self.loot_tool.pack(fill="x", pady=(0, SECTION_GAP))
                 if getattr(self, "accounts_tool", None):
                     self.accounts_tool.pack(fill="x", pady=(0, SECTION_GAP))
                 self.spacer.pack(fill="both", expand=True)
@@ -199,7 +213,7 @@ class SidebarWidget(ctk.CTkFrame):
         
         self.tab_bar = TabBar(
             self.tab_frame,
-            tabs=["Play", "Accounts", "Automations", "Settings"],
+            tabs=["Play", "Loot", "Accounts", "Automations", "Settings"],
             default_tab=None,
             command=self.switch_tab
         )

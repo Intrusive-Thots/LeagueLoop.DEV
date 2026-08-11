@@ -47,7 +47,7 @@ class LootTool(ctk.CTkFrame):
             padx=0,
             pady=0,
             collapsible=True,
-            start_collapsed=True,
+            start_collapsed=False,  # Own tab — start expanded
         )
 
         self.lbl_count = ctk.CTkLabel(
@@ -97,10 +97,10 @@ class LootTool(ctk.CTkFrame):
         self.list_frame = ctk.CTkScrollableFrame(
             self.body,
             fg_color=get_color("colors.background.card", "#0F1A24"),
-            height=120,
+            height=280,
             corner_radius=6,
         )
-        self.list_frame.pack(fill="x", padx=10, pady=(4, 4))
+        self.list_frame.pack(fill="both", expand=True, padx=10, pady=(4, 4))
 
         self.empty_lbl = ctk.CTkLabel(
             self.list_frame,
