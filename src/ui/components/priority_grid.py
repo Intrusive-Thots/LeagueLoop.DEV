@@ -43,12 +43,47 @@ CHAMPION_ALIASES = {
 
 
 class PriorityIconGrid(ctk.CTkFrame):
-    """Icon grid with collapse, add, edit (select → ▲▼⤒ reorder + multi-delete)."""
+    """Icon grid with collapse, add, edit (select → ▲▼⤒ reorder + multi-delete).
 
-    def __init__(self, master, config, assets, expanded: bool = False, **kw):
+    list_kind:
+      - "aram" → config priority_picker.list (ARAM Priority List)
+      - "ban"  → config auto_ban_list (Auto-Ban priority champions)
+    show_section_header:
+      - False when embedded in a dedicated window that already has a title bar
+        (avoids double headers).
+    """
+
+    def __init__(
+        self,
+        master,
+        config,
+        assets,
+        expanded: bool = False,
+        list_kind: str = "aram",
+        show_section_header: bool = True,
+        **kw,
+    ):
         super().__init__(master, fg_color=get_color("colors.background.panel", "#0F1A24"), corner_radius=8, **kw)
         self.config = config
         self.assets = assets
+        self.list_kind = (list_kind or "aram").lower()
+        self.show_section_header = show_section_header
+
+        # Display strings by list kind
+        if self.list_kind == "ban":
+            self._section_title = "BAN LIST"
+            self._list_label = "Ban List"
+            self._empty_toast = "Ban List Cleared"
+            self._export_empty = "Ban List is empty!"
+            self._export_ok = "Ban List Copied!"
+            self._add_all_label = "✨ Add All Champions to Ban List"
+        else:
+            self._section_title = "ARAM LIST"
+            self._list_label = "ARAM List"
+            self._empty_toast = "ARAM List Cleared"
+            self._export_empty = "ARAM List is empty!"
+            self._export_ok = "ARAM List Copied!"
+            self._add_all_label = "✨ Add All Champions to ARAM List"
 
         self._expanded = expanded
         self._edit_mode = False
@@ -64,7 +99,12 @@ class PriorityIconGrid(ctk.CTkFrame):
         self._parsed_import = None       # Cached parsed import data
         self._drag_data = {"widget": None, "start_x": 0, "start_y": 0, "idx": -1, "ghost": None, "cell": None}
         self._icons_per_row = ICONS_PER_ROW
+        self._render_job = None          # cancel token for progressive render
+        self._render_gen = 0             # bump to drop stale progressive batches
 
+        # Always build the toolbar (count / edit / add / import). When
+        # show_section_header is False the collapsible title is omitted so a
+        # parent window can own the sole title bar (no double header).
         self._build_header()
         self._build_body()
         self._known_champions = self._scan_known_champions()
@@ -122,22 +162,48 @@ class PriorityIconGrid(ctk.CTkFrame):
         return list(dict.fromkeys(seq))
 
     def _get_priority_list(self):
+        if self.list_kind == "ban":
+            raw = self.config.get("auto_ban_list", None)
+            if not isinstance(raw, list):
+                # Migrate legacy auto_ban_1..3 slots into a list once
+                migrated = []
+                for i in range(1, 16):
+                    val = (self.config.get(f"auto_ban_{i}", "") or "").strip()
+                    if val:
+                        migrated.append(val)
+                raw = migrated
+                if migrated:
+                    try:
+                        self.config.set("auto_ban_list", self._dedup(migrated))
+                    except Exception:
+                        pass
+            return self._dedup(raw or [])
+
         raw = self.config.get("priority_picker", {}).get("list", [])
         return self._dedup(raw)
 
     def _save_priority_list(self, lst, record_history=True):
+        clean = self._dedup(lst)
         if record_history:
             current = self._get_priority_list()
             # Only push if it actually changed
-            if current != lst:
+            if current != clean:
                 self._undo_stack.append(current)
                 # Cap the stack at, say, 10 items
                 if len(self._undo_stack) > 10:
                     self._undo_stack.pop(0)
 
-        cfg = self.config.get("priority_picker", {})
-        cfg["list"] = self._dedup(lst)
-        self.config.set("priority_picker", cfg)
+        if self.list_kind == "ban":
+            self.config.set("auto_ban_list", clean)
+            # Keep first 3 legacy keys in sync for older code paths / mobile API
+            for i in range(1, 4):
+                self.config.set(f"auto_ban_{i}", clean[i - 1] if i - 1 < len(clean) else "")
+        else:
+            cfg = self.config.get("priority_picker", {})
+            if not isinstance(cfg, dict):
+                cfg = {}
+            cfg["list"] = clean
+            self.config.set("priority_picker", cfg)
 
         if hasattr(self, "_sync_undo_btn"):
             self._sync_undo_btn()
@@ -155,17 +221,35 @@ class PriorityIconGrid(ctk.CTkFrame):
         self.header = ctk.CTkFrame(self, fg_color="transparent", height=24)
         self.header.pack(fill="x", padx=SPACING_MD, pady=(SPACING_MD, 0))
 
-        self.lbl_section = ctk.CTkLabel(
-            self.header, text="▶  ARAM LIST",
-            font=get_font("caption", "bold"),
-            text_color=get_color("colors.text.muted"), anchor="w",
-            cursor="hand2"
-        )
-        self.lbl_section.pack(side="left", padx=2)
-        CTkTooltip(self.lbl_section, "Toggle ARAM List")
-        self.lbl_section.bind("<Button-1>", lambda e: self._toggle_collapse())
-        self.lbl_section.bind("<Enter>", lambda e: self.lbl_section.configure(text_color=get_color("colors.text.primary")))
-        self.lbl_section.bind("<Leave>", lambda e: self.lbl_section.configure(text_color=get_color("colors.text.muted")))
+        if self.show_section_header:
+            chevron = "▼" if self._expanded else "▶"
+            self.lbl_section = ctk.CTkLabel(
+                self.header, text=f"{chevron}  {self._section_title}",
+                font=get_font("caption", "bold"),
+                text_color=get_color("colors.text.muted"), anchor="w",
+                cursor="hand2"
+            )
+            self.lbl_section.pack(side="left", padx=2)
+            CTkTooltip(self.lbl_section, f"Toggle {self._list_label}")
+            self.lbl_section.bind("<Button-1>", lambda e: self._toggle_collapse())
+            self.lbl_section.bind(
+                "<Enter>",
+                lambda e: self.lbl_section.configure(text_color=get_color("colors.text.primary")),
+            )
+            self.lbl_section.bind(
+                "<Leave>",
+                lambda e: self.lbl_section.configure(text_color=get_color("colors.text.muted")),
+            )
+        else:
+            # Compact label when parent window already provides the page title
+            self.lbl_section = ctk.CTkLabel(
+                self.header,
+                text=self._section_title,
+                font=get_font("caption", "bold"),
+                text_color=get_color("colors.accent.gold", "#C8AA6E"),
+                anchor="w",
+            )
+            self.lbl_section.pack(side="left", padx=2)
 
         # Item #141: Count badge
         self.lbl_count = ctk.CTkLabel(
@@ -223,7 +307,7 @@ class PriorityIconGrid(ctk.CTkFrame):
             command=self._show_import_preview, cursor="hand2",
             )
         self.btn_import.pack(side="right", padx=2)
-        CTkTooltip(self.btn_import, "Import ARAM List from Clipboard")
+        CTkTooltip(self.btn_import, f"Import {self._list_label} from Clipboard")
 
         # Export
         self.btn_export = ctk.CTkButton(
@@ -235,7 +319,7 @@ class PriorityIconGrid(ctk.CTkFrame):
             command=self._export_list, cursor="hand2",
             )
         self.btn_export.pack(side="right")
-        CTkTooltip(self.btn_export, "Export ARAM List to Clipboard")
+        CTkTooltip(self.btn_export, f"Export {self._list_label} to Clipboard")
 
     # ───────────── body ─────────────
     def _build_body(self):
@@ -379,6 +463,19 @@ class PriorityIconGrid(ctk.CTkFrame):
             text_color=get_color("colors.state.danger", "#ff4444"), command=self._request_clear_all, cursor="hand2",
             )
 
+        # Style mass-action buttons so they stand out (not ghost text on dark bg)
+        self.btn_clear_all.configure(
+            fg_color="#2A1520",
+            border_width=1,
+            border_color=get_color("colors.state.danger", "#E74C3C"),
+            text_color=get_color("colors.state.danger", "#E74C3C"),
+        )
+        self.btn_del.configure(
+            fg_color="#2A1520",
+            border_width=1,
+            border_color=get_color("colors.state.danger", "#E74C3C"),
+            text_color=get_color("colors.state.danger", "#E74C3C"),
+        )
         self.btn_clear_all.pack(side="right", padx=1)
         CTkTooltip(self.btn_clear_all, "Clear All")
         self.btn_del.pack(side="right", padx=1)
@@ -451,8 +548,22 @@ class PriorityIconGrid(ctk.CTkFrame):
 
     # ───────────── grid rendering ─────────────
     def _render_grid(self):
+        """Clear and progressively re-populate the icon grid (batched for smoothness)."""
+        # Cancel any in-flight progressive render
+        self._render_gen += 1
+        gen = self._render_gen
+        if self._render_job is not None:
+            try:
+                self.after_cancel(self._render_job)
+            except Exception:
+                pass
+            self._render_job = None
+
         for w in self.grid_parent.winfo_children():
-            w.destroy()
+            try:
+                w.destroy()
+            except Exception:
+                pass
         self._icon_widgets.clear()
 
         names = self._get_priority_list()
@@ -467,7 +578,6 @@ class PriorityIconGrid(ctk.CTkFrame):
                 self.lbl_count.configure(fg_color=get_color("colors.accent.primary"))
 
         if not names:
-            # 🔮 Malcolm's Infusion: Interactive Empty State
             empty_btn = ctk.CTkButton(
                 self.grid_parent,
                 text="+\nAdd Champion",
@@ -487,109 +597,116 @@ class PriorityIconGrid(ctk.CTkFrame):
             self._sync_edit_bar_state()
             return
 
-        # ⚡ Bolt: Lift static color lookups outside the grid generation loop and event handlers
-        # to prevent repetitive string parsing overhead and optimize high-frequency hover events.
-        _hover_border = get_color("colors.accent.gold", "#C8AA6E")
-        _normal_border = get_color("colors.border.subtle")
-        _bg_card = get_color("colors.background.card")
-        _text_primary = get_color("colors.text.primary")
-
-        cols_per_row = getattr(self, "_icons_per_row", ICONS_PER_ROW)
-        for i, name in enumerate(names):
-            row = i // cols_per_row
-            col = i % cols_per_row
-
-            # Slightly larger cell in edit mode to fit rank badge
-            cell_size = ICON_SIZE + 4
-            cell = ctk.CTkFrame(
-                self.grid_parent, width=cell_size, height=cell_size,
-                fg_color="transparent", corner_radius=4,
-                border_width=1,
-                border_color=_normal_border
-            )
-            # Use grid with the requested GRID_GAP
-            cell.grid(
-                row=row,
-                column=col,
-                padx=GRID_GAP // 2,
-                pady=GRID_GAP // 2
-            )
-            cell.pack_propagate(False)
-
-            # Set a placeholder label first
-            lbl = ctk.CTkLabel(
-                cell, text=name[:2], width=ICON_SIZE, height=ICON_SIZE,
-                font=get_font("caption", "bold"),
-                fg_color=_bg_card,
-                corner_radius=4,
-                text_color=_text_primary,
-                cursor="hand2",
-            )
-            # Start with centered place for easy animation
-            lbl.place(relx=0.5, rely=0.5, anchor="center")
-
-            # Rank order badge overlay (#1, #2, #3...)
-            rank_bg = get_color("colors.accent.gold", "#C8AA6E") if i < 3 else "#121C2A"
-            rank_fg = "#0A1428" if i < 3 else get_color("colors.accent.gold", "#C8AA6E")
-            rank_badge = ctk.CTkLabel(
-                cell, text=f"#{i + 1}", width=20, height=14,
-                corner_radius=4,
-                fg_color=rank_bg,
-                text_color=rank_fg,
-                font=get_font("caption", "bold")
-            )
-            rank_badge.place(x=2, y=2)
-
-            # Start async load
-            def _update_icon(img, label=lbl):
-                try:
-                    if label.winfo_exists():
-                        label.configure(image=img, text="", fg_color="transparent")
-                except Exception:
-                    pass
-
-            self.assets.get_icon_async("champion", name, _update_icon, size=(ICON_SIZE, ICON_SIZE), widget=lbl)
-
-            # Hover animations for grid
-            def _on_enter(e, n=name, idx=i, c=cell, hb=_hover_border):
-                self._show_tooltip(e, n, idx)
-                if not self._edit_mode and idx not in self._selected_indices and idx not in self._delete_marked:
-                    c.configure(border_color=hb)
-
-            def _on_leave(e, c=cell, nb=_normal_border):
-                self._hide_tooltip()
-                # Item #135: Use cget() instead of accessing private c._border_color
-                if not self._edit_mode:
-                    try:
-                        cur_border = c.cget("border_color")
-                    except Exception:
-                        cur_border = nb
-                    if cur_border != SEL_BORDER and cur_border != DEL_BORDER:
-                        c.configure(border_color=nb)
-
-            lbl.bind("<Enter>", _on_enter)
-            lbl.bind("<Leave>", _on_leave)
-            
-            # Drag-and-drop bindings replace cell click and shift-click
-            lbl.bind("<ButtonPress-1>", lambda e=None, idx=i, label=lbl, c=cell: self._on_drag_start(e, idx, label, c))
-            lbl.bind("<B1-Motion>", self._on_drag_motion)
-            lbl.bind("<ButtonRelease-1>", self._on_drag_release)
-
-            self._icon_widgets.append((cell, lbl, i))
-
         cols_per_row = getattr(self, "_icons_per_row", ICONS_PER_ROW)
         if hasattr(self, "grid_parent") and self.grid_parent.winfo_exists():
             for c in range(cols_per_row):
                 self.grid_parent.grid_columnconfigure(c, weight=0, minsize=48)
 
-        self._refresh_visuals()
+        # Hoist static tokens once for the whole render pass
+        ctx = {
+            "hover_border": get_color("colors.accent.gold", "#C8AA6E"),
+            "normal_border": get_color("colors.border.subtle"),
+            "bg_card": get_color("colors.background.card"),
+            "text_primary": get_color("colors.text.primary"),
+            "gold": get_color("colors.accent.gold", "#C8AA6E"),
+            "cols": cols_per_row,
+            "names": names,
+            "gen": gen,
+            "batch": 16,  # icons per frame — keeps UI responsive on large lists
+        }
 
-        # Reset scrollbar position so top champion icons are always visible
-        if hasattr(self, "scroll") and hasattr(self.scroll, "_parent_canvas"):
+        def _batch(start: int = 0):
+            if gen != self._render_gen or not self.winfo_exists():
+                return
+            end = min(start + ctx["batch"], len(ctx["names"]))
+            for i in range(start, end):
+                self._create_grid_cell(i, ctx["names"][i], ctx)
+            if end < len(ctx["names"]):
+                self._render_job = self.after(1, lambda: _batch(end))
+            else:
+                self._render_job = None
+                self._refresh_visuals()
+                if hasattr(self, "scroll") and hasattr(self.scroll, "_parent_canvas"):
+                    try:
+                        self.scroll._parent_canvas.yview_moveto(0.0)
+                    except Exception:
+                        pass
+
+        _batch(0)
+
+    def _create_grid_cell(self, i: int, name: str, ctx: dict):
+        """Build one champion cell; called from progressive batch renderer."""
+        cols = ctx["cols"]
+        row = i // cols
+        col = i % cols
+        cell_size = ICON_SIZE + 4
+        cell = ctk.CTkFrame(
+            self.grid_parent, width=cell_size, height=cell_size,
+            fg_color="transparent", corner_radius=4,
+            border_width=1,
+            border_color=ctx["normal_border"]
+        )
+        cell.grid(row=row, column=col, padx=GRID_GAP // 2, pady=GRID_GAP // 2)
+        cell.pack_propagate(False)
+
+        lbl = ctk.CTkLabel(
+            cell, text=name[:2], width=ICON_SIZE, height=ICON_SIZE,
+            font=get_font("caption", "bold"),
+            fg_color=ctx["bg_card"],
+            corner_radius=4,
+            text_color=ctx["text_primary"],
+            cursor="hand2",
+        )
+        lbl.place(relx=0.5, rely=0.5, anchor="center")
+
+        rank_bg = ctx["gold"] if i < 3 else "#121C2A"
+        rank_fg = "#0A1428" if i < 3 else ctx["gold"]
+        rank_badge = ctk.CTkLabel(
+            cell, text=f"#{i + 1}", width=20, height=14,
+            corner_radius=4,
+            fg_color=rank_bg,
+            text_color=rank_fg,
+            font=get_font("caption", "bold")
+        )
+        rank_badge.place(x=2, y=2)
+
+        def _update_icon(img, label=lbl):
             try:
-                self.scroll._parent_canvas.yview_moveto(0.0)
+                if label.winfo_exists():
+                    label.configure(image=img, text="", fg_color="transparent")
             except Exception:
                 pass
+
+        if self.assets:
+            self.assets.get_icon_async(
+                "champion", name, _update_icon, size=(ICON_SIZE, ICON_SIZE), widget=lbl
+            )
+
+        hb = ctx["hover_border"]
+        nb = ctx["normal_border"]
+
+        def _on_enter(e, n=name, idx=i, c=cell, border=hb):
+            self._show_tooltip(e, n, idx)
+            if not self._edit_mode and idx not in self._selected_indices and idx not in self._delete_marked:
+                c.configure(border_color=border)
+
+        def _on_leave(e, c=cell, border=nb):
+            self._hide_tooltip()
+            if not self._edit_mode:
+                try:
+                    cur_border = c.cget("border_color")
+                except Exception:
+                    cur_border = border
+                if cur_border != SEL_BORDER and cur_border != DEL_BORDER:
+                    c.configure(border_color=border)
+
+        lbl.bind("<Enter>", _on_enter)
+        lbl.bind("<Leave>", _on_leave)
+        lbl.bind("<ButtonPress-1>", lambda e=None, idx=i, label=lbl, c=cell: self._on_drag_start(e, idx, label, c))
+        lbl.bind("<B1-Motion>", self._on_drag_motion)
+        lbl.bind("<ButtonRelease-1>", self._on_drag_release)
+
+        self._icon_widgets.append((cell, lbl, i))
 
     # ───────────── tooltip ─────────────
     def _show_tooltip(self, event, name, idx=None):
@@ -710,10 +827,12 @@ class PriorityIconGrid(ctk.CTkFrame):
         self._expanded = not self._expanded
         if self._expanded:
             self.body.pack(fill="both", expand=True, pady=(SPACING_SM, SPACING_MD), padx=SPACING_MD)
-            self.lbl_section.configure(text="▼  ARAM LIST")
+            if hasattr(self, "lbl_section"):
+                self.lbl_section.configure(text=f"▼  {self._section_title}")
         else:
             self.body.pack_forget()
-            self.lbl_section.configure(text="▶  ARAM LIST")
+            if hasattr(self, "lbl_section"):
+                self.lbl_section.configure(text=f"▶  {self._section_title}")
 
     # ───────────── edit mode ─────────────
     def _toggle_edit_mode(self):
@@ -1009,7 +1128,7 @@ class PriorityIconGrid(ctk.CTkFrame):
             self._render_grid()
 
             ToastManager.get_instance().show(
-                "ARAM List Cleared",
+                self._empty_toast,
                 icon="💥",
                 theme="error",
                 confetti=True
@@ -1044,7 +1163,7 @@ class PriorityIconGrid(ctk.CTkFrame):
     def _export_list(self):
         names = self._get_priority_list()
         if not names:
-            ToastManager.get_instance().show("ARAM List is empty!", icon="⚠️", theme="error")
+            ToastManager.get_instance().show(self._export_empty, icon="⚠️", theme="error")
             return
 
         export_str = ", ".join(names)
@@ -1053,7 +1172,7 @@ class PriorityIconGrid(ctk.CTkFrame):
         self.update() # necessary to keep clipboard after window closes
 
         ToastManager.get_instance().show(
-            "ARAM List Copied!",
+            self._export_ok,
             icon="📋",
             theme="success",
             confetti=True
@@ -1182,7 +1301,7 @@ class PriorityIconGrid(ctk.CTkFrame):
             card.pack_propagate(False)
 
             ctk.CTkLabel(
-                card, text="✨ Add All Champions to ARAM List",
+                card, text=self._add_all_label,
                 font=get_font("caption", "bold"),
                 text_color=get_color("colors.accent.gold", "#C8AA6E")
             ).pack(side="left", padx=8)

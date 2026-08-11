@@ -165,21 +165,27 @@ class AutomationEditor(ctk.CTkToplevel):
         footer.pack(fill="x", padx=SPACING_MD, pady=(0, SPACING_MD))
 
         ctk.CTkButton(
-            footer, text="Cancel", width=100, height=32,
+            footer, text="Cancel", width=100, height=34,
             font=get_font("body", "bold"),
-            fg_color=get_color("colors.background.card"),
+            fg_color=get_color("colors.background.card", "#1E2328"),
             text_color=get_color("colors.text.primary"),
             hover_color=get_color("colors.state.hover"),
-            command=self._on_cancel
+            border_width=1,
+            border_color=get_color("colors.border.subtle", "#3A4654"),
+            command=self._on_cancel,
+            cursor="hand2",
         ).pack(side="right", padx=(SPACING_SM, 0))
 
         ctk.CTkButton(
-            footer, text="Save", width=100, height=32,
+            footer, text="Save", width=100, height=34,
             font=get_font("body", "bold"),
-            fg_color=get_color("colors.accent.primary"),
-            text_color="#ffffff",
-            hover_color=get_color("colors.state.hover"),
-            command=self._on_save
+            fg_color=get_color("colors.accent.gold", "#C8AA6E"),
+            text_color="#0A1428",
+            hover_color="#A88B4A",
+            border_width=1,
+            border_color="#E0C98A",
+            command=self._on_save,
+            cursor="hand2",
         ).pack(side="right")
 
     # ── Builders for Automation Settings ──
@@ -350,46 +356,75 @@ class AutomationEditor(ctk.CTkToplevel):
             ).pack(anchor="w", padx=(24, 0), pady=(0, 8))
 
     def _build_auto_ban(self):
-        """Auto-Ban settings form."""
+        """Auto-Ban: open full icon-grid editor (same UX as ARAM list)."""
         ctk.CTkLabel(
-            self.body, text="Priority Champion Bans",
-            font=get_font("body", "bold"), text_color=get_color("colors.text.primary")
-        ).pack(anchor="w", pady=(0, 8))
+            self.body,
+            text="Ban list is managed in the full champion editor "
+                 "(icons + search), just like the ARAM Priority List.",
+            font=get_font("caption"),
+            text_color=get_color("colors.text.muted"),
+            wraplength=320,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 12))
 
-        self._ban_entries = []
-        for i in range(1, 4):
-            val = self.config.get(f"auto_ban_{i}", "")
-            ctk.CTkLabel(
-                self.body, text=f"Ban Preference #{i}",
-                font=get_font("caption", "bold"), text_color=get_color("colors.text.muted")
-            ).pack(anchor="w", pady=(4, 2))
+        ban_list = self.config.get("auto_ban_list", None)
+        if not isinstance(ban_list, list):
+            ban_list = [
+                (self.config.get(f"auto_ban_{i}", "") or "").strip()
+                for i in range(1, 4)
+                if (self.config.get(f"auto_ban_{i}", "") or "").strip()
+            ]
+        count = len(ban_list) if isinstance(ban_list, list) else 0
 
-            entry = ctk.CTkEntry(
-                self.body,
-                placeholder_text=f"e.g. Yuumi, Shaco, Master Yi",
-                font=get_font("body"),
-                fg_color=get_color("colors.background.card"),
-                text_color=get_color("colors.text.primary"),
-                border_color=get_color("colors.border.subtle")
-            )
-            entry.insert(0, val)
-            entry.pack(fill="x", pady=(0, 8))
-            self._ban_entries.append(entry)
+        ctk.CTkLabel(
+            self.body,
+            text=f"Current ban list: {count} champion{'s' if count != 1 else ''}",
+            font=get_font("body", "bold"),
+            text_color=get_color("colors.accent.gold", "#C8AA6E"),
+        ).pack(anchor="w", pady=(0, 10))
 
-        self._respect_hovers_var = ctk.BooleanVar(value=bool(self.config.get("auto_ban_respect_hovers", True)))
+        ctk.CTkButton(
+            self.body,
+            text="Open Ban List Editor",
+            height=36,
+            font=get_font("body", "bold"),
+            fg_color=get_color("colors.accent.gold", "#C8AA6E"),
+            hover_color="#A88B4A",
+            text_color="#0A1428",
+            border_width=1,
+            border_color="#E0C98A",
+            command=self._open_ban_list_editor,
+            cursor="hand2",
+        ).pack(fill="x", pady=(0, 12))
+
+        self._respect_hovers_var = ctk.BooleanVar(
+            value=bool(self.config.get("auto_ban_respect_hovers", True))
+        )
         sw = ctk.CTkSwitch(
-            self.body, text="Respect Teammate Hovers",
+            self.body,
+            text="Respect Teammate Hovers",
             font=get_font("body", "bold"),
             variable=self._respect_hovers_var,
-            progress_color=get_color("colors.accent.gold", "#C8AA6E")
+            progress_color=get_color("colors.accent.gold", "#C8AA6E"),
         )
         sw.pack(anchor="w", pady=(8, 0))
         ctk.CTkLabel(
             self.body,
-            text="Will not ban a champion if a teammate in your lobby has selected/hovered it.",
-            font=get_font("caption"), text_color=get_color("colors.text.muted"),
-            wraplength=320, justify="left"
+            text="Will not ban a champion if a teammate has hovered/selected it.",
+            font=get_font("caption"),
+            text_color=get_color("colors.text.muted"),
+            wraplength=320,
+            justify="left",
         ).pack(anchor="w", pady=(2, 0))
+
+    def _open_ban_list_editor(self):
+        """Launch the full Ban List window from this settings dialog."""
+        try:
+            from ui.components.ban_list_window import BanListWindow
+            root = self.master.winfo_toplevel() if self.master else self
+            BanListWindow.open_window(root, self.config, self.assets)
+        except Exception:
+            pass
 
     def _build_common_show_icon(self):
         """Standard setting for enabling/disabling the mainpage quick access icon."""
@@ -463,10 +498,6 @@ class AutomationEditor(ctk.CTkToplevel):
                 self.config.set("auto_add_position", self._add_pos_var.get())
 
         elif key == "auto_ban":
-            if hasattr(self, "_ban_entries"):
-                for i, entry in enumerate(self._ban_entries, 1):
-                    val = entry.get().strip()
-                    self.config.set(f"auto_ban_{i}", val)
             if hasattr(self, "_respect_hovers_var"):
                 self.config.set("auto_ban_respect_hovers", self._respect_hovers_var.get())
 

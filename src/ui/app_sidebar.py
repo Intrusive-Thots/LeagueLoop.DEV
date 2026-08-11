@@ -399,6 +399,14 @@ class SidebarWidget(ctk.CTkFrame):
             )
             card.pack(fill="x", padx=CARD_PAD, pady=(0, INNER_GAP))
 
+            def _edit_handler(k=key):
+                if k == "priority_picker":
+                    self._open_aram_list_window()
+                elif k == "auto_ban":
+                    self._open_ban_list_window()
+                else:
+                    self._open_editor(k)
+
             row_kwargs = {
                 "master": card,
                 "label_text": label_text,
@@ -407,7 +415,7 @@ class SidebarWidget(ctk.CTkFrame):
                 "tooltip_text": tooltip_text,
                 "assets": self.assets,
                 "height": TOGGLE_ROW_HEIGHT,
-                "on_edit": lambda k=key, c=card: self._open_aram_list_window() if k == "priority_picker" else self._open_editor(k)
+                "on_edit": _edit_handler,
             }
             if icon_type == "champion":
                 row_kwargs["icon_champion_id"] = icon_id
@@ -1289,6 +1297,12 @@ class SidebarWidget(ctk.CTkFrame):
 
     def _open_editor(self, automation_key):
         """Open the automation parameter editor popup."""
+        if automation_key == "auto_ban":
+            self._open_ban_list_window()
+            return
+        if automation_key == "priority_picker":
+            self._open_aram_list_window()
+            return
         from ui.components.automation_editor import AutomationEditor
         AutomationEditor(self, automation_key, self.config, assets=self.assets)
 
@@ -1296,6 +1310,11 @@ class SidebarWidget(ctk.CTkFrame):
         """Open the standalone ARAM Priority List popup window."""
         from ui.components.aram_list_window import AramListWindow
         AramListWindow.open_window(self.winfo_toplevel(), self.config, self.assets)
+
+    def _open_ban_list_window(self):
+        """Open the Auto-Ban champion list editor (same UX as ARAM list)."""
+        from ui.components.ban_list_window import BanListWindow
+        BanListWindow.open_window(self.winfo_toplevel(), self.config, self.assets)
 
     def _toggle_inline_panel(self, key, parent_card):
         """Toggle inline sub-panel frame directly below an automation item (accordion rule)."""

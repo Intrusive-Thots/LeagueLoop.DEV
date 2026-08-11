@@ -1007,19 +1007,26 @@ class AutomationEngine:
                 if ban_str:
                     ban_candidates.append(ban_str)
             
-            # Fallback to cockblocker (auto_ban) champions if no role-specific bans
+            # Fallback to global auto_ban list if no role-specific bans
             if not ban_candidates and self.config.get("auto_ban_enabled", False):
-                for i in range(1, 4):
-                    ban_str = self.config.get(f"auto_ban_{i}", "")
-                    if ban_str:
-                        ban_candidates.append(ban_str)
+                ban_list = self.config.get("auto_ban_list", None)
+                if isinstance(ban_list, list) and ban_list:
+                    ban_candidates.extend(
+                        [str(n).strip() for n in ban_list if str(n).strip()]
+                    )
+                else:
+                    # Legacy auto_ban_1..3 slots
+                    for i in range(1, 16):
+                        ban_str = (self.config.get(f"auto_ban_{i}", "") or "").strip()
+                        if ban_str:
+                            ban_candidates.append(ban_str)
             
             for ban_str in ban_candidates:
                 ban_id = self.assets.name_to_id.get(ban_str.lower(), 0)
                 if not ban_id: continue
                 
                 if ban_id in banned_champ_ids: continue
-                if ban_id in teammate_hovers:
+                if ban_id in teammate_hovers and self.config.get("auto_ban_respect_hovers", True):
                     self._log(f"Draft: Skipping ban {ban_str} because a teammate is hovering it.")
                     continue
                 
