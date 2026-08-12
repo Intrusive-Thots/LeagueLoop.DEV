@@ -569,6 +569,18 @@
       "Committed and pushed the merged branch to origin/main.",
       "Repaired MemPalace FTS5 inverted index and reconnected to restore vector memory functionality."
     ],
-    "outcome": "Success. Working tree clean, branches synchronized, and memory palace fully healthy."
+  },
+  {
+    "timestamp": "2026-08-12T04:12:00Z",
+    "task": "Package and publish standalone one-click installer to GitHub",
+    "duration_seconds": 240,
+    "actions": [
+      "Added missing hidden imports (pystray, pypresence, PySide6, websockets, lcu_driver, aiohttp) to LeagueLoop.spec.",
+      "Compiled PyInstaller ONEDIR bundle dist/LeagueLoop/.",
+      "Generated standalone setup executable dist/LeagueLoop_Installer.exe via Inno Setup (ISCC.exe).",
+      "Cloned and updated LeagueLoop-Installer repository at C:\\Users\\Malcolm\\Desktop\\LeagueLoop-Installer.",
+      "Committed and pushed LeagueLoop_Installer.exe and README.md to https://github.com/Intrusive-Thots/LeagueLoop-Installer (main branch)."
+    ],
+    "outcome": "Success. Standalone one-click installer packaged and published publicly."
   }
 ]
