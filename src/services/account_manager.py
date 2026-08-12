@@ -899,7 +899,11 @@ class AccountManager:
             return
 
         import ctypes
-        candidates = [
+        primary_target = r"C:\Riot Games\Riot Client\RiotClientServices.exe"
+        candidates = [primary_target] if os.path.exists(primary_target) else []
+
+        # Additional candidates & registry lookups as fallback
+        fallback_candidates = [
             r"C:\Riot Games\Riot Client\RiotClientServices.exe",
             r"D:\Riot Games\Riot Client\RiotClientServices.exe",
             r"E:\Riot Games\Riot Client\RiotClientServices.exe",
@@ -921,12 +925,16 @@ class AccountManager:
                     val, _ = winreg.QueryValueEx(key, "UninstallString")
                     if val and "RiotClientServices.exe" in val:
                         path = val.split('"')[1] if '"' in val else val.split(' ')[0]
-                        if os.path.exists(path):
-                            candidates.insert(0, path)
+                        if os.path.exists(path) and path not in candidates:
+                            fallback_candidates.append(path)
                 except Exception:
                     pass
         except Exception:
             pass
+
+        for fc in fallback_candidates:
+            if fc not in candidates:
+                candidates.append(fc)
 
         args = "--launch-product=league_of_legends --launch-patchline=live" if launch_league else ""
         for c in candidates:

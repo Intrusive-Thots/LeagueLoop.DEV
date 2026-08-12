@@ -371,24 +371,29 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
             if path_override and os.path.exists(path_override):
                 candidates = [path_override]
             else:
-                candidates = []
+                primary_target = r"C:\Riot Games\Riot Client\RiotClientServices.exe"
+                candidates = [primary_target] if os.path.exists(primary_target) else []
+                
                 try:
                     from utils.client_detector import resolve_installation_paths
                     _, rc_install_dir = resolve_installation_paths()
                     if rc_install_dir:
                         rc_path = os.path.join(rc_install_dir, "RiotClientServices.exe")
-                        if os.path.exists(rc_path):
+                        if os.path.exists(rc_path) and rc_path not in candidates:
                             candidates.append(rc_path)
                 except Exception as e:
                     Logger.debug("SYS", f"Failed resolving installs: {e}")
                 
-                candidates.extend([
+                fallback_paths = [
                     r"C:\Riot Games\Riot Client\RiotClientServices.exe",
                     r"D:\Riot Games\Riot Client\RiotClientServices.exe",
                     r"E:\Riot Games\Riot Client\RiotClientServices.exe",
                     r"C:\Program Files (x86)\Riot Games\Riot Client\RiotClientServices.exe",
                     os.path.join(os.environ.get("USERPROFILE", ""), r"Riot Games\Riot Client\RiotClientServices.exe")
-                ])
+                ]
+                for fp in fallback_paths:
+                    if fp not in candidates:
+                        candidates.append(fp)
                 
                 # Proactive Registry Lookup
                 try:
@@ -399,7 +404,8 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                             val, _ = getattr(winreg, "QueryValueEx")(key, "UninstallString")
                             if val and "RiotClientServices.exe" in val:
                                 path = val.split('"')[1] if '"' in val else val.split(' ')[0]
-                                if os.path.exists(path): candidates.insert(0, path)
+                                if os.path.exists(path) and path not in candidates:
+                                    candidates.append(path)
                         except FileNotFoundError:
                             pass
                         except Exception as e:

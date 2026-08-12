@@ -87,14 +87,16 @@ def resolve_installation_paths() -> Tuple[Optional[str], Optional[str]]:
 
 def get_riot_executable_path() -> Optional[str]:
     """Returns the resolved absolute path to RiotClientServices.exe if found."""
+    standard_target = os.path.normpath("C:\\Riot Games\\Riot Client\\RiotClientServices.exe")
+    if os.path.exists(standard_target):
+        return standard_target
+
     _, riot_dir = resolve_installation_paths()
     if riot_dir:
         exe = os.path.normpath(os.path.join(riot_dir, "RiotClientServices.exe"))
         if os.path.exists(exe):
             return exe
-    # Fallback standard path
-    fallback = os.path.normpath("C:\\Riot Games\\Riot Client\\RiotClientServices.exe")
-    return fallback if os.path.exists(fallback) else None
+    return None
 
 def get_league_executable_path() -> Optional[str]:
     """Returns the resolved absolute path to LeagueClient.exe if found."""
