@@ -6,7 +6,7 @@
             "password_enc": "AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAASmuB7IZ6zk2UxWCHqas4PwAAAAAmAAAATABlAGEAZwB1AGUATABvAG8AcAAgAEEAYwBjAG8AdQBuAHQAAAAQZgAAAAEAACAAAABr9TCFyaoukuir1WWVWQUbxAV1o9o+aKuki1joI5qGGwAAAAAOgAAAAAIAACAAAADz+fB0srHy+8ceh7eELUBMMBDVFzztIBimYSgbUTZh9BAAAAAwKfakf1QPp3zX8tdyjKZWQAAAAFdhvAq3pkAkCM+OF3qmM1d2IMHISHEGe2daq03ZETeYTFPRm73zeW63hkjocCy+s0zZKmnVWIYtwWJA6STjRRk=",
             "tagline": "",
             "region": "NA1",
-            "last_used": "2026-08-06T10:44:41.820091",
+            "last_used": "2026-08-12T03:53:02.584174",
             "wallet": {
                 "be": 0,
                 "rp": 0
@@ -19,7 +19,20 @@
             "password_enc": "AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAASmuB7IZ6zk2UxWCHqas4PwAAAAAmAAAATABlAGEAZwB1AGUATABvAG8AcAAgAEEAYwBjAG8AdQBuAHQAAAAQZgAAAAEAACAAAABGh7kThlMh+D/FEXbK5xYKJ7gNRT/FajOdD5OLvdswlgAAAAAOgAAAAAIAACAAAABaaE7Em+BAjXDeY1YXwGEf/uisGN8LBEspJ10RV3z4JxAAAAA04MzgJvlykAU7N1Qa0nLTQAAAAHudpTXD5gcoG2byf0XbOU5FmdJjtTc0A4HRc8S4ZXI6vNAJPcHCVo0L9nfI5sCNByZYAScE/JqS1tC5Ap9CY9k=",
             "tagline": "",
             "region": "NA1",
-            "last_used": "2026-08-02T15:38:39.726936",
+            "last_used": "2026-08-11T21:15:06.821100",
+            "wallet": {
+                "be": 0,
+                "rp": 0
+            },
+            "is_default": false
+        },
+        {
+            "label": "6",
+            "username": "themalcolm6",
+            "password_enc": "AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAASmuB7IZ6zk2UxWCHqas4PwAAAAAmAAAATABlAGEAZwB1AGUATABvAG8AcAAgAEEAYwBjAG8AdQBuAHQAAAAQZgAAAAEAACAAAAAQKUh9K1vwq8yHW0VSUDqzESRLUyUh5j+mpq1D1lRr4wAAAAAOgAAAAAIAACAAAAA+fZuCEUwRgKBpXIg0rdxFL3Qinj/T8X0RYuaGh1psQRAAAABxj36WYgtznOuek/nyATLaQAAAAJ8zdmu+Qdx5Gcq2T+izHQy+vEqDlycuqaMfcwMMbU+E4r52yaaW6/8AcbgSk8YHifzLuygyMAWt/SVRuhhjspk=",
+            "tagline": "",
+            "region": "NA1",
+            "last_used": "2026-08-11T12:49:55.137581",
             "wallet": {
                 "be": 0,
                 "rp": 0
