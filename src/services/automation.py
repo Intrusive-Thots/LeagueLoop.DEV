@@ -293,7 +293,7 @@ class AutomationEngine:
             phase_req = f_phase.result()
             phase = phase_req.json() if phase_req and phase_req.status_code == 200 else "None"
 
-        # LCU Ghost ChampSelect Bug Fix: if gameflow says we're in ChampSelect but we have no session, we're actually in the Lobby
+        # LCU Ghost ChampSelect Workaround: if gameflow says we're in ChampSelect but we have no session, we're actually in the Lobby
         if phase == "ChampSelect":
             if not f_session:
                 f_session = self.executor.submit(self.lcu.request, "GET", "/lol-champ-select/v1/session", None, True)
