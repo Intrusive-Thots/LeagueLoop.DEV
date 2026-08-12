@@ -29,7 +29,15 @@ a = Analysis(
         'tkinterdnd2',
         'customtkinter',
         'packaging',
-        'darkdetect'
+        'darkdetect',
+        'pystray',
+        'pypresence',
+        'PySide6',
+        'websockets',
+        'lcu_driver',
+        'aiohttp',
+        'yarl',
+        'multidict'
     ],
     hookspath=[],
     hooksconfig={},
