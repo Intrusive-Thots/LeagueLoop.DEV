@@ -254,6 +254,34 @@ class LootTool(ctk.CTkFrame):
         )
         self.challenges_empty_lbl.pack(pady=16)
 
+        # Challenges tab actions
+        challenges_actions = ctk.CTkFrame(self.tab_challenges, fg_color="transparent")
+        challenges_actions.pack(fill="x", padx=10, pady=(2, 4))
+
+        self.btn_claim_all_challenges = ctk.CTkButton(
+            challenges_actions,
+            text="Claim Challenge Rewards",
+            width=140,
+            height=28,
+            font=get_font("caption", "bold"),
+            fg_color=get_color("colors.accent.gold", "#C8AA6E"),
+            hover_color="#A88B4A",
+            text_color="#0A1428",
+            command=self.claim_all_challenge_rewards,
+            cursor="hand2",
+        )
+        self.btn_claim_all_challenges.pack(side="left")
+        CTkTooltip(self.btn_claim_all_challenges, "Claim all rewards from completed challenges")
+
+        self.challenges_action_status_lbl = ctk.CTkLabel(
+            challenges_actions,
+            text="",
+            font=get_font("caption"),
+            text_color=get_color("colors.text.muted"),
+            anchor="e",
+        )
+        self.challenges_action_status_lbl.pack(side="right", fill="x", expand=True, padx=(8, 0))
+
         self.challenges_status_lbl = ctk.CTkLabel(
             self.tab_challenges,
             text="",
@@ -750,6 +778,54 @@ class LootTool(ctk.CTkFrame):
             ).pack(side="right", padx=(4, 0))
 
             self._challenge_row_widgets.append(fr)
+
+    def claim_all_challenge_rewards(self) -> None:
+        """Claim all rewards from completed challenges."""
+        if not self.service or not self.lcu:
+            self.challenges_action_status_lbl.configure(text="No LCU client")
+            return
+
+        def work():
+            result = {"claimed": 0, "failed": 0, "details": []}
+            err = ""
+            try:
+                if not getattr(self.lcu, "is_connected", False):
+                    if hasattr(self.lcu, "connect"):
+                        self.lcu.connect(silent=True)
+                if not getattr(self.lcu, "is_connected", False):
+                    err = "Client not connected"
+                else:
+                    result = self.service.claim_all_challenge_rewards()
+            except Exception as e:
+                err = str(e)
+                Logger.error("Challenges", f"Claim all failed: {e}")
+
+            def done():
+                if not self.winfo_exists():
+                    return
+                if err:
+                    self.challenges_action_status_lbl.configure(text=err)
+                else:
+                    summary = f"Claimed {result['claimed']} · failed {result['failed']}"
+                    self.challenges_action_status_lbl.configure(text=summary)
+                    try:
+                        ToastManager.get_instance(self.winfo_toplevel()).show(
+                            summary,
+                            icon="🏆",
+                            duration=4000,
+                            theme="success" if result["claimed"] > 0 else "error",
+                        )
+                    except Exception:
+                        pass
+                    self.refresh_challenges()
+
+            try:
+                self.after(0, done)
+            except Exception:
+                pass
+
+        self.challenges_action_status_lbl.configure(text="Claiming…")
+        threading.Thread(target=work, daemon=True).start()
 
     # Override refresh to handle all tabs
     def refresh(self) -> None:

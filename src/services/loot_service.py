@@ -577,6 +577,44 @@ class LootService:
         
         return result
 
+    def claim_challenge_reward(self, challenge_id: str, tier: str) -> Tuple[bool, str]:
+        """Claim a specific challenge reward by ID and tier."""
+        endpoint = f"/lol-challenges/v1/challenges/{challenge_id}/claim/{tier}"
+        ok, payload, err = self._post(endpoint)
+        if ok:
+            return True, f"Successfully claimed reward for challenge {challenge_id}"
+        return False, f"Failed to claim challenge reward: {err}"
+
+    def claim_all_challenge_rewards(self) -> Dict[str, Any]:
+        """Claim all rewards from completed challenges."""
+        result = {
+            "claimed": 0,
+            "failed": 0,
+            "details": [],
+        }
+        challenges = self.check_challenge_rewards()
+        if not challenges:
+            result["details"].append("No challenge rewards to claim")
+            return result
+
+        for challenge in challenges:
+            chal_id = challenge.get("challenge_id")
+            tier = challenge.get("tier", "")
+            if not chal_id or not tier:
+                continue
+            
+            success, msg = self.claim_challenge_reward(str(chal_id), tier)
+            if success:
+                result["claimed"] += 1
+                result["details"].append(msg)
+            else:
+                result["failed"] += 1
+                result["details"].append(msg)
+            
+            time.sleep(0.2)  # Rate limiting
+        
+        return result
+
     def summarize_openable(self) -> List[Dict[str, Any]]:
         items = self.fetch_loot()
         plans = {p.loot_id: p for p in self.plan_opens(items)}
