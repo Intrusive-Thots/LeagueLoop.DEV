@@ -253,6 +253,26 @@ class TestUIComponents(unittest.TestCase):
         keys_to_test = ["auto_accept", "auto_join", "auto_honor", "auto_runes", "auto_add_played", "auto_ban"]
         for key in keys_to_test:
             editor = AutomationEditor(mock_master, key, mock_config)
+
+            # Mock variables so hasattr checks pass
+            editor._show_icon_var = MagicMock()
+            editor._delay_var = MagicMock()
+            editor._honor_var = MagicMock()
+            editor._vip_only_var = MagicMock()
+
+            vip_list_mock = MagicMock()
+            vip_list_mock.get.return_value = "Faker"
+            editor._vip_list_var = vip_list_mock
+
+            editor._runes_mode_var = MagicMock()
+            editor._add_pos_var = MagicMock()
+
+            ban_entry_mock = MagicMock()
+            ban_entry_mock.get.return_value = "Yuumi"
+            editor._ban_entries = [ban_entry_mock]
+
+            editor._respect_hovers_var = MagicMock()
+
             editor._on_save()
             assert mock_config.set.call_count > 0
 
