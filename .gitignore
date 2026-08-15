@@ -1,10 +1,25 @@
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
 *.py[cod]
 *$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
 # Virtual environments
 .venv/
@@ -15,31 +30,20 @@ ENV/
 # Environment / secrets
 .env
 .env.*
-*.pem
-*.pfx
-*.key
-accounts.json
-config.local.json
+!.env.example
 
 # Coverage / test artifacts
 .coverage
 .coverage.*
 htmlcov/
-.pytest_cache/
 .tox/
 .nox/
-coverage.xml
-*.cover
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Build / packaging
-build/
-dist/
-*.egg-info/
-*.egg
-*.spec.bak
-get-pip.py
-
-# Editors / IDE
+# IDE / editors
 .vscode/
 .idea/
 *.swp
@@ -51,15 +55,30 @@ get-pip.py
 Thumbs.db
 Desktop.ini
 
+# Project specific sensitive / local
+accounts.json
+config.json
+*.pfx
+*.keystore
+*.pem
+!assets/certs/riotgames.pem
+!assets/riotgames.pem
+
+# Build / packaging
+*.spec.bak
+installer/
+output/
+*.exe
+*.msi
+
 # Logs / temp
 *.log
 *.tmp
+*.temp
 logs/
-tmp/
 
-# Project-specific
+# Large / unnecessary committed binaries
+get-pip.py
+
+# Empty / junk
 WQ
-scratch/*.png
-scratch/debug_*
-.agents/memory/
-memory/
