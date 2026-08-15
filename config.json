@@ -50,13 +50,14 @@
     "hotkey_find_match": "menu",
     "hotkey_compact_mode": "ctrl+shift+m",
     "priority_picker": {
-        "enabled": true,
+        "enabled": false,
         "list": [
             "Jinx",
             "TwistedFate",
             "Taric",
             "TahmKench",
             "Velkoz",
+            "Gnar",
             "Fiddlesticks",
             "Urgot",
             "Xerath",
@@ -105,7 +106,6 @@
             "Ambessa",
             "Nidalee",
             "MonkeyKing",
-            "Gnar",
             "Poppy",
             "Kassadin",
             "Chogath",
@@ -148,7 +148,7 @@
     "discord_rpc_enabled": false,
     "hotkey_omnibar": "alt+,",
     "aram_mode": "ARAM: Mayhem",
-    "auto_join_enabled": true,
+    "auto_join_enabled": false,
     "auto_honor_enabled": true,
     "auto_join_list": [
         {
@@ -193,7 +193,7 @@
         },
         {
             "name": "5 bean medley",
-            "enabled": true
+            "enabled": false
         },
         {
             "name": "xelcro",
