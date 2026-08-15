@@ -1,4 +1,4 @@
-# Core runtime
+# Core runtime (CustomTkinter UI)
 customtkinter==5.2.2
 darkdetect==0.8.0
 pillow==12.1.1
@@ -31,17 +31,17 @@ aiohappyeyeballs==2.6.1
 # Automation / input
 pyautogui==0.9.54
 
-# Optional / migration (PySide6 – future UI)
-PySide6==6.11.0
-PySide6_Addons==6.11.0
-PySide6_Essentials==6.11.0
-shiboken6==6.11.0
-
 # Presence / extras
 pypresence==4.6.1
 beautifulsoup4==4.15.0
 
-# Build / packaging
+# Optional / migration (PySide6 – future UI; install only when migrating)
+# PySide6==6.11.0
+# PySide6_Addons==6.11.0
+# PySide6_Essentials==6.11.0
+# shiboken6==6.11.0
+
+# Build / packaging (dev only)
 altgraph==0.17.5
 pefile==2024.8.26
 pyinstaller==6.21.0
