@@ -38,7 +38,7 @@ LeagueLoop is an automated League of Legends LCU client companion built with a P
 
 ### 2. Service Layer (`src/services/`)
 - `LCUClient` (`api_handler.py`): Manages LCU lockfile discovery, HTTPS connections, and WebSocket subscriptions.
-- `AutomationEngine`: `src/services/automation/` modular gameflow phase handlers (`ready_check`, `champ_select`, `draft_assistant`, `chat_warden`, `dodge_requeue`, `end_game`, `friend_lobby`).
+- `AutomationEngine` (`src/services/automation.py`): Gameflow phase handlers for ready_check, champ_select, draft_assistant, chat_warden, dodge_requeue, end_game, friend_lobby.
 - `AccountManager`: Encrypted Riot credential storage and auto-login automation.
 - `StatsScraper`: Fetches summoner stats, ranked info, and match history.
 - `LocalAPIHandler` (`local_api.py`): HTTP REST API server on port 8337 for mobile companion and remote control.
