@@ -1,0 +1,18 @@
+{
+    "accounts": [
+        {
+            "label": "MAIN",
+            "username": "your_username",
+            "password_enc": "",
+            "tagline": "",
+            "region": "NA1",
+            "last_used": null,
+            "wallet": {
+                "be": 0,
+                "rp": 0
+            },
+            "is_default": true
+        }
+    ],
+    "active_account_idx": 0
+}
