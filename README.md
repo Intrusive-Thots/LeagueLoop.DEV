@@ -1,6 +1,6 @@
 <div align="center">
   <img src="assets/app.png" alt="LeagueLoop Icon" width="128"/>
-  <h1>LeagueLoop-Lock</h1>
+  <h1>LeagueLoop</h1>
   <p><strong>Advanced Automation, Overlaid Elegance, and Ultimate Matchmaking Control for League of Legends</strong></p>
 </div>
 
@@ -74,14 +74,14 @@ To construct a new executable instance using the bundled PyInstaller and InnoSet
 
 ```bash
 # Clone Repository
-git clone https://github.com/Intrusive-Thots/LeagueLoop-Lock.git
-cd LeagueLoop-Lock
+git clone https://github.com/Intrusive-Thots/LeagueLoop.DEV.git
+cd LeagueLoop.DEV
 
 # Install Dependencies
 pip install -r requirements.txt
 
-# Run Development Server Native
-python -m src.core.main
+# Run Development Server
+python run.py
 ```
 
 Then, you can utilize the internal build scripts *(assuming InnoSetup is installed at standard paths)*:

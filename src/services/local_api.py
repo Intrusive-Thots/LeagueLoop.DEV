@@ -31,9 +31,21 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
         pass
 
     def _set_cors_headers(self):
-        self.send_header('Access-Control-Allow-Origin', '*')
+        """Set CORS headers with configured allowed origins."""
+        # Get origin from request headers
+        origin = self.headers.get('Origin', '')
+        server = getattr(self.server, 'allowed_origins', ['http://localhost', 'http://127.0.0.1'])
+        
+        # Check if origin is in allowed list
+        if origin and origin in server:
+            self.send_header('Access-Control-Allow-Origin', origin)
+        else:
+            # Default to localhost for security
+            self.send_header('Access-Control-Allow-Origin', 'http://localhost')
+        
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.send_header('Access-Control-Max-Age', '86400')  # Cache preflight for 24 hours
 
     def _send_json(self, data, status_code=200):
         """Task 137: Optimized JSON response writer with compact serialization buffers to minimize GC and string allocations."""
@@ -794,26 +806,51 @@ def ensure_firewall_rule(port):
     except Exception as e:
         Logger.warn("API", f"Could not auto-configure firewall: {e}")
 
-def start_api_server(app_instance, port=8337):
+def start_api_server(app_instance, port=8337, bind_local=True):
+    """
+    Start the Local API HTTP server.
+    
+    Args:
+        app_instance: The LeagueLoopApp instance
+        port: Port number (default 8337)
+        bind_local: If True, bind to localhost only (more secure). 
+                    If False, bind to 0.0.0.0 to allow LAN access.
+    
+    Returns:
+        Tuple of (host_ip, port) or (None, None) on failure
+    """
+    # Security: Default to localhost-only binding unless remote access is explicitly enabled
     # Port 8337 = LEET -> L E E T -> 8337 (sort of)
-    # Bind to 0.0.0.0 to allow mobile remote connections over LAN
-    host = '0.0.0.0'
+    host = '127.0.0.1' if bind_local else '0.0.0.0'
+    
     try:
-        # Auto-configure Windows Firewall before starting the server
-        ensure_firewall_rule(port)
+        # Only configure firewall if binding to all interfaces
+        if not bind_local:
+            ensure_firewall_rule(port)
 
         server = ThreadingHTTPServer((host, port), LeagueLoopAPIHandler)
         server.app_instance = app_instance
         server.start_time = time.time()
         server._summoner_cache = None
         server._summoner_cache_time = 0
+        server.allowed_origins = [
+            'http://localhost',
+            'http://127.0.0.1',
+            # Add mobile companion origins here when pairing is implemented
+        ]
         
         server_thread = threading.Thread(target=server.serve_forever, daemon=True)
         server_thread.start()
         
-        local_ip = get_local_ip()
-        Logger.info("API", f"Remote Link API started on http://{local_ip}:{port}")
-        return local_ip, port
+        if bind_local:
+            Logger.info("API", f"Local API started on http://localhost:{port} (localhost only)")
+            local_ip = get_local_ip()
+            return local_ip, port
+        else:
+            local_ip = get_local_ip()
+            Logger.info("API", f"Remote Link API started on http://{local_ip}:{port}")
+            Logger.warn("API", "Remote access enabled - ensure proper authentication is configured")
+            return local_ip, port
     except Exception as e:
         Logger.error("API", f"Failed to start API server: {e}")
         return None, None

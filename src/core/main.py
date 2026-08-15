@@ -185,8 +185,9 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
             
         self.protocol("WM_DELETE_WINDOW", self._on_close_request)
 
-        # Start background API server
-        self._local_ip, self._local_port = start_api_server(self, port=8337)
+        # Start background API server (localhost-only by default for security)
+        # To enable remote access from mobile companion, set bind_local=False
+        self._local_ip, self._local_port = start_api_server(self, port=8337, bind_local=True)
 
         threading.Thread(target=self.connection_loop, daemon=True).start()
         threading.Thread(target=self.docking_loop, daemon=True).start()
