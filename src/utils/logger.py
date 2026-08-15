@@ -31,7 +31,10 @@ formatter = logging.Formatter(_log_format, datefmt=_date_format)
 
 # Main Logger
 _logger = logging.getLogger("LeagueLoop")
-_logger.setLevel(logging.DEBUG)
+# Honor LOG_LEVEL env var (DEBUG, INFO, WARNING, ERROR, CRITICAL). Default DEBUG.
+_log_level_name = os.environ.get("LOG_LEVEL", "DEBUG").upper()
+_log_level = getattr(logging, _log_level_name, logging.DEBUG)
+_logger.setLevel(_log_level)
 
 if not _logger.handlers:
     # File Handler - ALL Logs (5MB max size, keeps 3 backups)
