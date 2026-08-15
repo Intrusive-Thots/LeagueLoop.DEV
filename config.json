@@ -50,7 +50,7 @@
     "hotkey_find_match": "menu",
     "hotkey_compact_mode": "ctrl+shift+m",
     "priority_picker": {
-        "enabled": false,
+        "enabled": true,
         "list": [
             "Jinx",
             "TwistedFate",
@@ -62,6 +62,7 @@
             "Urgot",
             "Xerath",
             "Vayne",
+            "Jax",
             "Amumu",
             "Fizz",
             "Singed",
@@ -147,7 +148,7 @@
     "aram_auto_add_played": true,
     "discord_rpc_enabled": false,
     "hotkey_omnibar": "alt+,",
-    "aram_mode": "ARAM: Mayhem",
+    "aram_mode": "ARAM: Mayhem Classic-ish",
     "auto_join_enabled": false,
     "auto_honor_enabled": true,
     "auto_join_list": [
