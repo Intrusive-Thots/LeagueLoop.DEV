@@ -463,6 +463,128 @@ class LootService:
             if not is_likely_openable(item) and item.loot_id not in plans:
                 continue
             plan = plans.get(item.loot_id)
+            will = plan.times if plan else 0
+            rows.append(
+                {
+                    "loot_id": item.loot_id,
+                    "name": item.name,
+                    "count": item.count,
+                    "can_open": will > 0,
+                    "needs_key": plan.needs_key if plan else False,
+                    "will_open": will,
+                }
+            )
+        return rows
+
+    # ── Season Challenges & Rewards ────────────────────────────
+
+    def fetch_challenges_progress(self) -> Optional[Dict[str, Any]]:
+        """Fetch current challenges progress and earned rewards."""
+        data = self._get_json("/lol-challenges/v1/challenges")
+        if not isinstance(data, list):
+            return None
+        return {"challenges": data}
+
+    def fetch_season_rewards(self) -> Optional[List[Dict[str, Any]]]:
+        """Fetch available season rewards that can be claimed."""
+        # Get player preferences which includes honor level and rewards
+        prefs = self._get_json("/lol-seasonal/v1/rewards")
+        if not prefs:
+            return None
+        if isinstance(prefs, dict):
+            prefs = [prefs]
+        return prefs if isinstance(prefs, list) else None
+
+    def fetch_honor_level(self) -> Optional[Dict[str, Any]]:
+        """Fetch current honor level and checkpoint."""
+        data = self._get_json("/lol-honor-v2/v1/profile")
+        if not isinstance(data, dict):
+            return None
+        return {
+            "honor_level": data.get("honorLevel", 0),
+            "checkpoint": data.get("checkpoint", 0),
+            "honor_points": data.get("honorPoints", 0),
+        }
+
+    def claim_season_reward(self, reward_id: str) -> Tuple[bool, str]:
+        """Claim a specific season reward by ID."""
+        endpoint = f"/lol-seasonal/v1/rewards/{reward_id}/claim"
+        ok, payload, err = self._post(endpoint)
+        if ok:
+            return True, f"Successfully claimed reward {reward_id}"
+        return False, f"Failed to claim reward {reward_id}: {err}"
+
+    def claim_all_available_rewards(self) -> Dict[str, Any]:
+        """Claim all available season rewards."""
+        result = {
+            "claimed": 0,
+            "failed": 0,
+            "details": [],
+        }
+        rewards = self.fetch_season_rewards()
+        if not rewards:
+            result["details"].append("No season rewards found")
+            return result
+
+        for reward in rewards:
+            reward_id = reward.get("id") or reward.get("rewardId")
+            if not reward_id:
+                continue
+            
+            # Check if already claimed
+            if reward.get("isClaimed", False):
+                continue
+            
+            # Check if eligible (not locked)
+            if reward.get("isLocked", True):
+                result["details"].append(f"Reward {reward_id} is locked")
+                continue
+            
+            success, msg = self.claim_season_reward(str(reward_id))
+            if success:
+                result["claimed"] += 1
+                result["details"].append(msg)
+            else:
+                result["failed"] += 1
+                result["details"].append(msg)
+            
+            time.sleep(0.2)  # Rate limiting
+        
+        return result
+
+    def check_challenge_rewards(self) -> List[Dict[str, Any]]:
+        """Check challenges for unclaimed rewards."""
+        result = []
+        challenges_data = self.fetch_challenges_progress()
+        if not challenges_data:
+            return result
+        
+        challenges = challenges_data.get("challenges", [])
+        for challenge in challenges:
+            chal_id = challenge.get("id")
+            name = challenge.get("localizedName", "Unknown Challenge")
+            tier = challenge.get("tier", "UNSET")
+            achieved = challenge.get("achieved", False)
+            
+            # Check if challenge is completed but rewards not claimed
+            if achieved and tier != "UNSET":
+                result.append({
+                    "challenge_id": chal_id,
+                    "name": name,
+                    "tier": tier,
+                    "status": "completed",
+                })
+        
+        return result
+
+    def summarize_openable(self) -> List[Dict[str, Any]]:
+        items = self.fetch_loot()
+        plans = {p.loot_id: p for p in self.plan_opens(items)}
+        rows: List[Dict[str, Any]] = []
+        for item in items:
+            if not is_likely_openable(item) and item.loot_id not in plans:
+                continue
+            plan = plans.get(item.loot_id)
             rows.append(
                 {
                     "loot_id": item.loot_id,
