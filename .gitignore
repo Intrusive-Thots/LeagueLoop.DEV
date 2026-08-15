@@ -1,27 +1,65 @@
-```
 # Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.py[cod]
+*$py.class
 
-# Dependencies
+# Virtual environments
 .venv/
 venv/
 env/
+ENV/
+
+# Environment / secrets
 .env
-.env.local
 .env.*
+*.pem
+*.pfx
+*.key
+accounts.json
+config.local.json
 
-# Logs and temporary files
-*.log
-*.tmp
+# Coverage / test artifacts
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+coverage.xml
+*.cover
 
-# Editors
+# Build / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+*.spec.bak
+get-pip.py
+
+# Editors / IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
-```
+Desktop.ini
+
+# Logs / temp
+*.log
+*.tmp
+logs/
+tmp/
+
+# Project-specific
+WQ
+scratch/*.png
+scratch/debug_*
+.agents/memory/
+memory/
