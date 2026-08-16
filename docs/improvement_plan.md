@@ -4,7 +4,7 @@
 **Repository**: `Intrusive-Thots/LeagueLoop.DEV`
 
 ### Current Assessment Overview
-- **Overall Health**: 86/100 (up from 85)
+- **Overall Health**: 88/100 (up from 86)
 - **Primary Objectives**:
   1. Complete PySide6 migration and eliminate legacy Tkinter code. (pending)
   2. Reduce architectural coupling via ApplicationContainer and dependency injection. (done — construction + shutdown + loops wired)
@@ -20,3 +20,4 @@
 2. Finish PySide6 migration path (scaffold already in `src/ui/qt/`).
 3. Optional SQLite for match history.
 4. ~~Reduce excessive telemetry methods in `api_handler.py` by adopting `src/utils/running_stats.RunningStats` (Welford online)~~ **Done for primary HTTP latency path** — remaining exotic jitter polarization methods can be pruned later.
+5. Continue pruning remaining CustomTkinter surface area as Qt widgets land.
