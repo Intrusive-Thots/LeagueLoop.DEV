@@ -61,7 +61,7 @@ def global_exception_handler(exc_type, exc_value, exp_traceback):
     if issubclass(exc_type, KeyboardInterrupt):
         sys.__excepthook__(exc_type, exc_value, exp_traceback)
         return
-    err_str = "".join(traceback.format_exception(exc_type, exp_value, exp_traceback))
+    err_str = "".join(traceback.format_exception(exc_type, exc_value, exp_traceback))
     Logger.error("SYS", f"Uncaught exception:\n{err_str}")
 
 sys.excepthook = global_exception_handler
