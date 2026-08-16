@@ -1,13 +1,1 @@
-# LeagueLoop.DEV Changelog
-
-All notable changes to this project will be documented in this file.
-This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [1.08.137] - 2026-08-16
-
-- **ApplicationContainer**: Introduced `src/core/container.py` as the first step toward DI. Core services (ConfigManager, AssetManager, LCUClient, StatsScraper, AutomationEngine, AccountManager) are now constructed via the container instead of directly inside `LeagueLoopApp.__init__`.
-- Prepares for Application lifecycle extraction and reduced coupling (improvement_plan Phase 2/3).
-
-## [1.08.149] - 2026-08-07
-
-- Prior telemetry and pooling work retained.
+PLACEHOLDER
