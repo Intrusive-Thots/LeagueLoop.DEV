@@ -16,6 +16,6 @@
 ---
 
 ## Next Focus
-1. ApplicationContainer skeleton landed; full lifecycle extraction next.
+1. ApplicationContainer wired into LeagueLoopApp (construction + shutdown). Full lifecycle extraction next.
 2. Finish PySide6 migration path.
 3. Optional SQLite for match history.
