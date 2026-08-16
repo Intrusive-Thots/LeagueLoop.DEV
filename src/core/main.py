@@ -41,6 +41,7 @@ from ui.components.toast import ToastManager  # type: ignore
 from ui.components.mini_player import MiniPlayer
 from ui.components.tray_icon import SystemTrayApp
 from utils.focus_states import apply_focus_states_recursive
+from utils.client_detector import get_riot_executable_path, get_league_executable_path
 from tkinterdnd2 import TkinterDnD  # type: ignore
 
 _SET_WINDOW_LONG = None
@@ -54,7 +55,7 @@ ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("dark-blue")
 
 
-def global_exception_handler(exc_type, exc_value, exp_traceback):
+def global_exception_handler(exc_type, exp_value, exp_traceback):
     """Global exception handler."""
     if issubclass(exc_type, KeyboardInterrupt):
         sys.__excepthook__(exc_type, exp_value, exp_traceback)
@@ -252,33 +253,126 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         os._exit(0)
 
     def _setup_window_dragging(self):
-        pass
+        """Enable drag for borderless window via left mouse."""
+        def start_drag(event):
+            self._drag_data["x"] = event.x
+            self._drag_data["y"] = event.y
+
+        def do_drag(event):
+            x = self.winfo_x() + (event.x - self._drag_data["x"])
+            y = self.winfo_y() + (event.y - self._drag_data["y"])
+            self.geometry(f"+{x}+{y}")
+
+        self.bind("<ButtonPress-1>", start_drag)
+        self.bind("<B1-Motion>", do_drag)
 
     def _bind_hotkeys(self):
-        pass
+        """Register global hotkeys from config."""
+        try:
+            launch_key = self.config.get("hotkey_launch_client", "ctrl+alt+c")
+            toggle_key = self.config.get("hotkey_toggle_automation", "ctrl+shift+alt+a")
+            compact_key = self.config.get("hotkey_compact_mode", "ctrl+shift+m")
+
+            if launch_key:
+                keyboard.add_hotkey(launch_key, self._hotkey_launch_client, suppress=False)
+                self._launch_hotkey = launch_key
+            if toggle_key:
+                keyboard.add_hotkey(toggle_key, self._hotkey_toggle_automation, suppress=False)
+                self._automation_hotkey = toggle_key
+            if compact_key:
+                keyboard.add_hotkey(compact_key, self._hotkey_compact, suppress=False)
+                self._queue_hotkey = compact_key
+            Logger.info("SYS", f"Hotkeys bound: launch={launch_key}, toggle={toggle_key}, compact={compact_key}")
+        except Exception as e:
+            Logger.warning("SYS", f"Hotkey bind failed: {e}")
 
     def _hotkey_launch_client(self):
-        pass
+        """Launch Riot Client / League Client if not running."""
+        try:
+            exe = get_riot_executable_path() or get_league_executable_path()
+            if exe and os.path.exists(exe):
+                subprocess.Popen([exe], shell=False)
+                Logger.info("SYS", f"Launched client: {exe}")
+                if hasattr(self, "sidebar") and self.sidebar.winfo_exists():
+                    self.sidebar.update_action_log("Launching Riot Client...")
+            else:
+                Logger.warning("SYS", "No Riot/League executable found")
+        except Exception as e:
+            Logger.error("SYS", f"Launch client failed: {e}")
+
+    def _hotkey_toggle_automation(self):
+        """Toggle automation power via hotkey."""
+        try:
+            if hasattr(self, "sidebar") and self.sidebar.winfo_exists():
+                self.after(0, self.sidebar._on_power_click)
+        except Exception as e:
+            Logger.debug("SYS", f"Toggle automation hotkey: {e}")
+
+    def _hotkey_compact(self):
+        """Toggle compact/orb mode."""
+        try:
+            if hasattr(self, "mini_player"):
+                self.after(0, lambda: self.mini_player.toggle() if hasattr(self.mini_player, "toggle") else None)
+        except Exception as e:
+            Logger.debug("SYS", f"Compact hotkey: {e}")
 
     def connection_loop(self):
+        """Poll LCU connection and keep state in sync."""
         while self.running:
+            try:
+                was = self.lcu.is_connected
+                self.lcu.connect(silent=True)
+                now = self.lcu.is_connected
+                if was != now and hasattr(self, "sidebar") and self.sidebar.winfo_exists():
+                    status = "Connected" if now else "Disconnected"
+                    self.after(0, lambda s=status: self.sidebar.update_action_log(f"LCU {s}") if hasattr(self.sidebar, "update_action_log") else None)
+            except Exception as e:
+                Logger.debug("LCU", f"connection_loop: {e}")
+                time.sleep(CONNECTION_ERROR_INTERVAL)
+                continue
             time.sleep(CONNECTION_POLL_INTERVAL)
 
     def docking_loop(self):
+        """Basic docking poll (geometry follow placeholder)."""
         while self.running:
-            time.sleep(DOCKING_POLL_INTERVAL)
+            try:
+                if not self.config.get("docked", True):
+                    time.sleep(DOCKING_IDLE_INTERVAL)
+                    continue
+                # Full Win32 docking lives in future polish; keep loop alive
+                time.sleep(DOCKING_POLL_INTERVAL)
+            except Exception:
+                time.sleep(DOCKING_IDLE_INTERVAL)
 
     def _handle_window_state(self, state):
-        pass
+        """React to automation window state changes (hide/show/orb)."""
+        try:
+            if state == "hide":
+                self.withdraw()
+            elif state == "show":
+                self.deiconify()
+                self.lift()
+            elif state == "orb" and hasattr(self, "mini_player"):
+                self.withdraw()
+                if hasattr(self.mini_player, "show"):
+                    self.mini_player.show()
+        except Exception as e:
+            Logger.debug("UI", f"window state {state}: {e}")
 
     def on_settings_saved(self):
-        pass
+        """Rebind hotkeys after settings change."""
+        try:
+            keyboard.unhook_all()
+            self._bind_hotkeys()
+        except Exception as e:
+            Logger.debug("SYS", f"settings rebind: {e}")
 
     def on_dock_toggled(self, docked):
-        pass
+        self.config.set("docked", bool(docked))
 
     def _show_mobile_qr(self):
-        pass
+        """Placeholder for mobile QR display."""
+        Logger.info("SYS", f"Mobile API at http://{self._local_ip}:{self._local_port}")
 
 
 def _kill_other_instances():
