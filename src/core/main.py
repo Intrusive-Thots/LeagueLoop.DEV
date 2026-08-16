@@ -59,7 +59,7 @@ ctk.set_default_color_theme("dark-blue")
 def global_exception_handler(exc_type, exc_value, exp_traceback):
     """Global exception handler."""
     if issubclass(exc_type, KeyboardInterrupt):
-        sys.__excepthook__(exc_type, exp_value, exp_traceback)
+        sys.__excepthook__(exc_type, exc_value, exp_traceback)
         return
     err_str = "".join(traceback.format_exception(exc_type, exp_value, exp_traceback))
     Logger.error("SYS", f"Uncaught exception:\n{err_str}")
