@@ -56,12 +56,12 @@ if TYPE_CHECKING:
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("dark-blue")
 
-def global_exception_handler(exc_type, exc_value, exc_traceback):
+def global_exception_handler(exc_type, exc_value, exp_traceback):
     """Global exception handler."""
     if issubclass(exc_type, KeyboardInterrupt):
-        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        sys.__excepthook__(exc_type, exc_value, exp_traceback)
         return
-    err_str = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+    err_str = "".join(traceback.format_exception(exc_type, exc_value, exp_traceback))
     Logger.error("SYS", f"Uncaught exception:\n{err_str}")
 
 sys.excepthook = global_exception_handler
@@ -84,7 +84,7 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         except Exception:
             pass
             
-        self.title("Queqq")
+        self.title("LeagueLoop")
         try:
             icon_path = get_asset_path("assets/app.ico")
             if os.path.exists(icon_path):
