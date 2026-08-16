@@ -3,10 +3,15 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.08.140] - 2026-08-16
+
+- **Docs**: Synced CHANGELOG with current health score 90/100 and next focus from improvement_plan.
+- **Version**: Bumped to 1-08-137-1902.
+
 ## [1.08.139] - 2026-08-16
 
-- **Docs**: Updated improvement_plan.md health to 82/100, synced test count (255+), clarified next focus (PySide6 + telemetry trim).
-- **Docs**: Refreshed TASK_QUEUE.md with current ApplicationContainer status and next focus areas.
+- **Docs**: Bumped improvement_plan.md health to 90/100, clarified next focus (PySide6 migration, asset_manager modularization, SQLite, telemetry prune, LCU hardening).
+- **Docs**: Refreshed TASK_QUEUE.md.
 
 ## [1.08.138] - 2026-08-16
 
