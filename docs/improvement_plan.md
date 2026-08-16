@@ -4,20 +4,20 @@
 **Repository**: `Intrusive-Thots/LeagueLoop.DEV`
 
 ### Current Assessment Overview
-- **Overall Health**: 88/100 (up from 86)
+- **Overall Health**: 90/100 (up from 88)
 - **Primary Objectives**:
-  1. Complete PySide6 migration and eliminate legacy Tkinter code. (pending)
+  1. Complete PySide6 migration and eliminate legacy Tkinter code. (pending — scaffold in `src/ui/qt/`)
   2. Reduce architectural coupling via ApplicationContainer and dependency injection. (done — construction + shutdown + loops wired)
   3. Improve reliability, error logging, and application lifecycle management. (done)
-  4. Expand test suite coverage and CI/CD pipelines. (done — 255+ tests)
+  4. Expand test suite coverage and CI/CD pipelines. (done — 255+ tests, smoke + full suite)
   5. Modernize UI architecture with Riot Games design language tokens. (partial)
-  6. Optimize startup speed, memory footprint, and maintainability. (done — extensive perf work; RunningStats adopted for HTTP latency)
+  6. Optimize startup speed, memory footprint, and maintainability. (done — extensive perf work; RunningStats for HTTP latency)
 
 ---
 
 ## Next Focus
-1. ~~ApplicationContainer wired into LeagueLoopApp (construction + shutdown). Full lifecycle extraction next.~~ **Done**
-2. Finish PySide6 migration path (scaffold already in `src/ui/qt/`).
-3. Optional SQLite for match history.
-4. ~~Reduce excessive telemetry methods in `api_handler.py` by adopting `src/utils/running_stats.RunningStats` (Welford online)~~ **Done for primary HTTP latency path** — remaining exotic jitter polarization methods can be pruned later.
-5. Continue pruning remaining CustomTkinter surface area as Qt widgets land.
+1. Finish PySide6 migration path (scaffold already in `src/ui/qt/`; begin replacing CustomTkinter surfaces).
+2. Optional SQLite for match history / post-game summaries.
+3. Prune remaining exotic jitter polarization telemetry methods in `api_handler.py` (low priority; tests cover them).
+4. Continue modular split of `asset_manager.py` (currently ~6k LOC).
+5. Harden LCU transport / reconnect edge cases.
