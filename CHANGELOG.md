@@ -3,6 +3,11 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.08.139] - 2026-08-16
+
+- **Docs**: Updated improvement_plan.md health to 82/100, synced test count (255+), clarified next focus (PySide6 + telemetry trim).
+- **Docs**: Refreshed TASK_QUEUE.md with current ApplicationContainer status and next focus areas.
+
 ## [1.08.138] - 2026-08-16
 
 - **Fix**: Restored full `LeagueLoopApp` implementation in `src/core/main.py` (was replaced by a placeholder in the prior DI commit).
