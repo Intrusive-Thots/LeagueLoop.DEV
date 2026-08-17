@@ -11,7 +11,8 @@ from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from services.api_handler import LCUClient
-    from services.asset_manager import AssetManager, ConfigManager
+    from services.asset_manager import AssetManager
+    from services.config_manager import ConfigManager
     from services.automation import AutomationEngine
     from services.account_manager import AccountManager
     from services.stats_scraper import StatsScraper
@@ -21,7 +22,8 @@ class ApplicationContainer:
     """Owns and exposes the main service graph."""
 
     def __init__(self) -> None:
-        from services.asset_manager import AssetManager, ConfigManager
+        from services.asset_manager import AssetManager
+        from services.config_manager import ConfigManager
         from services.api_handler import LCUClient
         from services.stats_scraper import StatsScraper
 
