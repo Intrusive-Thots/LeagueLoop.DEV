@@ -31,6 +31,9 @@ from ui.qt.theme import (
     get_global_stylesheet,
 )
 from ui.qt.widgets.navigation.sidebar import QtNavigationSidebar
+from ui.qt.widgets.play_tab import QtPlayTab
+from ui.qt.widgets.diagnostics_tab import QtDiagnosticsTab
+from ui.qt.widgets.settings_tab import QtSettingsTab
 
 
 class CustomTitleBar(QFrame):
@@ -136,10 +139,17 @@ class LeagueLoopMainWindow(QMainWindow):
         self.tab_stack = QStackedWidget(self)
         body_layout.addWidget(self.tab_stack)
 
-        # Populate placeholder views for navigation
+        # Populate tab pages
         self.tab_pages = {}
         for key, name, icon in self.sidebar.DEFAULT_TABS:
-            page = self._create_placeholder_page(key, name)
+            if key == "play":
+                page = QtPlayTab(container=self.container, parent=self)
+            elif key == "diagnostics":
+                page = QtDiagnosticsTab(container=self.container, parent=self)
+            elif key == "settings":
+                page = QtSettingsTab(container=self.container, parent=self)
+            else:
+                page = self._create_placeholder_page(key, name)
             self.tab_stack.addWidget(page)
             self.tab_pages[key] = page
 

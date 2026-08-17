@@ -44,6 +44,8 @@ class AutomationEngine:
         self.window_func: Optional[Callable] = kwargs.get("window_func")
         self.toast_func: Optional[Callable] = kwargs.get("toast_func")
         self.queue_func: Optional[Callable] = kwargs.get("queue_func")
+        self.db = kwargs.get("db")
+        self._last_db_telemetry_snapshot = 0.0
         self.running: bool = False
         self.paused: bool = False
         self.thread: Optional[threading.Thread] = None
@@ -352,6 +354,24 @@ class AutomationEngine:
 
         self.last_phase = phase
         self._is_first_tick = False
+
+        # Periodic telemetry snapshot to local SQLite DatabaseService
+        if getattr(self, "db", None) is not None:
+            now_ts = time.time()
+            if now_ts - getattr(self, "_last_db_telemetry_snapshot", 0.0) >= 30.0:
+                self._last_db_telemetry_snapshot = now_ts
+                hist = self.lcu.get_http_latency_histogram() if hasattr(self.lcu, "get_http_latency_histogram") else {}
+                ws_tel = self.lcu.get_ws_telemetry() if hasattr(self.lcu, "get_ws_telemetry") else {}
+                try:
+                    self.db.record_telemetry_snapshot({
+                        "timestamp": now_ts,
+                        "phase": phase,
+                        "latency_avg_ms": hist.get("avg_latency_ms", 0.0),
+                        "latency_p95_ms": hist.get("p95_latency_ms", 0.0),
+                        "ws_events_total": ws_tel.get("total_events", 0),
+                    })
+                except Exception as e:
+                    Logger.debug("AutoLoop", f"Telemetry DB snapshot failed: {e}")
 
         lobby_data = None
         if f_lobby:
@@ -1379,6 +1399,41 @@ class AutomationEngine:
             
             data = eog.json()
             game_id = data.get("gameId")
+
+            # Persist match history to local SQLite DatabaseService
+            if getattr(self, "db", None) is not None and game_id:
+                try:
+                    local_player = data.get("localPlayer", {})
+                    champ_id = local_player.get("championId")
+                    if champ_id:
+                        stats = local_player.get("stats", {})
+                        is_win = False
+                        for team in data.get("teams", []):
+                            if team.get("isPlayerTeam", False):
+                                is_win = team.get("isWinningTeam", False) or bool(team.get("win"))
+                                break
+                        champ_name = (
+                            self.assets.get_champ_name(champ_id)
+                            if hasattr(self.assets, "get_champ_name")
+                            else str(champ_id)
+                        )
+                        match_rec = {
+                            "game_id": game_id,
+                            "timestamp": time.time(),
+                            "queue_id": data.get("queueId", getattr(self, "current_queue_id", None)),
+                            "champion_id": champ_id,
+                            "champion_name": champ_name,
+                            "role": local_player.get("role", "") or local_player.get("position", ""),
+                            "win": is_win,
+                            "kills": stats.get("CHAMPIONS_KILLED", 0),
+                            "deaths": stats.get("NUM_DEATHS", 0),
+                            "assists": stats.get("ASSISTS", 0),
+                            "duration_s": data.get("gameLength", 0),
+                            "raw_json": data,
+                        }
+                        self.db.record_match(match_rec)
+                except Exception as db_err:
+                    Logger.debug("AutoLoop", f"Match DB record error: {db_err}")
             
             my_puuid = data.get("localPlayer", {}).get("puuid")
             if not my_puuid:

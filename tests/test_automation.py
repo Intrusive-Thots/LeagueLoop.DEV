@@ -846,6 +846,8 @@ class TestAutomationEngineAutoJoinAndSkin(unittest.TestCase):
         self.engine._current_auto_joined_friend = None
         self.engine._current_auto_joined_party_id = None
         self.engine._skin_equipped = False
+        self.engine._honor_handled = False
+        self.engine.assets = MagicMock()
 
     def test_leave_friend_lobby_applies_5min_cooldown(self):
         self.engine._current_auto_joined_friend = "Alice"
@@ -906,6 +908,52 @@ class TestAutomationEngineAutoJoinAndSkin(unittest.TestCase):
         self.engine._equip_random_skin(session)
 
         self.assertTrue(self.engine._skin_equipped)
+
+    def test_handle_end_of_game_records_match_to_database(self):
+        """Verify _handle_end_of_game records completed match details into DatabaseService."""
+        mock_db = MagicMock()
+        self.engine.db = mock_db
+        self.engine.config.get.side_effect = lambda key, default=None: {
+            "skip_stats_enabled": True,
+            "auto_honor_enabled": False,
+        }.get(key, default)
+
+        eog_data = {
+            "gameId": 888999,
+            "queueId": 420,
+            "gameLength": 1620,
+            "localPlayer": {
+                "puuid": "my-puuid-123",
+                "championId": 266,
+                "role": "TOP",
+                "stats": {
+                    "CHAMPIONS_KILLED": 9,
+                    "NUM_DEATHS": 3,
+                    "ASSISTS": 7,
+                }
+            },
+            "teams": [
+                {
+                    "isPlayerTeam": True,
+                    "isWinningTeam": True,
+                    "players": [{"puuid": "my-puuid-123", "championId": 266}]
+                }
+            ]
+        }
+        mock_eog_res = MagicMock()
+        mock_eog_res.status_code = 200
+        mock_eog_res.json.return_value = eog_data
+        self.engine.lcu.request.return_value = mock_eog_res
+
+        self.engine._handle_end_of_game("EndOfGame")
+
+        self.assertTrue(mock_db.record_match.called)
+        recorded = mock_db.record_match.call_args[0][0]
+        self.assertEqual(recorded["game_id"], 888999)
+        self.assertEqual(recorded["champion_id"], 266)
+        self.assertEqual(recorded["kills"], 9)
+        self.assertEqual(recorded["deaths"], 3)
+        self.assertTrue(recorded["win"])
 
 
 if __name__ == '__main__':

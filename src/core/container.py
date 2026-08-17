@@ -59,6 +59,7 @@ class ApplicationContainer:
             stats_func=stats_func,
             window_func=window_func,
             queue_func=queue_func,
+            db=self.db,
         )
         return self.automation
 

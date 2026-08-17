@@ -58,6 +58,7 @@ Desktop.ini
 # Project specific sensitive / local
 accounts.json
 config.json
+*.db
 *.pfx
 *.keystore
 *.pem

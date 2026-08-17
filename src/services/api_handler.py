@@ -2439,7 +2439,7 @@ class LCUClient:
                         base_delay = 0.05 * (2 ** attempt)
                         jitter = random.uniform(0.01, 0.04)
                         self._record_http_retry_jitter(jitter)
-                        retry_delay = base_delay + jitter
+                        retry_delay = min(2.0, base_delay + jitter)
                         if not silent:
                             Logger.warning("LCU", f"HTTP {response.status_code} Transient Server Error on {endpoint}. Retrying attempt {attempt + 1}/{max_attempts} after {retry_delay:.3f}s jitter backoff...")
                         time.sleep(retry_delay)
