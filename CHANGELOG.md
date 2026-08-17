@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.08.141] - 2026-08-16
+
+- **Feature / Hardening**: Added `src/utils/riot_id.py` with `resolve_riot_id()` / `resolve_riot_id_lower()` as the single source of truth for name resolution (RIOT-ID-001).
+- Updated `friend_list.py` and `local_api.py` to use the utility instead of ad-hoc field fallbacks.
+- Added unit tests in `tests/test_riot_id.py`.
+
+
 ## [1.08.140] - 2026-08-16
 
 - **Docs**: Synced CHANGELOG with current health score 90/100 and next focus from improvement_plan.
