@@ -43,5 +43,15 @@
     "failure": "WinError 2: The system cannot find the file specified: config.json.tmp -> config.json in tests",
     "pattern": "Failed saving config: [WinError 2] during test_set_and_save",
     "fix": "Ensure os.replace and os.makedirs are patched alongside builtins.open in unit tests, and add os.makedirs in ConfigManager.save()."
+  },
+  {
+    "failure": "Virtual environment launcher killed itself on startup with code 15",
+    "pattern": "app_exit=15 when running .venv/Scripts/python.exe run.py via batch script",
+    "fix": "In _kill_other_instances(), ignore current process PID AND all parent/ancestor PIDs (psutil.Process().parents()) so that the virtualenv python shim process isn't killed by its own child process."
+  },
+  {
+    "failure": "AttributeError: '_tkinter.tkapp' object has no attribute 'running' on startup",
+    "pattern": "AttributeError: '_tkinter.tkapp' object has no attribute 'running' in _process_ui_queue() during __init__",
+    "fix": "Set self.running = True before calling self._process_ui_queue(), and use getattr(self, 'running', False) defensively in _process_ui_queue()."
   }
 ]

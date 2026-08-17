@@ -1,11 +1,11 @@
 {
-  "task": "Audit and resolve runtime errors identified in debug and error logs",
+  "task": "Diagnose and resolve startup crash (exit code 15) and Tkinter running attribute error",
   "status": "completed",
   "changes": [
-    "Added Logger.warn alias to Logger.warning in src/utils/logger.py and cleaned up calls in src/services/local_api.py",
-    "Fixed int/str key resolution in src/services/asset_manager.py get_icon() to prevent AttributeError on int champion IDs and fix 404 DDragon requests",
-    "Fixed CustomTkinter ValueError on None border colors during make_input unfocus events in src/ui/components/factory.py",
-    "Added os.makedirs in ConfigManager.save() and patched os.replace in tests/test_utilities.py to eliminate WinError 2 config saving error logs",
-    "Added regression unit tests across tests/test_asset_manager.py, tests/test_utilities.py, and tests/test_ui_utils.py (295 passed)"
+    "Identified root cause of exit code 15: _kill_other_instances() was matching its own parent .venv/Scripts/python.exe launcher shim and calling proc.terminate() (SIGTERM / code 15) on itself",
+    "Protected current process and all ancestor process PIDs (psutil.Process().parents()) in _kill_other_instances()",
+    "Fixed initialization order in LeagueLoopApp.__init__ so self.running is defined before _process_ui_queue() is called, preventing AttributeError: '_tkinter.tkapp' object has no attribute 'running'",
+    "Added phase_indicator property to QtPlayTab and aligned test_qt_ui.py window dimension assertions (980x660)",
+    "Verified clean startup and 296 passing tests in test suite"
   ]
 }
