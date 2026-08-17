@@ -40,12 +40,22 @@ class EventType(Enum):
     
     # Champ Select
     CHAMP_SELECT_STARTED = "champ_select_started"
+    CHAMP_SELECT_UPDATED = "champ_select_updated"
     CHAMP_SELECT_ENDED = "champ_select_ended"
+    CHAMPION_SELECTED = "champion_selected"
+    CHAMPION_BANNED = "champion_banned"
     
     # Lobby
     LOBBY_CREATED = "lobby_created"
     LOBBY_JOINED = "lobby_joined"
     LOBBY_LEFT = "lobby_left"
+
+    # Automation error & diagnostics
+    AUTOMATION_ERROR = "automation_error"
+    ACCOUNT_CHANGED = "account_changed"
+    STATS_UPDATED = "stats_updated"
+    SETTINGS_CHANGED = "settings_changed"
+    STATE_CHANGED = "state_changed"
 
 
 @dataclass

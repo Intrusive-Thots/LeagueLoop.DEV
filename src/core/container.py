@@ -28,7 +28,11 @@ class ApplicationContainer:
         from services.api_handler import LCUClient
         from services.stats_scraper import StatsScraper
         from services.database import DatabaseService
+        from core.events import EventBus
+        from core.state import StateManager
 
+        self.bus: EventBus = EventBus
+        self.state_manager: StateManager = StateManager(bus=self.bus)
         self.config: ConfigManager = ConfigManager()
         self.assets: AssetManager = AssetManager()
         self.lcu: LCUClient = LCUClient()

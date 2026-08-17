@@ -1,0 +1,42 @@
+"""
+Riot Hextech Color Tokens for PySide6 UI.
+Defines standard surface, text, border, and state color tokens.
+"""
+from __future__ import annotations
+
+# Surfaces
+SURFACE_APP_BACKGROUND = "#010A13"
+SURFACE_PANEL = "#091428"
+SURFACE_PANEL_ELEVATED = "#0A1428"
+SURFACE_PANEL_HOVER = "#1E282D"
+SURFACE_PANEL_ACTIVE = "#1E2328"
+SURFACE_OVERLAY = "rgba(1, 10, 19, 0.85)"
+
+# Gold / Hextech Accents
+GOLD_PRIMARY = "#C8AA6E"
+GOLD_LIGHT = "#F0E6D2"
+GOLD_DARK = "#785A28"
+GOLD_BORDER = "#C8AA6E"
+
+# Blue / Magic Accents
+BLUE_ACCENT = "#0AC8B9"
+BLUE_DARK = "#005A82"
+BLUE_HOVER = "#0397AB"
+
+# Text
+TEXT_PRIMARY = "#F0E6D2"
+TEXT_SECONDARY = "#A09B8C"
+TEXT_MUTED = "#5C5B57"
+TEXT_DISABLED = "#3C3C41"
+TEXT_ACCENT = "#0AC8B9"
+
+# Borders
+BORDER_DEFAULT = "#1E282D"
+BORDER_ACCENT = "#785A28"
+BORDER_ACTIVE = "#C8AA6E"
+
+# State / Feedback
+COLOR_SUCCESS = "#0AC8B9"
+COLOR_DANGER = "#E84057"
+COLOR_WARNING = "#E0A92E"
+COLOR_INFO = "#005A82"

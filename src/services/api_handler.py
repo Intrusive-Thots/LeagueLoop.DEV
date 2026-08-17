@@ -23,6 +23,7 @@ from websockets.exceptions import ConnectionClosed
 from utils.logger import Logger
 from utils.client_detector import scan_clients
 from utils.running_stats import RunningStats
+from core.state import ConnectionStateEnum
 
 
 class LCUClient:
@@ -53,6 +54,8 @@ class LCUClient:
         # 3.1 & 3.3 State
         self._backoff = 1.0
         self._last_scan_time = 0.0
+        self._connection_state: ConnectionStateEnum = ConnectionStateEnum.DISCONNECTED
+        self._connection_generation: int = 0
         
         self._tokens = 20.0
         self._token_capacity = 20.0
@@ -2259,13 +2262,25 @@ class LCUClient:
         res.update(shape_meta)
         return res
 
+    @property
+    def connection_state(self) -> ConnectionStateEnum:
+        with self._lock:
+            return self._connection_state
+
+    @property
+    def connection_generation(self) -> int:
+        with self._lock:
+            return self._connection_generation
+
     def connect(self, silent=False) -> bool:
-        """Attempts to read the lockfile and establish connection details."""
+        """Attempts to read the lockfile and establish connection details with state machine transitions."""
         with self._lock:
             # Atomic check: If we connected while waiting for lock, return success
             if self.is_connected:
+                self._connection_state = ConnectionStateEnum.CONNECTED
                 return True
 
+            self._connection_state = ConnectionStateEnum.DISCOVERING
             try:
                 # Check connection throttling and sleep/wake gaps
                 now = time.time()
@@ -2280,6 +2295,7 @@ class LCUClient:
                         pass
 
                 if now - self._last_scan_time < self._backoff:
+                    self._connection_state = ConnectionStateEnum.DISCONNECTED
                     return False
                 self._last_scan_time = now
 
@@ -2294,9 +2310,11 @@ class LCUClient:
                         from core.events import EventBus
                         EventBus.emit("lcu_connected", False)
                     self.is_connected = False
+                    self._connection_state = ConnectionStateEnum.DISCONNECTED
                     self._backoff = min(self._backoff * 1.2, 2.0)
                     return False
 
+                self._connection_state = ConnectionStateEnum.CONNECTING
                 self.port = league_info["port"]
                 self.auth_token = league_info["token"]
                 self._client_pid = league_info["pid"]
@@ -2312,13 +2330,16 @@ class LCUClient:
                     self.session.headers.update(self.headers)
                     self.base_url = f"https://127.0.0.1:{self.port}"
                     self.is_connected = True
+                    self._connection_generation += 1
+                    self._connection_state = ConnectionStateEnum.CONNECTED
                     self._last_connected_timestamp = time.time()
                     self._backoff = 1.0  # Reset backoff on success
                     from core.events import EventBus
                     EventBus.emit("lcu_connected", True)
-                    Logger.debug("LCU", f"Connected to port {self.port}")
+                    Logger.debug("LCU", f"Connected to port {self.port} (gen {self._connection_generation})")
                     return True
 
+                self._connection_state = ConnectionStateEnum.DISCONNECTED
                 Logger.debug("LCU", "Found League Client but credentials are missing.")
 
             except Exception as e:
@@ -2327,6 +2348,7 @@ class LCUClient:
                     from core.events import EventBus
                     EventBus.emit("lcu_connected", False)
                 self.is_connected = False
+                self._connection_state = ConnectionStateEnum.DISCONNECTED
 
             return False
 

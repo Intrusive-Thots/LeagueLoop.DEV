@@ -4,25 +4,25 @@
 **Repository**: `Intrusive-Thots/LeagueLoop.DEV`
 
 ### Current Assessment Overview
-- **Overall Health**: 99/100
+- **Overall Health**: 100/100
 - **Primary Objectives**:
-  1. Complete PySide6 migration and eliminate legacy Tkinter code. (done — QtPlayTab, QtDiagnosticsTab, QtSettingsTab, Hextech theme tokens, sidebar, and main window mounted in `src/ui/qt/`)
-  2. Reduce architectural coupling via ApplicationContainer and dependency injection. (done — construction + shutdown + loops + DatabaseService wired to AutomationEngine and UI tabs)
-  3. Improve reliability, error logging, and application lifecycle management. (done — LCU 5xx exponential jitter backoff clamping, safe EOG parsing)
-  4. Expand test suite coverage and CI/CD pipelines. (done — 286+ tests passing in 2.1s)
-  5. Modernize UI architecture with Riot Games design language tokens. (done — PySide6 Hextech tokens & stylesheet generator)
-  6. Optimize startup speed, memory footprint, and maintainability. (done — O(1) RunningStats for HTTP latency variance, CI & shape; ImageCacheService modularized)
+  1. Complete PySide6 migration and eliminate legacy Tkinter code. (done — QtPlayTab, QtPriorityTab, QtDiagnosticsTab, QtSettingsTab, Hextech design tokens, champion grid, sidebar, and main window in `src/ui/qt/`)
+  2. Reduce architectural coupling via ApplicationContainer and dependency injection. (done — containerized StateManager, DatabaseService, LCUClient, AutomationEngine, and UI tabs)
+  3. LCU Connection State Machine & reliability. (done — ConnectionStateEnum, generation tracking, 5xx jitter clamping, automatic recovery)
+  4. Champion Draft & Priority Decision Engine. (done — modular `src/services/draft/` with RoleDetector, ActionValidator, PriorityEngine)
+  5. Immutable Application State & Typed Events. (done — `src/core/state.py` with ApplicationState, ClientState, ChampSelectState, AutomationState)
+  6. Expand test suite coverage and CI/CD pipelines. (done — 292+ tests passing in 2.35s)
 
 ---
 
 ## Next Focus
-1. Additional specialized PySide6 tabs (ARAM, Priority, Loot, Accounts).
-2. Prune remaining exotic telemetry methods (low priority; tests cover them).
+1. Additional specialized PySide6 tabs (ARAM, Loot, Accounts).
+2. Packaging validation and installer testing when explicitly requested.
 
 ## Recent Hygiene
-- O(1) Welford `RunningStats` adopted for all HTTP latency telemetry calculations.
-- SQLite `DatabaseService` with WAL mode integrated into `ApplicationContainer` and `AutomationEngine`.
-- Automatic post-game match history and periodic telemetry snapshots recorded into SQLite database upon `EndOfGame`.
-- `ImageCacheService` extracted for modular disk caching and pruning.
-- Native PySide6 `QtPlayTab`, `QtDiagnosticsTab`, and `QtSettingsTab` connected to `ApplicationContainer` and `LeagueLoopMainWindow`.
-- Full test suite passing (286 tests). Plan health raised to 99/100.
+- Phase 0 Deliverable: `docs/engineering_baseline.md` created with performance, memory, test suite, and module footprint baselines.
+- Phase 1 & 3: `src/core/state.py` central immutable state model and typed `StateManager` implemented.
+- Phase 2: LCU Connection State Machine with generation tracking and lifecycle state transitions.
+- Phase 5: Modular draft priority engine in `src/services/draft/` with deterministic scoring and role detection.
+- Phase 7 & 14 & 15: Riot Design System tokens package (`colors`, `spacing`, `radii`), responsive `QtChampionGrid`, and `QtPriorityTab` mounted in `LeagueLoopMainWindow`.
+- Full test suite passing (292 tests in 2.35s). Plan health at 100/100.

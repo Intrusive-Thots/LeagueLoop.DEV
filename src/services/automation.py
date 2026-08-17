@@ -14,6 +14,7 @@ import psutil
 
 from .api_handler import LCUClient  # type: ignore
 from .asset_manager import AssetManager, ConfigManager  # type: ignore
+from services.draft.priority_engine import PriorityEngine
 from utils.logger import Logger  # type: ignore
 from core.constants import (
     QUEUE_ARENA, QUEUE_ARENA_3V6, QUEUE_DRAFT, QUEUE_RANKED_SOLO, QUEUE_RANKED_FLEX,
@@ -45,6 +46,7 @@ class AutomationEngine:
         self.toast_func: Optional[Callable] = kwargs.get("toast_func")
         self.queue_func: Optional[Callable] = kwargs.get("queue_func")
         self.db = kwargs.get("db")
+        self.draft_engine = PriorityEngine(config_manager=self.config, asset_manager=self.assets)
         self._last_db_telemetry_snapshot = 0.0
         self.running: bool = False
         self.paused: bool = False

@@ -77,6 +77,26 @@ class TestQtTabWidgets(unittest.TestCase):
         tab.btn_save_status.click()
         self.assertEqual(self.container.config.get("custom_status"), "Chilling in Challenger")
 
+    def test_champion_grid_and_priority_tab(self):
+        from ui.qt.widgets.champion_grid import QtChampionGrid
+        from ui.qt.widgets.priority_tab import QtPriorityTab
+
+        grid = QtChampionGrid(asset_manager=self.container.assets)
+        self.assertGreater(len(grid.tiles), 0)
+
+        # Test search filter
+        grid.search_input.setText("Ahri")
+        self.assertEqual(grid.search_query, "ahri")
+
+        # Test Priority Tab
+        prio_tab = QtPriorityTab(container=self.container)
+        self.assertIsNotNone(prio_tab.grid)
+        self.assertIsNotNone(prio_tab.prio_list_widget)
+
+        # Select a champion
+        prio_tab._on_champion_clicked(103, "Ahri")
+        self.assertIn(103, self.container.config.get("priority_list"))
+
 
 if __name__ == "__main__":
     unittest.main()

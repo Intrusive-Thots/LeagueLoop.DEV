@@ -32,6 +32,7 @@ from ui.qt.theme import (
 )
 from ui.qt.widgets.navigation.sidebar import QtNavigationSidebar
 from ui.qt.widgets.play_tab import QtPlayTab
+from ui.qt.widgets.priority_tab import QtPriorityTab
 from ui.qt.widgets.diagnostics_tab import QtDiagnosticsTab
 from ui.qt.widgets.settings_tab import QtSettingsTab
 
@@ -144,6 +145,8 @@ class LeagueLoopMainWindow(QMainWindow):
         for key, name, icon in self.sidebar.DEFAULT_TABS:
             if key == "play":
                 page = QtPlayTab(container=self.container, parent=self)
+            elif key == "priority":
+                page = QtPriorityTab(container=self.container, parent=self)
             elif key == "diagnostics":
                 page = QtDiagnosticsTab(container=self.container, parent=self)
             elif key == "settings":
