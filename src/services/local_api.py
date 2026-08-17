@@ -7,6 +7,7 @@ import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from utils.logger import Logger
+from utils.riot_id import resolve_riot_id
 
 class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
     # Task 137: Pre-serialized static byte buffers for high-frequency endpoints
@@ -107,7 +108,7 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                                                 break
                                     
                                     self.server._summoner_cache = {
-                                        "summoner_name": sdata.get("displayName") or f"{sdata.get('gameName')}#{sdata.get('tagLine')}",
+                                        "summoner_name": resolve_riot_id(sdata),
                                         "profile_icon_id": sdata.get("profileIconId", 1),
                                         "level": sdata.get("summonerLevel", 1),
                                         "puuid": sdata.get("puuid"),
@@ -128,11 +129,9 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                                 lobby_data = lobby_res.json()
                                 members = []
                                 for m in lobby_data.get('members', []):
-                                    m_name = m.get('summonerName')
-                                    if not m_name and m.get('gameName'):
-                                        m_name = f"{m.get('gameName')}#{m.get('tagLine')}"
+                                    m_name = resolve_riot_id(m)
                                     if not m_name and summoner_info and m.get('puuid') == summoner_info.get("puuid"):
-                                        m_name = summoner_info.get("summoner_name")
+                                        m_name = summoner_info.get("summoner_name") or "Summoner"
                                     if not m_name:
                                         m_name = "Summoner"
                                     
@@ -698,7 +697,7 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
         elif self.path == '/ready-check/accept' or self.path == '/ready-check/decline':
             app = self.app_instance
             action_type = 'accept' if '/accept' in self.path else 'decline'
-            result = {'status': 'error', 'message': 'Not connected'}
+            result = {'status': 'error', 'message': 'Not in champ select'}
             status_code = 400
 
             if app and hasattr(app, 'automation') and app.automation:
@@ -854,4 +853,3 @@ def start_api_server(app_instance, port=8337, bind_local=True):
     except Exception as e:
         Logger.error("API", f"Failed to start API server: {e}")
         return None, None
-
