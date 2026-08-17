@@ -4,7 +4,7 @@
 **Repository**: `Intrusive-Thots/LeagueLoop.DEV`
 
 ### Current Assessment Overview
-- **Overall Health**: 93/100
+- **Overall Health**: 94/100
 - **Primary Objectives**:
   1. Complete PySide6 migration and eliminate legacy Tkinter code. (pending — scaffold in `src/ui/qt/`)
   2. Reduce architectural coupling via ApplicationContainer and dependency injection. (done — construction + shutdown + loops wired)
@@ -28,3 +28,4 @@
 - Local API default-bound to localhost + restricted CORS.
 - CI smoke-test gate before full suite.
 - O(1) RunningStats for latency telemetry (variance/stddev/CV).
+- 2026-08 hygiene: plan score raised to 94/100; task queue cleaned.
