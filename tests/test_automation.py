@@ -130,6 +130,7 @@ class TestAutomationEngineWindowState(unittest.TestCase):
         engine._cached_search_state = None
         engine._accept_timer = None
         engine._honor_handled = False
+        engine._is_game_running = MagicMock(return_value=False)
         return engine
 
     def test_stealth_off_sends_restore(self):
