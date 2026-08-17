@@ -22,6 +22,7 @@ from websockets.exceptions import ConnectionClosed
 
 from utils.logger import Logger
 from utils.client_detector import scan_clients
+from utils.running_stats import RunningStats
 
 
 class LCUClient:
@@ -214,6 +215,7 @@ class LCUClient:
 
         # Task 139: Adaptive HTTP client timeout adjustment based on LCU response latency histograms
         self._http_latency_lock = threading.Lock()
+        self._http_running_stats = RunningStats()
         self._http_latency_samples = []
         self._http_latency_buckets = {
             "<10ms": 0,
@@ -250,8 +252,9 @@ class LCUClient:
         return float(self._ws_stale_timeout_s)
 
     def _record_http_latency(self, latency_ms: float) -> None:
-        """Records HTTP request latency into sliding window sample array and histogram buckets."""
+        """Records HTTP request latency into sliding window sample array, histogram buckets, and online RunningStats."""
         with self._http_latency_lock:
+            self._http_running_stats.update(latency_ms)
             self._http_latency_samples.append(latency_ms)
             if len(self._http_latency_samples) > 200:
                 self._http_latency_samples.pop(0)
@@ -288,119 +291,96 @@ class LCUClient:
             return max(1.5, min(calc_timeout_s, 8.0))
 
     def get_http_latency_variance_telemetry(self) -> Dict[str, Any]:
-        """Task 172: Returns automated HTTP client request latency variance, standard deviation, and CV telemetry."""
+        """Task 172: Returns automated HTTP client request latency variance, standard deviation, and CV telemetry via O(1) RunningStats."""
         with self._http_latency_lock:
-            samples = self._http_latency_samples.copy()
+            n = self._http_running_stats.n
+            if n == 0:
+                return {
+                    "http_latency_variance_ms2": 0.0,
+                    "http_latency_stddev_ms": 0.0,
+                    "http_latency_cv": 0.0,
+                    "http_latency_sample_count": 0,
+                }
 
-        if not samples:
+            variance = self._http_running_stats.variance(population=True)
+            stddev = self._http_running_stats.stddev(population=True)
+            cv = round(self._http_running_stats.cv(), 4)
+
             return {
-                "http_latency_variance_ms2": 0.0,
-                "http_latency_stddev_ms": 0.0,
-                "http_latency_cv": 0.0,
-                "http_latency_sample_count": 0,
+                "http_latency_variance_ms2": round(variance, 4),
+                "http_latency_stddev_ms": round(stddev, 4),
+                "http_latency_cv": cv,
+                "http_latency_sample_count": n,
             }
-
-        avg = sum(samples) / len(samples)
-        variance = sum((x - avg) ** 2 for x in samples) / len(samples)
-        stddev = math.sqrt(variance)
-        cv = round(stddev / avg, 4) if avg > 0 else 0.0
-
-        return {
-            "http_latency_variance_ms2": round(variance, 4),
-            "http_latency_stddev_ms": round(stddev, 4),
-            "http_latency_cv": cv,
-            "http_latency_sample_count": len(samples),
-        }
 
     def get_http_latency_confidence_interval_telemetry(self, confidence_level: float = 0.95) -> Dict[str, Any]:
-        """Task 175: Returns automated HTTP client response latency standard error and confidence interval metrics."""
+        """Task 175: Returns automated HTTP client response latency standard error and confidence interval metrics via O(1) RunningStats."""
         with self._http_latency_lock:
-            samples = self._http_latency_samples.copy()
+            n = self._http_running_stats.n
+            if n == 0:
+                return {
+                    "http_latency_mean_ms": 0.0,
+                    "http_latency_stderr_ms": 0.0,
+                    "http_latency_ci_margin_ms": 0.0,
+                    "http_latency_ci_lower_ms": 0.0,
+                    "http_latency_ci_upper_ms": 0.0,
+                    "confidence_level": confidence_level,
+                    "sample_count": 0,
+                }
 
-        if not samples:
+            mean = self._http_running_stats.mean
+            if n > 1:
+                sample_variance = self._http_running_stats.variance(population=False)
+                sample_stddev = math.sqrt(sample_variance)
+                stderr = sample_stddev / math.sqrt(n)
+            else:
+                stderr = 0.0
+
+            if confidence_level >= 0.99:
+                z = 2.576
+            elif confidence_level >= 0.95:
+                z = 1.960
+            elif confidence_level >= 0.90:
+                z = 1.645
+            else:
+                z = 1.000
+
+            ci_margin = z * stderr
+            ci_lower = max(0.0, mean - ci_margin)
+            ci_upper = mean + ci_margin
+
             return {
-                "http_latency_mean_ms": 0.0,
-                "http_latency_stderr_ms": 0.0,
-                "http_latency_ci_margin_ms": 0.0,
-                "http_latency_ci_lower_ms": 0.0,
-                "http_latency_ci_upper_ms": 0.0,
+                "http_latency_mean_ms": round(mean, 4),
+                "http_latency_stderr_ms": round(stderr, 4),
+                "http_latency_ci_margin_ms": round(ci_margin, 4),
+                "http_latency_ci_lower_ms": round(ci_lower, 4),
+                "http_latency_ci_upper_ms": round(ci_upper, 4),
                 "confidence_level": confidence_level,
-                "sample_count": 0,
-            }
-
-        n = len(samples)
-        mean = sum(samples) / n
-        if n > 1:
-            variance = sum((x - mean) ** 2 for x in samples) / (n - 1)
-            stddev = math.sqrt(variance)
-            stderr = stddev / math.sqrt(n)
-        else:
-            variance = 0.0
-            stddev = 0.0
-            stderr = 0.0
-
-        if confidence_level >= 0.99:
-            z = 2.576
-        elif confidence_level >= 0.95:
-            z = 1.960
-        elif confidence_level >= 0.90:
-            z = 1.645
-        else:
-            z = 1.000
-
-        ci_margin = z * stderr
-        ci_lower = max(0.0, mean - ci_margin)
-        ci_upper = mean + ci_margin
-
-        return {
-            "http_latency_mean_ms": round(mean, 4),
-            "http_latency_stderr_ms": round(stderr, 4),
-            "http_latency_ci_margin_ms": round(ci_margin, 4),
-            "http_latency_ci_lower_ms": round(ci_lower, 4),
-            "http_latency_ci_upper_ms": round(ci_upper, 4),
-            "confidence_level": confidence_level,
-            "sample_count": n,
-        }
-
-    def get_http_latency_skewness_kurtosis_telemetry(self) -> Dict[str, Any]:
-        """Task 178: Returns automated HTTP client request latency skewness & kurtosis statistical telemetry."""
-        with self._http_latency_lock:
-            samples = self._http_latency_samples.copy()
-
-        if not samples or len(samples) < 3:
-            return {
-                "http_latency_skewness": 0.0,
-                "http_latency_kurtosis": 0.0,
-                "http_latency_excess_kurtosis": 0.0,
-                "sample_count": len(samples),
-            }
-
-        n = len(samples)
-        mean = sum(samples) / n
-        variance = sum((x - mean) ** 2 for x in samples) / n
-        stddev = math.sqrt(variance)
-
-        if stddev < 1e-9:
-            return {
-                "http_latency_skewness": 0.0,
-                "http_latency_kurtosis": 0.0,
-                "http_latency_excess_kurtosis": 0.0,
                 "sample_count": n,
             }
 
-        m3 = sum((x - mean) ** 3 for x in samples) / n
-        m4 = sum((x - mean) ** 4 for x in samples) / n
+    def get_http_latency_skewness_kurtosis_telemetry(self) -> Dict[str, Any]:
+        """Task 178: Returns automated HTTP client request latency skewness & kurtosis statistical telemetry via O(1) RunningStats."""
+        with self._http_latency_lock:
+            n = self._http_running_stats.n
+            if n < 3:
+                return {
+                    "http_latency_skewness": 0.0,
+                    "http_latency_kurtosis": 0.0,
+                    "http_latency_excess_kurtosis": 0.0,
+                    "sample_count": n,
+                }
 
-        skewness = m3 / (stddev ** 3)
-        kurtosis = m4 / (stddev ** 4)
-        excess_kurtosis = kurtosis - 3.0
+            skewness = self._http_running_stats.skewness()
+            kurtosis = self._http_running_stats.kurtosis()
+            excess_kurtosis = self._http_running_stats.excess_kurtosis()
 
-        return {
-            "http_latency_skewness": round(skewness, 4),
-            "http_latency_kurtosis": round(kurtosis, 4),
-            "http_latency_excess_kurtosis": round(excess_kurtosis, 4),
-            "sample_count": n,
-        }
+            return {
+                "http_latency_skewness": round(skewness, 4),
+                "http_latency_kurtosis": round(kurtosis, 4),
+                "http_latency_excess_kurtosis": round(excess_kurtosis, 4),
+                "sample_count": n,
+            }
 
     def _record_http_retry_jitter(self, jitter_s: float) -> None:
         """Task 181: Records HTTP request retry exponential backoff jitter sample and calculates Shannon entropy telemetry."""

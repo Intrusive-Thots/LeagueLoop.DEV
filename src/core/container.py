@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from services.automation import AutomationEngine
     from services.account_manager import AccountManager
     from services.stats_scraper import StatsScraper
+    from services.database import DatabaseService
 
 
 class ApplicationContainer:
@@ -26,10 +27,12 @@ class ApplicationContainer:
         from services.config_manager import ConfigManager
         from services.api_handler import LCUClient
         from services.stats_scraper import StatsScraper
+        from services.database import DatabaseService
 
         self.config: ConfigManager = ConfigManager()
         self.assets: AssetManager = AssetManager()
         self.lcu: LCUClient = LCUClient()
+        self.db: DatabaseService = DatabaseService()
         self.scraper: StatsScraper = StatsScraper(
             mode=self.config.get("aram_mode", "ARAM")
         )
@@ -76,3 +79,8 @@ class ApplicationContainer:
             except Exception:
                 pass
             self.automation = None
+        if hasattr(self, "db") and self.db is not None:
+            try:
+                self.db.close()
+            except Exception:
+                pass
