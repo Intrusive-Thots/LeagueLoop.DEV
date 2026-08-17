@@ -75,6 +75,10 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self.TkdndVersion = TkinterDnD._require(self)
         self.report_callback_exception = self._on_tk_error
         
+        self.running = True
+        self._manually_hidden = False
+        self._stop_event = threading.Event()
+        self._drag_data = {"x": 0, "y": 0}
         self._ui_queue = queue.Queue()
         self._process_ui_queue()
 
@@ -117,11 +121,6 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self.scraper = self.container.scraper
         from core.state import State
         State.assets = self.assets
-        
-        self.running = True
-        self._manually_hidden = False
-        self._stop_event = threading.Event()
-        self._drag_data = {"x": 0, "y": 0}
 
         self.stop_func = lambda: self.after(0, lambda: self.sidebar._on_power_click()) if hasattr(self, "sidebar") else None
         
@@ -194,7 +193,7 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                     Logger.debug("UI", f"queue cb: {e}")
         except queue.Empty:
             pass
-        if self.running:
+        if getattr(self, "running", False):
             self.after(50, self._process_ui_queue)
 
     def setup_ui(self):
@@ -379,15 +378,32 @@ def _kill_other_instances():
     """Terminate any other running instances of LeagueLoop."""
     try:
         import psutil  # type: ignore
-        my_pid = os.getpid()
+        current_proc = psutil.Process(os.getpid())
+        ignored_pids = {current_proc.pid}
+        try:
+            for parent in current_proc.parents():
+                ignored_pids.add(parent.pid)
+        except Exception:
+            pass
+
         for proc in psutil.process_iter(["pid", "name", "cmdline"]):
             try:
-                if proc.info["pid"] == my_pid:
+                if proc.info["pid"] in ignored_pids:
                     continue
+                name = (proc.info.get("name") or "").lower()
                 cmdline = proc.info.get("cmdline") or []
-                if any("LeagueLoop" in str(c) or "run.py" in str(c) for c in cmdline):
-                    if proc.info["name"] and "python" in proc.info["name"].lower():
-                        proc.terminate()
+                is_match = False
+                if "leagueloop.exe" in name:
+                    is_match = True
+                elif "python" in name:
+                    # Check script arguments (excluding python binary path in cmdline[0])
+                    for arg in cmdline[1:]:
+                        arg_str = str(arg).lower()
+                        if arg_str.endswith("run.py") or arg_str.endswith("main.py") or "src.core.main" in arg_str or "core.main" in arg_str:
+                            is_match = True
+                            break
+                if is_match:
+                    proc.terminate()
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
     except Exception:

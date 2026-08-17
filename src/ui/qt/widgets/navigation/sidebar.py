@@ -1,117 +1,136 @@
 """
-PySide6 Navigation Sidebar Widget for LeagueLoop.
-Provides collapsible navigation tabs with Hextech visual styling and signals.
+QtNavigationSidebar — primary navigation (UI/UX Master Plan §4).
+
+Top-level destinations only. The brand lockup and live status now live in
+the persistent header (§2.4), so the sidebar stays a single-purpose
+navigation column rather than repeating identity and state.
 """
 from __future__ import annotations
 
 from typing import Dict, List, Optional
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QFrame,
-    QHBoxLayout,
-    QLabel,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
-from ui.qt.theme import (
-    COLOR_BACKGROUND_DARK,
-    COLOR_BACKGROUND_HOVER,
-    COLOR_BACKGROUND_PANEL,
-    COLOR_BORDER,
-    COLOR_BORDER_GOLD,
-    COLOR_GOLD_LIGHT,
-    COLOR_GOLD_PRIMARY,
-    COLOR_TEXT_MUTED,
-    COLOR_TEXT_PRIMARY,
-    COLOR_TEXT_SECONDARY,
+from ui.qt.theme.colors import (
+    BORDER_DEFAULT,
+    FOCUS_RING,
+    FOCUS_RING_WIDTH,
+    GOLD_LIGHT,
+    GOLD_PRIMARY,
+    SURFACE_APP_BACKGROUND,
+    SURFACE_PANEL,
+    SURFACE_PANEL_HOVER,
+    TEXT_PRIMARY,
+    TEXT_SECONDARY,
 )
+from ui.qt.theme.spacing import (
+    ICON_MD,
+    NAV_ITEM_HEIGHT,
+    SIDEBAR_WIDTH,
+    SPACE_LG,
+    SPACE_MD,
+    SPACE_XS,
+)
+from ui.qt.theme.typography import FONT_FAMILY, WEIGHT_BOLD, WEIGHT_MEDIUM
+from ui.qt.components.focus import install_focus_visible
 
 
 class QtSidebarButton(QPushButton):
-    """Custom navigation sidebar item with active accent border."""
+    """A navigation item with hover / checked / focus states (§63)."""
 
-    def __init__(self, key: str, label: str, icon_text: str = "", parent: Optional[QWidget] = None):
+    def __init__(
+        self,
+        key: str,
+        label: str,
+        icon_text: str = "",
+        parent: Optional[QWidget] = None,
+    ):
         super().__init__(parent)
         self.key = key
         self.label_text = label
         self.icon_text = icon_text
+
         self.setCheckable(True)
         self.setCursor(Qt.PointingHandCursor)
-        self.setFixedHeight(40)
-        self.setText(f"  {icon_text}  {label}" if icon_text else f"  {label}")
-        self._update_style()
+        self.setFixedHeight(NAV_ITEM_HEIGHT)
+        self.setText(f"  {icon_text}   {label}" if icon_text else f"  {label}")
+        self.setAccessibleName(label)
+        self.setToolTip(label)
+        install_focus_visible(self)
+        self._apply_style()
 
-    def _update_style(self) -> None:
+    def _apply_style(self) -> None:
         self.setStyleSheet(f"""
             QPushButton {{
                 text-align: left;
-                padding-left: 12px;
+                padding-left: {SPACE_MD}px;
+                font-family: {FONT_FAMILY};
                 font-size: 13px;
-                font-weight: 500;
-                color: {COLOR_TEXT_SECONDARY};
+                font-weight: {WEIGHT_MEDIUM};
+                color: {TEXT_SECONDARY};
                 background-color: transparent;
                 border: none;
                 border-left: 3px solid transparent;
                 border-radius: 0px;
             }}
             QPushButton:hover {{
-                color: {COLOR_TEXT_PRIMARY};
-                background-color: {COLOR_BACKGROUND_HOVER};
-                border-left: 3px solid {COLOR_GOLD_PRIMARY};
+                color: {TEXT_PRIMARY};
+                background-color: {SURFACE_PANEL_HOVER};
+                border-left: 3px solid {GOLD_PRIMARY};
             }}
             QPushButton:checked {{
-                color: {COLOR_GOLD_LIGHT};
-                background-color: {COLOR_BACKGROUND_PANEL};
-                border-left: 3px solid {COLOR_GOLD_PRIMARY};
-                font-weight: bold;
+                color: {GOLD_LIGHT};
+                background-color: {SURFACE_PANEL};
+                border-left: 3px solid {GOLD_PRIMARY};
+                font-weight: {WEIGHT_BOLD};
+            }}
+            QPushButton[keyboardFocus="true"] {{
+                border: {FOCUS_RING_WIDTH}px solid {FOCUS_RING};
+                outline: none;
             }}
         """)
 
 
 class QtNavigationSidebar(QFrame):
-    """Left navigation sidebar containing application tabs."""
+    """Left navigation column."""
 
     tab_selected = Signal(str)
 
     DEFAULT_TABS = [
-        ("play", "Play", "⚔️"),
-        ("aram", "ARAM", "❄️"),
-        ("priority", "Priority", "⭐"),
-        ("loot", "Loot Opener", "🎁"),
+        ("play", "Play", "⚔"),
+        ("aram", "ARAM", "❄"),
+        ("priority", "Priority", "★"),
+        ("loot", "Loot", "🎁"),
         ("accounts", "Accounts", "👤"),
         ("diagnostics", "Diagnostics", "📊"),
-        ("settings", "Settings", "⚙️"),
+        ("settings", "Settings", "⚙"),
     ]
 
-    def __init__(self, tabs: Optional[List[tuple]] = None, parent: Optional[QWidget] = None):
+    def __init__(
+        self,
+        tabs: Optional[List[tuple]] = None,
+        parent: Optional[QWidget] = None,
+    ):
         super().__init__(parent)
         self.setObjectName("sidebar")
-        self.setFixedWidth(200)
+        self.setFixedWidth(SIDEBAR_WIDTH)
         self.setStyleSheet(f"""
             QFrame#sidebar {{
-                background-color: {COLOR_BACKGROUND_DARK};
-                border-right: 1px solid {COLOR_BORDER};
+                background-color: {SURFACE_APP_BACKGROUND};
+                border-right: 1px solid {BORDER_DEFAULT};
             }}
         """)
 
-        self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(0, 16, 0, 16)
-        self.layout.setSpacing(4)
-
-        # Header / Brand Label
-        self.brand_label = QLabel("  LEAGUELOOP", self)
-        self.brand_label.setStyleSheet(f"""
-            color: {COLOR_GOLD_PRIMARY};
-            font-size: 14px;
-            font-weight: bold;
-            letter-spacing: 1.5px;
-            padding-left: 12px;
-            margin-bottom: 12px;
-        """)
-        self.layout.addWidget(self.brand_label)
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(0, SPACE_LG, 0, SPACE_LG)
+        self._layout.setSpacing(SPACE_XS)
 
         self.button_group = QButtonGroup(self)
         self.button_group.setExclusive(True)
@@ -120,23 +139,13 @@ class QtNavigationSidebar(QFrame):
         tab_list = tabs or self.DEFAULT_TABS
         for key, name, icon in tab_list:
             btn = QtSidebarButton(key, name, icon, self)
-            btn.clicked.connect(lambda checked, k=key: self._on_btn_clicked(k))
+            btn.clicked.connect(lambda _checked, k=key: self._on_btn_clicked(k))
             self.button_group.addButton(btn)
-            self.layout.addWidget(btn)
+            self._layout.addWidget(btn)
             self.buttons[key] = btn
 
-        self.layout.addStretch()
+        self._layout.addStretch(1)
 
-        # Status / Footer
-        self.status_label = QLabel("  v2.0.0-DEV", self)
-        self.status_label.setStyleSheet(f"""
-            color: {COLOR_TEXT_MUTED};
-            font-size: 11px;
-            padding-left: 12px;
-        """)
-        self.layout.addWidget(self.status_label)
-
-        # Select first tab by default
         if tab_list:
             self.select_tab(tab_list[0][0])
 

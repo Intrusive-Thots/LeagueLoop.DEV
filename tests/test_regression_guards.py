@@ -49,3 +49,16 @@ def test_architecture_constraints_doc_present():
     assert doc.exists()
     text = doc.read_text(encoding="utf-8")
     assert "NEVER interacts with the running game process" in text
+
+
+def test_main_app_init_order_regression():
+    """Ensure self.running is defined before _process_ui_queue is called in LeagueLoopApp."""
+    main_py = SRC / "core" / "main.py"
+    assert main_py.exists()
+    text = main_py.read_text(encoding="utf-8")
+    running_pos = text.find("self.running = True")
+    ui_queue_pos = text.find("self._process_ui_queue()")
+    assert running_pos != -1, "self.running = True missing from LeagueLoopApp"
+    assert ui_queue_pos != -1, "self._process_ui_queue() missing from LeagueLoopApp"
+    assert running_pos < ui_queue_pos, "self.running must be initialized before calling _process_ui_queue"
+

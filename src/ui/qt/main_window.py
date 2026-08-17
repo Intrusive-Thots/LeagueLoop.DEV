@@ -1,121 +1,81 @@
 """
-PySide6 LeagueLoop Main Window Shell.
-Implements custom frameless titlebar, theme integration, sidebar navigation,
-and containerized service integration.
+LeagueLoop PySide6 main window.
+
+Implements the global application layout from UI/UX Master Plan §3:
+
+    ┌──────────────────────────────────────────┐
+    │ LeagueLoop                 ● Connected   │   persistent header (§2.4)
+    ├──────────────┬───────────────────────────┤
+    │ Navigation   │          CONTENT          │   one primary expandable region
+    ├──────────────┴───────────────────────────┤
+    │ Ready • League Client connected          │   fixed status footer
+    └──────────────────────────────────────────┘
+
+Fixed-height header and footer, a single expandable content region, and all
+state rendered from `ApplicationState` through `ShellViewModel` rather than
+polled from services (§2.1).
 """
 from __future__ import annotations
 
-from typing import Optional
-from PySide6.QtCore import QPoint, Qt
-from PySide6.QtGui import QMouseEvent
+import inspect
+from typing import Any, Optional
+
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QApplication,
-    QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
-    QPushButton,
+    QSizeGrip,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from ui.qt.theme import (
-    COLOR_BACKGROUND_DARK,
-    COLOR_BACKGROUND_PANEL,
-    COLOR_BORDER,
-    COLOR_DANGER,
-    COLOR_GOLD_PRIMARY,
-    COLOR_TEXT_PRIMARY,
-    COLOR_TEXT_SECONDARY,
-    get_global_stylesheet,
-)
+from ui.qt.components.card import LLCard
+from ui.qt.theme import get_global_stylesheet
+from ui.qt.theme.colors import TEXT_MUTED, TEXT_SECONDARY
+from ui.qt.theme.spacing import CONTENT_MARGIN, SPACE_MD, SPACE_SM
+from ui.qt.theme.typography import TEXT_BODY, TEXT_PAGE_TITLE
+from ui.qt.viewmodels.shell_viewmodel import ShellViewModel
+from ui.qt.widgets.app_header import LLAppHeader
+from ui.qt.widgets.diagnostics_tab import QtDiagnosticsTab
 from ui.qt.widgets.navigation.sidebar import QtNavigationSidebar
 from ui.qt.widgets.play_tab import QtPlayTab
 from ui.qt.widgets.priority_tab import QtPriorityTab
-from ui.qt.widgets.diagnostics_tab import QtDiagnosticsTab
 from ui.qt.widgets.settings_tab import QtSettingsTab
+from ui.qt.widgets.status_bar import LLStatusBar
+
+DEFAULT_WIDTH = 980
+DEFAULT_HEIGHT = 660
+MIN_WIDTH = 760
+MIN_HEIGHT = 560
 
 
-class CustomTitleBar(QFrame):
-    """Custom frameless draggable title bar."""
+def _app_version() -> str:
+    try:
+        from core.version import __version__  # type: ignore
 
-    def __init__(self, parent: LeagueLoopMainWindow):
-        super().__init__(parent)
-        self._parent = parent
-        self.setFixedHeight(32)
-        self.setStyleSheet(f"""
-            QFrame {{
-                background-color: {COLOR_BACKGROUND_DARK};
-                border-bottom: 1px solid {COLOR_BORDER};
-            }}
-        """)
-
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 0, 4, 0)
-
-        self.title_label = QLabel("Queqq — League of Legends Client Companion", self)
-        self.title_label.setStyleSheet(f"""
-            color: {COLOR_TEXT_SECONDARY};
-            font-size: 12px;
-            font-weight: 500;
-        """)
-        layout.addWidget(self.title_label)
-
-        layout.addStretch()
-
-        # Window control buttons
-        self.btn_min = QPushButton("🗕", self)
-        self.btn_min.setFixedSize(28, 24)
-        self.btn_min.setStyleSheet("""
-            QPushButton {
-                background: transparent;
-                border: none;
-                color: #A09B8C;
-                font-size: 12px;
-                padding: 0px;
-            }
-            QPushButton:hover {
-                background-color: #1E282D;
-                color: #FFFFFF;
-            }
-        """)
-        self.btn_min.clicked.connect(self._parent.showMinimized)
-        layout.addWidget(self.btn_min)
-
-        self.btn_close = QPushButton("✕", self)
-        self.btn_close.setFixedSize(28, 24)
-        self.btn_close.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent;
-                border: none;
-                color: #A09B8C;
-                font-size: 12px;
-                padding: 0px;
-            }}
-            QPushButton:hover {{
-                background-color: {COLOR_DANGER};
-                color: #FFFFFF;
-            }}
-        """)
-        self.btn_close.clicked.connect(self._parent.close)
-        layout.addWidget(self.btn_close)
+        return f"v{__version__}"
+    except Exception:
+        return ""
 
 
 class LeagueLoopMainWindow(QMainWindow):
     """Primary PySide6 application window."""
 
-    def __init__(self, container=None):
+    def __init__(self, container: Any = None):
         super().__init__()
         self.container = container
-        self._drag_pos = QPoint()
+        self.config = getattr(container, "config", None) if container else None
 
+        self.setWindowTitle("LeagueLoop")
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)
-        self.setAttribute(Qt.WA_TranslucentBackground, False)
-        self.resize(960, 640)
+        self.setMinimumSize(MIN_WIDTH, MIN_HEIGHT)
         self.setStyleSheet(get_global_stylesheet())
 
-        # Central Root Widget
+        # Presentation state for header/footer and future mode switching.
+        self.view_model = ShellViewModel(container=container, parent=self)
+
         root_widget = QWidget(self)
         self.setCentralWidget(root_widget)
 
@@ -123,75 +83,169 @@ class LeagueLoopMainWindow(QMainWindow):
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
 
-        # Titlebar
-        self.title_bar = CustomTitleBar(self)
-        root_layout.addWidget(self.title_bar)
+        # --- Header (fixed) ----------------------------------------------
+        self.header = LLAppHeader(self)
+        self.header.minimize_requested.connect(self.showMinimized)
+        self.header.close_requested.connect(self.close)
+        root_layout.addWidget(self.header)
 
-        # Body Layout: Sidebar + Stacked Content
-        body_layout = QHBoxLayout()
+        # --- Body: navigation + content ----------------------------------
+        body = QWidget(root_widget)
+        body_layout = QHBoxLayout(body)
         body_layout.setContentsMargins(0, 0, 0, 0)
         body_layout.setSpacing(0)
-        root_layout.addLayout(body_layout)
+        root_layout.addWidget(body, 1)
 
         self.sidebar = QtNavigationSidebar(parent=self)
         self.sidebar.tab_selected.connect(self._on_tab_switched)
         body_layout.addWidget(self.sidebar)
 
-        self.tab_stack = QStackedWidget(self)
-        body_layout.addWidget(self.tab_stack)
+        self.tab_stack = QStackedWidget(body)
+        body_layout.addWidget(self.tab_stack, 1)
 
-        # Populate tab pages
         self.tab_pages = {}
-        for key, name, icon in self.sidebar.DEFAULT_TABS:
-            if key == "play":
-                page = QtPlayTab(container=self.container, parent=self)
-            elif key == "priority":
-                page = QtPriorityTab(container=self.container, parent=self)
-            elif key == "diagnostics":
-                page = QtDiagnosticsTab(container=self.container, parent=self)
-            elif key == "settings":
-                page = QtSettingsTab(container=self.container, parent=self)
-            else:
-                page = self._create_placeholder_page(key, name)
-            self.tab_stack.addWidget(page)
-            self.tab_pages[key] = page
+        for key, name, _icon in self.sidebar.DEFAULT_TABS:
+            self.tab_stack.addWidget(self._build_page(key, name))
 
-    def _create_placeholder_page(self, key: str, name: str) -> QWidget:
+        # --- Footer (fixed) ----------------------------------------------
+        self.status_bar = LLStatusBar(version=_app_version(), parent=self)
+        # Frameless windows have no native resize border; a grip in the footer
+        # keeps resizing available without custom hit-testing (§27).
+        grip = QSizeGrip(self.status_bar)
+        self.status_bar.layout().addWidget(grip, 0, Qt.AlignBottom | Qt.AlignRight)
+        root_layout.addWidget(self.status_bar)
+
+        # --- Bind state ---------------------------------------------------
+        self.header.bind(self.view_model)
+        self.status_bar.bind(self.view_model)
+
+        self._restore_window_state()
+
+        # Start focus on navigation rather than letting the first focusable
+        # widget (a window control) claim the focus ring on launch.
+        current = self.sidebar.buttons.get(self.sidebar.DEFAULT_TABS[0][0])
+        if current is not None:
+            current.setFocus()
+
+    # ------------------------------------------------------------- pages
+    def _build_page(self, key: str, name: str) -> QWidget:
+        """Construct the page for a nav key, falling back to an empty state."""
+        builders = {
+            "play": QtPlayTab,
+            "priority": QtPriorityTab,
+            "diagnostics": QtDiagnosticsTab,
+            "settings": QtSettingsTab,
+        }
+        builder = builders.get(key)
+
+        page: QWidget
+        if builder is not None:
+            try:
+                kwargs = {"container": self.container, "parent": self}
+                # Pages opt into live state by declaring a `view_model` param.
+                if "view_model" in inspect.signature(builder.__init__).parameters:
+                    kwargs["view_model"] = self.view_model
+                page = builder(**kwargs)
+            except Exception as exc:  # a broken page must not take down the shell
+                page = self._create_empty_page(
+                    name,
+                    f"This screen could not be loaded.\n\n{type(exc).__name__}: {exc}",
+                )
+        else:
+            page = self._create_empty_page(
+                name,
+                "This screen has not been migrated to the new interface yet.",
+            )
+
+        self.tab_pages[key] = page
+        return page
+
+    def _create_empty_page(self, name: str, message: str) -> QWidget:
+        """
+        Intentional empty state (§54) — never a blank panel, never fake data.
+        """
         page = QWidget(self)
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setContentsMargins(
+            CONTENT_MARGIN, CONTENT_MARGIN, CONTENT_MARGIN, CONTENT_MARGIN
+        )
+        layout.setSpacing(SPACE_MD)
 
-        header = QLabel(f"{name}", page)
-        header.setStyleSheet(f"""
-            font-size: 20px;
-            font-weight: bold;
-            color: {COLOR_GOLD_PRIMARY};
-            margin-bottom: 8px;
-        """)
-        layout.addWidget(header)
+        title = QLabel(name, page)
+        title.setStyleSheet(
+            TEXT_PAGE_TITLE.qss(color=TEXT_SECONDARY) + " background: transparent;"
+        )
+        layout.addWidget(title)
 
-        card = QFrame(page)
-        card.setObjectName("panel")
-        card_layout = QVBoxLayout(card)
-        desc = QLabel(f"PySide6 {name} view initialized.", card)
-        desc.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY}; font-size: 13px;")
-        card_layout.addWidget(desc)
+        card = LLCard(parent=page)
+        body = QLabel(message, card)
+        body.setWordWrap(True)
+        body.setStyleSheet(
+            TEXT_BODY.qss(color=TEXT_MUTED) + " background: transparent;"
+        )
+        card.add_widget(body)
         layout.addWidget(card)
 
-        layout.addStretch()
+        layout.addStretch(1)
         return page
 
     def _on_tab_switched(self, key: str) -> None:
         page = self.tab_pages.get(key)
-        if page:
+        if page is not None:
             self.tab_stack.setCurrentWidget(page)
+            if self.config is not None:
+                try:
+                    self.config.set("qt_last_tab", key)
+                except Exception:
+                    pass
 
-    def mousePressEvent(self, event: QMouseEvent) -> None:
-        if event.button() == Qt.LeftButton:
-            self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-            event.accept()
+    # --------------------------------------------------- state persistence
+    def _restore_window_state(self) -> None:
+        """Restore size, position and last page (§52)."""
+        width, height = DEFAULT_WIDTH, DEFAULT_HEIGHT
+        pos_x = pos_y = None
+        last_tab = None
 
-    def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        if event.buttons() == Qt.LeftButton and not self._drag_pos.isNull():
-            self.move(event.globalPosition().toPoint() - self._drag_pos)
-            event.accept()
+        if self.config is not None:
+            try:
+                width = int(self.config.get("qt_window_width", DEFAULT_WIDTH))
+                height = int(self.config.get("qt_window_height", DEFAULT_HEIGHT))
+                pos_x = self.config.get("qt_window_x", None)
+                pos_y = self.config.get("qt_window_y", None)
+                last_tab = self.config.get("qt_last_tab", None)
+            except Exception:
+                width, height = DEFAULT_WIDTH, DEFAULT_HEIGHT
+
+        self.resize(max(width, MIN_WIDTH), max(height, MIN_HEIGHT))
+
+        if pos_x is not None and pos_y is not None:
+            try:
+                self.move(int(pos_x), int(pos_y))
+            except Exception:
+                pass
+
+        if last_tab and last_tab in self.tab_pages:
+            self.sidebar.select_tab(last_tab)
+
+    def _save_window_state(self) -> None:
+        if self.config is None:
+            return
+        try:
+            self.config.set_batch(
+                {
+                    "qt_window_width": self.width(),
+                    "qt_window_height": self.height(),
+                    "qt_window_x": self.x(),
+                    "qt_window_y": self.y(),
+                }
+            )
+        except Exception:
+            pass
+
+    def closeEvent(self, event) -> None:
+        self._save_window_state()
+        try:
+            self.view_model.dispose()
+        except Exception:
+            pass
+        super().closeEvent(event)

@@ -46,8 +46,8 @@ class TestQtThemeAndComponents(unittest.TestCase):
         from ui.qt.main_window import LeagueLoopMainWindow
 
         window = LeagueLoopMainWindow()
-        self.assertEqual(window.width(), 960)
-        self.assertEqual(window.height(), 640)
+        self.assertEqual(window.width(), 980)
+        self.assertEqual(window.height(), 660)
         self.assertIsNotNone(window.sidebar)
         self.assertIsNotNone(window.tab_stack)
         window.close()
