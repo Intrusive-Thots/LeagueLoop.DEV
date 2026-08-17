@@ -3,6 +3,11 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.08.142] - 2026-08-17
+
+- **Docs**: Synced health score to 93/100 across improvement_plan and TASK_QUEUE.
+- Confirmed all autonomous tasks complete; next focus remains PySide6 migration and asset_manager modularization.
+
 ## [1.08.141] - 2026-08-16
 
 - **Feature / Hardening**: Added `src/utils/riot_id.py` with `resolve_riot_id()` / `resolve_riot_id_lower()` as the single source of truth for name resolution (RIOT-ID-001).
