@@ -6,18 +6,25 @@ on:
   pull_request:
     branches: [ master, main ]
 
+permissions:
+  contents: read
+
 jobs:
   smoke-test:
-    name: Import Smoke Test
+    name: Import Smoke Test (Python ${{ matrix.python-version }})
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.11', '3.12', '3.13']
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python-version }}
           cache: 'pip'
 
       - name: Install Dependencies
@@ -26,8 +33,9 @@ jobs:
           pip install -r requirements.txt
 
       - name: Verify Core Imports
+        env:
+          PYTHONPATH: src
         run: |
-          $env:PYTHONPATH="src"
           python -c "from core.main import LeagueLoopApp; print('Core imports OK')"
           python -c "from core.events import EventBus, EventType; print('Events imports OK')"
           python -c "from services.local_api import start_api_server; print('Local API imports OK')"
@@ -36,7 +44,6 @@ jobs:
     name: Build & Test Suite
     runs-on: windows-latest
     needs: smoke-test
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
