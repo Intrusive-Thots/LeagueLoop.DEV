@@ -14,4 +14,4 @@ Formula:
   {HHMM}      = hour and minute of the change (24hr)
 """
 
-__version__ = "1-08-137-1902"
+__version__ = "1-08-136-0014"
