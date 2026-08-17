@@ -23,5 +23,25 @@
     "failure": "AttributeError on uninitialized _game_pid / mock executor result in spectator unit test",
     "pattern": "AttributeError: 'AutomationEngine' object has no attribute '_game_pid' when instantiated via __new__",
     "fix": "Use getattr(self, '_game_pid', None) and getattr(self, '_last_game_scan', 0.0) in _is_game_running() for defensive property access, and configure mock_future.result on engine.executor.submit in unit test mocks."
+  },
+  {
+    "failure": "type object 'Logger' has no attribute 'warn'",
+    "pattern": "AttributeError: type object 'Logger' has no attribute 'warn' when calling Logger.warn() in local_api.py",
+    "fix": "Add 'warn = warning' alias method to Logger class in src/utils/logger.py and update local_api.py to use Logger.warning directly."
+  },
+  {
+    "failure": "AttributeError: 'int' object has no attribute 'isdigit' in asset_manager get_icon",
+    "pattern": "AttributeError: 'int' object has no attribute 'isdigit' when passing numeric integer champion IDs (e.g. 350) to get_icon()",
+    "fix": "Check (isinstance(key, int) or str(key).isdigit()) before integer conversion and dictionary lookup in src/services/asset_manager.py."
+  },
+  {
+    "failure": "CustomTkinter ValueError: color is None in factory.py make_input",
+    "pattern": "ValueError: color is None, for transparency set color='transparent' during entry unfocus event",
+    "fix": "Ensure default fallback color for parse_border and make_input _unfocus_border/_unfocus_bg is 'transparent' instead of None."
+  },
+  {
+    "failure": "WinError 2: The system cannot find the file specified: config.json.tmp -> config.json in tests",
+    "pattern": "Failed saving config: [WinError 2] during test_set_and_save",
+    "fix": "Ensure os.replace and os.makedirs are patched alongside builtins.open in unit tests, and add os.makedirs in ConfigManager.save()."
   }
 ]

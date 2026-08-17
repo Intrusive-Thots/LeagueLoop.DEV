@@ -1,11 +1,11 @@
 {
-  "task": "Package and publish standalone one-click installer to GitHub",
+  "task": "Audit and resolve runtime errors identified in debug and error logs",
   "status": "completed",
   "changes": [
-    "Added missing hidden imports (pystray, pypresence, PySide6, websockets, lcu_driver, aiohttp) to LeagueLoop.spec",
-    "Ran PyInstaller ONEDIR build producing dist/LeagueLoop/ executable package",
-    "Compiled installer script installer.iss via Inno Setup (ISCC.exe) to generate dist/LeagueLoop_Installer.exe (31.8 MB)",
-    "Cloned and configured git repository for https://github.com/Intrusive-Thots/LeagueLoop-Installer",
-    "Committed and pushed LeagueLoop_Installer.exe and README.md to remote main branch"
+    "Added Logger.warn alias to Logger.warning in src/utils/logger.py and cleaned up calls in src/services/local_api.py",
+    "Fixed int/str key resolution in src/services/asset_manager.py get_icon() to prevent AttributeError on int champion IDs and fix 404 DDragon requests",
+    "Fixed CustomTkinter ValueError on None border colors during make_input unfocus events in src/ui/components/factory.py",
+    "Added os.makedirs in ConfigManager.save() and patched os.replace in tests/test_utilities.py to eliminate WinError 2 config saving error logs",
+    "Added regression unit tests across tests/test_asset_manager.py, tests/test_utilities.py, and tests/test_ui_utils.py (295 passed)"
   ]
 }
