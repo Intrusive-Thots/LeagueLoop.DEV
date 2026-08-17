@@ -1,0 +1,106 @@
+name: Build and Release Installer
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create a new release'
+        required: false
+        default: 'false'
+
+jobs:
+  build-installer:
+    name: Build Windows Installer
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Get Version from Source
+        id: version
+        run: |
+          $version = (Get-Content src/core/version.py | Select-String "__version__" -Pattern).Line.Split('=')[1].Trim().Trim('"')
+          Write-Host "Version: $version"
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Clean Previous Builds
+        run: |
+          if (Test-Path build) { Remove-Item -Recurse -Force build }
+          if (Test-Path dist\LeagueLoop) { Remove-Item -Recurse -Force dist\LeagueLoop }
+          if (Test-Path dist\LeagueLoop.exe) { Remove-Item -Force dist\LeagueLoop.exe }
+          if (Test-Path dist\LeagueLoop_Installer.exe) { Remove-Item -Force dist\LeagueLoop_Installer.exe }
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller --clean -y LeagueLoop.spec
+
+      - name: Verify PyInstaller Output
+        run: |
+          if (-not (Test-Path dist\LeagueLoop\LeagueLoop.exe)) {
+            Write-Error "PyInstaller build failed - LeagueLoop.exe not found"
+            exit 1
+          }
+          Write-Host "PyInstaller build successful!"
+
+      - name: Install NSIS
+        run: |
+          choco install nsis -y
+
+      - name: Build Installer with NSIS
+        run: |
+          makensis -V2 installer.nsi
+          
+      - name: Verify Installer
+        run: |
+          if (-not (Test-Path dist\LeagueLoop_Installer.exe)) {
+            Write-Error "NSIS build failed - installer not found"
+            exit 1
+          }
+          $size = (Get-Item dist\LeagueLoop_Installer.exe).Length / 1MB
+          Write-Host "Installer created successfully! Size: $([math]::Round($size, 2)) MB"
+
+      - name: Upload Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LeagueLoop-Installer
+          path: dist/LeagueLoop_Installer.exe
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.create_release == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/LeagueLoop_Installer.exe
+          name: LeagueLoop ${{ steps.version.outputs.version }}
+          body: |
+            ## LeagueLoop Installer
+            
+            **Version:** ${{ steps.version.outputs.version }}
+            
+            ### Installation
+            1. Download `LeagueLoop_Installer.exe`
+            2. Run the installer
+            3. Launch LeagueLoop from Start Menu or Desktop
+            
+            ### What's Changed
+            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
