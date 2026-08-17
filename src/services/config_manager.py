@@ -137,6 +137,7 @@ class ConfigManager:
         """Save configuration to file securely in AppData using atomic write."""
         try:
             tmp_path = USER_CONFIG_FILE + ".tmp"
+            os.makedirs(os.path.dirname(os.path.abspath(USER_CONFIG_FILE)), exist_ok=True)
             with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(self.cfg, f, indent=4)
             os.replace(tmp_path, USER_CONFIG_FILE)

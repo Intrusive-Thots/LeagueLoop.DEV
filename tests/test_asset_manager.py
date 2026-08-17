@@ -80,6 +80,39 @@ class TestAssetManager(unittest.TestCase):
         self.assertEqual(self.assets.get_champ_name(266), "Aatrox")
         self.assertEqual(self.assets.get_champ_name(9999), "9999")
 
+    def test_get_icon_integer_and_string_keys(self):
+        """Test that get_icon safely handles int, numeric str, and champion name keys without throwing AttributeError."""
+        self.assets.id_to_key = {350: "Yuumi", 266: "Aatrox"}
+        self.assets.name_to_id = {"yuumi": 350, "aatrox": 266}
+        with patch.object(self.assets, '_download_and_cache_image', return_value=None) as mock_download:
+            # 1. Integer champion ID
+            self.assets.get_icon("champion", 350)
+            mock_download.assert_called_with(
+                f"https://ddragon.leagueoflegends.com/cdn/{self.assets.ddragon_ver}/img/champion/Yuumi.png",
+                unittest.mock.ANY,
+                "champion_350_40x40",
+                size=(40, 40)
+            )
+
+            # 2. String numeric ID
+            self.assets.get_icon("champion", "266")
+            mock_download.assert_called_with(
+                f"https://ddragon.leagueoflegends.com/cdn/{self.assets.ddragon_ver}/img/champion/Aatrox.png",
+                unittest.mock.ANY,
+                "champion_266_40x40",
+                size=(40, 40)
+            )
+
+            # 3. Champion name string
+            self.assets.get_icon("champion", "Yuumi")
+            mock_download.assert_called_with(
+                f"https://ddragon.leagueoflegends.com/cdn/{self.assets.ddragon_ver}/img/champion/Yuumi.png",
+                unittest.mock.ANY,
+                "champion_Yuumi_40x40",
+                size=(40, 40)
+            )
+
+
     def test_get_memory_summary_diagnostics(self):
         """Test memory usage summary diagnostics logging and structure."""
         summary = self.assets.get_memory_summary_diagnostics()

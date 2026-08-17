@@ -5249,12 +5249,12 @@ class AssetManager:
             # DDragon uses champion name keys (e.g. "Yuumi"), not numeric IDs (e.g. "350")
             # or display names with spaces (e.g. "Twisted Fate" -> "TwistedFate")
             resolved_key = key
-            if key.isdigit() and hasattr(self, "id_to_key"):
-                resolved_key = self.id_to_key.get(int(key), key)
+            if (isinstance(key, int) or str(key).isdigit()) and hasattr(self, "id_to_key"):
+                resolved_key = self.id_to_key.get(int(key), str(key))
             elif hasattr(self, "name_to_id") and hasattr(self, "id_to_key"):
-                cid = self.name_to_id.get(key.lower())
+                cid = self.name_to_id.get(str(key).lower())
                 if cid is not None:
-                    resolved_key = self.id_to_key.get(cid, key)
+                    resolved_key = self.id_to_key.get(cid, str(key))
             fname = f"champion_{resolved_key}.png"
             url = f"https://ddragon.leagueoflegends.com/cdn/{self.ddragon_ver}/img/champion/{resolved_key}.png"
         elif type_ == "item":

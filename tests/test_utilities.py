@@ -158,6 +158,16 @@ class TestLoggerGetLogs(unittest.TestCase):
         logs = Logger.get_logs(module="core")
         self.assertEqual(len(logs), 2)
 
+    def test_logger_warn_alias(self):
+        Logger._logs.clear()
+        Logger.warn("TEST", "Warning message via warn alias")
+        logs = Logger.get_logs()
+        self.assertEqual(len(logs), 1)
+        self.assertEqual(logs[0]["level"], "WARNING")
+        self.assertEqual(logs[0]["module"], "TEST")
+        self.assertEqual(logs[0]["msg"], "Warning message via warn alias")
+
+
 
 class TestConfigManager(unittest.TestCase):
     def test_load_default_config(self):
@@ -188,11 +198,14 @@ class TestConfigManager(unittest.TestCase):
     def test_set_and_save(self):
         from services.asset_manager import ConfigManager, USER_CONFIG_FILE as CONFIG_FILE
         with patch('os.path.exists', return_value=False), \
+             patch('os.makedirs'), \
+             patch('os.replace') as mock_replace, \
              patch('builtins.open', mock_open()) as mocked_file:
             config = ConfigManager()
             config.set("auto_accept", True)
             self.assertEqual(config.get("auto_accept"), True)
             mocked_file.assert_called_with(CONFIG_FILE + ".tmp", "w", encoding="utf-8")
+            mock_replace.assert_called_with(CONFIG_FILE + ".tmp", CONFIG_FILE)
 
 
 class TestBuildValidator(unittest.TestCase):

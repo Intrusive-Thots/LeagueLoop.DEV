@@ -128,10 +128,48 @@ class TestUIKwargs(unittest.TestCase):
         self.assertIsNotNone(grid)
 
     def test_factory_make_input(self):
-        from ui.components.factory import make_input
+        from ui.components.factory import make_input, parse_border
         entry = make_input(self.root, placeholder="Test", cursor="hand2")
         self.assertIsNotNone(entry)
+        
+        # Test parse_border with invalid/missing token
+        w, c = parse_border("nonexistent_border_key")
+        self.assertEqual(w, 0)
+        self.assertEqual(c, "transparent")
+
+    def test_factory_make_input_focus_unfocus(self):
+        from ui.components.factory import make_input
+        # Mock CTkEntry
+        with patch('customtkinter.CTkEntry') as mock_ctk_entry:
+            mock_instance = MagicMock()
+            mock_ctk_entry.return_value = mock_instance
+            entry = make_input(self.root, placeholder="Test", border_color=None, fg_color=None)
+            self.assertIsNotNone(entry)
+            
+            # Find the FocusIn and FocusOut callbacks
+            focus_in_cb = None
+            focus_out_cb = None
+            for call in mock_instance.bind.call_args_list:
+                args = call[0]
+                if args[0] == "<FocusIn>":
+                    focus_in_cb = args[1]
+                elif args[0] == "<FocusOut>":
+                    focus_out_cb = args[1]
+
+            self.assertIsNotNone(focus_in_cb)
+            self.assertIsNotNone(focus_out_cb)
+
+            # Trigger callbacks to ensure configure is called with non-None colors
+            focus_in_cb(MagicMock())
+            mock_instance.configure.assert_called()
+            
+            focus_out_cb(MagicMock())
+            # Ensure border_color is not None in kwargs
+            last_configure_kwargs = mock_instance.configure.call_args[1]
+            self.assertIsNotNone(last_configure_kwargs.get("border_color"))
+            self.assertIsNotNone(last_configure_kwargs.get("fg_color"))
 
 
 if __name__ == '__main__':
+
     unittest.main()

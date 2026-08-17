@@ -65,7 +65,7 @@ def parse_border(token_key):
     """
     val = TOKENS.get("borders", token_key)
     if not val:
-        return 0, None
+        return 0, "transparent"
     
     parts = val.split()
     try:
@@ -76,7 +76,7 @@ def parse_border(token_key):
         return width, color
     except Exception as e:
         Logger.error("factory.py", f"Handled exception: {e}")
-        return 0, None
+        return 0, "transparent"
 
 # --- Components ---
 
@@ -149,10 +149,12 @@ class RiotButton(ctk.CTkFrame):
         self.inner.configure(fg_color=h_color)
         
     def _on_leave(self, i_color):
+        if self._disabled:
+            return
         self.configure()
         self.inner.configure(fg_color=i_color)
         
-    def _on_click(self, e):
+    def _on_click(self, e=None):
         if self._disabled:
             return
         # Optional: Add small press scale if desired
@@ -209,10 +211,10 @@ def make_input(parent, placeholder="", width=None, **kw):
     radius = kw.pop("corner_radius", get_radius("sm"))
     height = kw.pop("height", 32)
     
-    bg_color = kw.pop("fg_color", get_color("colors.background.app"))
+    bg_color = kw.pop("fg_color", get_color("colors.background.app", "#091428")) or "#091428"
     def_border_w, def_border_c = parse_border("subtle")
     border_w = kw.pop("border_width", def_border_w)
-    border_c = kw.pop("border_color", def_border_c)
+    border_c = kw.pop("border_color", def_border_c) or def_border_c or "transparent"
     kw.pop("cursor", None)
     
     entry = ctk.CTkEntry(
@@ -225,18 +227,18 @@ def make_input(parent, placeholder="", width=None, **kw):
         border_color=border_c,
         border_width=border_w,
         placeholder_text=placeholder,
-        placeholder_text_color=get_color("colors.text.muted"),
-        text_color=get_color("colors.text.primary"),
+        placeholder_text_color=get_color("colors.text.muted", "#6C757D"),
+        text_color=get_color("colors.text.primary", "#F0E6D2"),
         
         **kw
     )
 
     # ⚡ Bolt: Precompute static colors for focus handlers to avoid main thread latency
     # during high-frequency focus events.
-    _focus_border = get_color("colors.accent.blue")
-    _focus_bg = get_color("colors.background.card")
-    _unfocus_border = border_c
-    _unfocus_bg = bg_color
+    _focus_border = get_color("colors.accent.blue", "#0BC6E3")
+    _focus_bg = get_color("colors.background.card", "#141E28")
+    _unfocus_border = border_c or "transparent"
+    _unfocus_bg = bg_color or "transparent"
 
     def _on_focus(e):
         entry.configure(
@@ -246,8 +248,8 @@ def make_input(parent, placeholder="", width=None, **kw):
 
     def _on_unfocus(e):
         entry.configure(
-            border_color=_unfocus_border,
-            fg_color=_unfocus_bg
+            border_color=_unfocus_border or "transparent",
+            fg_color=_unfocus_bg or "transparent"
         )
 
     entry.bind("<FocusIn>", _on_focus, add="+")

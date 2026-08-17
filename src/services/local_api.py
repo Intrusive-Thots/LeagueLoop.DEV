@@ -801,9 +801,9 @@ def ensure_firewall_rule(port):
         if result.returncode == 0:
             Logger.info("API", f"Firewall rule created for port {port}")
         else:
-            Logger.warn("API", f"Firewall rule creation returned: {result.stderr.strip()}")
+            Logger.warning("API", f"Firewall rule creation returned: {result.stderr.strip()}")
     except Exception as e:
-        Logger.warn("API", f"Could not auto-configure firewall: {e}")
+        Logger.warning("API", f"Could not auto-configure firewall: {e}")
 
 def start_api_server(app_instance, port=8337, bind_local=True):
     """
@@ -848,7 +848,7 @@ def start_api_server(app_instance, port=8337, bind_local=True):
         else:
             local_ip = get_local_ip()
             Logger.info("API", f"Remote Link API started on http://{local_ip}:{port}")
-            Logger.warn("API", "Remote access enabled - ensure proper authentication is configured")
+            Logger.warning("API", "Remote access enabled - ensure proper authentication is configured")
             return local_ip, port
     except Exception as e:
         Logger.error("API", f"Failed to start API server: {e}")

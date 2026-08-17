@@ -116,3 +116,9 @@ class Logger:
         """Log a warning message."""
         _logger.warning(f"[{tag}] {msg}")
         cls._add_log("WARNING", tag, msg)
+
+    @classmethod
+    def warn(cls, tag, msg):
+        """Alias for warning."""
+        cls.warning(tag, msg)
+
