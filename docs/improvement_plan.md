@@ -4,7 +4,7 @@
 **Repository**: `Intrusive-Thots/LeagueLoop.DEV`
 
 ### Current Assessment Overview
-- **Overall Health**: 91/100
+- **Overall Health**: 92/100
 - **Primary Objectives**:
   1. Complete PySide6 migration and eliminate legacy Tkinter code. (pending — scaffold in `src/ui/qt/`)
   2. Reduce architectural coupling via ApplicationContainer and dependency injection. (done — construction + shutdown + loops wired)
@@ -18,6 +18,12 @@
 ## Next Focus
 1. Finish PySide6 migration path (scaffold already in `src/ui/qt/`; begin replacing CustomTkinter surfaces).
 2. Optional SQLite for match history / post-game summaries.
-3. Continue modular split of `asset_manager.py` (still large; ConfigManager already extracted).
+3. Continue modular split of `asset_manager.py` (still large ~6k LOC; ConfigManager already extracted).
 4. Harden LCU transport / reconnect edge cases.
 5. Prune remaining exotic telemetry methods (low priority; tests cover them).
+
+## Recent Hygiene
+- Documentation accuracy aligned with CustomTkinter runtime.
+- EventBus thread-safety and typed events.
+- Local API default-bound to localhost + restricted CORS.
+- CI smoke-test gate before full suite.
