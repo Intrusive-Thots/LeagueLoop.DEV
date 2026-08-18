@@ -217,6 +217,41 @@ class QueueManager:
 
         return BASELINE_QUEUE_MAP.get(qid, f"Queue {qid}")
 
+    # ─────────── Matchmaking Actions ───────────
+
+    def start_matchmaking(self, lcu) -> bool:
+        """Starts matchmaking search in the current lobby."""
+        if not lcu or not getattr(lcu, "is_connected", False):
+            return False
+        try:
+            res = lcu.request("POST", "/lol-lobby/v2/lobby/matchmaking/search")
+            return res is not None and res.status_code in (200, 204)
+        except Exception as e:
+            Logger.debug("QueueManager", f"Failed to start matchmaking: {e}")
+            return False
+
+    def stop_matchmaking(self, lcu) -> bool:
+        """Cancels active matchmaking search."""
+        if not lcu or not getattr(lcu, "is_connected", False):
+            return False
+        try:
+            res = lcu.request("DELETE", "/lol-lobby/v2/lobby/matchmaking/search")
+            return res is not None and res.status_code in (200, 204)
+        except Exception as e:
+            Logger.debug("QueueManager", f"Failed to stop matchmaking: {e}")
+            return False
+
+    def create_lobby(self, lcu, queue_id: int) -> bool:
+        """Creates a lobby for the specified queue ID."""
+        if not lcu or not getattr(lcu, "is_connected", False):
+            return False
+        try:
+            res = lcu.request("POST", "/lol-lobby/v2/lobby", {"queueId": queue_id})
+            return res is not None and res.status_code in (200, 204)
+        except Exception as e:
+            Logger.debug("QueueManager", f"Failed to create lobby {queue_id}: {e}")
+            return False
+
 
 # Global convenience helper functions
 _mgr = QueueManager.get_instance()
@@ -236,3 +271,15 @@ def resolve_queue_id(mode: str, lcu=None) -> int:
 def resolve_mode_name(queue_id: int, lcu=None) -> str:
     """Resolve queue ID to mode string."""
     return _mgr.resolve_mode_name(queue_id, lcu)
+
+def start_matchmaking(lcu) -> bool:
+    """Start matchmaking search."""
+    return _mgr.start_matchmaking(lcu)
+
+def stop_matchmaking(lcu) -> bool:
+    """Stop matchmaking search."""
+    return _mgr.stop_matchmaking(lcu)
+
+def create_lobby(lcu, queue_id: int) -> bool:
+    """Create lobby for queue ID."""
+    return _mgr.create_lobby(lcu, queue_id)

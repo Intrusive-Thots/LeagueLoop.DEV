@@ -20,7 +20,7 @@ target/
 # Scratch and test outputs
 scratch/
 cache/
-*.db
+*.db*
 accounts.json
 
 # Editors

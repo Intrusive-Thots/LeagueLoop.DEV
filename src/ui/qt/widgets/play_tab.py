@@ -162,21 +162,9 @@ class QtPlayTab(QWidget):
 
     # ------------------------------------------------------------- actions
     def _on_find_match(self) -> None:
-        """
-        Start matchmaking.
-
-        NOTE: this still calls the LCU directly because there is no
-        start-matchmaking method on any service yet (QueueManager only
-        resolves queue ids/names). A `QueueService.start_search()` seam
-        should own this so the view stops knowing LCU endpoints.
-        """
-        if not (self.lcu and getattr(self.lcu, "is_connected", False)):
-            return
-        try:
-            self.lcu.request("POST", "/lol-lobby/v2/lobby/matchmaking/search")
-        except Exception:
-            # Errors surface through state/activity rather than crashing the view.
-            pass
+        """Start matchmaking search via QueueManager."""
+        from services.queue_manager import start_matchmaking
+        start_matchmaking(self.lcu)
 
     def update_phase(self, phase: str) -> None:
         """Legacy push-style entry point, retained for callers that use it."""
