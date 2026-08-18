@@ -105,6 +105,8 @@ class QtNavigationSidebar(QFrame):
 
     DEFAULT_TABS = [
         ("play", "Play", "⚔"),
+        ("champ_select", "Champ Select", "◆"),
+        ("automation", "Automation", "⚙"),
         ("aram", "ARAM", "❄"),
         ("priority", "Priority", "★"),
         ("loot", "Loot", "🎁"),

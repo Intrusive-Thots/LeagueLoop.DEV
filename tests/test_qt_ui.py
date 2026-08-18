@@ -32,9 +32,12 @@ class TestQtThemeAndComponents(unittest.TestCase):
         from ui.qt.widgets.navigation.sidebar import QtNavigationSidebar
 
         sidebar = QtNavigationSidebar()
-        self.assertEqual(len(sidebar.buttons), 7)
-        self.assertIn("play", sidebar.buttons)
-        self.assertIn("settings", sidebar.buttons)
+        # Assert on the destinations themselves rather than a bare count, so
+        # adding a nav item (e.g. Champ Select) does not break the test for
+        # the wrong reason.
+        self.assertEqual(len(sidebar.buttons), len(QtNavigationSidebar.DEFAULT_TABS))
+        for key in ("play", "champ_select", "priority", "settings"):
+            self.assertIn(key, sidebar.buttons)
 
         # Test tab selection signal
         received = []

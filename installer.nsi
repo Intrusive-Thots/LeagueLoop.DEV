@@ -1,7 +1,7 @@
 ; LeagueLoop Installer — NSIS Script (Cross-Platform Alternative)
 ; Install location and metadata
 !define APP_NAME "LeagueLoop"
-!define APP_VERSION "1-08-137-2319"
+!define APP_VERSION "1-08-135-0153"
 !define APP_PUBLISHER "Malcolm"
 !define APP_URL "https://github.com/Intrusive-Thots/LeagueLoop-Installer"
 

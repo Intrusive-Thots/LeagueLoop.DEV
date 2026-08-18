@@ -374,10 +374,21 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         Logger.info("SYS", f"Mobile API at http://{self._local_ip}:{self._local_port}")
 
 
-def _kill_other_instances():
-    """Terminate any other running instances of LeagueLoop."""
+def _find_other_instances():
+    """
+    Return psutil.Process objects for other running LeagueLoop instances.
+
+    Matches the packaged LeagueLoop.exe and any Python process whose script
+    argument is this app's entry point. The current process and its parents
+    are always excluded, so this never reports the caller itself.
+    """
+    matches = []
     try:
         import psutil  # type: ignore
+    except Exception:
+        return matches
+
+    try:
         current_proc = psutil.Process(os.getpid())
         ignored_pids = {current_proc.pid}
         try:
@@ -403,8 +414,33 @@ def _kill_other_instances():
                             is_match = True
                             break
                 if is_match:
-                    proc.terminate()
+                    matches.append(proc)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
     except Exception:
         pass
+
+    return matches
+
+
+def _kill_other_instances():
+    """
+    Terminate any other running instances of LeagueLoop.
+
+    This is no longer called automatically on startup. Doing so meant a second
+    launch silently terminated the instance the user was already using, which
+    surfaced as a bare "exit code 15" in the older window and looked like a
+    crash. Startup now refuses instead (see run.py); this is only used when
+    the user explicitly asks to take over via ``run.py --replace``.
+
+    Returns the list of PIDs that were asked to terminate.
+    """
+    killed = []
+    for proc in _find_other_instances():
+        try:
+            pid = proc.pid
+            proc.terminate()
+            killed.append(pid)
+        except Exception:
+            pass
+    return killed

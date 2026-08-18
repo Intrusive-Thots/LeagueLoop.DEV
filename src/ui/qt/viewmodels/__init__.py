@@ -5,6 +5,11 @@ Views bind to these instead of reading services directly, so presentation
 logic stays testable and the UI has a single path from
 `core.state.ApplicationState` to the screen (UI/UX Master Plan §2.1).
 """
+from ui.qt.viewmodels.champ_select_viewmodel import (
+    ChampSelectViewModel,
+    Confidence,
+    Recommendation,
+)
 from ui.qt.viewmodels.shell_viewmodel import (
     PHASE_LABELS,
     QUEUE_NAMES,
@@ -14,6 +19,9 @@ from ui.qt.viewmodels.shell_viewmodel import (
 )
 
 __all__ = [
+    "ChampSelectViewModel",
+    "Recommendation",
+    "Confidence",
     "ShellViewModel",
     "phase_label",
     "queue_label",

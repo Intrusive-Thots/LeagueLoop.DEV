@@ -7,17 +7,28 @@ focus states, so screens never hand-roll QSS.
 
 Implemented so far:
     LLStatus, Tone   §20  universal status readout
+    LLChampionTile   §9    champion tile, full state set
     LLButton         §2.2 ranked-emphasis button
     LLIconButton     §33  icon-only control
     LLCard           §38  meaningful group surface
     LLSection        §39  light titled group
     LLSeparator      §39  subtle rule
     LLBadge          §62  compact state pill
+    LLTimer          §13  semantic countdown
+    LLDraftTimeline  §12  draft phase strip
+    LLToggle         §33  on/off switch
+    LLSettingRow     §7   name + state + explanation + control
+    LLActivityFeed   §18  human-readable activity
 
-Still to build (see the migration audit): LLToggle, LLTabs, LLSearch,
-LLChampionTile, LLChampionGrid, LLPriorityList, LLToast, LLModal,
-LLTooltip, LLAvatar, LLActivityRow.
+Still to build (see the migration audit): LLTabs, LLSearch,
+LLPriorityList, LLToast, LLModal, LLTooltip, LLAvatar.
 """
+from ui.qt.components.activity import (
+    ActivityEntry,
+    ActivityKind,
+    LLActivityFeed,
+    LLActivityRow,
+)
 from ui.qt.components.badge import LLBadge
 from ui.qt.components.button import (
     ButtonSize,
@@ -26,16 +37,41 @@ from ui.qt.components.button import (
     LLIconButton,
 )
 from ui.qt.components.card import LLCard, LLSection, LLSeparator
+from ui.qt.components.champion_tile import (
+    ChampionTileModel,
+    LLChampionTile,
+    TileSize,
+)
+from ui.qt.components.draft_timeline import LLDraftTimeline, StepState
 from ui.qt.components.focus import install_focus_visible
+from ui.qt.components.timer import LLTimer, TimerState
+from ui.qt.components.setting_row import LLSettingRow
 from ui.qt.components.status import LLStatus, Tone, tone_color, tone_glyph
+from ui.qt.components.toast import LLToast, LLToastManager
+from ui.qt.components.toggle import LLToggle
 
 __all__ = [
     "install_focus_visible",
+    "LLActivityFeed",
+    "LLActivityRow",
+    "ActivityEntry",
+    "ActivityKind",
     "LLBadge",
     "LLButton",
     "LLIconButton",
     "ButtonVariant",
     "ButtonSize",
+    "LLChampionTile",
+    "ChampionTileModel",
+    "TileSize",
+    "LLTimer",
+    "TimerState",
+    "LLDraftTimeline",
+    "StepState",
+    "LLToast",
+    "LLToastManager",
+    "LLToggle",
+    "LLSettingRow",
     "LLCard",
     "LLSection",
     "LLSeparator",

@@ -1,6 +1,7 @@
 """
 Manages external assets, champions, and configurations.
 """
+from __future__ import annotations
 from utils.logger import Logger
 import gc
 import json
@@ -12,7 +13,13 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 from collections import OrderedDict
 
-import customtkinter as ctk
+try:
+    import customtkinter as ctk  # type: ignore
+except Exception:  # pragma: no cover - headless / Qt-only contexts
+    # The PySide6 shell and headless tests import this service without a Tk
+    # stack available. Icon *data* still works; only CTkImage construction
+    # needs the toolkit, and those paths return None below.
+    ctk = None  # type: ignore
 import requests
 from PIL import Image
 
@@ -5178,6 +5185,8 @@ class AssetManager:
                 pil_img = Image.open(processed_path).convert("RGBA")
                 # CTkImage size requires integer tuple, fallback to original if size contains None
                 disp_size = size if size and size[1] is not None else pil_img.size
+                if ctk is None:
+                    return None
                 img = ctk.CTkImage(pil_img, size=disp_size)
                 with self._lock:
                     target_dict[cache_key] = img
@@ -5220,6 +5229,8 @@ class AssetManager:
                     Logger.debug("Assets", f"Failed to cache processed icon: {e}")
 
                 img_size = size if size and size[1] is not None else pil_img.size
+                if ctk is None:
+                    return None
                 img = ctk.CTkImage(pil_img, size=img_size)
                 with self._lock:
                     target_dict[cache_key] = img
@@ -5456,6 +5467,8 @@ class AssetManager:
             try:
                 pil_img = Image.open(processed_path).convert("RGBA")
                 disp_size = size if size and size[1] is not None else pil_img.size
+                if ctk is None:
+                    return None
                 img = ctk.CTkImage(pil_img, size=disp_size)
                 with self._lock:
                     self.skin_icons[cache_key] = img
@@ -5478,6 +5491,8 @@ class AssetManager:
                     Logger.debug("Assets", f"Failed to cache processed skin icon: {e}")
 
                 img_size = size if size and size[1] is not None else pil_img.size
+                if ctk is None:
+                    return None
                 img = ctk.CTkImage(pil_img, size=img_size)
                 with self._lock:
                     self.skin_icons[cache_key] = img

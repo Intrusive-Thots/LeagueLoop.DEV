@@ -41,13 +41,8 @@ class LCUClient:
         self.base_url: Optional[str] = None
         self.is_connected: bool = False
         self.headers: Dict[str, str] = {}
-        self.session = requests.Session()
-        self.session.verify = False
-        
-        # 3.2 Connection pooling
-        adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=10, max_retries=1)
-        self.session.mount("https://", adapter)
-        self.session.mount("http://", adapter)
+        from services.http_session_factory import create_pooled_session
+        self.session = create_pooled_session(pool_connections=20, pool_maxsize=20, max_retries=1)
         
         self._client_pid: Optional[int] = None
         

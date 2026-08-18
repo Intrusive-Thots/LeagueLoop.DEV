@@ -12,11 +12,16 @@ class TestQtTabWidgets(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
 
     def setUp(self):
+        import tempfile
+        self.temp_dir = tempfile.TemporaryDirectory()
+        db_path = os.path.join(self.temp_dir.name, "test_qt_tabs.db")
         from core.container import ApplicationContainer
-        self.container = ApplicationContainer()
+        self.container = ApplicationContainer(db_path=db_path)
 
     def tearDown(self):
         self.container.shutdown()
+        if hasattr(self, "temp_dir"):
+            self.temp_dir.cleanup()
 
     def test_play_tab_initialization_and_toggles(self):
         from ui.qt.widgets.play_tab import QtPlayTab

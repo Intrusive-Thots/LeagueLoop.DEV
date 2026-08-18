@@ -53,8 +53,8 @@ class RiotClientAPI:
         self.port: Optional[str] = None
         self.auth_token: Optional[str] = None
         self.base_url: Optional[str] = None
-        self.session = requests.Session()
-        self.session.verify = False
+        from services.http_session_factory import create_pooled_session
+        self.session = create_pooled_session(pool_connections=10, pool_maxsize=10, max_retries=1)
         self.is_connected = False
 
     def connect(self) -> bool:

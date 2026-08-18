@@ -25,11 +25,13 @@ from PySide6.QtWidgets import (
 )
 
 from ui.qt.components.button import ButtonSize, ButtonVariant, LLButton
-from ui.qt.components.card import LLCard
+from ui.qt.components.activity import ActivityKind, LLActivityFeed
+from ui.qt.components.card import LLCard, LLSection
 from ui.qt.components.status import LLStatus, Tone
 from ui.qt.theme.colors import TEXT_SECONDARY
 from ui.qt.theme.spacing import CONTENT_MARGIN, SPACE_LG, SPACE_MD
 from ui.qt.theme.typography import TEXT_PAGE_TITLE
+from ui.qt.viewmodels.activity_viewmodel import ActivityViewModel
 
 
 class QtPlayTab(QWidget):
@@ -48,6 +50,7 @@ class QtPlayTab(QWidget):
         self.automation = getattr(container, "automation", None) if container else None
         self.view_model = view_model
 
+        self.activity_vm = None
         self._setup_ui()
         self._load_config_state()
 
@@ -74,6 +77,9 @@ class QtPlayTab(QWidget):
 
         self.phase_status = LLStatus("Idle", Tone.NEUTRAL, "Nothing in progress", parent=status_card)
         status_row.addWidget(self.phase_status)
+        # Backwards-compatible alias: earlier code and tests refer to the
+        # phase readout as `phase_indicator`. LLStatus exposes .text() too.
+        self.phase_indicator = self.phase_status
         status_row.addStretch(1)
 
         self.btn_find_match = LLButton(
@@ -113,7 +119,15 @@ class QtPlayTab(QWidget):
         toggles_card.add_layout(grid)
         layout.addWidget(toggles_card)
 
-        layout.addStretch(1)
+        # --- recent activity (§6, §18) ------------------------------------
+        activity_section = LLSection("Recent activity", parent=self)
+        self.activity = LLActivityFeed(parent=activity_section)
+        activity_section.add_widget(self.activity, 1)
+        layout.addWidget(activity_section, 1)
+
+        # Events -> readable sentences, never raw protocol text.
+        self.activity_vm = ActivityViewModel(parent=self)
+        self.activity_vm.entry_added.connect(self.activity.add)
 
     # -------------------------------------------------------------- state
     def _render_state(self, *_args) -> None:
@@ -167,9 +181,3 @@ class QtPlayTab(QWidget):
     def update_phase(self, phase: str) -> None:
         """Legacy push-style entry point, retained for callers that use it."""
         self.phase_status.set_status(phase, Tone.NEUTRAL)
-
-    @property
-    def phase_indicator(self):
-        """Compatibility accessor for test suites and callers expecting phase_indicator widget."""
-        return self.phase_status
-

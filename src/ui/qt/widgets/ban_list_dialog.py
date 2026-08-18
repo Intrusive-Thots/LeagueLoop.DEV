@@ -1,12 +1,11 @@
 """
-Priority — champion priority configuration (UI/UX Master Plan §8).
+Ban List Dialog — Custom Champion Ban Configuration Modal (UI/UX Master Plan §8 & §15).
 
-Pairs the champion grid with the ordered priority list. Selecting a champion
-appends it; the grid then shows its rank badge, so the two halves stay in
-sync visually (§8: priority management should be visual).
-
-Reordering is drag-and-drop (§45). Full primary-vs-backup emphasis and a
-dedicated LLPriorityList component are still to come.
+Provides:
+- Searchable champion roster to select preferred bans
+- Drag-and-drop ordered ban priority list
+- Teammate hover respect rule configuration
+- Direct integration with ConfigManager
 """
 from __future__ import annotations
 
@@ -15,17 +14,19 @@ from typing import List, Optional
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QStackedWidget,
+    QCheckBox,
+    QDialog,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from ui.qt.components.button import ButtonVariant, LLButton
-from ui.qt.components.card import LLSection
+from ui.qt.components.card import LLCard, LLSection, LLSeparator
 from ui.qt.theme.colors import (
     BORDER_ACCENT,
     BORDER_DEFAULT,
@@ -38,56 +39,71 @@ from ui.qt.theme.colors import (
 )
 from ui.qt.theme.radii import RADIUS_MD
 from ui.qt.theme.spacing import CONTENT_MARGIN, SPACE_LG, SPACE_MD, SPACE_SM
-from ui.qt.theme.typography import TEXT_BODY, TEXT_PAGE_TITLE
+from ui.qt.theme.typography import TEXT_BODY, TEXT_CAPTION, TEXT_PAGE_TITLE
 from ui.qt.widgets.champion_grid import QtChampionGrid
 
 
-class QtPriorityTab(QWidget):
-    """Champion priority and ban preference configuration."""
+class QtBanListDialog(QDialog):
+    """Modal dialog for editing custom champion ban priorities."""
 
     def __init__(
         self,
-        container=None,
-        view_model=None,
+        config=None,
+        assets=None,
         parent: Optional[QWidget] = None,
     ):
         super().__init__(parent)
-        self.container = container
-        self.config = getattr(container, "config", None) if container else None
-        self.assets = getattr(container, "assets", None) if container else None
+        self.config = config
+        self.assets = assets
+
+        self.setWindowTitle("Ban List Preferences")
+        self.resize(780, 520)
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: #010A13;
+                border: 1px solid {BORDER_DEFAULT};
+            }}
+        """)
 
         self._setup_ui()
-        self._load_priority_list()
+        self._load_config_state()
 
-    # ------------------------------------------------------------------ UI
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(CONTENT_MARGIN, SPACE_LG, CONTENT_MARGIN, SPACE_LG)
         root.setSpacing(SPACE_MD)
 
-        title = QLabel("Priority", self)
+        title = QLabel("Champion Ban List Preferences", self)
         title.setStyleSheet(TEXT_PAGE_TITLE.qss(color=TEXT_SECONDARY))
         root.addWidget(title)
 
+        # Options Row
+        options_card = LLCard(parent=self)
+        self.chk_respect = QCheckBox("Respect teammate hovers (never ban what a teammate intends to play)", options_card)
+        self.chk_respect.setChecked(True)
+        options_card.add_widget(self.chk_respect)
+        root.addWidget(options_card)
+
+        # Two-column selector
         columns = QHBoxLayout()
         columns.setSpacing(SPACE_LG)
         root.addLayout(columns, 1)
 
-        # --- left: champion roster ---------------------------------------
+        # Left: Champion Roster
         left = LLSection("Champion roster", parent=self)
         self.grid = QtChampionGrid(asset_manager=self.assets, parent=left)
         self.grid.champion_selected.connect(self._on_champion_clicked)
         left.add_widget(self.grid, 1)
         columns.addWidget(left, 3)
 
-        # --- right: ordered priority list --------------------------------
-        right = LLSection("Pick priority order", parent=self)
+        # Right: Ban Priority List
+        right = LLSection("Ban priority order", parent=self)
 
-        self.prio_list_widget = QListWidget(right)
-        self.prio_list_widget.setDragDropMode(QAbstractItemView.InternalMove)
-        self.prio_list_widget.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.prio_list_widget.model().rowsMoved.connect(self._on_rows_moved)
-        self.prio_list_widget.setStyleSheet(f"""
+        self.ban_list_widget = QListWidget(right)
+        self.ban_list_widget.setDragDropMode(QAbstractItemView.InternalMove)
+        self.ban_list_widget.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.ban_list_widget.model().rowsMoved.connect(self._on_rows_moved)
+        self.ban_list_widget.setStyleSheet(f"""
             QListWidget {{
                 background-color: {SURFACE_PANEL};
                 border: 1px solid {BORDER_DEFAULT};
@@ -107,11 +123,9 @@ class QtPriorityTab(QWidget):
                 border: 1px solid {BORDER_ACCENT};
             }}
         """)
-        # Empty state (§54): never show a blank panel, always name the next
-        # useful action.
+
         self.empty_state = QLabel(
-            "No champions in your priority list.\n\n"
-            "Pick one from the roster to make it your first choice.",
+            "No champions in your ban list.\n\nSelect a champion from the left to add it to your auto-ban queue.",
             right,
         )
         self.empty_state.setAlignment(Qt.AlignCenter)
@@ -127,73 +141,83 @@ class QtPriorityTab(QWidget):
         """)
 
         self.list_stack = QStackedWidget(right)
-        self.list_stack.addWidget(self.empty_state)      # index 0
-        self.list_stack.addWidget(self.prio_list_widget)  # index 1
+        self.list_stack.addWidget(self.empty_state)
+        self.list_stack.addWidget(self.ban_list_widget)
         right.add_widget(self.list_stack, 1)
 
-        self.hint = QLabel("Click a champion to add. Drag to reorder.", right)
-        self.hint.setStyleSheet(
-            TEXT_BODY.qss(color=TEXT_MUTED) + " background: transparent;"
-        )
+        self.hint = QLabel("Click to add ban. Drag to reorder priority.", right)
+        self.hint.setStyleSheet(TEXT_BODY.qss(color=TEXT_MUTED) + " background: transparent;")
         right.add_widget(self.hint)
 
-        buttons = QHBoxLayout()
-        buttons.setSpacing(SPACE_SM)
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(SPACE_SM)
+
         self.btn_remove = LLButton("Remove", parent=right)
         self.btn_remove.clicked.connect(self._on_remove_selected)
-        buttons.addWidget(self.btn_remove)
+        btn_row.addWidget(self.btn_remove)
 
         self.btn_clear = LLButton("Clear all", variant=ButtonVariant.DANGER, parent=right)
         self.btn_clear.clicked.connect(self._on_clear_all)
-        buttons.addWidget(self.btn_clear)
-        buttons.addStretch(1)
-        right.add_layout(buttons)
+        btn_row.addWidget(self.btn_clear)
+        btn_row.addStretch(1)
+        right.add_layout(btn_row)
 
         columns.addWidget(right, 2)
 
-    # ---------------------------------------------------------------- data
+        # Footer Dialog Action
+        footer = QHBoxLayout()
+        footer.addStretch(1)
+        btn_close = LLButton("Done", variant=ButtonVariant.PRIMARY, parent=self)
+        btn_close.clicked.connect(self.accept)
+        footer.addWidget(btn_close)
+        root.addLayout(footer)
+
     def _champ_name(self, cid: int) -> str:
         getter = getattr(self.assets, "get_champ_name", None)
         if callable(getter):
             try:
-                return getter(cid) or str(cid)
+                name = getter(cid)
+                if name:
+                    return name
             except Exception:
                 pass
         tile = self.grid.tiles.get(int(cid)) if self.grid.tiles else None
         return tile.model.name if tile is not None else str(cid)
 
-    def _load_priority_list(self) -> None:
+    def _load_config_state(self) -> None:
         if not self.config:
-            self._sync_grid_badges()
+            self._sync_badges()
             return
-        self.prio_list_widget.clear()
-        for cid in self.config.get("priority_list", []) or []:
+
+        self.chk_respect.setChecked(bool(self.config.get("auto_ban_respect_teammates", True)))
+
+        self.ban_list_widget.clear()
+        for cid in self.config.get("ban_list", []) or []:
             try:
                 cid_int = int(cid)
             except (TypeError, ValueError):
                 continue
             self._append_item(cid_int)
         self._renumber_items()
-        self._sync_grid_badges()
+        self._sync_badges()
 
     def _append_item(self, champ_id: int) -> None:
         item = QListWidgetItem(self._champ_name(champ_id))
         item.setData(Qt.UserRole, champ_id)
-        self.prio_list_widget.addItem(item)
+        self.ban_list_widget.addItem(item)
 
     def _current_ids(self) -> List[int]:
         return [
-            self.prio_list_widget.item(i).data(Qt.UserRole)
-            for i in range(self.prio_list_widget.count())
+            self.ban_list_widget.item(i).data(Qt.UserRole)
+            for i in range(self.ban_list_widget.count())
         ]
 
     def _renumber_items(self) -> None:
-        for i in range(self.prio_list_widget.count()):
-            item = self.prio_list_widget.item(i)
+        for i in range(self.ban_list_widget.count()):
+            item = self.ban_list_widget.item(i)
             item.setText("#{}  {}".format(i + 1, self._champ_name(item.data(Qt.UserRole))))
 
-    def _sync_grid_badges(self) -> None:
-        """Push the current order to the grid so rank badges match."""
+    def _sync_badges(self) -> None:
         ids = self._current_ids()
         self.grid.set_priority_ids(ids)
         self.list_stack.setCurrentIndex(1 if ids else 0)
@@ -203,10 +227,10 @@ class QtPriorityTab(QWidget):
 
     def _save(self) -> None:
         if self.config:
-            self.config.set("priority_list", self._current_ids())
-        self._sync_grid_badges()
+            self.config.set("ban_list", self._current_ids())
+            self.config.set("auto_ban_respect_teammates", self.chk_respect.isChecked())
+        self._sync_badges()
 
-    # -------------------------------------------------------------- actions
     def _on_champion_clicked(self, champ_id: int, name: str) -> None:
         if champ_id in self._current_ids():
             return
@@ -219,12 +243,12 @@ class QtPriorityTab(QWidget):
         self._save()
 
     def _on_remove_selected(self) -> None:
-        row = self.prio_list_widget.currentRow()
+        row = self.ban_list_widget.currentRow()
         if row >= 0:
-            self.prio_list_widget.takeItem(row)
+            self.ban_list_widget.takeItem(row)
             self._renumber_items()
             self._save()
 
     def _on_clear_all(self) -> None:
-        self.prio_list_widget.clear()
+        self.ban_list_widget.clear()
         self._save()

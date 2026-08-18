@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 class ApplicationContainer:
     """Owns and exposes the main service graph."""
 
-    def __init__(self) -> None:
+    def __init__(self, db_path: Optional[str] = None) -> None:
         from services.asset_manager import AssetManager
         from services.config_manager import ConfigManager
         from services.api_handler import LCUClient
@@ -36,7 +36,7 @@ class ApplicationContainer:
         self.config: ConfigManager = ConfigManager()
         self.assets: AssetManager = AssetManager()
         self.lcu: LCUClient = LCUClient()
-        self.db: DatabaseService = DatabaseService()
+        self.db: DatabaseService = DatabaseService(db_path=db_path) if db_path else DatabaseService()
         self.scraper: StatsScraper = StatsScraper(
             mode=self.config.get("aram_mode", "ARAM")
         )

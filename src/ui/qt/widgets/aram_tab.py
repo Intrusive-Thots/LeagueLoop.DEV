@@ -1,12 +1,11 @@
 """
-Priority — champion priority configuration (UI/UX Master Plan §8).
+ARAM Tab — ARAM Champion Priority & Bench Sniper (UI/UX Master Plan §8 & §10).
 
-Pairs the champion grid with the ordered priority list. Selecting a champion
-appends it; the grid then shows its rank badge, so the two halves stay in
-sync visually (§8: priority management should be visual).
-
-Reordering is drag-and-drop (§45). Full primary-vs-backup emphasis and a
-dedicated LLPriorityList component are still to come.
+Provides:
+- Dedicated ARAM Champion Priority list with drag-and-drop reordering
+- Visual champion roster with search & filter
+- Bench Sniper & Auto-Reroll automation configuration
+- Synchronized rank badges on champion roster tiles
 """
 from __future__ import annotations
 
@@ -15,17 +14,20 @@ from typing import List, Optional
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QStackedWidget,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QScrollArea,
+    QSpinBox,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from ui.qt.components.button import ButtonVariant, LLButton
-from ui.qt.components.card import LLSection
+from ui.qt.components.card import LLCard, LLSection, LLSeparator
+from ui.qt.components.setting_row import LLSettingRow
 from ui.qt.theme.colors import (
     BORDER_ACCENT,
     BORDER_DEFAULT,
@@ -42,8 +44,8 @@ from ui.qt.theme.typography import TEXT_BODY, TEXT_PAGE_TITLE
 from ui.qt.widgets.champion_grid import QtChampionGrid
 
 
-class QtPriorityTab(QWidget):
-    """Champion priority and ban preference configuration."""
+class QtAramTab(QWidget):
+    """ARAM Champion Priority and Bench Sniper configuration surface."""
 
     def __init__(
         self,
@@ -57,31 +59,54 @@ class QtPriorityTab(QWidget):
         self.assets = getattr(container, "assets", None) if container else None
 
         self._setup_ui()
-        self._load_priority_list()
+        self._load_config_state()
 
-    # ------------------------------------------------------------------ UI
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(CONTENT_MARGIN, SPACE_LG, CONTENT_MARGIN, SPACE_LG)
         root.setSpacing(SPACE_MD)
 
-        title = QLabel("Priority", self)
+        title = QLabel("ARAM Priority & Bench Sniper", self)
         title.setStyleSheet(TEXT_PAGE_TITLE.qss(color=TEXT_SECONDARY))
         root.addWidget(title)
 
+        # Automation Options Row
+        options_card = LLCard(title="ARAM Automation Rules", parent=self)
+        self.row_bench_swap = LLSettingRow(
+            "Auto Bench Sniper",
+            "Instantly grabs preferred champions when teammates roll them to the bench.",
+            checked=True,
+            parent=options_card,
+        )
+        self.row_bench_swap.toggled.connect(lambda v: self._set_cfg("aram_bench_swap", v))
+        options_card.add_widget(self.row_bench_swap)
+        options_card.add_widget(LLSeparator(parent=options_card))
+
+        self.row_auto_reroll = LLSettingRow(
+            "Always Reroll Below Top 3",
+            "Spends a dice roll if your current champion is not in your top 3 choices.",
+            checked=False,
+            parent=options_card,
+        )
+        self.row_auto_reroll.toggled.connect(lambda v: self._set_cfg("aram_auto_reroll", v))
+        options_card.add_widget(self.row_auto_reroll)
+
+        root.addWidget(options_card)
+
+        # Main two-column editor
         columns = QHBoxLayout()
         columns.setSpacing(SPACE_LG)
         root.addLayout(columns, 1)
 
-        # --- left: champion roster ---------------------------------------
+        # Left: Champion Roster
         left = LLSection("Champion roster", parent=self)
         self.grid = QtChampionGrid(asset_manager=self.assets, parent=left)
         self.grid.champion_selected.connect(self._on_champion_clicked)
         left.add_widget(self.grid, 1)
         columns.addWidget(left, 3)
 
-        # --- right: ordered priority list --------------------------------
-        right = LLSection("Pick priority order", parent=self)
+        # Right: Ordered Priority List
+        right = LLSection("ARAM Priority Order", parent=self)
 
         self.prio_list_widget = QListWidget(right)
         self.prio_list_widget.setDragDropMode(QAbstractItemView.InternalMove)
@@ -107,11 +132,10 @@ class QtPriorityTab(QWidget):
                 border: 1px solid {BORDER_ACCENT};
             }}
         """)
-        # Empty state (§54): never show a blank panel, always name the next
-        # useful action.
+
         self.empty_state = QLabel(
-            "No champions in your priority list.\n\n"
-            "Pick one from the roster to make it your first choice.",
+            "No champions in your ARAM priority list.\n\n"
+            "Select champions from the roster on the left to add them to your priority queue.",
             right,
         )
         self.empty_state.setAlignment(Qt.AlignCenter)
@@ -127,14 +151,12 @@ class QtPriorityTab(QWidget):
         """)
 
         self.list_stack = QStackedWidget(right)
-        self.list_stack.addWidget(self.empty_state)      # index 0
-        self.list_stack.addWidget(self.prio_list_widget)  # index 1
+        self.list_stack.addWidget(self.empty_state)
+        self.list_stack.addWidget(self.prio_list_widget)
         right.add_widget(self.list_stack, 1)
 
-        self.hint = QLabel("Click a champion to add. Drag to reorder.", right)
-        self.hint.setStyleSheet(
-            TEXT_BODY.qss(color=TEXT_MUTED) + " background: transparent;"
-        )
+        self.hint = QLabel("Click roster to add. Drag to reorder ranking.", right)
+        self.hint.setStyleSheet(TEXT_BODY.qss(color=TEXT_MUTED) + " background: transparent;")
         right.add_widget(self.hint)
 
         buttons = QHBoxLayout()
@@ -151,23 +173,27 @@ class QtPriorityTab(QWidget):
 
         columns.addWidget(right, 2)
 
-    # ---------------------------------------------------------------- data
     def _champ_name(self, cid: int) -> str:
         getter = getattr(self.assets, "get_champ_name", None)
         if callable(getter):
             try:
-                return getter(cid) or str(cid)
+                name = getter(cid)
+                if name:
+                    return name
             except Exception:
                 pass
         tile = self.grid.tiles.get(int(cid)) if self.grid.tiles else None
         return tile.model.name if tile is not None else str(cid)
 
-    def _load_priority_list(self) -> None:
+    def _load_config_state(self) -> None:
         if not self.config:
             self._sync_grid_badges()
             return
+        self.row_bench_swap.set_checked(bool(self.config.get("aram_bench_swap", True)))
+        self.row_auto_reroll.set_checked(bool(self.config.get("aram_auto_reroll", False)))
+
         self.prio_list_widget.clear()
-        for cid in self.config.get("priority_list", []) or []:
+        for cid in self.config.get("aram_priority_list", []) or []:
             try:
                 cid_int = int(cid)
             except (TypeError, ValueError):
@@ -193,7 +219,6 @@ class QtPriorityTab(QWidget):
             item.setText("#{}  {}".format(i + 1, self._champ_name(item.data(Qt.UserRole))))
 
     def _sync_grid_badges(self) -> None:
-        """Push the current order to the grid so rank badges match."""
         ids = self._current_ids()
         self.grid.set_priority_ids(ids)
         self.list_stack.setCurrentIndex(1 if ids else 0)
@@ -203,10 +228,13 @@ class QtPriorityTab(QWidget):
 
     def _save(self) -> None:
         if self.config:
-            self.config.set("priority_list", self._current_ids())
+            self.config.set("aram_priority_list", self._current_ids())
         self._sync_grid_badges()
 
-    # -------------------------------------------------------------- actions
+    def _set_cfg(self, key: str, value) -> None:
+        if self.config:
+            self.config.set(key, value)
+
     def _on_champion_clicked(self, champ_id: int, name: str) -> None:
         if champ_id in self._current_ids():
             return
