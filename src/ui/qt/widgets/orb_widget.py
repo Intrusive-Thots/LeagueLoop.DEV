@@ -133,7 +133,7 @@ class QtOrbWidget(QWidget):
         self.lbl_phase.setText(f"● {phase_str}")
 
         if phase_str == "ChampSelect":
-            champ = state.draft.selected_champion_id
+            champ = getattr(state.champ_select, "selected_champion_id", 0) if hasattr(state, "champ_select") else 0
             self.lbl_rec.setText(f"Pick ID: {champ}" if champ else "Drafting...")
             self.btn_lock.setEnabled(True)
         else:

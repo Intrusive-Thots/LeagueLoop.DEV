@@ -6,7 +6,8 @@ sys.path.insert(0, os.path.join(os.path.abspath(os.path.dirname(__file__)), "src
 
 USAGE = """LeagueLoop
 
-  python run.py              start LeagueLoop
+  python run.py              start LeagueLoop (CustomTkinter)
+  python run.py --qt         start LeagueLoop (PySide6 Qt Shell)
   python run.py --replace    shut down a running instance and start fresh
   python run.py --help       show this message
 """
@@ -26,6 +27,10 @@ if __name__ == "__main__":
     if "--help" in args or "-h" in args:
         print(USAGE)
         raise SystemExit(0)
+
+    if "--qt" in args:
+        from ui.qt.app.application import run as run_qt_app
+        raise SystemExit(run_qt_app(with_services="--no-services" not in args))
 
     replace = "--replace" in args or "--force" in args
 
