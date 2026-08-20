@@ -789,8 +789,8 @@ class AutomationEngine:
                     self._chat_warden_warned = True
                     self._log(f"Toxicity detected in lobby: '{kw}'")
                     try:
-                        from ui.components.toast import ToastManager
-                        ToastManager.get_instance().show(f"Toxicity Warning: A teammate typed '{kw}'", theme="error")
+                        from core.events import EventBus
+                        EventBus.emit("toast_requested", f"Toxicity Warning: A teammate typed '{kw}'", "Toxicity Warning", "warning")
                     except Exception as e:
                         Logger.debug("Auto", f"Toast notification failed: {e}")
                     return

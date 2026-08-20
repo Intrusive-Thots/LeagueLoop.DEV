@@ -252,7 +252,20 @@ class LeagueLoopMainWindow(QMainWindow):
                     detail = result.detail or result.outcome.value
                     self.toast_requested.emit(f"Switch to {username} failed: {detail}", "Switch Failed", Tone.DANGER)
 
+            def _on_toast_event(msg, title="LeagueLoop", tone=Tone.INFO):
+                if isinstance(tone, str):
+                    tone_map = {
+                        "success": Tone.SUCCESS,
+                        "warning": Tone.WARNING,
+                        "danger": Tone.DANGER,
+                        "error": Tone.DANGER,
+                        "info": Tone.INFO,
+                    }
+                    tone = tone_map.get(tone.lower(), Tone.INFO)
+                self.toast_requested.emit(str(msg), str(title), tone)
+
             EventBus.on(EVENT_SWITCH_FINISHED, _on_switch_finished)
+            EventBus.on("toast_requested", _on_toast_event)
         except Exception:
             pass
 
