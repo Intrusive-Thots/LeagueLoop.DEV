@@ -579,6 +579,28 @@ class QtAccountsTab(QWidget):
             )
             layout.addWidget(warning)
 
+        # Account reordering affordance (§14)
+        total_accounts = len(self._accounts())
+        if total_accounts > 1:
+            btn_up = LLButton(
+                "▲", variant=ButtonVariant.GHOST, size=ButtonSize.SM, parent=row
+            )
+            btn_up.setToolTip("Move account up")
+            btn_up.setEnabled(index > 0 and self.accounts_service is not None)
+            btn_up.setProperty("llBaseEnabled", index > 0 and self.accounts_service is not None)
+            btn_up.clicked.connect(lambda _c, i=index: self._on_move(i, -1))
+            layout.addWidget(btn_up)
+
+            btn_down = LLButton(
+                "▼", variant=ButtonVariant.GHOST, size=ButtonSize.SM, parent=row
+            )
+            btn_down.setToolTip("Move account down")
+            btn_down.setEnabled(index < total_accounts - 1 and self.accounts_service is not None)
+            btn_down.setProperty("llBaseEnabled", index < total_accounts - 1 and self.accounts_service is not None)
+            btn_down.clicked.connect(lambda _c, i=index: self._on_move(i, 1))
+            layout.addWidget(btn_down)
+            self._buttons.extend((btn_up, btn_down))
+
         btn_default = LLButton(
             "Set default", variant=ButtonVariant.GHOST, size=ButtonSize.SM, parent=row
         )
@@ -623,6 +645,16 @@ class QtAccountsTab(QWidget):
         return row
 
     # -------------------------------------------------------------- actions
+    def _on_move(self, index: int, direction: int) -> None:
+        if self.accounts_service is None or self._switching:
+            return
+        mover = getattr(self.accounts_service, "move_account", None)
+        if callable(mover):
+            try:
+                mover(index, direction)
+            except Exception:
+                pass
+        self.refresh()
     def _usernames(self, excluding: int = -1):
         return [
             (a.get("username") or "")

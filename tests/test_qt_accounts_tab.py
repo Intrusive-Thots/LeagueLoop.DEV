@@ -62,6 +62,11 @@ class FakeAccountsService:
         self.STORED.pop(index)
         self.DISPLAY_ORDER = list(range(len(self.STORED)))
 
+    def move_account(self, idx: int, direction: int):
+        new_idx = idx + direction
+        if 0 <= new_idx < len(self.STORED):
+            self.STORED[idx], self.STORED[new_idx] = self.STORED[new_idx], self.STORED[idx]
+
 
 class FakeContainer:
     def __init__(self, service):
@@ -496,3 +501,16 @@ class ThreadAffinityTests(unittest.TestCase):
         self.assertEqual(len(self.tab._rows), 3,
                          "the stored accounts vanished after a failed switch")
         self.assertIn("sign out", self.tab.active_status.text().lower())
+
+    def test_reorder_accounts_moves_account_order(self):
+        # Initial order is Main (0), Smurf (1), Fresh (2)
+        self.assertEqual(self.service.STORED[0]["username"], "main")
+        self.assertEqual(self.service.STORED[1]["username"], "smurf")
+
+        # Move index 0 down
+        self.tab._on_move(0, 1)
+        self.app.processEvents()
+
+        # New order should be Smurf (0), Main (1), Fresh (2)
+        self.assertEqual(self.service.STORED[0]["username"], "smurf")
+        self.assertEqual(self.service.STORED[1]["username"], "main")
