@@ -88,11 +88,20 @@ class OpenPlan:
 
 
 @dataclass
+class ClaimResult:
+    claimed: int = 0
+    sources: List[str] = field(default_factory=list)
+    details: List[str] = field(default_factory=list)
+    errors: List[str] = field(default_factory=list)
+
+
+@dataclass
 class OpenResult:
     opened: int = 0
     failed: int = 0
     skipped: int = 0
     keys_crafted: int = 0
+    rewards_claimed: int = 0
     details: List[str] = field(default_factory=list)
 
 
@@ -352,6 +361,151 @@ class LootService:
                 self.log(f"Failed crafting keys from {item.name}")
         return crafted_total
 
+    # ── reward claiming (passes, missions, milestones) ─────────
+
+    def claim_battle_pass_rewards(self) -> ClaimResult:
+        """Claim pending event pass, battle pass, and TFT pass milestone rewards."""
+        res = ClaimResult()
+        pass_endpoints = [
+            "/lol-battle-pass/v1/rewards/claim",
+            "/lol-battle-pass/v1/claim-all",
+            "/lol-event-shop/v1/rewards/claim",
+            "/lol-event-shop/v1/claim-all",
+            "/lol-tft/v1/battlepass/claim",
+            "/lol-tft-pass/v1/claim-all",
+        ]
+        for ep in pass_endpoints:
+            ok, payload, err = self._post(ep, body={})
+            if ok:
+                cnt = 1
+                if isinstance(payload, dict):
+                    cnt = len(payload.get("rewards") or payload.get("claimedRewards") or [1])
+                elif isinstance(payload, list):
+                    cnt = max(1, len(payload))
+                res.claimed += cnt
+                res.sources.append(f"Pass ({ep})")
+                res.details.append(f"Claimed pass rewards via {ep}")
+                self.log(f"Successfully claimed {cnt} event/battle pass reward(s)")
+            elif "not found" not in err.lower() and "404" not in err:
+                res.errors.append(f"{ep}: {err}")
+
+        return res
+
+    def claim_mission_rewards(self) -> ClaimResult:
+        """Claim all completed but unclaimed missions and quests."""
+        res = ClaimResult()
+        missions = self._get_json("/lol-missions/v1/missions")
+        if isinstance(missions, list):
+            for m in missions:
+                if not isinstance(m, dict):
+                    continue
+                mid = m.get("id") or m.get("missionId")
+                status = str(m.get("status") or "").upper()
+                reward_status = str(m.get("rewardStatus") or "").upper()
+                is_claimable = bool(
+                    m.get("isClaimable")
+                    or reward_status in ("UNCLAIMED", "AVAILABLE")
+                    or status in ("COMPLETED_UNCLAIMED", "COMPLETED")
+                )
+                if mid and is_claimable:
+                    title = m.get("title") or m.get("name") or str(mid)
+                    ok, _payload, _err = self._post(f"/lol-missions/v1/missions/{mid}/claim", body={})
+                    if ok:
+                        res.claimed += 1
+                        res.sources.append(f"Mission: {title}")
+                        res.details.append(f"Claimed mission '{title}'")
+                        self.log(f"Claimed mission: {title}")
+
+        # Batch fallback
+        ok, _payload, _ = self._post("/lol-missions/v1/player/claim", body={})
+        if ok and not res.claimed:
+            res.claimed += 1
+            res.sources.append("Missions Player Claim")
+            res.details.append("Claimed pending player missions")
+
+        return res
+
+    def claim_loot_milestones(self) -> ClaimResult:
+        """Claim open milestone track rewards (e.g. Masterwork chests, Showcase capsules)."""
+        res = ClaimResult()
+        milestone_data = self._get_json("/lol-loot/v1/milestones")
+        if isinstance(milestone_data, list):
+            for track in milestone_data:
+                if not isinstance(track, dict):
+                    continue
+                milestones = track.get("milestones") or []
+                for ms in milestones:
+                    if not isinstance(ms, dict):
+                        continue
+                    ms_id = ms.get("id") or ms.get("milestoneId")
+                    status = str(ms.get("status") or "").upper()
+                    if ms_id and status in ("COMPLETED", "UNCLAIMED", "READY"):
+                        ok, _, _ = self._post(f"/lol-loot/v1/milestones/{ms_id}/claim", body={})
+                        if ok:
+                            res.claimed += 1
+                            res.sources.append(f"Milestone {ms_id}")
+                            res.details.append(f"Claimed loot milestone #{ms_id}")
+                            self.log(f"Claimed loot milestone: {ms_id}")
+
+        # Batch fallback
+        ok, _, _ = self._post("/lol-loot/v1/milestones/claim-all", body={})
+        if ok:
+            res.sources.append("Loot Milestones Claim-All")
+
+        return res
+
+    def claim_mastery_and_grants(self) -> ClaimResult:
+        """Claim champion mastery milestone and reward grant notifications."""
+        res = ClaimResult()
+        ok, _, _ = self._post("/lol-champion-mastery/v1/milestones/claim", body={})
+        if ok:
+            res.claimed += 1
+            res.sources.append("Champion Mastery Milestones")
+            res.details.append("Claimed champion mastery milestones")
+            self.log("Claimed champion mastery milestones")
+
+        ok, _, _ = self._post("/lol-rewards/v1/grants/claim", body={})
+        if ok:
+            res.claimed += 1
+            res.sources.append("Reward Grants")
+            res.details.append("Claimed reward grants")
+
+        return res
+
+    def claim_all_rewards(self) -> ClaimResult:
+        """
+        Execute full claim pipeline across:
+        1. Battle Pass & Event Pass milestone tracks (e.g. Pass level rewards)
+        2. Completed Missions & Quests
+        3. Loot Milestones (Masterwork / Showcase tracks)
+        4. Champion Mastery Milestones & Reward Grants
+        """
+        self.log("Claiming all unclaimed event pass, mission, and milestone rewards…")
+        total = ClaimResult()
+
+        for step_fn in (
+            self.claim_battle_pass_rewards,
+            self.claim_mission_rewards,
+            self.claim_loot_milestones,
+            self.claim_mastery_and_grants,
+        ):
+            try:
+                step_res = step_fn()
+                total.claimed += step_res.claimed
+                total.sources.extend(step_res.sources)
+                total.details.extend(step_res.details)
+                total.errors.extend(step_res.errors)
+            except Exception as exc:
+                self.log(f"Claim step error: {exc}")
+                total.errors.append(str(exc))
+
+        if total.claimed > 0:
+            self.log(f"Claim step completed: {total.claimed} reward(s) claimed into inventory.")
+        else:
+            self.log("Claim step completed: No pending unclaimed rewards found.")
+
+        return total
+
     # ── craft execution ────────────────────────────────────────
 
     def _craft(
@@ -389,12 +543,21 @@ class LootService:
     def open_all(
         self,
         craft_keys_first: bool = True,
+        claim_rewards_first: bool = True,
         max_passes: int = 4,
         only_ids: Optional[Set[str]] = None,
         stop_flag: Optional[Callable[[], bool]] = None,
     ) -> OpenResult:
         result = OpenResult()
         stop = stop_flag or (lambda: False)
+
+        if claim_rewards_first:
+            self.log("Claiming pending pass and mission rewards first…")
+            claim_res = self.claim_all_rewards()
+            result.rewards_claimed = claim_res.claimed
+            if claim_res.claimed > 0:
+                result.details.append(f"Rewards claimed: {claim_res.claimed}")
+                time.sleep(0.3)  # Brief delay to allow inventory to sync
 
         if craft_keys_first:
             self.log("Forging key fragments → keys…")

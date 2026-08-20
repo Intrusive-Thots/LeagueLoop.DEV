@@ -69,6 +69,22 @@ class LootTool(ctk.CTkFrame):
         opts = ctk.CTkFrame(self.body, fg_color="transparent")
         opts.pack(fill="x", padx=10, pady=(6, 2))
 
+        self.var_claim = ctk.BooleanVar(value=True)
+        self.chk_claim = ctk.CTkCheckBox(
+            opts,
+            text="Claim pass & missions first",
+            variable=self.var_claim,
+            font=get_font("caption"),
+            text_color=get_color("colors.text.primary"),
+            fg_color=get_color("colors.accent.gold", "#C8AA6E"),
+            hover_color=get_color("colors.accent.gold", "#C8AA6E"),
+            checkmark_color="#0A1428",
+            checkbox_width=16,
+            checkbox_height=16,
+        )
+        self.chk_claim.pack(side="left")
+        CTkTooltip(self.chk_claim, "Claim all pending battle pass, event pass, and mission rewards before opening")
+
         self.var_keys = ctk.BooleanVar(value=True)
         self.chk_keys = ctk.CTkCheckBox(
             opts,
@@ -82,7 +98,7 @@ class LootTool(ctk.CTkFrame):
             checkbox_width=16,
             checkbox_height=16,
         )
-        self.chk_keys.pack(side="left")
+        self.chk_keys.pack(side="left", padx=(12, 0))
         CTkTooltip(self.chk_keys, "Forge key fragments into keys before opening chests")
 
         self.summary_lbl = ctk.CTkLabel(
@@ -123,12 +139,27 @@ class LootTool(ctk.CTkFrame):
             fg_color=get_color("colors.background.card"),
             hover_color=get_color("colors.state.hover"),
             text_color=get_color("colors.text.primary"),
-            border_width=1,
-            border_color=get_color("colors.border.subtle"),
             command=self.refresh,
             cursor="hand2",
         )
         self.btn_refresh.pack(side="left")
+
+        self.btn_claim = ctk.CTkButton(
+            actions,
+            text="Claim",
+            width=64,
+            height=28,
+            font=get_font("caption", "bold"),
+            fg_color=get_color("colors.background.card"),
+            hover_color=get_color("colors.state.hover"),
+            text_color=get_color("colors.text.primary"),
+            border_width=1,
+            border_color=get_color("colors.border.subtle"),
+            command=self.claim_rewards,
+            cursor="hand2",
+        )
+        self.btn_claim.pack(side="left", padx=(6, 0))
+        CTkTooltip(self.btn_claim, "Claim pending battle pass, event pass, and mission rewards")
 
         self.btn_open = ctk.CTkButton(
             actions,
@@ -195,6 +226,7 @@ class LootTool(ctk.CTkFrame):
         state = "disabled" if busy else "normal"
         try:
             self.btn_open.configure(state=state)
+            self.btn_claim.configure(state=state)
             self.btn_refresh.configure(state=state)
             self.btn_stop.configure(state="normal" if busy else "disabled")
         except Exception:
@@ -300,6 +332,58 @@ class LootTool(ctk.CTkFrame):
 
     # ─────────── actions ───────────
 
+    def claim_rewards(self) -> None:
+        """Claim all pending pass, mission, and milestone rewards."""
+        if self._busy:
+            return
+        if not self.service or not self.lcu:
+            self.status_lbl.configure(text="No LCU client")
+            return
+
+        self._set_busy(True)
+        self.status_lbl.configure(text="Claiming rewards…")
+
+        def work():
+            msg = ""
+            try:
+                if not getattr(self.lcu, "is_connected", False):
+                    if hasattr(self.lcu, "connect"):
+                        self.lcu.connect(silent=True)
+                if not getattr(self.lcu, "is_connected", False):
+                    msg = "Client not connected"
+                else:
+                    res = self.service.claim_all_rewards()
+                    if res.claimed > 0:
+                        msg = f"Claimed {res.claimed} reward{'s' if res.claimed != 1 else ''}"
+                    else:
+                        msg = "No rewards pending"
+            except Exception as e:
+                msg = f"Claim error: {e}"
+                Logger.error("Loot", f"Claim rewards failed: {e}")
+
+            def done():
+                if not self.winfo_exists():
+                    return
+                self._set_busy(False)
+                self.status_lbl.configure(text=msg)
+                try:
+                    ToastManager.get_instance(self.winfo_toplevel()).show(
+                        msg,
+                        icon="🎁",
+                        duration=3500,
+                        theme="success" if "Claimed" in msg else "neutral",
+                    )
+                except Exception:
+                    pass
+                self.refresh()
+
+            try:
+                self.after(0, done)
+            except Exception:
+                pass
+
+        threading.Thread(target=work, daemon=True).start()
+
     def refresh(self) -> None:
         if self._busy:
             return
@@ -353,6 +437,7 @@ class LootTool(ctk.CTkFrame):
         self._stop = False
         self._set_busy(True)
         craft_keys = bool(self.var_keys.get())
+        claim_rewards = bool(self.var_claim.get())
 
         def work():
             summary = ""
@@ -365,10 +450,12 @@ class LootTool(ctk.CTkFrame):
                 else:
                     result = self.service.open_all(
                         craft_keys_first=craft_keys,
+                        claim_rewards_first=claim_rewards,
                         stop_flag=lambda: self._stop,
                     )
+                    claimed_str = f"claimed {result.rewards_claimed} · " if result.rewards_claimed else ""
                     summary = (
-                        f"Opened {result.opened} · failed {result.failed} · "
+                        f"{claimed_str}Opened {result.opened} · failed {result.failed} · "
                         f"skipped {result.skipped} · keys {result.keys_crafted}"
                     )
             except Exception as e:

@@ -10,7 +10,7 @@ this screen manages *which* stored account is active, not secrets.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
@@ -146,10 +146,21 @@ class QtAccountsTab(QWidget):
                 pass
 
     def _set_busy(self, busy: bool) -> None:
+        """
+        Lock the list while a switch is in flight.
+
+        Un-busying restores each button's *designed* state rather than
+        enabling everything: "Switch" on the active account and "Set default"
+        on the default one are deliberately disabled (§63 - disabled is a
+        designed state), and a finished switch must not light them up.
+        """
         self._switching = busy
         for button in self._buttons:
             try:
-                button.setEnabled(not busy and button.property("llEnabled") is not False)
+                if busy:
+                    button.setEnabled(False)
+                else:
+                    button.setEnabled(bool(button.property("llBaseEnabled")))
             except Exception:
                 pass
 
@@ -216,12 +227,28 @@ class QtAccountsTab(QWidget):
                 "Launch the League Client or switch to a stored account",
             )
 
-    def _accounts(self) -> List[Dict[str, Any]]:
+    def _accounts(self) -> List[Tuple[int, Dict[str, Any]]]:
+        """
+        (stable index, account) pairs in display order.
+
+        The index carried here is the account's position in the stored list -
+        the same index `login_account`, `set_default_account` and the switcher
+        expect. Display order and storage order are deliberately allowed to
+        differ: `get_accounts_display()` sorts by recency for the eye while
+        keeping the real index for the click.
+        """
+        display = getattr(self.accounts_service, "get_accounts_display", None)
+        if callable(display):
+            try:
+                return [(int(i), dict(a)) for i, a in (display() or [])]
+            except Exception:
+                pass
+
         getter = getattr(self.accounts_service, "get_accounts", None)
         if not callable(getter):
             return []
         try:
-            return list(getter() or [])
+            return list(enumerate(getter() or []))
         except Exception:
             return []
 
@@ -272,8 +299,8 @@ class QtAccountsTab(QWidget):
         active = self._active_index()
         default = self._default_index()
 
-        for index, account in enumerate(accounts):
-            if index:
+        for position, (index, account) in enumerate(accounts):
+            if position:
                 self.list_card.add_widget(LLSeparator(parent=self.list_card))
             self.list_card.add_widget(
                 self._account_row(index, account, index == active, index == default)
@@ -318,13 +345,16 @@ class QtAccountsTab(QWidget):
             "Set default", variant=ButtonVariant.GHOST, size=ButtonSize.SM, parent=row
         )
         btn_default.setEnabled(not is_default)
+        btn_default.setProperty("llBaseEnabled", not is_default)
         btn_default.clicked.connect(lambda _c, i=index: self._on_set_default(i))
         layout.addWidget(btn_default)
 
         btn_switch = LLButton(
             "Switch", variant=ButtonVariant.SECONDARY, size=ButtonSize.SM, parent=row
         )
-        btn_switch.setEnabled(not is_active and self.accounts_service is not None)
+        can_switch = not is_active and self.accounts_service is not None
+        btn_switch.setEnabled(can_switch)
+        btn_switch.setProperty("llBaseEnabled", can_switch)
         btn_switch.clicked.connect(lambda _c, i=index: self._on_switch(i))
         layout.addWidget(btn_switch)
 

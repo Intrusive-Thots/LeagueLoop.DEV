@@ -26,7 +26,7 @@ import threading
 import time
 import warnings
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 import urllib3
@@ -373,26 +373,45 @@ class AccountManager:
 
     # ─────────── CRUD ───────────
     def get_accounts(self) -> List[Dict[str, Any]]:
-        """Return all accounts sorted by most recently used (last_used)."""
-        def parse_date(date_str):
-            if not date_str: return datetime.min
-            try: return datetime.fromisoformat(date_str)
-            except: return datetime.min
+        """
+        Return the stored accounts, in stored order. Pure read.
+
+        This used to sort `self._accounts` in place by `last_used`, recompute
+        `_active_idx` and call `_save()` - a *getter* that mutated and wrote
+        to disk. Because `last_used` is updated on every successful sign-in,
+        the list silently reordered after each login, so an index the UI had
+        rendered a moment earlier could point at a different account by the
+        time the user clicked it. That is how you end up switching into the
+        wrong account.
+
+        Indices returned here are stable and are what `switch_to()`,
+        `get_password()` and `delete_account()` expect. For most-recent-first
+        display order, use `get_accounts_display()`, which keeps the real
+        index alongside each account.
+        """
+        with self._lock:
+            return [dict(a) for a in self._accounts]
+
+    def get_accounts_display(self) -> List[Tuple[int, Dict[str, Any]]]:
+        """
+        (index, account) pairs, most recently used first.
+
+        Lets a UI show recency ordering while still carrying the stable index
+        that every mutating call needs.
+        """
+        def parse_date(value):
+            if not value:
+                return datetime.min
+            try:
+                return datetime.fromisoformat(value)
+            except Exception:
+                return datetime.min
 
         with self._lock:
-            # Sort a copy so we don't scramble index maps permanently,
-            # or actually, just return them as-is but UI will sort?
-            # Wait, if we sort the underlying array, indices change!
-            # We must maintain stable indices. The UI will just use the returned list.
-            # actually it's better to just sort the underlying array and update _active_idx.
-            if len(self._accounts) > 1:
-                active_acct = self._accounts[self._active_idx] if self._active_idx >= 0 else None
-                self._accounts.sort(key=lambda a: parse_date(a.get("last_used")), reverse=True)
-                if active_acct:
-                    self._active_idx = self._accounts.index(active_acct)
-                self._save()
+            pairs = [(i, dict(a)) for i, a in enumerate(self._accounts)]
 
-        return list(self._accounts)
+        pairs.sort(key=lambda pair: parse_date(pair[1].get("last_used")), reverse=True)
+        return pairs
 
     def get_account_count(self) -> int:
         return len(self._accounts)
