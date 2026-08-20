@@ -333,16 +333,40 @@ class LeagueLoopMainWindow(QMainWindow):
                     pass
 
     def _on_phase_changed(self, phase: str) -> None:
-        """Jump to Champ Select when the draft starts; never jump away."""
+        """Jump to Champ Select when the draft starts; cleanly recover on dodge."""
         from core.state import GameflowPhase
 
+        last_phase = getattr(self, "_last_seen_phase", None)
+        self._last_seen_phase = phase
+
         if phase == GameflowPhase.CHAMP_SELECT.value:
+            curr = getattr(self.sidebar, "current_tab", "")
+            if curr and curr != "champ_select":
+                self._tab_before_champ_select = curr
             if self.container and getattr(self.container, "scraper", None):
                 queue_id = getattr(self.view_model.state.client, "queue_id", None)
                 if queue_id:
                     self.container.scraper.set_mode_by_queue_id(queue_id)
             if "champ_select" in self.tab_pages:
                 self.sidebar.select_tab("champ_select")
+        elif last_phase == GameflowPhase.CHAMP_SELECT.value and phase in (
+            GameflowPhase.LOBBY.value,
+            GameflowPhase.MATCHMAKING.value,
+            GameflowPhase.READY_CHECK.value,
+            GameflowPhase.NONE.value,
+        ):
+            # A dodge occurred during champ select
+            self.toast_requested.emit(
+                "Dodge detected — returned to queue/lobby.",
+                "Dodge Recovered",
+                Tone.INFO,
+            )
+            # If user was viewing champ select, switch back to previous tab or play tab
+            if getattr(self.sidebar, "current_tab", "") == "champ_select":
+                fallback = getattr(self, "_tab_before_champ_select", "play") or "play"
+                if fallback == "champ_select":
+                    fallback = "play"
+                self.sidebar.select_tab(fallback)
 
     # --------------------------------------------------- state persistence
     def _restore_window_state(self) -> None:

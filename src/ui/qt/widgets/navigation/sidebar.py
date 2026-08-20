@@ -149,14 +149,17 @@ class QtNavigationSidebar(QFrame):
 
         self._layout.addStretch(1)
 
+        self.current_tab: str = tab_list[0][0] if tab_list else ""
         if tab_list:
             self.select_tab(tab_list[0][0])
 
     def _on_btn_clicked(self, key: str) -> None:
+        self.current_tab = key
         self.tab_selected.emit(key)
 
     def select_tab(self, key: str) -> None:
         """Programmatically activate a tab by key."""
+        self.current_tab = key
         btn = self.buttons.get(key)
         if btn:
             btn.setChecked(True)

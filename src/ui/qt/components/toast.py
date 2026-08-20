@@ -218,11 +218,14 @@ class QtToastManager:
         """Position toasts stacked in the top-right corner of the host window."""
         if not self.host_window:
             return
+        try:
+            host_rect = self.host_window.rect()
+        except RuntimeError:
+            return
         margin_right = 24
         margin_top = 24
         spacing = 10
 
-        host_rect = self.host_window.rect()
         current_y = margin_top
 
         for toast in self._active_toasts:

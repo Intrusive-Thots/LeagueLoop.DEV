@@ -118,6 +118,29 @@ class TestShell(unittest.TestCase):
         tab = QtLootTab(container=_Container())
         self.assertFalse(tab.btn_open.isEnabled())
 
+    def test_dodge_recovers_navigation_and_emits_toast(self):
+        """When someone dodges in draft, shell recovers cleanly to previous tab."""
+        window = self._window(_Container())
+        try:
+            # Start on play tab
+            window.sidebar.select_tab("play")
+            self.assertEqual(window.sidebar.current_tab, "play")
+
+            # Follow into draft
+            window._on_phase_changed("ChampSelect")
+            self.assertEqual(window.sidebar.current_tab, "champ_select")
+
+            # Dodge occurs -> phase returns to Lobby
+            toasts_shown = []
+            window.toast_requested.connect(lambda msg, title, tone: toasts_shown.append((msg, title, tone)))
+            window._on_phase_changed("Lobby")
+
+            # Recovers to previous tab ("play") and shows toast
+            self.assertEqual(window.sidebar.current_tab, "play")
+            self.assertTrue(any("dodge" in msg.lower() for msg, _t, _tone in toasts_shown))
+        finally:
+            window.close()
+
 
 if __name__ == "__main__":
     unittest.main()

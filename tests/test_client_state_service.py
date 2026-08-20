@@ -154,6 +154,34 @@ class PhaseTests(unittest.TestCase):
         service.tick()
         self.assertFalse(state.state.champ_select.active)
 
+    def test_dodge_resets_champ_select_state_and_returns_to_lobby(self):
+        mock_cs = {
+            "localPlayerCellId": 0,
+            "myTeam": [{"cellId": 0, "championId": 103}],
+            "actions": [[{"actorCellId": 0, "type": "pick", "completed": True}]],
+            "timer": {"adjustedTimeLeftInPhase": 15000},
+        }
+        service, lcu, state = build(
+            phase="ChampSelect",
+            summoner={"gameName": "A", "tagLine": "B"},
+            champ_select=mock_cs,
+        )
+        service.tick()
+        self.assertTrue(state.state.champ_select.active)
+        self.assertEqual(state.state.champ_select.selected_champion_id, 103)
+
+        # Someone dodges -> phase drops back to Lobby
+        lcu.phase = "Lobby"
+        lcu.champ_select = None
+        service.tick()
+
+        # State is cleanly reset for next game
+        self.assertEqual(state.state.client.phase, GameflowPhase.LOBBY.value)
+        self.assertFalse(state.state.champ_select.active)
+        self.assertEqual(state.state.champ_select.selected_champion_id, 0)
+        self.assertEqual(state.state.champ_select.timer_remaining_s, 0.0)
+        self.assertEqual(len(state.state.champ_select.actions), 0)
+
     def test_a_disconnected_client_reports_no_phase(self):
         service, _lcu, state = build(connectable=False)
         service.tick()
