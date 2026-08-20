@@ -6,8 +6,8 @@ sys.path.insert(0, os.path.join(os.path.abspath(os.path.dirname(__file__)), "src
 
 USAGE = """LeagueLoop
 
-  python run.py              start LeagueLoop (CustomTkinter)
-  python run.py --qt         start LeagueLoop (PySide6 Qt Shell)
+  python run.py              start LeagueLoop (PySide6 Qt Shell - Default)
+  python run.py --tk         start LeagueLoop (Legacy CustomTkinter)
   python run.py --replace    shut down a running instance and start fresh
   python run.py --help       show this message
 """
@@ -28,28 +28,24 @@ if __name__ == "__main__":
         print(USAGE)
         raise SystemExit(0)
 
-    if "--qt" in args:
-        from ui.qt.app.application import run as run_qt_app
-        raise SystemExit(run_qt_app(with_services="--no-services" not in args))
-
     replace = "--replace" in args or "--force" in args
 
     import ctypes
-    try:
-        ctypes.windll.user32.SetProcessDPIAware()
-    except AttributeError:
-        pass
+    if sys.platform == "win32":
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)  # per-monitor v2
+        except Exception:
+            try:
+                ctypes.windll.user32.SetProcessDPIAware()
+            except Exception:
+                pass
 
     from core.main import (  # type: ignore
-        LeagueLoopApp,
         _find_other_instances,
         _kill_other_instances,
     )
 
-    # Single instance. Previously this terminated whatever was already
-    # running, which meant launching a second time silently killed the copy
-    # you were using - the old window just reported "exit code 15". Now we
-    # refuse and say so, and taking over is opt-in via --replace.
+    # Single instance check
     others = _find_other_instances()
     if others:
         if replace:
@@ -69,9 +65,14 @@ if __name__ == "__main__":
             print("exit it from there, or start fresh with:")
             print()
             print("    python run.py --replace")
-            # Exit 0: this is a normal outcome, not a failure. Exiting non-zero
-            # here is what made launchers report a crash.
             raise SystemExit(0)
 
-    app = LeagueLoopApp()
-    app.mainloop()
+    use_legacy_tk = "--tk" in args or "--legacy" in args or "--customtkinter" in args
+
+    if use_legacy_tk:
+        from core.main import LeagueLoopApp
+        app = LeagueLoopApp()
+        app.mainloop()
+    else:
+        from ui.qt.app.application import run as run_qt_app
+        raise SystemExit(run_qt_app(with_services="--no-services" not in args))
