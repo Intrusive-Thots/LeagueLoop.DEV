@@ -84,10 +84,24 @@ class ChampSelectViewModel(QObject):
 
     # --------------------------------------------------------------- input
     def apply(self, app_state: ApplicationState) -> None:
-        """Adopt a new application state snapshot and recompute."""
+        """Adopt a new application state snapshot and recompute if structure changed."""
+        prev_state = self._state
         self._app_state = app_state
         self._state = app_state.champ_select
-        self._recompute()
+
+        structure_changed = (
+            prev_state.active != self._state.active
+            or prev_state.cell_id != self._state.cell_id
+            or prev_state.local_role != self._state.local_role
+            or prev_state.locked_in != self._state.locked_in
+            or prev_state.selected_champion_id != self._state.selected_champion_id
+            or prev_state.my_team != self._state.my_team
+            or prev_state.their_team != self._state.their_team
+            or prev_state.actions != self._state.actions
+        )
+
+        if structure_changed:
+            self._recompute()
         self.changed.emit()
 
     # -------------------------------------------------------------- getters

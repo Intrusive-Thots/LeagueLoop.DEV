@@ -289,6 +289,19 @@ class LLChampionTile(QFrame):
                 "LOCKED",
             )
 
+        if m.winrate is not None and not m.banned and not m.favorite and self.tile_size is not TileSize.SM:
+            font = painter.font()
+            font.setPixelSize(9)
+            font.setWeight(QFont.Weight(WEIGHT_BOLD))
+            painter.setFont(font)
+            wr_col = QColor("#0AC8B9") if m.winrate >= 50.0 else QColor(TEXT_MUTED)
+            painter.setPen(wr_col)
+            painter.drawText(
+                QRect(art_rect.left() + 2, art_rect.top() + 2, art_rect.width() - 4, 12),
+                Qt.AlignLeft | Qt.AlignTop,
+                f"{m.winrate:.1f}%",
+            )
+
     @staticmethod
     def _paint_star(painter: QPainter, box: QRect) -> None:
         """Five-pointed favourite marker on a dark disc for contrast."""
