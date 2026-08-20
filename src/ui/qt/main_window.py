@@ -202,11 +202,30 @@ class LeagueLoopMainWindow(QMainWindow):
                 except Exception:
                     pass
 
+        settings_page = self.tab_pages.get("settings")
+        if settings_page is not None:
+            status_sig = getattr(settings_page, "status_saved", None)
+            if status_sig is not None:
+                try:
+                    status_sig.connect(self._on_status_saved)
+                except Exception:
+                    pass
+
         if controller is not None:
             try:
                 controller.publish()
             except Exception:
                 pass
+
+    def _on_status_saved(self, status_text: str) -> None:
+        """Push custom status message to LCU via chat API."""
+        lcu = getattr(self.container, "lcu", None) if self.container else None
+        if lcu is not None and getattr(lcu, "is_connected", False):
+            try:
+                lcu.request("PUT", "/lol-chat/v1/me", json={"statusMessage": status_text})
+                self.toast_requested.emit("Status updated on League Client.", "Status Saved", Tone.SUCCESS)
+            except Exception as exc:
+                self.toast_requested.emit(f"Could not update status: {exc}", "Status Error", Tone.WARNING)
 
     def _on_automation_configure(self, key: str) -> None:
         """Navigate to the appropriate tab to configure an automation rule further."""
@@ -223,17 +242,17 @@ class LeagueLoopMainWindow(QMainWindow):
             from core.events import EventBus
             from services.accounts.results import EVENT_SWITCH_FINISHED, SwitchResult
 
-            def _on_switch_finished(data):
-                res = data.get("result")
-                username = data.get("username", "Account")
-                if isinstance(res, SwitchResult):
-                    if res.is_success():
-                        self.toast_requested.emit(f"Signed in as {username}", "Account Switched", Tone.SUCCESS)
-                    else:
-                        detail = res.detail or res.outcome.value
-                        self.toast_requested.emit(f"Switch to {username} failed: {detail}", "Switch Failed", Tone.DANGER)
+            def _on_switch_finished(result):
+                if not isinstance(result, SwitchResult):
+                    return
+                username = getattr(result, "account_label", None) or "Account"
+                if result.ok:
+                    self.toast_requested.emit(f"Signed in as {username}", "Account Switched", Tone.SUCCESS)
+                else:
+                    detail = result.detail or result.outcome.value
+                    self.toast_requested.emit(f"Switch to {username} failed: {detail}", "Switch Failed", Tone.DANGER)
 
-            EventBus.subscribe(EVENT_SWITCH_FINISHED, _on_switch_finished)
+            EventBus.on(EVENT_SWITCH_FINISHED, _on_switch_finished)
         except Exception:
             pass
 
@@ -422,6 +441,7 @@ class LeagueLoopMainWindow(QMainWindow):
             launch_key = self.config.get("hotkey_launch_client", "ctrl+shift+l")
             toggle_key = self.config.get("hotkey_toggle_automation", "ctrl+shift+a")
             compact_key = self.config.get("hotkey_compact_mode", "ctrl+shift+m")
+            find_key = self.config.get("hotkey_find_match", "ctrl+shift+f")
 
             if launch_key:
                 try:
@@ -436,6 +456,11 @@ class LeagueLoopMainWindow(QMainWindow):
             if compact_key:
                 try:
                     keyboard.add_hotkey(compact_key, self.toggle_orb_mode, suppress=False)
+                except Exception:
+                    pass
+            if find_key:
+                try:
+                    keyboard.add_hotkey(find_key, self._hotkey_find_match, suppress=False)
                 except Exception:
                     pass
         except Exception:
@@ -477,6 +502,22 @@ class LeagueLoopMainWindow(QMainWindow):
                 "Automation",
                 Tone.SUCCESS if new_state else Tone.NEUTRAL,
             )
+
+    def _hotkey_find_match(self) -> None:
+        """Start matchmaking search via shortcut."""
+        lcu = getattr(self.container, "lcu", None) if self.container else None
+        if lcu is None or not getattr(lcu, "is_connected", False):
+            self.toast_requested.emit("Client not connected.", "Find Match", Tone.WARNING)
+            return
+        try:
+            resp = lcu.request("POST", "/lol-lobby/v2/lobby/matchmaking/search")
+            if resp and getattr(resp, "status_code", 0) in (200, 204):
+                self.toast_requested.emit("Searching for match...", "Find Match", Tone.SUCCESS)
+            else:
+                code = getattr(resp, "status_code", "?")
+                self.toast_requested.emit(f"Could not start search (HTTP {code})", "Find Match", Tone.WARNING)
+        except Exception as exc:
+            self.toast_requested.emit(f"Queue error: {exc}", "Find Match", Tone.WARNING)
 
     def _auto_load_default_account(self) -> None:
         """Auto-login to default stored account if client is not connected (§220)."""

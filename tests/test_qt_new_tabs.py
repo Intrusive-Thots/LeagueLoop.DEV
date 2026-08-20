@@ -133,13 +133,13 @@ class TestQtNewTabsAndComponents(unittest.TestCase):
         self.assertNotIn(toast, mgr.active_toasts)
 
     def test_system_tray_service(self):
-        from ui.qt.services.tray_service import LLSystemTray
+        from ui.qt.widgets.system_tray import QtSystemTray
 
-        tray = LLSystemTray(config=self.container.config)
-        self.assertIsNotNone(tray.tray_icon)
+        tray = QtSystemTray(parent=None)
+        self.assertIsNotNone(tray)
 
         # Test notification dispatch doesn't raise
-        tray.show_message("Test Title", "Test Message")
+        tray.showMessage("Test Title", "Test Message")
 
 
 if __name__ == "__main__":
