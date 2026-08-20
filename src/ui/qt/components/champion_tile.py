@@ -72,6 +72,7 @@ class ChampionTileModel:
     banned: bool = False
     disabled: bool = False           # e.g. already picked by a teammate
     error: bool = False              # art or data failed to load
+    winrate: Optional[float] = None  # Lolalytics winrate percentage (e.g. 52.8)
 
     @property
     def selectable(self) -> bool:
@@ -137,6 +138,8 @@ class LLChampionTile(QFrame):
     def _tooltip_text(self) -> str:
         m = self.model
         bits = [m.name]
+        if m.winrate is not None:
+            bits.append(f"{m.winrate:.1f}% WR (Lolalytics)")
         if m.priority:
             bits.append("Priority #{}".format(m.priority))
         if m.favorite:

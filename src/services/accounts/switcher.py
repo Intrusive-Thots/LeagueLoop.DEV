@@ -31,6 +31,7 @@ from services.accounts.results import (
     EVENT_SWITCH_FINISHED,
     EVENT_SWITCH_PROGRESS,
     EVENT_SWITCH_STARTED,
+    OP_SIGN_OUT,
     SwitchOutcome,
     SwitchPhase,
     SwitchProgress,
@@ -151,18 +152,29 @@ class AccountSwitcher:
     def sign_out(self) -> SwitchResult:
         """Sign out whoever is signed in. Same lock, same outcomes."""
         if not self._lock.acquire(blocking=False):
-            return SwitchResult(SwitchOutcome.BUSY, SwitchPhase.IDLE)
+            return SwitchResult(
+                SwitchOutcome.BUSY, SwitchPhase.IDLE, operation=OP_SIGN_OUT
+            )
         try:
             self._emit(EVENT_SWITCH_STARTED, SwitchProgress(SwitchPhase.PREPARING, "Signing out"))
             outcome = self._ensure_signed_out()
             if outcome is not None:
-                return self._finish(SwitchResult(outcome, SwitchPhase.SIGNING_OUT))
+                return self._finish(
+                    SwitchResult(outcome, SwitchPhase.SIGNING_OUT, operation=OP_SIGN_OUT)
+                )
             # NB: _ensure_signed_out already fired on_signed_out; calling it
             # again here would double-write the active-account state.
-            return self._finish(SwitchResult(SwitchOutcome.SUCCESS, SwitchPhase.DONE))
+            return self._finish(
+                SwitchResult(
+                    SwitchOutcome.SUCCESS, SwitchPhase.DONE, operation=OP_SIGN_OUT
+                )
+            )
         except Exception as exc:
             return self._finish(
-                SwitchResult(SwitchOutcome.ERROR, self._phase, detail=str(exc))
+                SwitchResult(
+                    SwitchOutcome.ERROR, self._phase,
+                    detail=str(exc), operation=OP_SIGN_OUT,
+                )
             )
         finally:
             self._lock.release()

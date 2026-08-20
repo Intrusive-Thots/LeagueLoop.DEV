@@ -134,11 +134,50 @@ class LeagueLoopMainWindow(QMainWindow):
         # since Champ Select is the most time-critical surface (§80).
         self.view_model.phase_changed.connect(self._on_phase_changed)
 
+        # Both the Automation screen and the draft screen expose an emergency
+        # stop (§17). Their `stop_requested` signals were connected to nothing,
+        # so the button was decorative.
+        self._wire_automation()
+
         # Start focus on navigation rather than letting the first focusable
         # widget (a window control) claim the focus ring on launch.
         current = self.sidebar.buttons.get(self.sidebar.DEFAULT_TABS[0][0])
         if current is not None:
             current.setFocus()
+
+    # -------------------------------------------------------- automation
+    def _automation_controller(self):
+        return getattr(self.container, "automation_controller", None)
+
+    def _wire_automation(self) -> None:
+        controller = self._automation_controller()
+        for page in self.tab_pages.values():
+            signal = getattr(page, "stop_requested", None)
+            if signal is not None:
+                try:
+                    signal.connect(self._on_stop_automation)
+                except Exception:
+                    pass
+
+        automation_page = self.tab_pages.get("automation")
+        toggle = getattr(automation_page, "master_toggle", None)
+        if toggle is not None and controller is not None:
+            try:
+                toggle.toggled.connect(controller.set_master)
+            except Exception:
+                pass
+
+        if controller is not None:
+            try:
+                controller.publish()
+            except Exception:
+                pass
+
+    def _on_stop_automation(self) -> None:
+        """Emergency stop. Must work from any screen that offers it (§17)."""
+        controller = self._automation_controller()
+        if controller is not None:
+            controller.stop()
 
     # ------------------------------------------------------------- pages
     def _build_page(self, key: str, name: str) -> QWidget:
@@ -213,6 +252,11 @@ class LeagueLoopMainWindow(QMainWindow):
         page = self.tab_pages.get(key)
         if page is not None:
             self.tab_stack.setCurrentWidget(page)
+            if self.container and getattr(self.container, "scraper", None):
+                if key == "aram":
+                    self.container.scraper.set_mode("ARAM")
+                elif key == "priority":
+                    self.container.scraper.set_mode("Ranked")
             if self.config is not None:
                 try:
                     self.config.set("qt_last_tab", key)
@@ -223,8 +267,13 @@ class LeagueLoopMainWindow(QMainWindow):
         """Jump to Champ Select when the draft starts; never jump away."""
         from core.state import GameflowPhase
 
-        if phase == GameflowPhase.CHAMP_SELECT.value and "champ_select" in self.tab_pages:
-            self.sidebar.select_tab("champ_select")
+        if phase == GameflowPhase.CHAMP_SELECT.value:
+            if self.container and getattr(self.container, "scraper", None):
+                queue_id = getattr(self.view_model.state.client, "queue_id", None)
+                if queue_id:
+                    self.container.scraper.set_mode_by_queue_id(queue_id)
+            if "champ_select" in self.tab_pages:
+                self.sidebar.select_tab("champ_select")
 
     # --------------------------------------------------- state persistence
     def _restore_window_state(self) -> None:

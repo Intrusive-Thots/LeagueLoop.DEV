@@ -42,6 +42,8 @@ class ApplicationContainer:
         )
         self.automation: Optional[AutomationEngine] = None
         self.account_manager: Optional[AccountManager] = None
+        self.client_state = None
+        self.automation_controller = None
 
     def create_automation(
         self,
@@ -76,8 +78,55 @@ class ApplicationContainer:
         )
         return self.account_manager
 
+    def create_automation_controller(self, **kwargs):
+        """
+        Build the engine and the controller that owns its lifecycle.
+
+        The Qt shell never called `create_automation()`, so every automation
+        toggle wrote a config key that nothing read at runtime.
+        """
+        from services.automation_controller import AutomationController
+
+        if self.automation is None:
+            self.create_automation(**kwargs)
+        self.automation_controller = AutomationController(
+            self.automation, self.state_manager, self.config
+        )
+        return self.automation_controller
+
+    def create_client_state_service(self, autostart: bool = False, **kwargs):
+        """
+        Mirror the League Client into `ApplicationState`.
+
+        Without this the state model has no producer at all: every view that
+        renders from state shows its default (disconnected, idle) no matter
+        what the client is doing.
+
+        Does **not** start polling by default. The service only publishes
+        changes, so if it runs before the UI has subscribed, the first batch
+        of values is delivered to nobody and the shell sits on its defaults
+        until the client next does something. Start it once the views exist.
+        """
+        from services.client_state_service import ClientStateService
+
+        self.client_state = ClientStateService(
+            self.lcu, self.state_manager,
+            automation_controller=self.automation_controller,
+            **kwargs
+        )
+        if autostart:
+            self.client_state.start()
+        return self.client_state
+
     def shutdown(self) -> None:
         """Best-effort teardown of long-lived services."""
+        self.automation_controller = None
+        if getattr(self, "client_state", None) is not None:
+            try:
+                self.client_state.stop()
+            except Exception:
+                pass
+            self.client_state = None
         if self.automation is not None:
             try:
                 self.automation.stop()

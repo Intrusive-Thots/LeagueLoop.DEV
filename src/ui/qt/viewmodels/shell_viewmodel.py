@@ -102,18 +102,19 @@ class ShellViewModel(QObject):
         """
         Listen for state changes.
 
-        NOTE: `core.state.StateManager._notify_state_change` emits with the
-        `EventType.STATE_CHANGED` *enum member* as the key, while most other
-        emitters in the codebase use the `.value` string. We subscribe to both
-        so this view-model keeps working whichever convention wins; the
-        handler is idempotent, so a double-delivery is harmless.
+        This used to subscribe to both the `EventType.STATE_CHANGED` enum
+        member and its `.value` string, because the bus keyed listeners by
+        the exact object passed in and `StateManager` emitted the enum while
+        everything else emitted the string. `EventBus` now normalises both to
+        the same channel, so one subscription is enough.
         """
         self._on_state_event_ref = self._on_state_event  # keep a strong ref
-        for key in (EventType.STATE_CHANGED, EventType.STATE_CHANGED.value):
-            try:
-                self._handles.append(EventBus.on(key, self._on_state_event_ref))
-            except Exception:
-                pass
+        try:
+            self._handles.append(
+                EventBus.on(EventType.STATE_CHANGED, self._on_state_event_ref)
+            )
+        except Exception:
+            pass
 
     def dispose(self) -> None:
         """Unsubscribe from the event bus."""
@@ -125,7 +126,24 @@ class ShellViewModel(QObject):
         self._handles.clear()
 
     def _on_state_event(self, payload: Any = None, *args, **kwargs) -> None:
-        """EventBus callback. Accepts the {'state': ApplicationState} payload."""
+        """
+        EventBus callback. Accepts the {'state': ApplicationState} payload.
+
+        The bus dispatches from a background thread, and the window can be
+        torn down between the emit and the delivery - Qt then raises
+        "Signal source has been deleted" from inside the bus, which the bus
+        logs as an error on every subsequent tick. Unsubscribing on the way
+        out is cheaper than logging it forever.
+        """
+        try:
+            import shiboken6
+
+            if not shiboken6.isValid(self):
+                self.dispose()
+                return
+        except Exception:
+            pass
+
         state = None
         if isinstance(payload, dict):
             state = payload.get("state")
@@ -149,7 +167,12 @@ class ShellViewModel(QObject):
     def push_state(self, state: ApplicationState) -> None:
         """Adopt a new state snapshot and emit only what changed."""
         self._state = state
-        self.state_changed.emit(state)
+        try:
+            self.state_changed.emit(state)
+        except RuntimeError:
+            # The underlying QObject went away mid-dispatch.
+            self.dispose()
+            return
 
         connected = bool(state.client.connected)
         if connected != self._last_connected:

@@ -97,10 +97,26 @@ class SubscriptionHandle:
         self.dispose()
 
 
+def _channel(event_name) -> str:
+    """
+    Normalise a channel key to its string form.
+
+    Listeners were keyed by the exact object passed in, so subscribing with
+    `EventType.STATE_CHANGED` and emitting `"state_changed"` (or the reverse)
+    produced two unrelated channels and the listener silently never fired.
+    Both forms now land on the same key.
+    """
+    value = getattr(event_name, "value", event_name)
+    return value if isinstance(value, str) else str(value)
+
+
 class _EventBus:
     """
     Central event bus for cross-component communication.
     Thread-safe with copy-on-emit strategy and subscription handles.
+
+    Channel keys accept either an `EventType` member or its string value;
+    see `_channel`.
     """
     
     def __init__(self):
@@ -118,6 +134,7 @@ class _EventBus:
         Returns:
             SubscriptionHandle that can be disposed to unsubscribe
         """
+        event_name = _channel(event_name)
         handle = SubscriptionHandle(event_name, callback, self)
         
         with self._lock:
@@ -130,6 +147,7 @@ class _EventBus:
     
     def off(self, event_name: str, callback: Callable):
         """Unbind a listener from an event."""
+        event_name = _channel(event_name)
         with self._lock:
             if event_name in self._listeners and callback in self._listeners[event_name]:
                 self._listeners[event_name].remove(callback)
@@ -145,7 +163,9 @@ class _EventBus:
         """
         from utils.logger import Logger
         import traceback
-        
+
+        event_name = _channel(event_name)
+
         # Copy listeners under lock to avoid mutation during dispatch
         with self._lock:
             if event_name not in self._listeners:

@@ -86,6 +86,7 @@ class QtDiagnosticsTab(QWidget):
         self.lbl_p95_latency = self._create_metric_card("P95 LATENCY", "0.0 ms", metrics_layout, 0, 1)
         self.lbl_ws_events = self._create_metric_card("WS TOTAL EVENTS", "0", metrics_layout, 0, 2)
         self.lbl_disk_cache = self._create_metric_card("DISK CACHE SIZE", "0 MB", metrics_layout, 0, 3)
+        self.lbl_stats_scraper = self._create_metric_card("STATS (LOLALYTICS)", "Ready", metrics_layout, 0, 4)
 
         layout.addWidget(metrics_card)
 
@@ -135,6 +136,15 @@ class QtDiagnosticsTab(QWidget):
                 self.lbl_p95_latency.setText(f"{hist.get('p95_latency_ms', 0.0):.1f} ms")
                 ws_tel = self.lcu.get_ws_telemetry()
                 self.lbl_ws_events.setText(str(ws_tel.get("total_events", 0)))
+            except Exception:
+                pass
+
+        scraper = getattr(self.container, "scraper", None) if self.container else None
+        if scraper:
+            try:
+                mode = getattr(scraper, "mode", "ARAM")
+                count = len(getattr(scraper, "win_rates", {}))
+                self.lbl_stats_scraper.setText(f"{mode} ({count})")
             except Exception:
                 pass
 

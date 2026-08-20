@@ -82,16 +82,54 @@ class TestQtTabWidgets(unittest.TestCase):
         tab.btn_save_status.click()
         self.assertEqual(self.container.config.get("custom_status"), "Chilling in Challenger")
 
-    def test_champion_grid_and_priority_tab(self):
+    def _assets(self, champ_data):
+        class FakeAssets:
+            def __init__(self):
+                self.champ_data = champ_data
+        return FakeAssets()
+
+    def test_champion_grid_renders_real_champion_data(self):
         from ui.qt.widgets.champion_grid import QtChampionGrid
-        from ui.qt.widgets.priority_tab import QtPriorityTab
 
-        grid = QtChampionGrid(asset_manager=self.container.assets)
-        self.assertGreater(len(grid.tiles), 0)
+        assets = self._assets({
+            "Ahri": {"key": "103", "name": "Ahri"},
+            "Garen": {"key": "86", "name": "Garen"},
+        })
+        grid = QtChampionGrid(asset_manager=assets)
+        grid.load_champions()
 
-        # Test search filter
+        self.assertEqual(sorted(grid.tiles), [86, 103])
+
         grid.search_input.setText("Ahri")
         self.assertEqual(grid.search_query, "ahri")
+
+    def test_grid_invents_nothing_when_champion_data_is_missing(self):
+        """
+        There used to be a hardcoded list of twelve champions here, so a
+        machine whose assets had not downloaded showed a plausible roster
+        that was not the user's. This test exists to keep it gone.
+        """
+        from ui.qt.widgets.champion_grid import QtChampionGrid
+
+        grid = QtChampionGrid(asset_manager=self._assets({}))
+        grid.load_champions()
+
+        self.assertEqual(grid.tiles, {})
+        self.assertTrue(grid.empty_label.isVisibleTo(grid))
+        self.assertIn("not loaded", grid.empty_label.text().lower())
+
+    def test_empty_search_and_missing_data_say_different_things(self):
+        from ui.qt.widgets.champion_grid import QtChampionGrid
+
+        grid = QtChampionGrid(asset_manager=self._assets(
+            {"Ahri": {"key": "103", "name": "Ahri"}}
+        ))
+        grid.load_champions()
+        grid.search_input.setText("zzzzzz")
+        self.assertIn("match your search", grid.empty_label.text().lower())
+
+    def test_priority_tab(self):
+        from ui.qt.widgets.priority_tab import QtPriorityTab
 
         # Test Priority Tab
         prio_tab = QtPriorityTab(container=self.container)

@@ -95,15 +95,23 @@ RIOT_ERROR_MAP = {
 }
 
 
+# Which operation produced a result. SUCCESS means two different things
+# depending on it - "you are signed in" vs "you are signed out" - and a
+# sign-out that announces "Signed in." is worse than no message at all.
+OP_SWITCH = "switch"
+OP_SIGN_OUT = "sign_out"
+
+
 @dataclass(frozen=True)
 class SwitchResult:
-    """The outcome of one account switch."""
+    """The outcome of one account switch or sign-out."""
 
     outcome: SwitchOutcome
     phase: SwitchPhase = SwitchPhase.DONE
     account_index: int = -1
     account_label: str = ""
     detail: str = ""
+    operation: str = OP_SWITCH
 
     @property
     def ok(self) -> bool:
@@ -116,8 +124,11 @@ class SwitchResult:
     @property
     def message(self) -> str:
         base = OUTCOME_MESSAGES.get(self.outcome, OUTCOME_MESSAGES[SwitchOutcome.ERROR])
-        if self.account_label and self.outcome is SwitchOutcome.SUCCESS:
-            return "Signed in as {}.".format(self.account_label)
+        if self.outcome is SwitchOutcome.SUCCESS:
+            if self.operation == OP_SIGN_OUT:
+                return "Signed out."
+            if self.account_label:
+                return "Signed in as {}.".format(self.account_label)
         return base
 
     def __str__(self) -> str:

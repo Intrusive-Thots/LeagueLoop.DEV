@@ -57,6 +57,9 @@ class QtAramTab(QWidget):
         self.container = container
         self.config = getattr(container, "config", None) if container else None
         self.assets = getattr(container, "assets", None) if container else None
+        self.scraper = getattr(container, "scraper", None) if container else None
+        if self.scraper:
+            self.scraper.set_mode("ARAM")
 
         self._setup_ui()
         self._load_config_state()
@@ -100,7 +103,7 @@ class QtAramTab(QWidget):
 
         # Left: Champion Roster
         left = LLSection("Champion roster", parent=self)
-        self.grid = QtChampionGrid(asset_manager=self.assets, parent=left)
+        self.grid = QtChampionGrid(asset_manager=self.assets, scraper=self.scraper, parent=left)
         self.grid.champion_selected.connect(self._on_champion_clicked)
         left.add_widget(self.grid, 1)
         columns.addWidget(left, 3)
@@ -161,6 +164,11 @@ class QtAramTab(QWidget):
 
         buttons = QHBoxLayout()
         buttons.setSpacing(SPACE_SM)
+        self.btn_sort = LLButton("Sort by winrate", parent=right)
+        self.btn_sort.setToolTip("Sort ARAM priorities by Lolalytics win rate (highest first)")
+        self.btn_sort.clicked.connect(self._on_sort_by_winrate)
+        buttons.addWidget(self.btn_sort)
+
         self.btn_remove = LLButton("Remove", parent=right)
         self.btn_remove.clicked.connect(self._on_remove_selected)
         buttons.addWidget(self.btn_remove)
@@ -178,12 +186,19 @@ class QtAramTab(QWidget):
         if callable(getter):
             try:
                 name = getter(cid)
-                if name:
+                if name and name != str(cid):
                     return name
             except Exception:
                 pass
         tile = self.grid.tiles.get(int(cid)) if self.grid.tiles else None
         return tile.model.name if tile is not None else str(cid)
+
+    def _display_name(self, cid: int) -> str:
+        name = self._champ_name(cid)
+        if self.scraper:
+            wr = self.scraper.get_winrate(name)
+            return f"{name}  ({wr:.1f}% WR)"
+        return name
 
     def _load_config_state(self) -> None:
         if not self.config:
@@ -216,12 +231,13 @@ class QtAramTab(QWidget):
     def _renumber_items(self) -> None:
         for i in range(self.prio_list_widget.count()):
             item = self.prio_list_widget.item(i)
-            item.setText("#{}  {}".format(i + 1, self._champ_name(item.data(Qt.UserRole))))
+            item.setText("#{}  {}".format(i + 1, self._display_name(item.data(Qt.UserRole))))
 
     def _sync_grid_badges(self) -> None:
         ids = self._current_ids()
         self.grid.set_priority_ids(ids)
         self.list_stack.setCurrentIndex(1 if ids else 0)
+        self.btn_sort.setEnabled(bool(ids))
         self.btn_remove.setEnabled(bool(ids))
         self.btn_clear.setEnabled(bool(ids))
         self.hint.setVisible(bool(ids))
@@ -243,6 +259,18 @@ class QtAramTab(QWidget):
         self._save()
 
     def _on_rows_moved(self, *_args) -> None:
+        self._renumber_items()
+        self._save()
+
+    def _on_sort_by_winrate(self) -> None:
+        ids = self._current_ids()
+        if not ids:
+            return
+        if self.scraper:
+            ids.sort(key=lambda cid: self.scraper.get_winrate(self._champ_name(cid)), reverse=True)
+        self.prio_list_widget.clear()
+        for cid in ids:
+            self._append_item(cid)
         self._renumber_items()
         self._save()
 

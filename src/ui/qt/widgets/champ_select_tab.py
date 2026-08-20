@@ -189,6 +189,7 @@ class QtChampSelectTab(QWidget):
         self.available_section = LLSection("Available champions", parent=self)
         self.grid = QtChampionGrid(
             asset_manager=getattr(self.container, "assets", None),
+            scraper=getattr(self.container, "scraper", None),
             tile_size=TileSize.SM,
             parent=self.available_section,
         )
@@ -220,12 +221,11 @@ class QtChampSelectTab(QWidget):
         action_row.addWidget(self.btn_override)
 
         self.btn_stop = LLButton(
-            "Stop automation",
+            "Stop",
             variant=ButtonVariant.DANGER,
-            size=ButtonSize.MD,
             parent=action_card,
         )
-        self.btn_stop.setToolTip("Emergency stop - halt all automated actions")
+        self.btn_stop.setToolTip("Emergency stop - pauses all automation immediately")
         self.btn_stop.clicked.connect(self.stop_requested.emit)
         action_row.addWidget(self.btn_stop)
 
@@ -240,6 +240,7 @@ class QtChampSelectTab(QWidget):
             name=rec.name or "Unknown",
             key=rec.key or "",
             priority=priority,
+            winrate=getattr(rec, "winrate", None),
         )
         tile = LLChampionTile(model, size=size, icon_provider=self.icons, parent=self)
         tile.clicked.connect(lambda cid, _n: self.pick_requested.emit(cid))

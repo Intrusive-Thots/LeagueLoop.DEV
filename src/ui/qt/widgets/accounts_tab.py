@@ -5,14 +5,15 @@ Accounts (UI/UX Master Plan §25).
 is always visible at the top, switching is one click, and the default account
 is set from the same list rather than a separate screen.
 
-Credential entry deliberately lives in the existing account tool for now -
-this screen manages *which* stored account is active, not secrets.
+Accounts are added, edited and removed here too. Sending people to a
+different tool to type a password, then back here to use it, was the kind of
+split that makes a feature feel unfinished.
 """
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -24,7 +25,9 @@ from PySide6.QtWidgets import (
 from ui.qt.components.badge import LLBadge
 from ui.qt.components.button import ButtonSize, ButtonVariant, LLButton
 from ui.qt.components.card import LLCard, LLSeparator
+from ui.qt.components.modal import LLConfirmModal
 from ui.qt.components.status import LLStatus, Tone
+from ui.qt.widgets.account_editor import AccountEditorModal
 from ui.qt.theme.colors import TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY
 from ui.qt.theme.spacing import CONTENT_MARGIN, SPACE_LG, SPACE_MD, SPACE_SM
 from ui.qt.theme.typography import (
@@ -35,10 +38,52 @@ from ui.qt.theme.typography import (
 )
 
 
+class _DetectSignals(QObject):
+    finished = Signal()
+
+
+class _DetectTask(QRunnable):
+    """
+    Ask the account manager who is signed in, off the GUI thread.
+
+    Detection talks to two local HTTP APIs; on a cold Riot Client that is
+    hundreds of milliseconds, which is a visible freeze if done inline.
+    """
+
+    def __init__(self, service, signals: _DetectSignals):
+        super().__init__()
+        self._service = service
+        self._signals = signals
+
+    def run(self) -> None:
+        try:
+            detect = getattr(self._service, "detect_active_account", None)
+            if callable(detect):
+                detect()
+        except Exception:
+            pass
+        finally:
+            try:
+                self._signals.finished.emit()
+            except RuntimeError:
+                # The tab was destroyed while we were working.
+                pass
+
+
 class QtAccountsTab(QWidget):
     """Stored account list with an always-visible active account."""
 
     switch_requested = Signal(int)
+
+    # EventBus dispatches from the switcher's worker thread. Qt widgets may
+    # only be created, destroyed or restyled on the GUI thread, and `refresh()`
+    # rebuilds the whole list. Bouncing every bus callback through a signal
+    # gets it onto the GUI thread (Qt auto-queues cross-thread connections).
+    # Doing the work inline is why the stored-account list came back empty
+    # after a failed switch.
+    _switch_started = Signal(object)
+    _switch_progress = Signal(object)
+    _switch_finished = Signal(object)
 
     def __init__(
         self,
@@ -58,9 +103,17 @@ class QtAccountsTab(QWidget):
         self._switching = False
         self._handles = []
 
+        self._switch_started.connect(self._apply_switch_started)
+        self._switch_progress.connect(self._apply_switch_progress)
+        self._switch_finished.connect(self._apply_switch_finished)
+
+        self._detect_signals = _DetectSignals(self)
+        self._detect_signals.finished.connect(self.refresh)
+
         self._setup_ui()
         self.refresh()
         self._subscribe_to_switches()
+        self.detect()
 
         if view_model is not None:
             view_model.state_changed.connect(self._render_active)
@@ -72,9 +125,22 @@ class QtAccountsTab(QWidget):
         root.setContentsMargins(CONTENT_MARGIN, SPACE_LG, CONTENT_MARGIN, SPACE_LG)
         root.setSpacing(SPACE_MD)
 
+        header = QHBoxLayout()
+        header.setSpacing(SPACE_SM)
+
         title = QLabel("Accounts", self)
         title.setStyleSheet(TEXT_PAGE_TITLE.qss(color=TEXT_SECONDARY))
-        root.addWidget(title)
+        header.addWidget(title)
+        header.addStretch(1)
+
+        self.btn_add = LLButton(
+            "Add account", variant=ButtonVariant.PRIMARY, size=ButtonSize.SM, parent=self
+        )
+        self.btn_add.clicked.connect(self._on_add)
+        self.btn_add.setEnabled(self.accounts_service is not None)
+        header.addWidget(self.btn_add)
+
+        root.addLayout(header)
 
         # --- active account, always visible (§25) --------------------------
         self.active_card = LLCard(title="Active account", parent=self)
@@ -83,6 +149,33 @@ class QtAccountsTab(QWidget):
         )
         self.active_card.add_widget(self.active_status)
         root.addWidget(self.active_card)
+
+        # --- signed in, but not stored (§54) --------------------------------
+        # Detection used to fix this by silently inserting an account with no
+        # password and the username "Update Username". Asking is better than
+        # a row the user did not create and cannot use.
+        self.unknown_card = LLCard(title="Signed in as an unsaved account", parent=self)
+        self.unknown_label = QLabel("", self.unknown_card)
+        self.unknown_label.setWordWrap(True)
+        self.unknown_label.setStyleSheet(
+            TEXT_BODY.qss(color=TEXT_MUTED) + " background: transparent;"
+        )
+        self.unknown_card.add_widget(self.unknown_label)
+
+        unknown_row = QHBoxLayout()
+        unknown_row.addStretch(1)
+        self.btn_save_unknown = LLButton(
+            "Save this account",
+            variant=ButtonVariant.SECONDARY,
+            size=ButtonSize.SM,
+            parent=self.unknown_card,
+        )
+        self.btn_save_unknown.clicked.connect(self._on_save_unrecognised)
+        unknown_row.addWidget(self.btn_save_unknown)
+        self.unknown_card.add_layout(unknown_row)
+
+        self.unknown_card.setVisible(False)
+        root.addWidget(self.unknown_card)
 
         # --- stored accounts ------------------------------------------------
         scroll = QScrollArea(self)
@@ -100,8 +193,8 @@ class QtAccountsTab(QWidget):
         holder_layout.addWidget(self.list_card)
 
         note = QLabel(
-            "Adding or editing account credentials is not available in this "
-            "interface yet - use the existing Accounts tool for that.",
+            "Passwords are encrypted with Windows DPAPI and are only readable "
+            "by your Windows user account on this machine.",
             holder,
         )
         note.setWordWrap(True)
@@ -132,6 +225,7 @@ class QtAccountsTab(QWidget):
         except Exception:
             return
 
+        # These run on the worker thread and must do nothing but re-emit.
         self._on_started_ref = self._on_switch_started
         self._on_progress_ref = self._on_switch_progress
         self._on_finished_ref = self._on_switch_finished
@@ -164,7 +258,26 @@ class QtAccountsTab(QWidget):
             except Exception:
                 pass
 
+    # --- worker-thread entry points: re-emit only, touch nothing ----------
     def _on_switch_started(self, progress=None, *_a, **_kw) -> None:
+        self._emit_safely(self._switch_started, progress)
+
+    def _on_switch_progress(self, progress=None, *_a, **_kw) -> None:
+        self._emit_safely(self._switch_progress, progress)
+
+    def _on_switch_finished(self, result=None, *_a, **_kw) -> None:
+        self._emit_safely(self._switch_finished, result)
+
+    @staticmethod
+    def _emit_safely(signal, payload) -> None:
+        try:
+            signal.emit(payload)
+        except RuntimeError:
+            # The tab was destroyed between the emit and the delivery.
+            pass
+
+    # --- GUI-thread slots: safe to build and destroy widgets --------------
+    def _apply_switch_started(self, progress=None) -> None:
         self._set_busy(True)
         label = getattr(progress, "account_label", "") or ""
         self.active_status.set_status(
@@ -172,14 +285,14 @@ class QtAccountsTab(QWidget):
             Tone.INFO, getattr(progress, "message", ""),
         )
 
-    def _on_switch_progress(self, progress=None, *_a, **_kw) -> None:
+    def _apply_switch_progress(self, progress=None) -> None:
         message = getattr(progress, "message", "")
         if message:
             self.active_status.set_status(
                 "Switching", Tone.INFO, message
             )
 
-    def _on_switch_finished(self, result=None, *_a, **_kw) -> None:
+    def _apply_switch_finished(self, result=None) -> None:
         self._set_busy(False)
         if result is None:
             self.refresh()
@@ -261,6 +374,21 @@ class QtAccountsTab(QWidget):
                 pass
         return -1
 
+    def _credentials_ok(self, index: int) -> bool:
+        """
+        True unless we can positively tell the credentials are unusable.
+
+        Defaults to True when the service cannot answer: an unknown state must
+        not be rendered as a problem the user then goes hunting for.
+        """
+        checker = getattr(self.accounts_service, "has_valid_credentials", None)
+        if not callable(checker):
+            return True
+        try:
+            return bool(checker(index))
+        except Exception:
+            return True
+
     def _default_index(self) -> int:
         getter = getattr(self.accounts_service, "get_default_account_index", None)
         if callable(getter):
@@ -270,7 +398,86 @@ class QtAccountsTab(QWidget):
                 pass
         return -1
 
+    def detect(self) -> None:
+        """Kick off background detection; `refresh()` runs when it lands."""
+        if self.accounts_service is None:
+            return
+        try:
+            QThreadPool.globalInstance().start(
+                _DetectTask(self.accounts_service, self._detect_signals)
+            )
+        except Exception:
+            pass
+
+    def showEvent(self, event) -> None:
+        # Re-check on every visit: the user may have signed in or out in the
+        # Riot Client while looking at another screen.
+        super().showEvent(event)
+        if not self._switching:
+            self.detect()
+
+    def _unrecognised(self):
+        getter = getattr(self.accounts_service, "get_unrecognised_identity", None)
+        if not callable(getter):
+            return None
+        try:
+            return getter() or None
+        except Exception:
+            return None
+
+    def _render_unrecognised(self) -> None:
+        identity = self._unrecognised()
+        if not identity:
+            self.unknown_card.setVisible(False)
+            return
+
+        name = identity.get("display_name") or identity.get("username") or "Someone"
+        self.unknown_label.setText(
+            "The Riot Client is signed in as {}, which is not in your saved "
+            "accounts. Save it and LeagueLoop can switch back to it later "
+            "without you retyping anything.".format(name)
+        )
+        self.unknown_card.setVisible(True)
+
+    def _on_save_unrecognised(self) -> None:
+        identity = self._unrecognised()
+        if identity is None or self.accounts_service is None:
+            return
+
+        seed = {
+            "username": identity.get("username") or "",
+            "tagline": identity.get("tagline") or "",
+            "label": identity.get("display_name") or "",
+            "region": "NA1",
+        }
+        # Deliberately opened as an *add*, not an edit: there is no stored
+        # password, and the point of asking is to collect one.
+        dialog = AccountEditorModal(parent=self, existing_usernames=self._usernames())
+        dialog.field_username.set_text(seed["username"])
+        dialog.field_tagline.set_text(seed["tagline"])
+        dialog.field_label.set_text(seed["label"])
+        dialog.field_password.focus()
+        if dialog.exec() != AccountEditorModal.Accepted:
+            return
+
+        values = dialog.values()
+        adder = getattr(self.accounts_service, "add_account", None)
+        if callable(adder):
+            try:
+                adder(
+                    values["label"], values["username"], values["password"] or "",
+                    values["tagline"], values["region"],
+                )
+            except Exception as exc:
+                self.active_status.set_status(
+                    "Could not add that account", Tone.DANGER, str(exc)
+                )
+                return
+        self.refresh()
+
     def refresh(self) -> None:
+        self._render_unrecognised()
+
         # Clear everything below the card title.
         self._buttons = []
         layout = self.list_card.body
@@ -284,9 +491,12 @@ class QtAccountsTab(QWidget):
 
         accounts = self._accounts()
         if not accounts:
+            # An empty state names the next action rather than just reporting
+            # emptiness (§54).
             empty = QLabel(
-                "No stored accounts.\n\n"
-                "Accounts you add appear here so you can switch between them.",
+                "No stored accounts yet.\n\n"
+                "Add one and LeagueLoop can sign you in and switch between "
+                "accounts without you retyping anything.",
                 self.list_card,
             )
             empty.setWordWrap(True)
@@ -294,6 +504,18 @@ class QtAccountsTab(QWidget):
                 TEXT_BODY.qss(color=TEXT_MUTED) + " background: transparent;"
             )
             self.list_card.add_widget(empty)
+
+            cta = LLButton(
+                "Add your first account",
+                variant=ButtonVariant.PRIMARY,
+                size=ButtonSize.MD,
+                parent=self.list_card,
+            )
+            cta.clicked.connect(self._on_add)
+            cta.setEnabled(self.accounts_service is not None)
+            self._buttons.append(cta)
+            cta.setProperty("llBaseEnabled", self.accounts_service is not None)
+            self.list_card.add_widget(cta)
             return
 
         active = self._active_index()
@@ -326,6 +548,10 @@ class QtAccountsTab(QWidget):
 
         region = str(account.get("region") or "")
         tagline = str(account.get("tagline") or "")
+        # A Riot ID often already carries the shard ("Name#EUW"), and printing
+        # it twice reads like a bug.
+        if region and region.lower() in tagline.lower():
+            region = ""
         detail_text = " - ".join(p for p in (tagline, region) if p)
         if detail_text:
             detail = QLabel(detail_text, row)
@@ -341,6 +567,18 @@ class QtAccountsTab(QWidget):
         if is_default:
             layout.addWidget(LLBadge("Default", Tone.ACCENT, parent=row))
 
+        # Say up front when an account cannot possibly sign in - a password
+        # that no longer decrypts (accounts.json copied from another machine,
+        # or a different Windows user) is otherwise only discovered as a
+        # mystery failure mid-switch.
+        if not self._credentials_ok(index):
+            warning = LLBadge("No password", Tone.WARNING, parent=row)
+            warning.setToolTip(
+                "No usable password is stored for this account. Use Edit to "
+                "set one."
+            )
+            layout.addWidget(warning)
+
         btn_default = LLButton(
             "Set default", variant=ButtonVariant.GHOST, size=ButtonSize.SM, parent=row
         )
@@ -349,20 +587,180 @@ class QtAccountsTab(QWidget):
         btn_default.clicked.connect(lambda _c, i=index: self._on_set_default(i))
         layout.addWidget(btn_default)
 
+        btn_edit = LLButton(
+            "Edit", variant=ButtonVariant.GHOST, size=ButtonSize.SM, parent=row
+        )
+        btn_edit.setToolTip("Change this account's details or password")
+        btn_edit.setEnabled(self.accounts_service is not None)
+        btn_edit.setProperty("llBaseEnabled", self.accounts_service is not None)
+        btn_edit.clicked.connect(lambda _c, i=index: self._on_edit(i))
+        layout.addWidget(btn_edit)
+
+        btn_remove = LLButton(
+            "Remove", variant=ButtonVariant.GHOST, size=ButtonSize.SM, parent=row
+        )
+        btn_remove.setToolTip("Forget this account's saved credentials")
+        btn_remove.setEnabled(self.accounts_service is not None)
+        btn_remove.setProperty("llBaseEnabled", self.accounts_service is not None)
+        btn_remove.clicked.connect(lambda _c, i=index: self._on_remove(i))
+        layout.addWidget(btn_remove)
+
         btn_switch = LLButton(
             "Switch", variant=ButtonVariant.SECONDARY, size=ButtonSize.SM, parent=row
         )
         can_switch = not is_active and self.accounts_service is not None
         btn_switch.setEnabled(can_switch)
         btn_switch.setProperty("llBaseEnabled", can_switch)
+        btn_switch.setToolTip(
+            "This account is already signed in" if is_active
+            else "Sign out and sign in as this account"
+        )
         btn_switch.clicked.connect(lambda _c, i=index: self._on_switch(i))
         layout.addWidget(btn_switch)
 
-        self._buttons.extend((btn_default, btn_switch))
+        self._buttons.extend((btn_default, btn_edit, btn_remove, btn_switch))
         self._rows.append(row)
         return row
 
     # -------------------------------------------------------------- actions
+    def _usernames(self, excluding: int = -1):
+        return [
+            (a.get("username") or "")
+            for i, a in self._accounts()
+            if i != excluding
+        ]
+
+    def _on_add(self) -> None:
+        if self.accounts_service is None or self._switching:
+            return
+        dialog = AccountEditorModal(
+            parent=self, existing_usernames=self._usernames()
+        )
+        if dialog.exec() != AccountEditorModal.Accepted:
+            return
+
+        values = dialog.values()
+        adder = getattr(self.accounts_service, "add_account", None)
+        if not callable(adder):
+            return
+        try:
+            new_index = adder(
+                values["label"], values["username"], values["password"] or "",
+                values["tagline"], values["region"],
+            )
+        except Exception as exc:
+            self.active_status.set_status(
+                "Could not add that account", Tone.DANGER, str(exc)
+            )
+            return
+
+        # The first account someone stores is the one they will be signing in
+        # with, so make it the default rather than leaving the app with a list
+        # and no default.
+        if len(self._accounts()) == 1:
+            setter = getattr(self.accounts_service, "set_default_account", None)
+            if callable(setter):
+                try:
+                    setter(new_index)
+                except Exception:
+                    pass
+
+        self.refresh()
+
+    def _on_edit(self, index: int) -> None:
+        if self.accounts_service is None or self._switching:
+            return
+        accounts = self._accounts()
+        account = next((a for i, a in accounts if i == index), None)
+        if account is None:
+            return
+
+        dialog = AccountEditorModal(
+            account=account, parent=self,
+            existing_usernames=self._usernames(excluding=index),
+        )
+        if dialog.exec() != AccountEditorModal.Accepted:
+            return
+
+        values = dialog.values()
+        editor = getattr(self.accounts_service, "edit_account", None)
+        if not callable(editor):
+            return
+        try:
+            # password=None means "leave the stored one alone".
+            editor(
+                index,
+                label=values["label"],
+                username=values["username"],
+                password=values["password"],
+                tagline=values["tagline"],
+                region=values["region"],
+            )
+        except Exception as exc:
+            self.active_status.set_status(
+                "Could not save those changes", Tone.DANGER, str(exc)
+            )
+            return
+        self.refresh()
+
+    def _on_remove(self, index: int) -> None:
+        """
+        Forget an account, after saying plainly what that means.
+
+        Removing the account you are currently signed in as does not sign you
+        out - the Riot Client keeps its own session - so the confirmation says
+        so rather than letting you assume otherwise (§40).
+        """
+        if self.accounts_service is None or self._switching:
+            return
+        accounts = self._accounts()
+        account = next((a for i, a in accounts if i == index), None)
+        if account is None:
+            return
+
+        label = account.get("label") or account.get("username") or "this account"
+        is_active = index == self._active_index()
+        message = (
+            "LeagueLoop will forget the saved credentials for {}. "
+            "The Riot account itself is untouched, and you can add it again "
+            "later by entering the password.".format(label)
+        )
+        if is_active:
+            message += (
+                "\n\nYou are signed in as this account right now. Removing it "
+                "does not sign you out."
+            )
+
+        dialog = LLConfirmModal(
+            "Remove {}?".format(label), message, "Remove account", parent=self
+        )
+        if dialog.exec() != LLConfirmModal.Accepted:
+            return
+
+        was_default = index == self._default_index()
+        remover = getattr(self.accounts_service, "delete_account", None)
+        if callable(remover):
+            try:
+                remover(index)
+            except Exception as exc:
+                self.active_status.set_status(
+                    "Could not remove that account", Tone.DANGER, str(exc)
+                )
+                return
+
+        # Deleting the default would otherwise leave the app with accounts but
+        # no default, and nothing in the UI would say why.
+        if was_default:
+            remaining = self._accounts()
+            setter = getattr(self.accounts_service, "set_default_account", None)
+            if remaining and callable(setter):
+                try:
+                    setter(remaining[0][0])
+                except Exception:
+                    pass
+
+        self.refresh()
+
     def _on_set_default(self, index: int) -> None:
         setter = getattr(self.accounts_service, "set_default_account", None)
         if callable(setter):

@@ -236,6 +236,9 @@ class AccountManager:
         self.riot_client = RiotClientAPI()
         self._accounts: List[Dict[str, Any]] = []
         self._active_idx: int = -1
+        #: Identity the client reports that matches no stored account. Set by
+        #: detect_active_account(); the UI offers to add it.
+        self._unrecognised: Optional[Dict[str, str]] = None
         self._lock = threading.Lock()
         
         # Migration: Ensure existing accounts have new fields
@@ -537,170 +540,156 @@ class AccountManager:
         return bool(pwd)
 
     # ─────────── Active Account Detection ───────────
-    def detect_active_account(self) -> int:
-        """Try to detect which account is currently logged in.
-        
-        Data model:
-          - acct['username'] = Riot login username (e.g. 'themalcolm3')
-          - acct['tagline']  = In-game Riot ID (e.g. 'IntrusiveThots#NTRSV')
-          - acct['label']    = User-defined label (e.g. 'Main')
-
-        API returns:
-          - preferred_username = Riot login username (matches acct['username'])
-          - acct.game_name + acct.tag_line = In-game Riot ID (matches acct['tagline'])
+    def _read_identity(self):
         """
-        # Method 1: Riot Client API (most reliable)
+        Ask the Riot Client who is signed in, falling back to the LCU.
+
+        Returns a `ClientIdentity`. The Riot Client is preferred because it is
+        the only source that knows the *login* username; the LCU only knows
+        the in-game name, so an LCU-derived identity can never match on
+        username.
+        """
+        from services.accounts.identity import (
+            ClientIdentity,
+            from_lcu_summoner,
+            from_riot_userinfo,
+        )
+
         try:
             if self.riot_client.connect():
-                userinfo = self.riot_client.get_current_user()
-                if userinfo:
-                    riot_login = (userinfo.get("preferred_username") or "").lower()
-                    acct_info = userinfo.get("acct", {}) or {}
-                    game_name = (acct_info.get("game_name") or "").lower()
-                    tag_line = (acct_info.get("tag_line") or "").lower()
-                    # Build the full Riot ID for matching
-                    riot_id = f"{game_name}#{tag_line}" if game_name and tag_line else game_name
-
-                    for i, acct in enumerate(self._accounts):
-                        acct_user = acct.get("username", "").lower()
-                        acct_tag = acct.get("tagline", "").lower()
-                        acct_label = acct.get("label", "").lower()
-
-                        # Best match: Riot login username == stored username
-                        if acct_user and acct_user == riot_login:
-                            self._active_idx = i
-                            self._save()
-                            return i
-
-                    # Second pass: match by Riot ID or label
-                    for i, acct in enumerate(self._accounts):
-                        acct_tag = acct.get("tagline", "").lower()
-                        acct_label = acct.get("label", "").lower()
-
-                        # Match stored Riot ID against live Riot ID
-                        if acct_tag and riot_id and acct_tag == riot_id:
-                            self._active_idx = i
-                            self._save()
-                            return i
-                        # Match label against game name
-                        if acct_label and game_name and acct_label == game_name:
-                            self._active_idx = i
-                            self._save()
-                            return i
-
-                    # Also try to auto-populate the Riot ID if we matched by username
-                    # but the tagline was empty
-                    if riot_id and self._active_idx >= 0:
-                        acct = self._accounts[self._active_idx]
-                        if not acct.get("tagline"):
-                             gn = acct_info.get("game_name", "")
-                             tl = acct_info.get("tag_line", "")
-                             if gn and tl:
-                                 acct["tagline"] = f"{gn}#{tl}"
-                                 self._save()
-
-                    # Auto-add previously logged-in account if not found in list
-                    if self._active_idx == -1 and riot_id:
-                        gn = acct_info.get("game_name", "")
-                        tl = acct_info.get("tag_line", "")
-                        label = f"{gn}#{tl}" if gn and tl else (gn or "Previously Logged In")
-                        
-                        exists = False
-                        for acct in self._accounts:
-                            if acct.get("tagline", "").lower() == label.lower():
-                                exists = True
-                                break
-                        
-                        if not exists:
-                            self.add_account(
-                                label=label,
-                                username=riot_login or "Update Username",
-                                password="",  # Placeholder empty password
-                                tagline=label,
-                                region="NA1"
-                            )
-                            self._active_idx = len(self._accounts) - 1
-                            self._save()
-                            Logger.info("AccountManager", f"Auto-populated previously logged-in account: {label}")
-
+                identity = from_riot_userinfo(self.riot_client.get_current_user())
+                if not identity.is_empty:
+                    return identity
         except Exception as e:
             Logger.debug("AccountManager", f"Riot Client detection failed: {e}")
 
-        # Method 2: LCU API fallback
-        if self.lcu and self.lcu.is_connected:
+        if self.lcu and getattr(self.lcu, "is_connected", False):
             try:
-                res = self.lcu.request("GET", "/lol-summoner/v1/current-summoner", silent=True)
-                if res and res.status_code == 200:
-                    data = res.json()
-                    game_name = (data.get("gameName") or "").lower()
-                    tag_line = (data.get("tagLine") or "").lower()
-                    riot_id = f"{game_name}#{tag_line}" if game_name and tag_line else game_name
-
-                    found_idx = -1
-                    for i, acct in enumerate(self._accounts):
-                        acct_tag = acct.get("tagline", "").lower()
-                        acct_label = acct.get("label", "").lower()
-                        # Match Riot ID
-                        if acct_tag and riot_id and acct_tag == riot_id:
-                            found_idx = i
-                            break
-                        if acct_label and game_name and acct_label == game_name:
-                            found_idx = i
-                            break
-
-                    if found_idx >= 0:
-                        self._active_idx = found_idx
-                        self._save()
-                        return found_idx
-                    elif riot_id:
-                        # Discovered LCU account is not in our list — auto-populate
-                        gn = data.get("gameName", "")
-                        tl = data.get("tagLine", "")
-                        label = f"{gn}#{tl}" if gn and tl else (gn or "Previously Logged In")
-                        
-                        exists = False
-                        for acct in self._accounts:
-                            if acct.get("tagline", "").lower() == label.lower():
-                                exists = True
-                                break
-                        
-                        if not exists:
-                            self.add_account(
-                                label=label,
-                                username="Update Username",
-                                password="",
-                                tagline=label,
-                                region="NA1"
-                            )
-                            self._active_idx = len(self._accounts) - 1
-                            self._save()
-                            Logger.info("AccountManager", f"Auto-populated previously logged-in LCU account: {label}")
-
+                res = self.lcu.request(
+                    "GET", "/lol-summoner/v1/current-summoner", silent=True
+                )
+                if res is not None and res.status_code == 200:
+                    return from_lcu_summoner(res.json())
             except Exception as e:
                 Logger.debug("AccountManager", f"LCU detection failed: {e}")
 
-        # Post-detection: Update Wallet if connected
-        self._update_wallet()
+        return ClientIdentity()
 
-        return self._active_idx
+    def get_unrecognised_identity(self) -> Optional[Dict[str, str]]:
+        """
+        The signed-in identity that matched no stored account, or None.
+
+        This replaces the old behaviour of silently calling `add_account()`
+        with an empty password and the username "Update Username". That
+        created rows which could never sign in, from a background thread, with
+        no way for the user to know where they came from. Surfacing the
+        identity instead lets the UI offer to add it *with* a password.
+        """
+        with self._lock:
+            return dict(self._unrecognised) if self._unrecognised else None
+
+    def detect_active_account(self) -> int:
+        """
+        Detect which stored account is currently signed in.
+
+        Returns the account index, or -1. Unlike the previous version this
+        only ever *reads* the client: it does not create accounts, and it
+        takes the lock before touching shared state, because it runs on a
+        background thread alongside the switcher.
+        """
+        from services.accounts.identity import match_account, missing_tagline_update
+
+        identity = self._read_identity()
+
+        if identity.is_empty:
+            with self._lock:
+                self._unrecognised = None
+            self._update_wallet()
+            return self._active_idx
+
+        with self._lock:
+            accounts = list(self._accounts)
+            match = match_account(identity, accounts)
+
+            dirty = False
+            if match.confident:
+                if self._active_idx != match.index:
+                    self._active_idx = match.index
+                    dirty = True
+                self._unrecognised = None
+
+                fill = missing_tagline_update(identity, self._accounts[match.index])
+                if fill:
+                    self._accounts[match.index]["tagline"] = fill
+                    dirty = True
+
+            elif match.found:
+                # A label that happens to equal an in-game name is a
+                # coincidence, not an identification. Report it, do not act
+                # on it.
+                Logger.debug(
+                    "AccountManager",
+                    "Ignoring low-confidence account match for "
+                    f"{identity.display_name()} (matched a label only)",
+                )
+                self._unrecognised = self._identity_dict(identity)
+
+            else:
+                self._unrecognised = self._identity_dict(identity)
+                Logger.info(
+                    "AccountManager",
+                    f"Signed-in account {identity.display_name()} is not stored",
+                )
+
+            if dirty:
+                self._save()
+            active = self._active_idx
+
+        self._update_wallet()
+        return active
+
+    @staticmethod
+    def _identity_dict(identity) -> Dict[str, str]:
+        return {
+            "username": identity.login_name,
+            "tagline": identity.riot_id,
+            "display_name": identity.display_name(),
+        }
 
     def _update_wallet(self):
-        """Fetch and cache Blue Essence and RP for the active account."""
-        if self._active_idx < 0 or not self.lcu or not self.lcu.is_connected:
+        """
+        Cache Blue Essence and RP for the active account.
+
+        The index is re-read *inside* the lock: this runs on a background
+        thread, and the previous version checked `_active_idx` outside the
+        lock and then indexed with it, which raises IndexError if an account
+        was removed in between. It also wrote accounts.json on every call;
+        now it only writes when the numbers actually changed.
+        """
+        if not self.lcu or not getattr(self.lcu, "is_connected", False):
             return
-            
+
         try:
             res = self.lcu.request("GET", "/lol-inventory/v1/wallet", silent=True)
-            if res and res.status_code == 200:
-                wallet_data = res.json()
-                rp = wallet_data.get("RP", 0)
-                be = wallet_data.get("lol_blue_essence", 0)
-                
-                with self._lock:
-                    self._accounts[self._active_idx]["wallet"] = {"be": be, "rp": rp}
-                    self._save()
+            if not (res is not None and res.status_code == 200):
+                return
+            wallet_data = res.json()
+            wallet = {
+                "be": wallet_data.get("lol_blue_essence", 0),
+                "rp": wallet_data.get("RP", 0),
+            }
         except Exception as e:
             Logger.debug("AccountManager", f"Wallet update failed: {e}")
+            return
+
+        with self._lock:
+            idx = self._active_idx
+            if not (0 <= idx < len(self._accounts)):
+                return
+            if self._accounts[idx].get("wallet") == wallet:
+                return
+            self._accounts[idx]["wallet"] = wallet
+            self._save()
 
     # ─────────── Helper: Kill Game Processes ───────────
     @staticmethod
@@ -840,156 +829,20 @@ class AccountManager:
         except Exception:
             return None
 
-    # ─────────── Keyboard Login (Fallback) ───────────
-
-    def _keyboard_login(self, username, password, label, log_func, completion_func, idx):
-        """
-        DEPRECATED fallback: type credentials into the Riot Client login form.
-
-        No longer part of the login path. It is retained only for manual
-        recovery if the Riot Client API sign-in endpoint changes.
-
-        Why it is not the default: `pyautogui.write(password)` sends the
-        password as keystrokes to whatever window holds focus at that instant.
-        If focus is stolen mid-type - a notification, the client repainting,
-        another app - the password is typed into that window instead. The API
-        path in `services.accounts.RiotSession.sign_in` sends it directly to
-        the local client instead.
-
-        Original description follows.
-
-        Fallback: type credentials into the Riot Client login form.
-
-        The Riot Client auto-focuses the username field on launch.
-        So the entire login is just: type username → Tab → type password → Enter.
-        No mouse clicks, no pixel coordinates, no window position math.
-        """
-        try:
-            import pyautogui
-            import ctypes
-
-            user32 = ctypes.windll.user32
-
-            # Wait for the Riot Client window
-            hwnd = self._find_riot_client_window(timeout=30)
-            if not hwnd:
-                if log_func:
-                    log_func("Riot Client window not found.")
-                if completion_func:
-                    completion_func(False)
-                return
-
-            # Wait for the login form to fully render
-            if log_func:
-                log_func("Waiting for login form...")
-            time.sleep(0.5)
-
-            # Ensure window is visible and un-minimized
-            user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-            user32.SetForegroundWindow(hwnd)
-            time.sleep(0.5)
-
-            if log_func:
-                log_func(f"Typing credentials for {label}...")
-
-            # Username field is auto-focused on fresh launch.
-            # Clear any existing text, type username.
-            pyautogui.hotkey('ctrl', 'a')
-            time.sleep(0.1)
-            pyautogui.write(username, interval=0.03)
-            time.sleep(0.2)
-
-            # Tab to password field
-            pyautogui.press('tab')
-            time.sleep(0.2)
-
-            # Type password
-            pyautogui.write(password, interval=0.03)
-            time.sleep(0.2)
-
-            # Submit
-            pyautogui.press('enter')
-
-            # Wait for auth result via API
-            if log_func:
-                log_func("Waiting for authentication...")
-            self._wait_for_auth_result(idx, label, log_func, completion_func, timeout=15)
-
-        except Exception as e:
-            Logger.error("AccountManager", f"Keyboard login failed: {e}")
-            if log_func:
-                log_func(f"Keyboard login failed: {e}")
-            if completion_func:
-                completion_func(False)
-
-    # ─────────── Login Helpers ───────────
-
-    def _find_riot_client_window(self, timeout=30) -> int:
-        """Find the VISIBLE Riot Client window handle."""
-        import ctypes
-        import ctypes.wintypes
-        user32 = ctypes.windll.user32
-        deadline = time.time() + timeout
-
-        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.wintypes.BOOL, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
-
-        while time.time() < deadline:
-            found_hwnd = []
-            def callback(hwnd, extra):
-                if not user32.IsWindowVisible(hwnd):
-                    return True
-                length = user32.GetWindowTextLengthW(hwnd)
-                if length > 0:
-                    buff = ctypes.create_unicode_buffer(length + 1)
-                    user32.GetWindowTextW(hwnd, buff, length + 1)
-                    if buff.value == "Riot Client":
-                        found_hwnd.append(hwnd)
-                        return False  # Stop enumerating
-                return True
-
-            user32.EnumWindows(WNDENUMPROC(callback), 0)
-            if found_hwnd:
-                return found_hwnd[0]
-            time.sleep(0.5)
-        return 0
-
-    def _wait_for_auth_result(self, idx, label, log_func, completion_func, timeout=15):
-        """Poll the Riot Client API for authentication result after form submission."""
-        deadline = time.time() + timeout
-        self.riot_client.connect()
-
-        while time.time() < deadline:
-            time.sleep(0.5)
-            session = self.riot_client.get_session()
-            if session:
-                err = session.get("error", "")
-                if err:
-                    if log_func:
-                        log_func(f"Login fault: {err}")
-                    if completion_func:
-                        completion_func(False)
-                    return
-                if session.get("type", "") == "authenticated":
-                    self._record_login_success(idx, label, log_func, completion_func)
-                    return
-
-        # Timed out — could still be processing
-        if log_func:
-            log_func("Login timed out. Check the Riot Client.")
-        if completion_func:
-            completion_func(False)
-
-    def _record_login_success(self, idx, label, log_func, completion_func):
-        """Mark login as successful and update account metadata."""
-        with self._lock:
-            self._accounts[idx]["last_used"] = datetime.now().isoformat()
-            self._active_idx = idx
-            self._save()
-
-        if log_func:
-            log_func(f"Logged in as {label}!")
-        if completion_func:
-            completion_func(True)
+    # ─────────── Removed: keyboard login ───────────
+    #
+    # `_keyboard_login()` and its helpers (`_find_riot_client_window`,
+    # `_wait_for_auth_result`, `_record_login_success`) typed the username and
+    # password into the Riot Client with `pyautogui.write()`. That sends the
+    # password as keystrokes to whatever window holds focus at that instant -
+    # a notification, the client repainting, or another app stealing focus
+    # mid-type means the password lands somewhere else entirely.
+    #
+    # It was already off the login path; sign-in goes through the local client
+    # API in `services.accounts.RiotSession.sign_in`. Keeping a dormant copy
+    # meant the credential-leak path still existed in the binary and could be
+    # re-enabled by a future "fallback" change, so it is gone rather than
+    # deprecated. Git history has it if it is ever genuinely needed.
 
     # ─────────── Helpers ───────────
     def _launch_riot_client(self, launch_league: bool = True):

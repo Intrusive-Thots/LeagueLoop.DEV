@@ -38,6 +38,7 @@ class Recommendation:
     confidence: Confidence = Confidence.BLOCKED
     reasons: List[str] = field(default_factory=list)
     is_fallback: bool = False
+    winrate: Optional[float] = None  # Lolalytics winrate %
 
     @property
     def valid(self) -> bool:
@@ -231,7 +232,14 @@ class ChampSelectViewModel(QObject):
             except Exception:
                 role_matched = True
 
-        reasons = [result.reason]
+        name = self._champ_name(result.champion_id)
+        scraper = getattr(self._container, "scraper", None)
+        wr = scraper.get_winrate(name) if scraper else None
+
+        reasons = []
+        if wr is not None:
+            reasons.append(f"{wr:.1f}% WR (Lolalytics)")
+        reasons.append(result.reason)
         if role:
             reasons.append("{} selected".format(ROLE_LABELS.get(role, role.title())))
         reasons.append("Available")
@@ -240,12 +248,13 @@ class ChampSelectViewModel(QObject):
 
         self._recommendation = Recommendation(
             champion_id=result.champion_id,
-            name=self._champ_name(result.champion_id),
+            name=name,
             key=self._champ_key(result.champion_id),
             confidence=self._confidence_for(0 if not result.is_fallback else 1,
                                             result.is_fallback, role_matched),
             reasons=reasons,
             is_fallback=result.is_fallback,
+            winrate=wr,
         )
 
         self._backups = self._compute_backups(session, result.champion_id)
@@ -269,6 +278,8 @@ class ChampSelectViewModel(QObject):
         except Exception:
             ActionValidator = None  # type: ignore
 
+        scraper = getattr(self._container, "scraper", None)
+
         for champ_id in raw:
             try:
                 cid = int(champ_id)
@@ -282,13 +293,19 @@ class ChampSelectViewModel(QObject):
                         continue
                 except Exception:
                     pass
+            b_name = self._champ_name(cid)
+            b_wr = scraper.get_winrate(b_name) if scraper else None
+            b_reasons = ["Backup"]
+            if b_wr is not None:
+                b_reasons.append(f"{b_wr:.1f}% WR")
             backups.append(
                 Recommendation(
                     champion_id=cid,
-                    name=self._champ_name(cid),
+                    name=b_name,
                     key=self._champ_key(cid),
                     confidence=Confidence.MEDIUM,
-                    reasons=["Backup"],
+                    reasons=b_reasons,
+                    winrate=b_wr,
                 )
             )
             if len(backups) >= limit:

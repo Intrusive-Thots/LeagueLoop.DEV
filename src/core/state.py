@@ -194,5 +194,14 @@ class StateManager:
             return self._state
 
     def _notify_state_change(self) -> None:
+        """
+        Publish the new state.
+
+        Emits the *string* channel name. The EventBus keys listeners by the
+        exact object passed to `emit`, and this used to pass the `EventType`
+        enum member while every subscriber in the codebase uses the string -
+        so a subscriber written the obvious way silently never fired.
+        `ShellViewModel` was carrying a workaround that subscribed to both.
+        """
         if self._bus:
-            self._bus.emit(EventType.STATE_CHANGED, {"state": self._state})
+            self._bus.emit(EventType.STATE_CHANGED.value, {"state": self._state})

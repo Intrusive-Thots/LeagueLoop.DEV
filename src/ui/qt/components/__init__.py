@@ -19,9 +19,11 @@ Implemented so far:
     LLToggle         §33  on/off switch
     LLSettingRow     §7   name + state + explanation + control
     LLActivityFeed   §18  human-readable activity
+    LLTextField      §33  labelled input with inline validation
+    LLModal          §40  dialog surface with verb-labelled actions
 
 Still to build (see the migration audit): LLTabs, LLSearch,
-LLPriorityList, LLToast, LLModal, LLTooltip, LLAvatar.
+LLPriorityList, LLToast, LLTooltip, LLAvatar.
 """
 from ui.qt.components.activity import (
     ActivityEntry,
@@ -37,6 +39,8 @@ from ui.qt.components.button import (
     LLIconButton,
 )
 from ui.qt.components.card import LLCard, LLSection, LLSeparator
+from ui.qt.components.field import LLTextField
+from ui.qt.components.modal import LLConfirmModal, LLModal
 from ui.qt.components.champion_tile import (
     ChampionTileModel,
     LLChampionTile,
@@ -47,7 +51,6 @@ from ui.qt.components.focus import install_focus_visible
 from ui.qt.components.timer import LLTimer, TimerState
 from ui.qt.components.setting_row import LLSettingRow
 from ui.qt.components.status import LLStatus, Tone, tone_color, tone_glyph
-from ui.qt.components.toast import LLToast, LLToastManager
 from ui.qt.components.toggle import LLToggle
 
 __all__ = [
@@ -68,11 +71,12 @@ __all__ = [
     "TimerState",
     "LLDraftTimeline",
     "StepState",
-    "LLToast",
-    "LLToastManager",
     "LLToggle",
     "LLSettingRow",
     "LLCard",
+    "LLTextField",
+    "LLModal",
+    "LLConfirmModal",
     "LLSection",
     "LLSeparator",
     "LLStatus",

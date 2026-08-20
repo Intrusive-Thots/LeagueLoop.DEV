@@ -72,12 +72,12 @@ MIN_COLUMNS = 3
 MAX_COLUMNS = 8
 
 #: Popular-champion fallback used when no AssetManager data is available.
-_FALLBACK_CHAMPIONS = [
-    (266, "Aatrox", "Aatrox"), (103, "Ahri", "Ahri"), (1, "Annie", "Annie"),
-    (22, "Ashe", "Ashe"), (81, "Ezreal", "Ezreal"), (86, "Garen", "Garen"),
-    (222, "Jinx", "Jinx"), (64, "Lee Sin", "LeeSin"), (89, "Leona", "Leona"),
-    (412, "Thresh", "Thresh"), (67, "Vayne", "Vayne"), (157, "Yasuo", "Yasuo"),
-]
+#: Set when `_champion_rows()` found no champion data. The grid renders an
+#: honest empty state instead of inventing a roster - there used to be a
+#: hardcoded list of twelve champions here, which meant a machine whose
+#: assets had not downloaded showed a plausible-looking roster that was not
+#: yours. Fake data that looks real is worse than no data (§22, §54).
+_NO_CHAMPION_DATA = "no_champion_data"
 
 
 def _fuzzy_match(query: str, *fields: str) -> bool:
@@ -125,11 +125,13 @@ class QtChampionGrid(QWidget):
     def __init__(
         self,
         asset_manager=None,
+        scraper=None,
         tile_size: TileSize = TileSize.MD,
         parent: Optional[QWidget] = None,
     ):
         super().__init__(parent)
         self.assets = asset_manager
+        self.scraper = scraper
         self.tile_size = tile_size
 
         self.current_role = "ALL"
@@ -234,6 +236,7 @@ class QtChampionGrid(QWidget):
         root.addWidget(self.scroll_area, 1)
 
         # --- empty state (§54) -------------------------------------------
+        self._has_champion_data = True
         self.empty_label = QLabel("No champions match your search.", self)
         self.empty_label.setAlignment(Qt.AlignCenter)
         self.empty_label.setStyleSheet(
@@ -287,9 +290,8 @@ class QtChampionGrid(QWidget):
                     continue
                 if cid > 0:
                     rows.append((cid, info.get("name", key), key))
-        if not rows:
-            rows = list(_FALLBACK_CHAMPIONS)
         rows.sort(key=lambda r: r[1].lower())
+        self._has_champion_data = bool(rows)
         return rows
 
     def load_champions(self) -> None:
@@ -301,6 +303,7 @@ class QtChampionGrid(QWidget):
         self.tiles.clear()
 
         for cid, name, key in self._champion_rows():
+            winrate = self.scraper.get_winrate(name) if self.scraper else None
             model = ChampionTileModel(
                 champ_id=cid,
                 name=name,
@@ -310,6 +313,7 @@ class QtChampionGrid(QWidget):
                 owned=self._owned is None or key in self._owned,
                 banned=key in self._banned,
                 disabled=key in self._disabled,
+                winrate=winrate,
             )
             tile = LLChampionTile(
                 model, size=self.tile_size,
@@ -323,6 +327,11 @@ class QtChampionGrid(QWidget):
         self._apply_filters()
 
     # ------------------------------------------------- external state setters
+    def set_scraper(self, scraper) -> None:
+        """Update the StatsScraper reference and refresh win rates."""
+        self.scraper = scraper
+        self._refresh_models()
+
     def set_priority(self, keys: Iterable[str]) -> None:
         """Mark champions as prioritised, in order (rank 1 first)."""
         self._priority = {k: i + 1 for i, k in enumerate(keys) if k}
@@ -365,6 +374,7 @@ class QtChampionGrid(QWidget):
     def _refresh_models(self) -> None:
         for tile in self.tiles.values():
             m = tile.model
+            winrate = self.scraper.get_winrate(m.name) if self.scraper else m.winrate
             tile.set_model(
                 ChampionTileModel(
                     champ_id=m.champ_id, name=m.name, key=m.key,
@@ -373,6 +383,7 @@ class QtChampionGrid(QWidget):
                     owned=self._owned is None or m.key in self._owned,
                     banned=m.key in self._banned,
                     disabled=m.key in self._disabled,
+                    winrate=winrate,
                 )
             )
         self._apply_filters()
@@ -418,6 +429,17 @@ class QtChampionGrid(QWidget):
             "{} champions".format(total) if shown == total
             else "{} of {}".format(shown, total)
         )
+        if shown == 0 and not self._has_champion_data:
+            # Distinguish "your search matched nothing" from "we have no
+            # champion data at all" - they need completely different actions.
+            self.empty_label.setText(
+                "Champion data has not loaded yet.\n\n"
+                "LeagueLoop downloads the champion list from Riot's Data "
+                "Dragon on first run. Check your connection, or open the "
+                "League Client once so it can be fetched."
+            )
+        elif shown == 0:
+            self.empty_label.setText("No champions match your search.")
         self.empty_label.setVisible(shown == 0)
         self.scroll_area.setVisible(shown > 0)
 

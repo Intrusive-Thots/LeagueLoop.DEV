@@ -67,6 +67,7 @@ class QtChampionListTab(QWidget):
         self.container = container
         self.config = getattr(container, "config", None) if container else None
         self.assets = getattr(container, "assets", None) if container else None
+        self.scraper = getattr(container, "scraper", None) if container else None
 
         self._setup_ui()
         self._load_list()
@@ -86,7 +87,7 @@ class QtChampionListTab(QWidget):
         root.addLayout(columns, 1)
 
         left = LLSection("Champion roster", parent=self)
-        self.grid = QtChampionGrid(asset_manager=self.assets, parent=left)
+        self.grid = QtChampionGrid(asset_manager=self.assets, scraper=self.scraper, parent=left)
         self.grid.champion_selected.connect(self._on_champion_clicked)
         left.add_widget(self.grid, 1)
         columns.addWidget(left, 3)
@@ -141,6 +142,11 @@ class QtChampionListTab(QWidget):
 
         buttons = QHBoxLayout()
         buttons.setSpacing(SPACE_SM)
+        self.btn_sort = LLButton("Sort by winrate", parent=right)
+        self.btn_sort.setToolTip("Sort champions by Lolalytics win rate (highest first)")
+        self.btn_sort.clicked.connect(self._on_sort_by_winrate)
+        buttons.addWidget(self.btn_sort)
+
         self.btn_remove = LLButton("Remove", parent=right)
         self.btn_remove.clicked.connect(self._on_remove_selected)
         buttons.addWidget(self.btn_remove)
@@ -155,14 +161,26 @@ class QtChampionListTab(QWidget):
 
     # ---------------------------------------------------------------- data
     def _champ_name(self, champ_id: int) -> str:
+        name = ""
         getter = getattr(self.assets, "get_champ_name", None)
         if callable(getter):
             try:
-                return getter(champ_id) or str(champ_id)
+                val = getter(champ_id)
+                if val and val != str(champ_id):
+                    name = val
             except Exception:
                 pass
-        tile = self.grid.tiles.get(int(champ_id)) if self.grid.tiles else None
-        return tile.model.name if tile is not None else str(champ_id)
+        if not name:
+            tile = self.grid.tiles.get(int(champ_id)) if self.grid.tiles else None
+            name = tile.model.name if tile is not None else str(champ_id)
+        return name
+
+    def _display_name(self, champ_id: int) -> str:
+        name = self._champ_name(champ_id)
+        if self.scraper and self.CONFIG_KEY != "ban_list":
+            wr = self.scraper.get_winrate(name)
+            return f"{name}  ({wr:.1f}% WR)"
+        return name
 
     def _load_list(self) -> None:
         self.list_widget.clear()
@@ -189,12 +207,14 @@ class QtChampionListTab(QWidget):
     def _renumber_items(self) -> None:
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)
-            item.setText("#{}  {}".format(i + 1, self._champ_name(item.data(Qt.UserRole))))
+            cid = item.data(Qt.UserRole)
+            item.setText("#{}  {}".format(i + 1, self._display_name(cid)))
 
     def _sync_grid_badges(self) -> None:
         ids = self.current_ids()
         self.grid.set_priority_ids(ids)
         self.list_stack.setCurrentIndex(1 if ids else 0)
+        self.btn_sort.setEnabled(bool(ids))
         self.btn_remove.setEnabled(bool(ids))
         self.btn_clear.setEnabled(bool(ids))
         self.hint.setVisible(bool(ids))
@@ -213,6 +233,18 @@ class QtChampionListTab(QWidget):
         self._save()
 
     def _on_rows_moved(self, *_args) -> None:
+        self._renumber_items()
+        self._save()
+
+    def _on_sort_by_winrate(self) -> None:
+        ids = self.current_ids()
+        if not ids:
+            return
+        if self.scraper:
+            ids.sort(key=lambda cid: self.scraper.get_winrate(self._champ_name(cid)), reverse=True)
+        self.list_widget.clear()
+        for cid in ids:
+            self._append_item(cid)
         self._renumber_items()
         self._save()
 
@@ -239,6 +271,10 @@ class QtPriorityTab(QtChampionListTab):
         super().__init__(container=container, view_model=view_model, parent=parent)
         # Name kept from the first Qt prototype; some callers/tests use it.
         self.prio_list_widget = self.list_widget
+        if self.scraper:
+            self.scraper.set_mode("Ranked")
+            self.grid.set_scraper(self.scraper)
+            self._renumber_items()
 
     # Retained for callers written against the earlier implementation.
     def _current_ids(self) -> List[int]:
@@ -255,6 +291,13 @@ class QtAramTab(QtChampionListTab):
         "No ARAM priorities set.\n\n"
         "Pick champions you want to roll or trade for in ARAM."
     )
+
+    def __init__(self, container=None, view_model=None, parent=None):
+        super().__init__(container=container, view_model=view_model, parent=parent)
+        if self.scraper:
+            self.scraper.set_mode("ARAM")
+            self.grid.set_scraper(self.scraper)
+            self._renumber_items()
 
 
 class QtBanListTab(QtChampionListTab):

@@ -42,12 +42,16 @@ class TestQtNewTabsAndComponents(unittest.TestCase):
         tab.row_bench_swap.set_checked(True)
         self.assertTrue(self.container.config.get("aram_bench_swap"))
 
+        # Clear list first for test isolation
+        tab._on_clear_all()
+        self.assertEqual(len(self.container.config.get("aram_priority_list")), 0)
+
         # Add champion to ARAM prio list
         tab._on_champion_clicked(99, "Lux")
         self.assertIn(99, self.container.config.get("aram_priority_list"))
         self.assertEqual(tab.prio_list_widget.count(), 1)
 
-        # Clear list
+        # Clear list again
         tab._on_clear_all()
         self.assertEqual(len(self.container.config.get("aram_priority_list")), 0)
 

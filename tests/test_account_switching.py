@@ -215,6 +215,35 @@ class TestSignOut(unittest.TestCase):
         self.assertTrue(switcher.sign_out().ok)
 
 
+class TestOperationVocabulary(unittest.TestCase):
+    """SUCCESS means two different things; the sentence must say which."""
+
+    def test_sign_out_does_not_announce_a_sign_in(self):
+        api = FakeApi(signed_in_as="someone")
+        switcher, _ = build(api)
+        result = switcher.sign_out()
+
+        self.assertTrue(result.ok)
+        self.assertEqual(result.message, "Signed out.")
+        self.assertNotIn("Signed in", result.message)
+
+    def test_switch_still_names_the_account_it_signed_into(self):
+        api = FakeApi(signed_in_as="someone")
+        switcher, _ = build(api)
+        result = switcher.switch_to(0)
+
+        self.assertTrue(result.ok)
+        self.assertIn("Signed in as", result.message)
+
+    def test_failed_sign_out_keeps_its_own_wording(self):
+        api = FakeApi(signed_in_as="someone", sign_out_works=False)
+        switcher, _ = build(api)
+        result = switcher.sign_out()
+
+        self.assertFalse(result.ok)
+        self.assertIn("sign out", result.message.lower())
+
+
 class TestConcurrency(unittest.TestCase):
     def test_one_lock_covers_switch_and_sign_out(self):
         """
