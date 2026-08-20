@@ -145,9 +145,7 @@ class LeagueLoopMainWindow(QMainWindow):
         # since Champ Select is the most time-critical surface (§80).
         self.view_model.phase_changed.connect(self._on_phase_changed)
 
-        # Both the Automation screen and the draft screen expose an emergency
-        # stop (§17). Their `stop_requested` signals were connected to nothing,
-        # so the button was decorative.
+        # Wire automation master toggle and emergency stop buttons (§17)
         self._wire_automation()
 
         # Start focus on navigation rather than letting the first focusable

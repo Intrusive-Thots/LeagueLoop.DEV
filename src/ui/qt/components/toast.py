@@ -1,5 +1,5 @@
 """
-LLToast & QtToastManager — Non-blocking Floating Feedback (UI/UX Master Plan §19, §33).
+LLToast & QtToastManager (LLToastManager) — Non-blocking Floating Feedback (UI/UX Master Plan §19, §33).
 
 Provides transient feedback toasts that slide/fade into view when actions occur
 (e.g., account switched, loot opened, backup pick locked, config saved) and
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from PySide6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, Qt, QTimer, Signal
+from PySide6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, Qt, QTimer
 from PySide6.QtWidgets import (
     QFrame,
     QGraphicsOpacityEffect,
@@ -36,8 +36,6 @@ from ui.qt.theme.typography import TEXT_BODY, TEXT_BODY_STRONG, TEXT_CAPTION
 class LLToast(QFrame):
     """A single floating toast card."""
 
-    dismissed = Signal()
-
     def __init__(
         self,
         message: str,
@@ -49,6 +47,7 @@ class LLToast(QFrame):
         super().__init__(parent)
         self.duration_ms = duration_ms
         self.tone = tone
+        self._manager: Optional["QtToastManager"] = None
 
         self.setWindowFlags(Qt.SubWindow | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
@@ -129,7 +128,8 @@ class LLToast(QFrame):
         self.opacity_anim.start()
 
     def dismiss(self) -> None:
-        self.dismissed.emit()
+        if self._manager and self in self._manager._active_toasts:
+            self._manager._active_toasts.remove(self)
         self.opacity_anim.stop()
         self.opacity_anim.setDuration(200)
         self.opacity_anim.setStartValue(self.opacity_effect.opacity())
@@ -167,11 +167,11 @@ class QtToastManager:
     def show_toast(
         self,
         title: str,
-        message: str = "",
+        message: str,
         tone: Tone = Tone.INFO,
         duration_ms: int = 4000,
     ) -> LLToast:
-        """Alias for show() compatible with legacy and test interfaces."""
+        """Alias for standard toast creation."""
         return self.show(message=message, title=title, tone=tone, duration_ms=duration_ms)
 
     def show(
@@ -189,12 +189,11 @@ class QtToastManager:
             duration_ms=duration_ms,
             parent=self.host_window,
         )
+        toast._manager = self
         self._active_toasts.append(toast)
-        toast.dismissed.connect(lambda: self._on_toast_destroyed(toast))
         toast.destroyed.connect(lambda: self._on_toast_destroyed(toast))
 
-        if self.host_window is not None:
-            self._reposition_toasts()
+        self._reposition_toasts()
         toast.show_animated()
         return toast
 
@@ -213,12 +212,11 @@ class QtToastManager:
     def _on_toast_destroyed(self, toast: LLToast) -> None:
         if toast in self._active_toasts:
             self._active_toasts.remove(toast)
-        if self.host_window is not None:
-            self._reposition_toasts()
+        self._reposition_toasts()
 
     def _reposition_toasts(self) -> None:
         """Position toasts stacked in the top-right corner of the host window."""
-        if self.host_window is None:
+        if not self.host_window:
             return
         margin_right = 24
         margin_top = 24
@@ -236,4 +234,5 @@ class QtToastManager:
             current_y += toast.sizeHint().height() + spacing
 
 
+# Backward compatibility alias
 LLToastManager = QtToastManager

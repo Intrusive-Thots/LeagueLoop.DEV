@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from typing import Optional, TYPE_CHECKING
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
 
@@ -22,8 +22,9 @@ if TYPE_CHECKING:
 class QtSystemTray(QSystemTrayIcon):
     """Native PySide6 system tray icon and context menu."""
 
-    def __init__(self, main_window: "LeagueLoopMainWindow", parent: Optional[QWidget] = None):
-        super().__init__(parent or main_window)
+    def __init__(self, main_window: Any, parent: Optional[QObject] = None):
+        tray_parent = parent if isinstance(parent, QObject) else (main_window if isinstance(main_window, QObject) else None)
+        super().__init__(tray_parent)
         self.main_window = main_window
         self._setup_tray()
 
