@@ -90,58 +90,25 @@ def launch_riot_client() -> None:
 
 def create_container() -> Any:
     """
-    Build the real service graph. Returns None if construction fails.
-
-    The container leaves the lazily-created services (automation, accounts)
-    as None; each shell is expected to construct the ones it uses. The Qt
-    shell was not creating the account manager, so the Accounts screen came
-    up permanently empty with every control disabled.
+    Build the real service graph using the unified bootstrap composition root.
+    Returns None if construction fails.
     """
     try:
         from core.container import ApplicationContainer  # type: ignore
 
         container = ApplicationContainer()
+        container.bootstrap(
+            launch_client_func=launch_riot_client,
+            start_assets=True,
+            start_automation=True,
+            start_client_state=False,  # Started in build() after window subscribes
+            start_api=True,
+        )
+        return container
     except Exception as exc:
         print(f"[LeagueLoop] Could not build ApplicationContainer: {exc}", file=sys.stderr)
         print("[LeagueLoop] Falling back to UI-only mode.", file=sys.stderr)
         return None
-
-    # Champion names, ids and icons come from Riot's Data Dragon, and nothing
-    # fetches them unless this is called. Without it `assets.champ_data` stays
-    # empty forever: no champion tiles on Priority / ARAM / Bans / Champ
-    # Select, and every champion renders as a bare numeric id.
-    try:
-        container.assets.start_loading()
-    except Exception as exc:
-        print(f"[LeagueLoop] Asset loading failed to start: {exc}", file=sys.stderr)
-
-    # Accounts is a first-class screen, not an optional extra. A failure here
-    # must not take down the whole shell, so the screen degrades to its empty
-    # state instead (§54).
-    try:
-        container.create_account_manager(launch_client_func=launch_riot_client)
-    except Exception as exc:
-        print(
-            f"[LeagueLoop] Account manager unavailable: {exc}", file=sys.stderr
-        )
-
-    # The automation engine. Without this `container.automation` is None and
-    # every toggle on the Automation screen writes a config key that nothing
-    # reads at runtime - the switches look live and do nothing.
-    try:
-        container.create_automation_controller()
-    except Exception as exc:
-        print(f"[LeagueLoop] Automation unavailable: {exc}", file=sys.stderr)
-
-    # Nothing else populates ApplicationState, and every Qt view renders from
-    # it. Without this the shell shows "Disconnected" with the client open.
-    # Created here, started in build() once the window is listening.
-    try:
-        container.create_client_state_service()
-    except Exception as exc:
-        print(f"[LeagueLoop] Client state service unavailable: {exc}", file=sys.stderr)
-
-    return container
 
 
 def create_window(container: Any = None):

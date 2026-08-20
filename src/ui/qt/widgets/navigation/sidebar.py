@@ -62,7 +62,6 @@ class QtSidebarButton(QPushButton):
         self.setFixedHeight(NAV_ITEM_HEIGHT)
         self.setText(f"  {icon_text}   {label}" if icon_text else f"  {label}")
         self.setAccessibleName(label)
-        self.setToolTip(label)
         install_focus_visible(self)
         self._apply_style()
 

@@ -1,5 +1,5 @@
 {
-    "auto_accept": true,
+    "auto_accept": false,
     "auto_requeue": true,
     "auto_pick": "",
     "auto_pick_backup": "",
@@ -133,17 +133,24 @@
     "auto_join_list": [],
     "docked": true,
     "honor_strategy": "friends",
-    "priority_list": [],
+    "priority_list": [
+        37,
+        13,
+        103
+    ],
     "aram_mode": "ARAM Mayhem",
     "automation_master": true,
     "qt_last_tab": "play",
     "qt_window_width": 979,
     "qt_window_height": 660,
-    "qt_window_x": 761,
-    "qt_window_y": 387,
+    "qt_window_x": -1183,
+    "qt_window_y": 647,
     "auto_ban_enabled": true,
     "aram_bench_swap": true,
-    "aram_priority_list": [],
+    "aram_priority_list": [
+        37,
+        13
+    ],
     "ban_list": [],
     "auto_ban_respect_teammates": true,
     "developer_mode": true

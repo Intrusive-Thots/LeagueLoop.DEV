@@ -20,7 +20,7 @@ from __future__ import annotations
 import inspect
 from typing import Any, Optional
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -37,6 +37,8 @@ from ui.qt.theme.colors import TEXT_MUTED, TEXT_SECONDARY
 from ui.qt.theme.spacing import CONTENT_MARGIN, SPACE_MD, SPACE_SM
 from ui.qt.theme.typography import TEXT_BODY, TEXT_PAGE_TITLE
 from ui.qt.viewmodels.shell_viewmodel import ShellViewModel
+from ui.qt.components.status import Tone
+from ui.qt.components.toast import QtToastManager
 from ui.qt.widgets.app_header import LLAppHeader
 from ui.qt.widgets.accounts_tab import QtAccountsTab
 from ui.qt.widgets.automation_tab import QtAutomationTab
@@ -72,6 +74,8 @@ def _app_version() -> str:
 class LeagueLoopMainWindow(QMainWindow):
     """Primary PySide6 application window."""
 
+    toast_requested = Signal(str, str, object)  # message, title, Tone
+
     def __init__(self, container: Any = None):
         super().__init__()
         self.container = container
@@ -81,6 +85,13 @@ class LeagueLoopMainWindow(QMainWindow):
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)
         self.setMinimumSize(MIN_WIDTH, MIN_HEIGHT)
         self.setStyleSheet(get_global_stylesheet())
+
+        # Toast manager for non-blocking notifications
+        self.toasts = QtToastManager(self)
+        self.toast_requested.connect(
+            lambda msg, title, tone: self.toasts.show(msg, title=title, tone=tone if isinstance(tone, Tone) else Tone.INFO)
+        )
+        self._subscribe_to_global_events()
 
         # Presentation state for header/footer and future mode switching.
         self.view_model = ShellViewModel(container=container, parent=self)
@@ -145,6 +156,18 @@ class LeagueLoopMainWindow(QMainWindow):
         if current is not None:
             current.setFocus()
 
+        # System tray integration (§10, §72)
+        from ui.qt.widgets.system_tray import QtSystemTray
+        self.tray = QtSystemTray(self)
+        if self.config and self.config.get("run_in_tray", True):
+            self.tray.show()
+
+        # Global hotkeys (§24)
+        self._bind_hotkeys()
+
+        # Auto-login default account on launch (§220)
+        QTimer.singleShot(2500, self._auto_load_default_account)
+
     # -------------------------------------------------------- automation
     def _automation_controller(self):
         return getattr(self.container, "automation_controller", None)
@@ -160,18 +183,55 @@ class LeagueLoopMainWindow(QMainWindow):
                     pass
 
         automation_page = self.tab_pages.get("automation")
-        toggle = getattr(automation_page, "master_toggle", None)
-        if toggle is not None and controller is not None:
-            try:
-                toggle.toggled.connect(controller.set_master)
-            except Exception:
-                pass
+        if automation_page is not None:
+            toggle = getattr(automation_page, "master_toggle", None)
+            if toggle is not None and controller is not None:
+                try:
+                    toggle.toggled.connect(controller.set_master)
+                except Exception:
+                    pass
+
+            config_sig = getattr(automation_page, "configure_requested", None)
+            if config_sig is not None:
+                try:
+                    config_sig.connect(self._on_automation_configure)
+                except Exception:
+                    pass
 
         if controller is not None:
             try:
                 controller.publish()
             except Exception:
                 pass
+
+    def _on_automation_configure(self, key: str) -> None:
+        """Navigate to the appropriate tab to configure an automation rule further."""
+        if key == "auto_lock_in":
+            self.sidebar.select_tab("priority")
+        elif key == "auto_ban_enabled":
+            self.sidebar.select_tab("bans")
+        elif key == "aram_bench_swap" or key == "aram_auto_reroll":
+            self.sidebar.select_tab("aram")
+
+    def _subscribe_to_global_events(self) -> None:
+        """Subscribe to background bus events and surface as user-facing toasts."""
+        try:
+            from core.events import EventBus
+            from services.accounts.results import EVENT_SWITCH_FINISHED, SwitchResult
+
+            def _on_switch_finished(data):
+                res = data.get("result")
+                username = data.get("username", "Account")
+                if isinstance(res, SwitchResult):
+                    if res.is_success():
+                        self.toast_requested.emit(f"Signed in as {username}", "Account Switched", Tone.SUCCESS)
+                    else:
+                        detail = res.detail or res.outcome.value
+                        self.toast_requested.emit(f"Switch to {username} failed: {detail}", "Switch Failed", Tone.DANGER)
+
+            EventBus.subscribe(EVENT_SWITCH_FINISHED, _on_switch_finished)
+        except Exception:
+            pass
 
     def _on_stop_automation(self) -> None:
         """Emergency stop. Must work from any screen that offers it (§17)."""
@@ -257,6 +317,11 @@ class LeagueLoopMainWindow(QMainWindow):
                     self.container.scraper.set_mode("ARAM")
                 elif key == "priority":
                     self.container.scraper.set_mode("Ranked")
+            if self.container and getattr(self.container, "state_manager", None):
+                try:
+                    self.container.state_manager.update_ui(current_tab=key)
+                except Exception:
+                    pass
             if self.config is not None:
                 try:
                     self.config.set("qt_last_tab", key)
@@ -318,8 +383,76 @@ class LeagueLoopMainWindow(QMainWindow):
         except Exception:
             pass
 
+    def _bind_hotkeys(self) -> None:
+        """Bind global keyboard shortcuts."""
+        try:
+            import keyboard
+
+            if not self.config:
+                return
+
+            launch_key = self.config.get("hotkey_launch_client", "ctrl+shift+l")
+            toggle_key = self.config.get("hotkey_toggle_automation", "ctrl+shift+a")
+
+            if launch_key:
+                try:
+                    keyboard.add_hotkey(launch_key, self._hotkey_launch_client, suppress=False)
+                except Exception:
+                    pass
+            if toggle_key:
+                try:
+                    keyboard.add_hotkey(toggle_key, self._hotkey_toggle_automation, suppress=False)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def _hotkey_launch_client(self) -> None:
+        """Launch the Riot Client / League Client via shortcut."""
+        try:
+            from ui.qt.app.application import launch_riot_client
+
+            launch_riot_client()
+            self.toast_requested.emit("Launching Riot Client...", "Client Launch", Tone.INFO)
+        except Exception as exc:
+            self.toast_requested.emit(f"Could not launch client: {exc}", "Launch Failed", Tone.WARNING)
+
+    def _hotkey_toggle_automation(self) -> None:
+        """Toggle automation master power via shortcut."""
+        ctrl = self._automation_controller()
+        if ctrl is not None:
+            new_state = not ctrl.is_master_enabled
+            ctrl.set_master(new_state)
+            self.toast_requested.emit(
+                f"Automation {'enabled' if new_state else 'disabled'}",
+                "Automation",
+                Tone.SUCCESS if new_state else Tone.NEUTRAL,
+            )
+
+    def _auto_load_default_account(self) -> None:
+        """Auto-login to default stored account if client is not connected (§220)."""
+        mgr = getattr(self.container, "account_manager", None) if self.container else None
+        lcu = getattr(self.container, "lcu", None) if self.container else None
+        if mgr is not None and lcu is not None and not getattr(lcu, "is_connected", False):
+            default_idx = mgr.get_default_account_index()
+            if default_idx >= 0:
+                import threading
+                self.toast_requested.emit("Auto-signing into default account...", "Auto-Login", Tone.INFO)
+                threading.Thread(target=mgr.switch_to, args=(default_idx,), daemon=True).start()
+
     def closeEvent(self, event) -> None:
         self._save_window_state()
+        if self.config and self.config.get("run_in_tray", True) and hasattr(self, "tray") and self.tray.isVisible():
+            self.hide()
+            self.tray.showMessage(
+                "LeagueLoop",
+                "LeagueLoop minimized to system tray.",
+                self.tray.icon(),
+                2000,
+            )
+            event.ignore()
+            return
+
         try:
             self.view_model.dispose()
         except Exception:

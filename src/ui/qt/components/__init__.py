@@ -51,6 +51,7 @@ from ui.qt.components.focus import install_focus_visible
 from ui.qt.components.timer import LLTimer, TimerState
 from ui.qt.components.setting_row import LLSettingRow
 from ui.qt.components.status import LLStatus, Tone, tone_color, tone_glyph
+from ui.qt.components.toast import LLToast, QtToastManager
 from ui.qt.components.toggle import LLToggle
 
 __all__ = [
@@ -80,6 +81,8 @@ __all__ = [
     "LLSection",
     "LLSeparator",
     "LLStatus",
+    "LLToast",
+    "QtToastManager",
     "Tone",
     "tone_color",
     "tone_glyph",

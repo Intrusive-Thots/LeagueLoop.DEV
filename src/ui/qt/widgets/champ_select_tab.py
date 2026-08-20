@@ -86,6 +86,19 @@ class QtChampSelectTab(QWidget):
         self._backup_tiles: List[LLChampionTile] = []
         self._recommended_tile: Optional[LLChampionTile] = None
 
+        # Picking used to be impossible from here: `pick_requested` was
+        # emitted and connected to nothing.
+        self._actions = None
+        lcu = getattr(container, "lcu", None)
+        if lcu is not None:
+            try:
+                from services.draft_actions import DraftActions  # type: ignore
+
+                self._actions = DraftActions(lcu)
+            except Exception:
+                self._actions = None
+        self._selected_id: int = 0
+
         self._setup_ui()
 
         self.vm.changed.connect(self._render)
@@ -189,11 +202,16 @@ class QtChampSelectTab(QWidget):
         self.available_section = LLSection("Available champions", parent=self)
         self.grid = QtChampionGrid(
             asset_manager=getattr(self.container, "assets", None),
-            scraper=getattr(self.container, "scraper", None),
             tile_size=TileSize.SM,
             parent=self.available_section,
         )
         self.grid.champion_selected.connect(self.pick_requested.emit)
+        self.grid.champion_selected.connect(
+            lambda cid, _key: self._on_select(cid)
+        )
+        self.grid.champion_activated.connect(
+            lambda cid, _key: self._on_lock_in(champion_id=cid)
+        )
         self.available_section.add_widget(self.grid, 1)
         # The roster absorbs whatever vertical space is left over.
         self.available_section.setMinimumHeight(180)
@@ -218,20 +236,127 @@ class QtChampSelectTab(QWidget):
             "Stop automation choosing for you and pick yourself"
         )
         self.btn_override.clicked.connect(self.override_requested.emit)
+        self.btn_override.clicked.connect(self._on_override)
         action_row.addWidget(self.btn_override)
 
+        # Selecting a champion hovers it; committing is a separate, explicit
+        # act. Hover and lock are the same LCU call with `completed` flipped,
+        # but conflating them in the UI means one stray click ends your draft.
+        self.btn_lock = LLButton(
+            "Lock in", variant=ButtonVariant.PRIMARY, parent=action_card
+        )
+        self.btn_lock.setEnabled(False)
+        self.btn_lock.clicked.connect(self._on_lock_in)
+        action_row.addWidget(self.btn_lock)
+
         self.btn_stop = LLButton(
-            "Stop",
+            "Stop automation",
             variant=ButtonVariant.DANGER,
+            size=ButtonSize.MD,
             parent=action_card,
         )
-        self.btn_stop.setToolTip("Emergency stop - pauses all automation immediately")
+        self.btn_stop.setToolTip("Emergency stop - halt all automated actions")
         self.btn_stop.clicked.connect(self.stop_requested.emit)
         action_row.addWidget(self.btn_stop)
 
         action_card.add_layout(action_row)
         action_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         root.addWidget(action_card)
+
+    # ------------------------------------------------------------ actions
+    def _report(self, result, champion_id: int = 0) -> None:
+        """Say what happened, in the status line the user is already reading."""
+        if result.ok:
+            return
+        self.automation_status.set_status(
+            "Could not do that", Tone.WARNING, result.message
+        )
+
+    def _on_select(self, champion_id: int) -> None:
+        """
+        Selecting hovers the champion so your team can see it.
+
+        A hover is reversible and is what the client itself does on a single
+        click, so this is safe to fire on selection. Committing needs the
+        Lock in button.
+        """
+        self._selected_id = int(champion_id or 0)
+        self._sync_lock_button()
+
+        if self._actions is None or not self._selected_id:
+            return
+        result = self._actions.hover(self._selected_id)
+        if result.ok:
+            self.automation_status.set_status(
+                "Hovering", Tone.INFO, "Your team can see this pick."
+            )
+        else:
+            self._report(result, self._selected_id)
+
+    def _on_lock_in(self, *_args, champion_id: int = 0) -> None:
+        champ = int(champion_id or self._selected_id or 0)
+        if not champ:
+            self.automation_status.set_status(
+                "Nothing selected", Tone.NEUTRAL,
+                "Choose a champion first, then lock in.",
+            )
+            return
+        if self._actions is None:
+            self._report(
+                type("R", (), {"ok": False, "message":
+                               "The League Client is not connected."})()
+            )
+            return
+
+        result = self._actions.lock_in(champ)
+        if result.ok:
+            self.automation_status.set_status(
+                "Locked in", Tone.SUCCESS, ""
+            )
+        else:
+            self._report(result, champ)
+        self._sync_lock_button()
+
+    def _on_override(self) -> None:
+        """
+        Manual pick: stop automation choosing for you, keep the draft going.
+
+        Pausing rather than stopping - a full stop would also disable the
+        post-draft automations you probably still want.
+        """
+        controller = getattr(self.container, "automation_controller", None)
+        if controller is not None:
+            try:
+                controller.pause(True)
+            except Exception:
+                pass
+        self.automation_status.set_status(
+            "Manual", Tone.NEUTRAL,
+            "Automation is paused - select a champion and lock in yourself.",
+        )
+        self._sync_lock_button()
+
+    def _sync_lock_button(self) -> None:
+        """Disabled is a designed state (§63): say why it is unavailable."""
+        state = self.vm.state
+        if state.locked_in:
+            self.btn_lock.setEnabled(False)
+            self.btn_lock.setToolTip("You have already locked in")
+            return
+        if not self._selected_id:
+            self.btn_lock.setEnabled(False)
+            self.btn_lock.setToolTip("Select a champion first")
+            return
+        can = True
+        if self._actions is not None:
+            try:
+                can = self._actions.can_act()
+            except Exception:
+                can = False
+        self.btn_lock.setEnabled(can)
+        self.btn_lock.setToolTip(
+            "Lock in your selection" if can else "It is not your turn yet"
+        )
 
     # ------------------------------------------------------------- render
     def _make_tile(self, rec, size: TileSize, priority=None) -> LLChampionTile:
@@ -240,10 +365,10 @@ class QtChampSelectTab(QWidget):
             name=rec.name or "Unknown",
             key=rec.key or "",
             priority=priority,
-            winrate=getattr(rec, "winrate", None),
         )
         tile = LLChampionTile(model, size=size, icon_provider=self.icons, parent=self)
         tile.clicked.connect(lambda cid, _n: self.pick_requested.emit(cid))
+        tile.clicked.connect(lambda cid, _n: self._on_select(cid))
         return tile
 
     def _clear_layout(self, layout) -> None:
@@ -260,6 +385,10 @@ class QtChampSelectTab(QWidget):
         self.role_badge.set_badge(vm.role_label, Tone.ACCENT)
         self.timer.set_remaining(vm.remaining_s, vm.timer_label())
         self.timeline.set_current(vm.timeline_index())
+
+        # Whose turn it is changes as the draft moves, so the lock button has
+        # to be re-evaluated on every state push, not only when you click.
+        self._sync_lock_button()
 
         rec = vm.recommendation
         self._clear_layout(self.rec_tile_holder)

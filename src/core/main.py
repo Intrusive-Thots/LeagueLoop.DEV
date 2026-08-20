@@ -113,15 +113,7 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         except Exception as e:
             Logger.error("SYS", f"ToastManager initialization error: {e}")
             
-        # ApplicationContainer owns service construction
-        self.container = ApplicationContainer()
-        self.config = self.container.config
-        self.assets = self.container.assets
-        self.lcu = self.container.lcu
-        self.scraper = self.container.scraper
-        from core.state import State
-        State.assets = self.assets
-
+        # ApplicationContainer owns service construction via bootstrap()
         self.stop_func = lambda: self.after(0, lambda: self.sidebar._on_power_click()) if hasattr(self, "sidebar") else None
         
         def _window_func(state):
@@ -133,13 +125,24 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
             if hasattr(self, "mini_player"):
                 self.after(0, lambda: self.mini_player.update_state(phase))
 
-        self.automation: Optional[AutomationEngine] = self.container.create_automation(
-            log_func=None,
+        self.container = ApplicationContainer()
+        self.container.bootstrap(
+            launch_client_func=self._hotkey_launch_client,
+            start_assets=True,
+            start_automation=True,
+            start_client_state=True,
+            start_api=True,
             stop_func=self.stop_func,
             stats_func=lambda team, bench, me=None: self.after(0, lambda: self.sidebar.update_lobby_stats(team, bench, me)) if hasattr(self, "sidebar") else None,
             window_func=_window_func,
-            queue_func=_queue_func
+            queue_func=_queue_func,
         )
+        self.config = self.container.config
+        self.assets = self.container.assets
+        self.lcu = self.container.lcu
+        self.scraper = self.container.scraper
+        self.automation = self.container.automation
+        self.account_manager = self.container.account_manager
 
         self.setup_ui()
         
@@ -147,10 +150,7 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         if auto is not None and hasattr(self, "sidebar"):
             auto.log = self.sidebar.update_action_log
 
-        self.account_manager = self.container.create_account_manager(
-            launch_client_func=self._hotkey_launch_client
-        )
-        if hasattr(self, "sidebar"):
+        if hasattr(self, "sidebar") and self.account_manager:
             self.sidebar.set_account_manager(self.account_manager)
 
         self._setup_window_dragging()
@@ -164,15 +164,14 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         if self.automation is not None:
             self.automation.start(start_paused=False)  # type: ignore
 
-        self.assets.start_loading()
-        
         self.tray = SystemTrayApp(self)
         if self.config.get("run_in_tray", True):
             self.tray.start()
             
         self.protocol("WM_DELETE_WINDOW", self._on_close_request)
 
-        self._local_ip, self._local_port = start_api_server(self, port=8337, bind_local=True)
+        self._local_ip = getattr(self.container, "_api_ip", "127.0.0.1")
+        self._local_port = getattr(self.container, "_api_port", 8337)
 
         threading.Thread(target=self.connection_loop, daemon=True).start()
         threading.Thread(target=self.docking_loop, daemon=True).start()

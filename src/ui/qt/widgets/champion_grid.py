@@ -151,6 +151,7 @@ class QtChampionGrid(QWidget):
 
         self.icons = ChampionIconProvider(asset_manager=asset_manager, parent=self)
         self.icons.icon_ready.connect(self._on_icon_ready)
+        self.champion_context_menu.connect(self._show_champion_context_menu)
 
         self._setup_ui()
         self.load_champions()
@@ -552,3 +553,38 @@ class QtChampionGrid(QWidget):
             tile.setFocus(Qt.TabFocusReason)
             self.scroll_area.ensureWidgetVisible(tile)
         return True
+
+    def _show_champion_context_menu(self, champ_id: int, pos) -> None:
+        """Right-click context menu on champion tiles."""
+        from PySide6.QtWidgets import QMenu
+        from PySide6.QtCore import QPoint
+
+        tile = self.tiles.get(champ_id)
+        if tile is None:
+            return
+
+        menu = QMenu(self)
+        name = tile.model.name
+
+        act_select = menu.addAction(f"Select {name}")
+        act_select.triggered.connect(lambda: self.champion_selected.emit(champ_id, name))
+
+        act_act = menu.addAction(f"Lock in / Activate {name}")
+        act_act.triggered.connect(lambda: self.champion_activated.emit(champ_id, name))
+
+        menu.addSeparator()
+
+        is_fav = tile.model.favorite
+        fav_label = "★ Remove from Favourites" if is_fav else "☆ Add to Favourites"
+        act_fav = menu.addAction(fav_label)
+        act_fav.triggered.connect(lambda: self._toggle_favorite(tile.model.key))
+
+        global_pos = pos if isinstance(pos, QPoint) else tile.mapToGlobal(QPoint(0, 0))
+        menu.exec(global_pos)
+
+    def _toggle_favorite(self, key: str) -> None:
+        if key in self._favorites:
+            self._favorites.remove(key)
+        else:
+            self._favorites.add(key)
+        self._refresh_models()

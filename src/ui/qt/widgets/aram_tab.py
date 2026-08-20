@@ -105,6 +105,7 @@ class QtAramTab(QWidget):
         left = LLSection("Champion roster", parent=self)
         self.grid = QtChampionGrid(asset_manager=self.assets, scraper=self.scraper, parent=left)
         self.grid.champion_selected.connect(self._on_champion_clicked)
+        self.grid.champion_activated.connect(self._on_champion_clicked)
         left.add_widget(self.grid, 1)
         columns.addWidget(left, 3)
 

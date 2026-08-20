@@ -69,6 +69,22 @@ class QtProfileTab(QWidget):
         self.db = getattr(container, "db", None) if container else None
         self.view_model = view_model
 
+        # The profile used to be built from at most 20 rows the automation
+        # loop happened to record locally, presented as your record. The
+        # client knows your real history and rank; ask it.
+        self.profile_service = None
+        lcu = getattr(container, "lcu", None) if container else None
+        if lcu is not None:
+            try:
+                from services.profile_service import ProfileService  # type: ignore
+
+                self.profile_service = ProfileService(
+                    lcu, getattr(container, "assets", None), self.db
+                )
+            except Exception:
+                self.profile_service = None
+
+        self.profile = None
         self._setup_ui()
         self.refresh()
 
@@ -163,6 +179,24 @@ class QtProfileTab(QWidget):
 
     # -------------------------------------------------------------- render
     def _render_identity(self, *_args) -> None:
+        """Name, level and *real* rank — previously rank was never fetched."""
+        profile = self.profile
+        if profile is not None and profile.summoner_name:
+            self.summoner_name.setText(profile.summoner_name)
+            parts = []
+            if profile.level:
+                parts.append("Level {}".format(profile.level))
+            if profile.solo.ranked:
+                parts.append("{} · {}".format(
+                    profile.solo.label, profile.solo.record))
+            elif profile.flex.ranked:
+                parts.append("Flex {} · {}".format(
+                    profile.flex.label, profile.flex.record))
+            else:
+                parts.append("Unranked")
+            self.summoner_detail.setText("  ·  ".join(parts))
+            return
+
         if self.view_model is None:
             return
         client = self.view_model.state.client
@@ -186,26 +220,44 @@ class QtProfileTab(QWidget):
                 widget.deleteLater()
 
     def refresh(self) -> None:
-        """Reload from the local match database."""
-        matches: List[Dict[str, Any]] = []
-        if self.db is not None:
-            try:
-                matches = self.db.get_recent_matches(limit=MAX_RECENT) or []
-            except Exception:
-                matches = []
-
-        self.match_count_badge.set_badge(
-            "{} match{}".format(len(matches), "" if len(matches) == 1 else "es"),
-            Tone.ACCENT if matches else Tone.NEUTRAL,
-        )
-
-        if not matches:
+        """Reload the profile from the client, falling back to local rows."""
+        if self.profile_service is None:
+            self.match_count_badge.set_badge("No games loaded", Tone.NEUTRAL)
             self.stack.setCurrentIndex(0)
             return
+
+        try:
+            self.profile = self.profile_service.load(limit=MAX_RECENT)
+        except Exception:
+            self.profile = None
+
+        if self.profile is None or not self.profile.matches:
+            self.match_count_badge.set_badge("No games loaded", Tone.NEUTRAL)
+            self.stack.setCurrentIndex(0)
+            return
+
+        # Name the sample rather than implying it is your whole record.
+        self.match_count_badge.set_badge(
+            self.profile.sample_label,
+            Tone.ACCENT if self.profile.from_client else Tone.WARNING,
+        )
+
+        matches = [
+            {
+                "champion_name": m.champion_name or "Unknown",
+                "win": m.win,
+                "kills": m.kills,
+                "deaths": m.deaths,
+                "assists": m.assists,
+                "duration_s": m.duration_s,
+            }
+            for m in self.profile.matches
+        ]
 
         self.stack.setCurrentIndex(1)
         self._render_champions(matches)
         self._render_matches(matches)
+        self._render_identity()
 
     def _render_champions(self, matches: List[Dict[str, Any]]) -> None:
         self._clear_card(self.champions_card)
