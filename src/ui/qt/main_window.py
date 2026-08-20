@@ -107,7 +107,13 @@ class LeagueLoopMainWindow(QMainWindow):
         self.header = LLAppHeader(self)
         self.header.minimize_requested.connect(self.showMinimized)
         self.header.close_requested.connect(self.close)
+        self.header.orb_requested.connect(self.toggle_orb_mode)
         root_layout.addWidget(self.header)
+
+        # Floating Mini Orb Widget (§16 & §27)
+        from ui.qt.widgets.orb_widget import QtOrbWidget
+        self.orb = QtOrbWidget(container=self.container, view_model=self.view_model)
+        self.orb.restore_requested.connect(self.toggle_orb_mode)
 
         # --- Body: navigation + content ----------------------------------
         body = QWidget(root_widget)
@@ -391,6 +397,7 @@ class LeagueLoopMainWindow(QMainWindow):
 
             launch_key = self.config.get("hotkey_launch_client", "ctrl+shift+l")
             toggle_key = self.config.get("hotkey_toggle_automation", "ctrl+shift+a")
+            compact_key = self.config.get("hotkey_compact_mode", "ctrl+shift+m")
 
             if launch_key:
                 try:
@@ -402,8 +409,28 @@ class LeagueLoopMainWindow(QMainWindow):
                     keyboard.add_hotkey(toggle_key, self._hotkey_toggle_automation, suppress=False)
                 except Exception:
                     pass
+            if compact_key:
+                try:
+                    keyboard.add_hotkey(compact_key, self.toggle_orb_mode, suppress=False)
+                except Exception:
+                    pass
         except Exception:
             pass
+
+    def toggle_orb_mode(self) -> None:
+        """Toggle between full main window and floating mini orb mode (§16 & §27)."""
+        if hasattr(self, "orb") and self.orb is not None:
+            if self.isVisible():
+                self.hide()
+                self.orb.show()
+                if self.container and getattr(self.container, "state_manager", None):
+                    self.container.state_manager.update_ui(compact_mode=True)
+            else:
+                self.orb.hide()
+                self.showNormal()
+                self.activateWindow()
+                if self.container and getattr(self.container, "state_manager", None):
+                    self.container.state_manager.update_ui(compact_mode=False)
 
     def _hotkey_launch_client(self) -> None:
         """Launch the Riot Client / League Client via shortcut."""

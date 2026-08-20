@@ -58,6 +58,7 @@ class LLAppHeader(QFrame):
 
     minimize_requested = Signal()
     close_requested = Signal()
+    orb_requested = Signal()
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -112,6 +113,12 @@ class LLAppHeader(QFrame):
         layout.addSpacing(SPACE_XS)
 
         # --- Window controls ---------------------------------------------
+        self.btn_orb = LLIconButton(
+            "◱", tooltip="Compact Orb Mode", size=CONTROL_HEIGHT_SM, parent=self
+        )
+        self.btn_orb.clicked.connect(self.orb_requested.emit)
+        layout.addWidget(self.btn_orb)
+
         self.btn_minimize = LLIconButton(
             "─", tooltip="Minimize", size=CONTROL_HEIGHT_SM, parent=self
         )
