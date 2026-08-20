@@ -242,15 +242,69 @@ class AccountManager:
         self._load()
         self._migrate_accounts()
 
+        # Switching/sign-out sequencing lives in services.accounts so the two
+        # operations cannot drift apart. This class keeps ownership of
+        # storage, encryption and the account list.
+        self._switcher = self._build_switcher()
+
+    def _build_switcher(self):
+        """Construct the AccountSwitcher, or None if the subsystem is absent."""
+        try:
+            from core.events import EventBus  # type: ignore
+        except Exception:
+            EventBus = None  # type: ignore
+
+        try:
+            from services.accounts import AccountSwitcher, RiotSession  # type: ignore
+        except Exception as exc:  # pragma: no cover - keeps the app usable
+            Logger.error("AccountManager", f"Account switcher unavailable: {exc}")
+            return None
+
+        return AccountSwitcher(
+            session=RiotSession(self.riot_client),
+            accounts_provider=lambda: list(self._accounts),
+            password_provider=self.get_password,
+            on_success=self._mark_active,
+            on_signed_out=self._mark_signed_out,
+            kill_games=lambda: self._kill_game_processes(None),
+            launch_client=self._launch_riot_client,
+            bus=EventBus,
+        )
+
+    # ─────────── State transitions used by the switcher ───────────
+    def _mark_active(self, idx: int) -> None:
+        """Record a successful sign-in. Single place that sets the active index."""
+        with self._lock:
+            if 0 <= idx < len(self._accounts):
+                self._accounts[idx]["last_used"] = datetime.now().isoformat()
+            self._active_idx = idx
+            self._save()
+
+    def _mark_signed_out(self) -> None:
+        with self._lock:
+            self._active_idx = -1
+            self._save()
+
     def _migrate_accounts(self):
-        """Ensure all loaded accounts have required fields for new features."""
+        """
+        Ensure all loaded accounts have required fields for new features.
+
+        Only writes when something actually changed - the previous version set
+        `dirty = True` unconditionally inside the loop, so it rewrote
+        accounts.json on every single startup.
+        """
         dirty = False
+        defaults = {
+            "wallet": lambda: {"be": 0, "rp": 0},
+            "region": lambda: "NA1",
+            "last_used": lambda: None,
+            "is_default": lambda: False,
+        }
         for acct in self._accounts:
-            if "wallet" not in acct: acct["wallet"] = {"be": 0, "rp": 0}
-            if "region" not in acct: acct["region"] = "NA1"
-            if "last_used" not in acct: acct["last_used"] = None
-            if "is_default" not in acct: acct["is_default"] = False
-            dirty = True
+            for key, make_default in defaults.items():
+                if key not in acct:
+                    acct[key] = make_default()
+                    dirty = True
         if dirty:
             self._save()
 
@@ -649,116 +703,143 @@ class AccountManager:
                 pass
         return killed_any
 
-    # ─────────── Login Automation ───────────
-    _login_in_progress = False  # Class-level guard against concurrent logins
+    # ─────────── Account switching ───────────
 
-    def login_account(self, idx: int, log_func=None, completion_func=None):
-        """Log into a specific account.
-
-        As requested: dead simple. No killing processes, no reloading.
-        Just focus the window, tab, and type the keystrokes.
+    def switch_to(self, idx: int, launch_league: bool = True):
         """
-        if AccountManager._login_in_progress:
+        Switch to an account and return a typed SwitchResult. Blocking.
+
+        Prefer this over `login_account` in new code: it tells you *why*
+        something failed (bad credentials vs 2FA vs client not running)
+        instead of just False.
+        """
+        if self._switcher is None:
+            from services.accounts.results import SwitchOutcome, SwitchResult
+
+            return SwitchResult(SwitchOutcome.ERROR, detail="switcher unavailable")
+        return self._switcher.switch_to(idx, launch_league=launch_league)
+
+    @property
+    def is_switching(self) -> bool:
+        return bool(self._switcher and self._switcher.busy)
+
+    def login_account(self, idx: int, log_func=None, completion_func=None,
+                      launch_league: bool = True):
+        """
+        Log into a specific account, on a background thread.
+
+        Rewritten: this now performs the full, consistent sequence - reach the
+        client, sign the current account out, authenticate through the Riot
+        Client API, verify, then optionally launch League.
+
+        Previously it typed the username and password as keystrokes into
+        whatever window held focus and never signed out first, so switching
+        only worked from an already-signed-out state.
+
+        `log_func` / `completion_func` are kept so existing callers keep
+        working; new code should use `switch_to()` or listen for the
+        account_switch_* events.
+        """
+        if self._switcher is None:
             if log_func:
-                log_func("Login already in progress...")
+                log_func("Account switching is unavailable.")
+            if completion_func:
+                completion_func(False)
             return
-
-        if not (0 <= idx < len(self._accounts)):
-            if log_func:
-                log_func("Invalid account index.")
-            return
-
-        acct = self._accounts[idx]
-        username = acct.get("username", "")
-        password = self._decrypt(acct.get("password_enc", ""))
-
-        if not username or not password:
-            if log_func:
-                log_func("Account credentials incomplete.")
-            return
-
-        label = acct.get("label", username)
 
         def _execute():
-            AccountManager._login_in_progress = True
+            handle = None
+            if log_func:
+                handle = self._subscribe_progress(log_func)
             try:
+                result = self._switcher.switch_to(idx, launch_league=launch_league)
                 if log_func:
-                    log_func(f"Switching to {label}...")
-
-                # Just run the macro.
-                self._keyboard_login(username, password, label, log_func, completion_func, idx)
-
-            except Exception as e:
-                Logger.error("AccountManager", f"Login automation failed: {e}")
-                if log_func:
-                    log_func(f"Login failed: {e}")
+                    log_func(result.message)
                 if completion_func:
-                    completion_func(False)
+                    completion_func(result.ok)
             finally:
-                AccountManager._login_in_progress = False
+                if handle is not None:
+                    try:
+                        handle.dispose()
+                    except Exception:
+                        pass
 
         threading.Thread(target=_execute, daemon=True).start()
-
-    # ─────────── Sign Out ───────────
 
     def sign_out(self, log_func=None, completion_func=None):
-        """Sign out the current account. Kills League Client first (required by API)."""
+        """
+        Sign out the current account, on a background thread.
+
+        Shares the switcher's lock and sequence, so a sign-out can no longer
+        run in the middle of a sign-in.
+        """
+        if self._switcher is None:
+            if log_func:
+                log_func("Account switching is unavailable.")
+            if completion_func:
+                completion_func(False)
+            return
+
         def _execute():
+            handle = None
+            if log_func:
+                handle = self._subscribe_progress(log_func)
             try:
+                result = self._switcher.sign_out()
                 if log_func:
-                    log_func("Signing out...")
-
-                if not self.riot_client.is_riot_client_running():
-                    if log_func:
-                        log_func("Riot Client is not running.")
-                    if completion_func:
-                        completion_func(False)
-                    return
-
-                # Must kill League Client first — API refuses sign-out otherwise
-                if log_func:
-                    log_func("Closing League Client...")
-                self._kill_game_processes(log_func)
-                time.sleep(2)
-
-                if not self.riot_client.is_connected:
-                    self.riot_client.connect()
-
-                if not self.riot_client.is_connected:
-                    if log_func:
-                        log_func("Cannot connect to Riot Client.")
-                    if completion_func:
-                        completion_func(False)
-                    return
-
-                success = self.riot_client.sign_out()
-
-                if success:
-                    with self._lock:
-                        self._active_idx = -1
-                        self._save()
-                    if log_func:
-                        log_func("Signed out successfully!")
-                else:
-                    if log_func:
-                        log_func("Sign out failed. Check the Riot Client.")
-
+                    log_func(result.message)
                 if completion_func:
-                    completion_func(success)
-
-            except Exception as e:
-                Logger.error("AccountManager", f"Sign out failed: {e}")
-                if log_func:
-                    log_func(f"Sign out error: {e}")
-                if completion_func:
-                    completion_func(False)
+                    completion_func(result.ok)
+            finally:
+                if handle is not None:
+                    try:
+                        handle.dispose()
+                    except Exception:
+                        pass
 
         threading.Thread(target=_execute, daemon=True).start()
+
+    @staticmethod
+    def _subscribe_progress(log_func):
+        """Bridge switcher progress events to a legacy log callback."""
+        try:
+            from core.events import EventBus  # type: ignore
+            from services.accounts.results import EVENT_SWITCH_PROGRESS  # type: ignore
+        except Exception:
+            return None
+
+        def _on_progress(progress=None, *_a, **_kw):
+            message = getattr(progress, "message", None)
+            if message:
+                try:
+                    log_func(message)
+                except Exception:
+                    pass
+
+        try:
+            return EventBus.on(EVENT_SWITCH_PROGRESS, _on_progress)
+        except Exception:
+            return None
 
     # ─────────── Keyboard Login (Fallback) ───────────
 
     def _keyboard_login(self, username, password, label, log_func, completion_func, idx):
-        """Fallback: type credentials into the Riot Client login form.
+        """
+        DEPRECATED fallback: type credentials into the Riot Client login form.
+
+        No longer part of the login path. It is retained only for manual
+        recovery if the Riot Client API sign-in endpoint changes.
+
+        Why it is not the default: `pyautogui.write(password)` sends the
+        password as keystrokes to whatever window holds focus at that instant.
+        If focus is stolen mid-type - a notification, the client repainting,
+        another app - the password is typed into that window instead. The API
+        path in `services.accounts.RiotSession.sign_in` sends it directly to
+        the local client instead.
+
+        Original description follows.
+
+        Fallback: type credentials into the Riot Client login form.
 
         The Riot Client auto-focuses the username field on launch.
         So the entire login is just: type username → Tab → type password → Enter.

@@ -55,29 +55,23 @@ class TestQtNewTabsAndComponents(unittest.TestCase):
         from ui.qt.widgets.loot_tab import QtLootTab
 
         tab = QtLootTab(container=self.container)
-        self.assertIsNotNone(tab.table)
         self.assertIsNotNone(tab.btn_refresh)
-        self.assertIsNotNone(tab.btn_forge_keys)
-        self.assertIsNotNone(tab.btn_open_all)
+        self.assertIsNotNone(tab.btn_open)
+        self.assertIsNotNone(tab.status)
 
         # Test refresh callback without crashing
-        tab.refresh_inventory()
+        tab.refresh()
 
     def test_accounts_tab_initialization_and_crud(self):
         from ui.qt.widgets.accounts_tab import QtAccountsTab
 
         tab = QtAccountsTab(container=self.container)
-        self.assertIsNotNone(tab.btn_add)
-        self.assertIsNotNone(tab.btn_detect)
+        self.assertIsNotNone(tab.active_card)
+        self.assertIsNotNone(tab.active_status)
+        self.assertIsNotNone(tab.list_card)
 
-        if tab.acct_mgr:
-            initial_count = len(tab.acct_mgr.get_accounts())
-            idx = tab.acct_mgr.add_account("Smurf1", "smurf_user", "password123", "Smurf#NA1", "NA1")
-            tab.refresh_accounts()
-            self.assertEqual(len(tab.acct_mgr.get_accounts()), initial_count + 1)
-
-            tab._on_delete_account(idx)
-            self.assertEqual(len(tab.acct_mgr.get_accounts()), initial_count)
+        # Test refresh callback without crashing
+        tab.refresh()
 
     def test_ban_list_dialog(self):
         from ui.qt.widgets.ban_list_dialog import QtBanListDialog

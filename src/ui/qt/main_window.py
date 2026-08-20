@@ -18,7 +18,7 @@ polled from services (§2.1).
 from __future__ import annotations
 
 import inspect
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -32,27 +32,27 @@ from PySide6.QtWidgets import (
 )
 
 from ui.qt.components.card import LLCard
-from ui.qt.components.toast import LLToastManager
 from ui.qt.theme import get_global_stylesheet
 from ui.qt.theme.colors import TEXT_MUTED, TEXT_SECONDARY
 from ui.qt.theme.spacing import CONTENT_MARGIN, SPACE_MD, SPACE_SM
 from ui.qt.theme.typography import TEXT_BODY, TEXT_PAGE_TITLE
 from ui.qt.viewmodels.shell_viewmodel import ShellViewModel
-from ui.qt.widgets.accounts_tab import QtAccountsTab
 from ui.qt.widgets.app_header import LLAppHeader
-from ui.qt.widgets.aram_tab import QtAramTab
+from ui.qt.widgets.accounts_tab import QtAccountsTab
 from ui.qt.widgets.automation_tab import QtAutomationTab
-from ui.qt.widgets.ban_list_dialog import QtBanListDialog
 from ui.qt.widgets.champ_select_tab import QtChampSelectTab
 from ui.qt.widgets.diagnostics_tab import QtDiagnosticsTab
-from ui.qt.widgets.loot_tab import QtLootTab
 from ui.qt.widgets.navigation.sidebar import QtNavigationSidebar
-from ui.qt.widgets.orb_widget import QtOrbWidget
 from ui.qt.widgets.play_tab import QtPlayTab
-from ui.qt.widgets.priority_tab import QtPriorityTab
+from ui.qt.widgets.champion_list_tab import (
+    QtAramTab,
+    QtBanListTab,
+    QtPriorityTab,
+)
+from ui.qt.widgets.loot_tab import QtLootTab
+from ui.qt.widgets.profile_tab import QtProfileTab
 from ui.qt.widgets.settings_tab import QtSettingsTab
 from ui.qt.widgets.status_bar import LLStatusBar
-from ui.qt.services.tray_service import LLSystemTray
 
 DEFAULT_WIDTH = 980
 DEFAULT_HEIGHT = 660
@@ -82,9 +82,8 @@ class LeagueLoopMainWindow(QMainWindow):
         self.setMinimumSize(MIN_WIDTH, MIN_HEIGHT)
         self.setStyleSheet(get_global_stylesheet())
 
-        # Presentation state for header/footer and mode switching
+        # Presentation state for header/footer and future mode switching.
         self.view_model = ShellViewModel(container=container, parent=self)
-        self.toast_mgr = LLToastManager.instance(self)
 
         root_widget = QWidget(self)
         self.setCentralWidget(root_widget)
@@ -113,27 +112,17 @@ class LeagueLoopMainWindow(QMainWindow):
         self.tab_stack = QStackedWidget(body)
         body_layout.addWidget(self.tab_stack, 1)
 
-        self.tab_pages: Dict[str, QWidget] = {}
+        self.tab_pages = {}
         for key, name, _icon in self.sidebar.DEFAULT_TABS:
             self.tab_stack.addWidget(self._build_page(key, name))
 
         # --- Footer (fixed) ----------------------------------------------
         self.status_bar = LLStatusBar(version=_app_version(), parent=self)
+        # Frameless windows have no native resize border; a grip in the footer
+        # keeps resizing available without custom hit-testing (§27).
         grip = QSizeGrip(self.status_bar)
         self.status_bar.layout().addWidget(grip, 0, Qt.AlignBottom | Qt.AlignRight)
         root_layout.addWidget(self.status_bar)
-
-        # --- Floating Orb Mode --------------------------------------------
-        self.orb_widget = QtOrbWidget(container=self.container, view_model=self.view_model)
-        self.orb_widget.restore_requested.connect(self._on_restore_from_orb)
-
-        # --- System Tray --------------------------------------------------
-        self.tray = LLSystemTray(config=self.config, parent=self)
-        self.tray.show_window_requested.connect(self._show_and_raise)
-        self.tray.toggle_orb_requested.connect(self._toggle_orb_mode)
-        self.tray.quit_requested.connect(self._force_quit)
-        if self.config and self.config.get("run_in_tray", True):
-            self.tray.show()
 
         # --- Bind state ---------------------------------------------------
         self.header.bind(self.view_model)
@@ -141,10 +130,12 @@ class LeagueLoopMainWindow(QMainWindow):
 
         self._restore_window_state()
 
-        # Mode-based UX (§5): follow the client into the draft automatically
+        # Mode-based UX (§5): follow the client into the draft automatically,
+        # since Champ Select is the most time-critical surface (§80).
         self.view_model.phase_changed.connect(self._on_phase_changed)
 
-        # Start focus on navigation
+        # Start focus on navigation rather than letting the first focusable
+        # widget (a window control) claim the focus ring on launch.
         current = self.sidebar.buttons.get(self.sidebar.DEFAULT_TABS[0][0])
         if current is not None:
             current.setFocus()
@@ -156,10 +147,12 @@ class LeagueLoopMainWindow(QMainWindow):
             "play": QtPlayTab,
             "champ_select": QtChampSelectTab,
             "automation": QtAutomationTab,
-            "aram": QtAramTab,
             "priority": QtPriorityTab,
-            "loot": QtLootTab,
+            "aram": QtAramTab,
+            "bans": QtBanListTab,
+            "profile": QtProfileTab,
             "accounts": QtAccountsTab,
+            "loot": QtLootTab,
             "diagnostics": QtDiagnosticsTab,
             "settings": QtSettingsTab,
         }
@@ -169,14 +162,11 @@ class LeagueLoopMainWindow(QMainWindow):
         if builder is not None:
             try:
                 kwargs = {"container": self.container, "parent": self}
+                # Pages opt into live state by declaring a `view_model` param.
                 if "view_model" in inspect.signature(builder.__init__).parameters:
                     kwargs["view_model"] = self.view_model
                 page = builder(**kwargs)
-
-                # Connect automation config triggers
-                if key == "automation" and hasattr(page, "configure_requested"):
-                    page.configure_requested.connect(self._on_configure_automation)
-            except Exception as exc:
+            except Exception as exc:  # a broken page must not take down the shell
                 page = self._create_empty_page(
                     name,
                     f"This screen could not be loaded.\n\n{type(exc).__name__}: {exc}",
@@ -191,7 +181,9 @@ class LeagueLoopMainWindow(QMainWindow):
         return page
 
     def _create_empty_page(self, name: str, message: str) -> QWidget:
-        """Intentional empty state (§54) — never a blank panel, never fake data."""
+        """
+        Intentional empty state (§54) — never a blank panel, never fake data.
+        """
         page = QWidget(self)
         layout = QVBoxLayout(page)
         layout.setContentsMargins(
@@ -234,40 +226,9 @@ class LeagueLoopMainWindow(QMainWindow):
         if phase == GameflowPhase.CHAMP_SELECT.value and "champ_select" in self.tab_pages:
             self.sidebar.select_tab("champ_select")
 
-    def _on_configure_automation(self, key: str) -> None:
-        """Open specialized configuration dialogs from the automation tab."""
-        if key == "auto_ban_enabled":
-            assets = getattr(self.container, "assets", None) if self.container else None
-            dlg = QtBanListDialog(config=self.config, assets=assets, parent=self)
-            dlg.exec()
-        elif key == "auto_lock_in":
-            self.sidebar.select_tab("priority")
-
-    # --------------------------------------------------- mode switching
-    def _toggle_orb_mode(self) -> None:
-        if self.isVisible():
-            self.hide()
-            self.orb_widget.show()
-            self.orb_widget.raise_()
-        else:
-            self._on_restore_from_orb()
-
-    def _on_restore_from_orb(self) -> None:
-        self.orb_widget.hide()
-        self._show_and_raise()
-
-    def _show_and_raise(self) -> None:
-        self.show()
-        self.raise_()
-        self.activateWindow()
-
-    def _force_quit(self) -> None:
-        if self.tray:
-            self.tray.hide()
-        self.close()
-
     # --------------------------------------------------- state persistence
     def _restore_window_state(self) -> None:
+        """Restore size, position and last page (§52)."""
         width, height = DEFAULT_WIDTH, DEFAULT_HEIGHT
         pos_x = pos_y = None
         last_tab = None
@@ -309,18 +270,8 @@ class LeagueLoopMainWindow(QMainWindow):
             pass
 
     def closeEvent(self, event) -> None:
-        if self.config and self.config.get("run_in_tray", True) and self.tray.tray_icon.isVisible():
-            self.hide()
-            self.tray.show_message("LeagueLoop", "Running minimized in system tray.")
-            event.ignore()
-            return
-
         self._save_window_state()
         try:
-            if self.orb_widget:
-                self.orb_widget.close()
-            if self.tray:
-                self.tray.hide()
             self.view_model.dispose()
         except Exception:
             pass
