@@ -1,33 +1,27 @@
-# Environment
-.env
-.env.local
-.env.*
-
+```
 # Dependencies
 node_modules/
 .venv/
 venv/
 __pycache__/
-.mypy_cache/
-.pytest_cache/
 
-# Build artifacts
-dist/
-build/
-target/
-*.spec
+# Logs and temp files
+*.log
+*.tmp
+*.swp
 
-# Scratch and test outputs
-scratch/
-cache/
-*.db*
-accounts.json
+# Environment
+.env
+.env.local
+*.env.*
 
 # Editors
 .vscode/
 .idea/
 
-# Compiled files
+# Build artifacts
+dist/
+build/
 *.pyc
 *.class
 *.o
@@ -38,19 +32,21 @@ accounts.json
 *.a
 *.out
 
-# Logs and temp files
-*.log
-*.tmp
-*.swp
-
-# System files
-.DS_Store
-Thumbs.db
-
 # Coverage
 coverage/
 htmlcov/
 .coverage
 
-# Gradle
-.gradle/
+# OS
+.DS_Store
+Thumbs.db
+
+# Python specific
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+*.so
+.PyInstaller/
+```
