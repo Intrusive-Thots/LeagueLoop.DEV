@@ -9,6 +9,7 @@ Provides:
 """
 from __future__ import annotations
 
+from core.config_keys import ARAM_PRIORITY_LIST
 from typing import List, Optional
 
 from PySide6.QtCore import Qt
@@ -26,6 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from ui.qt.components.button import ButtonVariant, LLButton
+from ui.qt.components.modal import LLConfirmModal
 from ui.qt.components.card import LLCard, LLSection, LLSeparator
 from ui.qt.components.setting_row import LLSettingRow
 from ui.qt.theme.colors import (
@@ -103,7 +105,7 @@ class QtAramTab(QWidget):
 
         # Left: Champion Roster
         left = LLSection("Champion roster", parent=self)
-        self.grid = QtChampionGrid(asset_manager=self.assets, scraper=self.scraper, parent=left)
+        self.grid = QtChampionGrid(asset_manager=self.assets, scraper=self.scraper, config=self.config, parent=left)
         self.grid.champion_selected.connect(self._on_champion_clicked)
         self.grid.champion_activated.connect(self._on_champion_clicked)
         left.add_widget(self.grid, 1)
@@ -168,7 +170,26 @@ class QtAramTab(QWidget):
         self.btn_sort = LLButton("Sort by winrate", parent=right)
         self.btn_sort.setToolTip("Sort ARAM priorities by Lolalytics win rate (highest first)")
         self.btn_sort.clicked.connect(self._on_sort_by_winrate)
+        # Disabled is a designed state (§63). Win rates are only available
+        # when they have actually been fetched; without them this button
+        # would reorder your list by a constant.
+        _live = self._can_sort()
+        self.btn_sort.setEnabled(_live)
+        self.btn_sort.setToolTip(
+            "Order your list by community win rate" if _live
+            else "Win rate data is not available, so there is nothing to sort by"
+        )
         buttons.addWidget(self.btn_sort)
+
+        # Most people already keep this list somewhere else — a Discord
+        # message, a spreadsheet, a tier-list page. Retyping sixty champions
+        # one click at a time is why a list like this goes stale.
+        self.btn_paste = LLButton("Paste list", parent=right)
+        self.btn_paste.setToolTip(
+            "Import champion names from your clipboard, in the order pasted"
+        )
+        self.btn_paste.clicked.connect(self._on_paste_list)
+        buttons.addWidget(self.btn_paste)
 
         self.btn_remove = LLButton("Remove", parent=right)
         self.btn_remove.clicked.connect(self._on_remove_selected)
@@ -198,7 +219,11 @@ class QtAramTab(QWidget):
         name = self._champ_name(cid)
         if self.scraper:
             wr = self.scraper.get_winrate(name)
-            return f"{name}  ({wr:.1f}% WR)"
+            # None means nobody measured it. Showing "50.0% WR" for every
+            # champion — which is what the old fallback did — is worse than
+            # showing nothing, because it looks like data.
+            if wr is not None:
+                return f"{name}  ({wr:.1f}% WR)"
         return name
 
     def _load_config_state(self) -> None:
@@ -209,7 +234,7 @@ class QtAramTab(QWidget):
         self.row_auto_reroll.set_checked(bool(self.config.get("aram_auto_reroll", False)))
 
         self.prio_list_widget.clear()
-        for cid in self.config.get("aram_priority_list", []) or []:
+        for cid in self.config.get(ARAM_PRIORITY_LIST, []) or []:
             try:
                 cid_int = int(cid)
             except (TypeError, ValueError):
@@ -238,14 +263,16 @@ class QtAramTab(QWidget):
         ids = self._current_ids()
         self.grid.set_priority_ids(ids)
         self.list_stack.setCurrentIndex(1 if ids else 0)
-        self.btn_sort.setEnabled(bool(ids))
+        # Sorting needs both a list *and* something to sort it by. This used
+        # to re-enable on list contents alone, undoing the data check.
+        self.btn_sort.setEnabled(bool(ids) and self._can_sort())
         self.btn_remove.setEnabled(bool(ids))
         self.btn_clear.setEnabled(bool(ids))
         self.hint.setVisible(bool(ids))
 
     def _save(self) -> None:
         if self.config:
-            self.config.set("aram_priority_list", self._current_ids())
+            self.config.set(ARAM_PRIORITY_LIST, self._current_ids())
         self._sync_grid_badges()
 
     def _set_cfg(self, key: str, value) -> None:
@@ -263,12 +290,68 @@ class QtAramTab(QWidget):
         self._renumber_items()
         self._save()
 
+    def _on_paste_list(self) -> None:
+        """
+        Replace or extend this list from the clipboard.
+
+        Unresolved names are reported rather than dropped: a list that
+        silently lost four entries is worse than one that tells you.
+        """
+        from PySide6.QtWidgets import QApplication
+
+        clipboard = QApplication.clipboard()
+        text = clipboard.text() if clipboard is not None else ""
+        if not text.strip():
+            self.hint.setText("Clipboard is empty — copy a list of champions first.")
+            self.hint.setVisible(True)
+            return
+
+        from services.champion_list_import import parse_champion_list
+
+        result = parse_champion_list(text, assets=self.assets)
+        if not result.ok:
+            self.hint.setText(result.summary)
+            self.hint.setVisible(True)
+            return
+
+        current = len(self.current_ids())
+        message = "{}\n\nThis replaces the {} champion{} currently in the list.".format(
+            result.summary, current, "" if current == 1 else "s"
+        )
+        if result.unknown:
+            message += "\n\nNot recognised: {}".format(", ".join(result.unknown))
+
+        dialog = LLConfirmModal(
+            "Import {} champions?".format(len(result.champion_ids)),
+            message, "Replace list", parent=self, destructive=bool(current),
+        )
+        if dialog.exec() != LLConfirmModal.Accepted:
+            return
+
+        self.list_widget.clear()
+        for cid in result.champion_ids:
+            self._append_item(cid)
+        self._renumber_items()
+        self._sync_grid_badges()
+        self._save()
+        self.hint.setText(result.summary)
+        self.hint.setVisible(True)
+
+    def _can_sort(self) -> bool:
+        return bool(self.scraper and self.scraper.has_live_winrates())
+
     def _on_sort_by_winrate(self) -> None:
         ids = self._current_ids()
         if not ids:
             return
-        if self.scraper:
-            ids.sort(key=lambda cid: self.scraper.get_winrate(self._champ_name(cid)), reverse=True)
+        if not (self.scraper and self.scraper.has_live_winrates()):
+            # Refuse rather than silently reordering by a constant. The button
+            # is disabled for this reason too; this is the belt-and-braces.
+            return
+        ids.sort(
+            key=lambda cid: self.scraper.get_winrate(self._champ_name(cid)) or 0.0,
+            reverse=True,
+        )
         self.prio_list_widget.clear()
         for cid in ids:
             self._append_item(cid)

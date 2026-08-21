@@ -9,6 +9,7 @@ Provides:
 """
 from __future__ import annotations
 
+from core.config_keys import AUTO_BAN_RESPECT_HOVERS, BAN_LIST
 from typing import List, Optional
 
 from PySide6.QtCore import Qt
@@ -81,6 +82,9 @@ class QtBanListDialog(QDialog):
         options_card = LLCard(parent=self)
         self.chk_respect = QCheckBox("Respect teammate hovers (never ban what a teammate intends to play)", options_card)
         self.chk_respect.setChecked(True)
+        # Without this the checkbox only reached config if the user also
+        # happened to edit the list; pressing Done discarded the change.
+        self.chk_respect.toggled.connect(lambda _v: self._save())
         options_card.add_widget(self.chk_respect)
         root.addWidget(options_card)
 
@@ -91,7 +95,7 @@ class QtBanListDialog(QDialog):
 
         # Left: Champion Roster
         left = LLSection("Champion roster", parent=self)
-        self.grid = QtChampionGrid(asset_manager=self.assets, parent=left)
+        self.grid = QtChampionGrid(asset_manager=self.assets, config=self.config, parent=left)
         self.grid.champion_selected.connect(self._on_champion_clicked)
         left.add_widget(self.grid, 1)
         columns.addWidget(left, 3)
@@ -177,8 +181,8 @@ class QtBanListDialog(QDialog):
         if callable(getter):
             try:
                 name = getter(cid)
-                if name:
-                    return name
+                if name and str(name) != str(cid):
+                    return str(name)
             except Exception:
                 pass
         tile = self.grid.tiles.get(int(cid)) if self.grid.tiles else None
@@ -189,10 +193,10 @@ class QtBanListDialog(QDialog):
             self._sync_badges()
             return
 
-        self.chk_respect.setChecked(bool(self.config.get("auto_ban_respect_teammates", True)))
+        self.chk_respect.setChecked(bool(self.config.get(AUTO_BAN_RESPECT_HOVERS, True)))
 
         self.ban_list_widget.clear()
-        for cid in self.config.get("ban_list", []) or []:
+        for cid in self.config.get(BAN_LIST, []) or []:
             try:
                 cid_int = int(cid)
             except (TypeError, ValueError):
@@ -227,8 +231,11 @@ class QtBanListDialog(QDialog):
 
     def _save(self) -> None:
         if self.config:
-            self.config.set("ban_list", self._current_ids())
-            self.config.set("auto_ban_respect_teammates", self.chk_respect.isChecked())
+            self.config.set(BAN_LIST, self._current_ids())
+            # The engine reads AUTO_BAN_RESPECT_HOVERS. This wrote
+            # "auto_ban_respect_teammates", a key nothing has ever read, so the
+            # checkbox never affected whether a teammate's hover was skipped.
+            self.config.set(AUTO_BAN_RESPECT_HOVERS, self.chk_respect.isChecked())
         self._sync_badges()
 
     def _on_champion_clicked(self, champ_id: int, name: str) -> None:

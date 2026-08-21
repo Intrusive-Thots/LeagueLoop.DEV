@@ -90,7 +90,24 @@ class QtProfileTab(QWidget):
 
         if view_model is not None:
             view_model.state_changed.connect(self._render_identity)
+            # The profile is read from the League Client, and at construction
+            # time the client-state service has usually not connected yet — so
+            # the first load returned nothing and nothing ever retried. The
+            # screen sat on "No games loaded" with a live client behind it.
+            view_model.connection_changed.connect(self._on_connection_changed)
             self._render_identity()
+
+    def _on_connection_changed(self, connected: bool) -> None:
+        if connected:
+            self.refresh()
+        else:
+            self._render_identity()
+
+    def showEvent(self, event) -> None:
+        # Also re-read on every visit: you may have played since last time.
+        super().showEvent(event)
+        if self.profile is None or not self.profile.matches:
+            self.refresh()
 
     # ------------------------------------------------------------------ UI
     def _setup_ui(self) -> None:

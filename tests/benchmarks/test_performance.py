@@ -63,7 +63,7 @@ class TestPerformanceBenchmarks(unittest.TestCase):
         elapsed_ms = (time.perf_counter() - start) * 1000
 
         self.assertIsNotNone(window)
-        self.assertIn("aram", window.tab_pages)
+        self.assertIn("priority", window.tab_pages)
         self.assertIn("loot", window.tab_pages)
         self.assertIn("accounts", window.tab_pages)
         self.assertLess(elapsed_ms, 800.0, f"MainWindow initialization took {elapsed_ms:.2f}ms")

@@ -157,3 +157,13 @@ class LLStatus(QWidget):
 
     def text(self) -> str:
         return self._label.text()
+
+    def detail(self) -> str:
+        """
+        The explanatory line, without the leading separator.
+
+        `text()` alone loses half the meaning — "Not connected" without
+        "Start the League Client" is the sort of status that sends someone
+        looking in the wrong place.
+        """
+        return self._detail.text().lstrip("· ").strip()

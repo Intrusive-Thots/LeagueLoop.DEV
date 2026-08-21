@@ -12,7 +12,6 @@ from typing import Any, Dict, List, Optional
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox,
     QHBoxLayout,
     QLabel,
     QScrollArea,
@@ -52,6 +51,9 @@ class QtLootTab(QWidget):
         self.loot = self._resolve_loot_service(container)
 
         self._rows: List[Dict[str, Any]] = []
+        #: False until the loot service has actually been asked. Distinguishes
+        #: "you have no loot" from "we have not looked".
+        self._has_read = False
         self._setup_ui()
         self._render_rows([])
 
@@ -113,14 +115,6 @@ class QtLootTab(QWidget):
         self.btn_refresh.clicked.connect(self.refresh)
         action_row.addWidget(self.btn_refresh)
 
-        self.btn_claim = LLButton(
-            "Claim rewards", variant=ButtonVariant.SECONDARY, parent=action_card
-        )
-        self.btn_claim.setEnabled(False)
-        self.btn_claim.setToolTip("Claim pending event pass milestones, missions, and milestone track rewards")
-        self.btn_claim.clicked.connect(self._on_claim_rewards)
-        action_row.addWidget(self.btn_claim)
-
         self.btn_open = LLButton(
             "Open all", variant=ButtonVariant.PRIMARY, parent=action_card
         )
@@ -130,24 +124,6 @@ class QtLootTab(QWidget):
         action_row.addWidget(self.btn_open)
 
         action_card.add_layout(action_row)
-
-        # Options checkboxes row
-        opts_row = QHBoxLayout()
-        opts_row.setSpacing(SPACE_LG)
-        opts_row.setContentsMargins(0, 4, 0, 0)
-
-        self.chk_claim_first = QCheckBox("Claim pass & missions before opening", action_card)
-        self.chk_claim_first.setChecked(True)
-        self.chk_claim_first.setStyleSheet(f"color: {TEXT_SECONDARY};")
-        opts_row.addWidget(self.chk_claim_first)
-
-        self.chk_craft_keys = QCheckBox("Craft keys from fragments first", action_card)
-        self.chk_craft_keys.setChecked(True)
-        self.chk_craft_keys.setStyleSheet(f"color: {TEXT_SECONDARY};")
-        opts_row.addWidget(self.chk_craft_keys)
-        opts_row.addStretch(1)
-
-        action_card.add_layout(opts_row)
         root.addWidget(action_card)
 
         # --- preview list ---------------------------------------------------
@@ -157,7 +133,9 @@ class QtLootTab(QWidget):
         empty_layout = QVBoxLayout(empty_holder)
         empty_layout.setContentsMargins(0, 0, 0, 0)
         self.empty_card = LLCard(parent=empty_holder)
-        self.empty_label = QLabel("Nothing to open.", self.empty_card)
+        # "Nothing to open" is a claim about your loot. Until we have actually
+        # looked, the honest text is that we have not looked (§54).
+        self.empty_label = QLabel("Loot has not been read yet.", self.empty_card)
         self.empty_label.setWordWrap(True)
         self.empty_label.setStyleSheet(
             TEXT_BODY.qss(color=TEXT_MUTED) + " background: transparent;"
@@ -187,7 +165,6 @@ class QtLootTab(QWidget):
     # -------------------------------------------------------------- render
     def _on_connection_changed(self, connected: bool) -> None:
         self.btn_refresh.setEnabled(bool(connected) and self.loot is not None)
-        self.btn_claim.setEnabled(bool(connected) and self.loot is not None)
         if not connected:
             self.status.set_status(
                 "Not connected", Tone.NEUTRAL,
@@ -201,13 +178,18 @@ class QtLootTab(QWidget):
                 "This build has no loot service wired up",
             )
         else:
-            self.status.set_status("Connected", Tone.SUCCESS, "Refresh to load your loot")
+            # Asking the user to press Refresh on a connected client is asking
+            # them to do the app's job. It also contradicted the panel below,
+            # which said "Nothing to open" before anything had been read.
+            self.status.set_status("Connected", Tone.SUCCESS, "Reading your loot…")
+            self.refresh()
 
     def refresh(self) -> None:
         """Ask the loot service what is openable right now."""
         if self.loot is None:
             self._render_rows([])
             return
+        self._has_read = True
         try:
             rows = self.loot.summarize_openable() or []
         except Exception as exc:
@@ -226,7 +208,10 @@ class QtLootTab(QWidget):
                 "Review below, then open",
             )
         else:
-            self.status.set_status("Nothing to open", Tone.NEUTRAL, "")
+            self.status.set_status(
+                "Nothing to open", Tone.NEUTRAL,
+                "You have no chests, capsules or orbs ready.",
+            )
 
         self.btn_open.setEnabled(bool(total))
         self._render_rows(rows)
@@ -242,11 +227,14 @@ class QtLootTab(QWidget):
 
         shown = [r for r in rows if r.get("can_open") or r.get("count")]
         if not shown:
-            self.empty_label.setText(
-                "Nothing to open."
-                if self.loot is not None
-                else "Loot is not available in this build yet."
-            )
+            if self.loot is None:
+                text = "Loot is not available in this build yet."
+            elif not self._has_read:
+                # Three different states that used to share one sentence.
+                text = "Loot has not been read yet."
+            else:
+                text = "Nothing to open — your loot has no openable items."
+            self.empty_label.setText(text)
             self.stack.setCurrentIndex(0)
             return
 
@@ -294,28 +282,6 @@ class QtLootTab(QWidget):
         return widget
 
     # -------------------------------------------------------------- actions
-    def _on_claim_rewards(self) -> None:
-        """Claim pending event pass, missions, and milestone rewards."""
-        if not self.loot or not callable(getattr(self.loot, "claim_all_rewards", None)):
-            return
-        self.btn_claim.setEnabled(False)
-        self.status.set_status("Claiming...", Tone.NEUTRAL, "Claiming pending pass and mission rewards")
-        try:
-            res = self.loot.claim_all_rewards()
-            if res.claimed > 0:
-                self.status.set_status(
-                    f"Claimed {res.claimed} reward{'s' if res.claimed != 1 else ''}",
-                    Tone.SUCCESS,
-                    "Rewards added to inventory",
-                )
-            else:
-                self.status.set_status("No rewards pending", Tone.NEUTRAL, "All pass & mission rewards are claimed")
-        except Exception as exc:
-            self.status.set_status("Claim failed", Tone.DANGER, str(exc))
-        finally:
-            self.btn_claim.setEnabled(True)
-            self.refresh()
-
     def _on_open_all(self) -> None:
         """Irreversible - only ever runs from an explicit click (§40)."""
         self.open_requested.emit()
@@ -324,11 +290,8 @@ class QtLootTab(QWidget):
             return
         self.btn_open.setEnabled(False)
         try:
-            claim_first = self.chk_claim_first.isChecked() if hasattr(self, "chk_claim_first") else True
-            craft_first = self.chk_craft_keys.isChecked() if hasattr(self, "chk_craft_keys") else True
-            res = opener(craft_keys_first=craft_first, claim_rewards_first=claim_first)
-            opened_cnt = getattr(res, "opened", 0) if res else 0
-            self.status.set_status(f"Opened {opened_cnt} item{'s' if opened_cnt != 1 else ''}", Tone.SUCCESS, "Refreshing inventory")
+            opener()
+            self.status.set_status("Loot opened", Tone.SUCCESS, "Refreshing")
         except Exception as exc:
             self.status.set_status("Could not open loot", Tone.DANGER, str(exc))
         self.refresh()

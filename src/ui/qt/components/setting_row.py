@@ -35,6 +35,11 @@ from ui.qt.theme.spacing import ROW_HEIGHT, SPACE_MD, SPACE_SM, SPACE_XS
 from ui.qt.theme.typography import TEXT_BODY_STRONG, TEXT_CAPTION
 
 
+#: Fixed column widths so controls line up across every row in a card.
+CONTROL_COLUMN_WIDTH = 72
+ACTION_COLUMN_WIDTH = 96
+
+
 class LLSettingRow(QWidget):
     """A labelled setting with an explanation, a toggle and optional action."""
 
@@ -87,6 +92,7 @@ class LLSettingRow(QWidget):
         )
         self.detail_label.setVisible(bool(detail))
         layout.addWidget(self.detail_label)
+        layout.addSpacing(SPACE_MD)
 
         # --- control ------------------------------------------------------
         # Defaults to a switch, but any widget can be supplied so settings
@@ -100,19 +106,46 @@ class LLSettingRow(QWidget):
         else:
             control.setParent(self)
             self.control = control
+        # Column width so every switch in a card lines up. Rows used to place
+        # the control immediately after a variable-width detail label, so a row
+        # reading "3 priorities configured" pushed its switch left of the row
+        # above it and the right edge came out ragged.
+        #
+        # Fixed only for the switch we own. A *supplied* control gets a
+        # minimum instead: forcing a width on someone else's composite widget
+        # clips it — the hotkey rows, which pack a key label beside a Rebind
+        # button, rendered as "IFT+L" with the button cut in half.
+        if self.toggle is not None:
+            self.control.setFixedWidth(CONTROL_COLUMN_WIDTH)
+        else:
+            self.control.setMinimumWidth(CONTROL_COLUMN_WIDTH)
         layout.addWidget(self.control, 0, Qt.AlignVCenter)
 
         # --- optional configuration action --------------------------------
+        # The slot is always reserved, so switches align whether or not the
+        # row has an action.
         self.action_button: Optional[LLButton] = None
+        action_slot = QWidget(self)
+        action_slot.setFixedWidth(ACTION_COLUMN_WIDTH)
+        action_slot.setStyleSheet("background: transparent;")
+        slot_layout = QHBoxLayout(action_slot)
+        slot_layout.setContentsMargins(0, 0, 0, 0)
+        slot_layout.setSpacing(0)
+
         if action_label:
+            # SECONDARY, not GHOST: this is a real destination, and a ghost
+            # button on a card reads as a caption rather than a control.
             self.action_button = LLButton(
                 action_label,
-                variant=ButtonVariant.GHOST,
+                variant=ButtonVariant.SECONDARY,
                 size=ButtonSize.SM,
-                parent=self,
+                parent=action_slot,
             )
+            self.action_button.setToolTip("Open {}".format(action_label.lower()))
             self.action_button.clicked.connect(self.action_clicked.emit)
-            layout.addWidget(self.action_button, 0, Qt.AlignVCenter)
+            slot_layout.addWidget(self.action_button)
+        slot_layout.addStretch(1)
+        layout.addWidget(action_slot, 0, Qt.AlignVCenter)
 
         self._sync_tooltip()
 

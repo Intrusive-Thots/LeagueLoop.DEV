@@ -113,7 +113,15 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         except Exception as e:
             Logger.error("SYS", f"ToastManager initialization error: {e}")
             
-        # ApplicationContainer owns service construction via bootstrap()
+        # ApplicationContainer owns service construction
+        self.container = ApplicationContainer()
+        self.config = self.container.config
+        self.assets = self.container.assets
+        self.lcu = self.container.lcu
+        self.scraper = self.container.scraper
+        from core.state import State
+        State.assets = self.assets
+
         self.stop_func = lambda: self.after(0, lambda: self.sidebar._on_power_click()) if hasattr(self, "sidebar") else None
         
         def _window_func(state):
@@ -125,32 +133,34 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
             if hasattr(self, "mini_player"):
                 self.after(0, lambda: self.mini_player.update_state(phase))
 
-        self.container = ApplicationContainer()
+        # Shared startup sequence (assets, automation, accounts, client
+        # state). The Qt shell calls the same method, so a service added to
+        # `bootstrap()` reaches both shells instead of only whichever one the
+        # author happened to be editing.
         self.container.bootstrap(
             launch_client_func=self._hotkey_launch_client,
-            start_assets=True,
-            start_automation=True,
-            start_client_state=True,
-            start_api=True,
-            stop_func=self.stop_func,
-            stats_func=lambda team, bench, me=None: self.after(0, lambda: self.sidebar.update_lobby_stats(team, bench, me)) if hasattr(self, "sidebar") else None,
-            window_func=_window_func,
-            queue_func=_queue_func,
+            automation_hooks=dict(
+                log_func=None,
+                stop_func=self.stop_func,
+                stats_func=lambda team, bench, me=None: self.after(
+                    0, lambda: self.sidebar.update_lobby_stats(team, bench, me)
+                ) if hasattr(self, "sidebar") else None,
+                window_func=_window_func,
+                queue_func=_queue_func,
+            ),
+            start_assets=False,   # started below, after the UI can show progress
         )
-        self.config = self.container.config
-        self.assets = self.container.assets
-        self.lcu = self.container.lcu
-        self.scraper = self.container.scraper
-        self.automation = self.container.automation
-        self.account_manager = self.container.account_manager
-
+        self.automation: Optional[AutomationEngine] = self.container.automation
+        
         self.setup_ui()
         
         auto = self.automation
         if auto is not None and hasattr(self, "sidebar"):
             auto.log = self.sidebar.update_action_log
 
-        if hasattr(self, "sidebar") and self.account_manager:
+        # Already built by bootstrap(); just take the reference.
+        self.account_manager = self.container.account_manager
+        if hasattr(self, "sidebar"):
             self.sidebar.set_account_manager(self.account_manager)
 
         self._setup_window_dragging()
@@ -164,14 +174,15 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         if self.automation is not None:
             self.automation.start(start_paused=False)  # type: ignore
 
+        self.assets.start_loading()
+        
         self.tray = SystemTrayApp(self)
         if self.config.get("run_in_tray", True):
             self.tray.start()
             
         self.protocol("WM_DELETE_WINDOW", self._on_close_request)
 
-        self._local_ip = getattr(self.container, "_api_ip", "127.0.0.1")
-        self._local_port = getattr(self.container, "_api_port", 8337)
+        self._local_ip, self._local_port = start_api_server(self, port=8337, bind_local=True)
 
         threading.Thread(target=self.connection_loop, daemon=True).start()
         threading.Thread(target=self.docking_loop, daemon=True).start()
@@ -373,21 +384,10 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         Logger.info("SYS", f"Mobile API at http://{self._local_ip}:{self._local_port}")
 
 
-def _find_other_instances():
-    """
-    Return psutil.Process objects for other running LeagueLoop instances.
-
-    Matches the packaged LeagueLoop.exe and any Python process whose script
-    argument is this app's entry point. The current process and its parents
-    are always excluded, so this never reports the caller itself.
-    """
-    matches = []
+def _kill_other_instances():
+    """Terminate any other running instances of LeagueLoop."""
     try:
         import psutil  # type: ignore
-    except Exception:
-        return matches
-
-    try:
         current_proc = psutil.Process(os.getpid())
         ignored_pids = {current_proc.pid}
         try:
@@ -413,33 +413,8 @@ def _find_other_instances():
                             is_match = True
                             break
                 if is_match:
-                    matches.append(proc)
+                    proc.terminate()
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
     except Exception:
         pass
-
-    return matches
-
-
-def _kill_other_instances():
-    """
-    Terminate any other running instances of LeagueLoop.
-
-    This is no longer called automatically on startup. Doing so meant a second
-    launch silently terminated the instance the user was already using, which
-    surfaced as a bare "exit code 15" in the older window and looked like a
-    crash. Startup now refuses instead (see run.py); this is only used when
-    the user explicitly asks to take over via ``run.py --replace``.
-
-    Returns the list of PIDs that were asked to terminate.
-    """
-    killed = []
-    for proc in _find_other_instances():
-        try:
-            pid = proc.pid
-            proc.terminate()
-            killed.append(pid)
-        except Exception:
-            pass
-    return killed

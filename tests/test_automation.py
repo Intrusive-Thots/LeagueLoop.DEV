@@ -271,11 +271,14 @@ class TestAutomationEnginePrioritySniper(unittest.TestCase):
 
 class TestAutomationEngineDraftAssistant(unittest.TestCase):
     def _make_engine(self):
+        from services.draft.priority_engine import PriorityEngine
         engine = AutomationEngine.__new__(AutomationEngine)
         engine.lcu = MagicMock()
         engine.config = MagicMock()
         engine.assets = MagicMock()
         engine.assets.name_to_id = {"yasuo": 30, "teemo": 20, "garen": 10}
+        engine.assets.get_champ_name = lambda cid: {30: "Yasuo", 20: "Teemo", 10: "Garen"}.get(cid, "")
+        engine.draft_engine = PriorityEngine(config_manager=engine.config, asset_manager=engine.assets)
         engine.log = MagicMock()
         engine._log = MagicMock()
         engine._last_draft_action_time = 0.0
@@ -284,7 +287,13 @@ class TestAutomationEngineDraftAssistant(unittest.TestCase):
     @patch("time.time", return_value=100)
     def test_draft_assistant_teammate_respect_ban(self, mock_time):
         engine = self._make_engine()
-        engine.config.get.side_effect = lambda key, default="": {"ban_MIDDLE_1": "yasuo", "ban_MIDDLE_2": "teemo", "auto_lock_in": False}.get(key, default)
+        engine.config.get.side_effect = lambda key, default="": {
+            "auto_ban_enabled": True,
+            "ban_priority_MIDDLE": [30, 20],
+            "ban_list": [30, 20],
+            "auto_ban_respect_hovers": True,
+            "auto_lock_in": False,
+        }.get(key, default)
 
         session = {
             "localPlayerCellId": 1,
@@ -302,7 +311,13 @@ class TestAutomationEngineDraftAssistant(unittest.TestCase):
     @patch("time.time", return_value=100)
     def test_draft_assistant_teammate_respect_ban_champion_id(self, mock_time):
         engine = self._make_engine()
-        engine.config.get.side_effect = lambda key, default="": {"ban_MIDDLE_1": "yasuo", "ban_MIDDLE_2": "teemo", "auto_lock_in": False}.get(key, default)
+        engine.config.get.side_effect = lambda key, default="": {
+            "auto_ban_enabled": True,
+            "ban_priority_MIDDLE": [30, 20],
+            "ban_list": [30, 20],
+            "auto_ban_respect_hovers": True,
+            "auto_lock_in": False,
+        }.get(key, default)
 
         session = {
             "localPlayerCellId": 1,
@@ -320,7 +335,12 @@ class TestAutomationEngineDraftAssistant(unittest.TestCase):
     @patch("time.time", return_value=100)
     def test_draft_assistant_fallback_pick(self, mock_time):
         engine = self._make_engine()
-        engine.config.get.side_effect = lambda key, default="": {"pick_MIDDLE_1": "garen", "pick_MIDDLE_2": "yasuo", "auto_lock_in": False}.get(key, default)
+        engine.config.get.side_effect = lambda key, default="": {
+            "priority_MIDDLE": [10, 30],
+            "priority_list": [10, 30],
+            "auto_hover": True,
+            "auto_lock_in": False,
+        }.get(key, default)
 
         session = {
             "localPlayerCellId": 1,
@@ -341,7 +361,12 @@ class TestAutomationEngineDraftAssistant(unittest.TestCase):
         engine = self._make_engine()
         # Ensure sufficient time has passed since last action
         engine._last_draft_action_time = 0.0
-        engine.config.get.side_effect = lambda key, default="": {"pick_MIDDLE_1": "yasuo", "auto_lock_in": True}.get(key, default)
+        engine.config.get.side_effect = lambda key, default="": {
+            "priority_MIDDLE": [30],
+            "priority_list": [30],
+            "auto_hover": True,
+            "auto_lock_in": True,
+        }.get(key, default)
 
         session = {
             "localPlayerCellId": 1,
@@ -360,7 +385,12 @@ class TestAutomationEngineDraftAssistant(unittest.TestCase):
     @patch("time.time", return_value=100)
     def test_draft_assistant_teammate_respect_pick(self, mock_time):
         engine = self._make_engine()
-        engine.config.get.side_effect = lambda key, default="": {"pick_MIDDLE_1": "yasuo", "pick_MIDDLE_2": "teemo", "auto_lock_in": False}.get(key, default)
+        engine.config.get.side_effect = lambda key, default="": {
+            "priority_MIDDLE": [30, 20],
+            "priority_list": [30, 20],
+            "auto_hover": True,
+            "auto_lock_in": False,
+        }.get(key, default)
 
         session = {
             "localPlayerCellId": 1,

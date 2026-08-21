@@ -1,5 +1,8 @@
-"""PySide6 widgets for LeagueLoop."""
+"""
+PySide6 widgets for LeagueLoop.
 
-from .transparent_overlay import TransparentOverlayWidget
-
-__all__ = ["TransparentOverlayWidget"]
+Deliberately empty of re-exports. This used to import and export
+`TransparentOverlayWidget` and nothing else, which meant importing the
+package pulled in an orphaned module, and the one name it advertised was the
+one widget the app never used. Import widgets from their own modules.
+"""

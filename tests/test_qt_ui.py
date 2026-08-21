@@ -42,8 +42,8 @@ class TestQtThemeAndComponents(unittest.TestCase):
         # Test tab selection signal
         received = []
         sidebar.tab_selected.connect(lambda k: received.append(k))
-        sidebar.select_tab("aram")
-        self.assertIn("aram", received)
+        sidebar.select_tab("priority")
+        self.assertIn("priority", received)
 
     def test_main_window_instantiation(self):
         from ui.qt.main_window import LeagueLoopMainWindow

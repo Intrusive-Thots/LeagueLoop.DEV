@@ -14,10 +14,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox,
-    QGridLayout,
     QHBoxLayout,
     QLabel,
     QVBoxLayout,
@@ -36,6 +34,9 @@ from ui.qt.viewmodels.activity_viewmodel import ActivityViewModel
 
 class QtPlayTab(QWidget):
     """Primary lobby and matchmaking control surface."""
+
+    #: Asks the shell to open the Automation screen.
+    automation_requested = Signal()
 
     def __init__(
         self,
@@ -94,30 +95,36 @@ class QtPlayTab(QWidget):
         status_card.add_layout(status_row)
         layout.addWidget(status_card)
 
-        # --- Automation toggles ------------------------------------------
-        toggles_card = LLCard(title="Automation", parent=self)
+        # --- what automation will do (§6) ---------------------------------
+        # These were four raw QCheckBoxes duplicating the Automation screen,
+        # rendered as checkboxes while every other surface uses the painted
+        # switch — and they showed their config values regardless of whether
+        # the engine was running, so the card could read "off" while the
+        # header read "Automation on". Play should say what will happen and
+        # send you to the one place that changes it (§2.2: one primary action
+        # per screen).
+        self.automation_card = LLCard(title="Automation", parent=self)
 
-        grid = QGridLayout()
-        grid.setSpacing(SPACE_MD)
+        auto_row = QHBoxLayout()
+        auto_row.setSpacing(SPACE_MD)
+        self.automation_status = LLStatus(
+            "Automation off", Tone.NEUTRAL, "", parent=self.automation_card
+        )
+        auto_row.addWidget(self.automation_status)
+        auto_row.addStretch(1)
 
-        self.chk_auto_accept = QCheckBox("Auto Accept Ready Check", toggles_card)
-        self.chk_auto_accept.toggled.connect(lambda v: self._set_cfg("auto_accept", v))
-        grid.addWidget(self.chk_auto_accept, 0, 0)
+        self.btn_automation = LLButton(
+            "Automation settings",
+            variant=ButtonVariant.SECONDARY,
+            size=ButtonSize.SM,
+            parent=self.automation_card,
+        )
+        self.btn_automation.setToolTip("Open the automation control centre")
+        self.btn_automation.clicked.connect(self.automation_requested.emit)
+        auto_row.addWidget(self.btn_automation)
 
-        self.chk_auto_lock = QCheckBox("Auto Lock-In Champion", toggles_card)
-        self.chk_auto_lock.toggled.connect(lambda v: self._set_cfg("auto_lock_in", v))
-        grid.addWidget(self.chk_auto_lock, 0, 1)
-
-        self.chk_auto_requeue = QCheckBox("Auto Requeue on Dodge", toggles_card)
-        self.chk_auto_requeue.toggled.connect(lambda v: self._set_cfg("auto_requeue", v))
-        grid.addWidget(self.chk_auto_requeue, 1, 0)
-
-        self.chk_auto_skin = QCheckBox("Auto Random Skin", toggles_card)
-        self.chk_auto_skin.toggled.connect(lambda v: self._set_cfg("auto_random_skin", v))
-        grid.addWidget(self.chk_auto_skin, 1, 1)
-
-        toggles_card.add_layout(grid)
-        layout.addWidget(toggles_card)
+        self.automation_card.add_layout(auto_row)
+        layout.addWidget(self.automation_card)
 
         # --- recent activity (§6, §18) ------------------------------------
         activity_section = LLSection("Recent activity", parent=self)
@@ -137,6 +144,7 @@ class QtPlayTab(QWidget):
 
         text, tone, detail = self.view_model.phase_status()
         self.phase_status.set_status(text, tone, detail)
+        self._render_automation()
 
         # The primary action only makes sense while the client is reachable
         # and not already in a match (§63: disabled is a designed state).
@@ -149,22 +157,89 @@ class QtPlayTab(QWidget):
         )
 
     def _load_config_state(self) -> None:
-        if not self.config:
-            return
-        self.chk_auto_accept.setChecked(bool(self.config.get("auto_accept", False)))
-        self.chk_auto_lock.setChecked(bool(self.config.get("auto_lock_in", False)))
-        self.chk_auto_requeue.setChecked(bool(self.config.get("auto_requeue", False)))
-        self.chk_auto_skin.setChecked(bool(self.config.get("auto_random_skin", True)))
+        """Nothing to load: this screen reports, it does not configure."""
+        self._render_automation()
 
-    def _set_cfg(self, key: str, val: bool) -> None:
-        if self.config:
-            self.config.set(key, val)
+    def _render_automation(self) -> None:
+        """
+        Say what automation will actually do, from live state.
+
+        Reads `AutomationState` — the engine's real running/paused flags — not
+        the config keys, so this cannot disagree with the header.
+        """
+        from core.config_keys import (
+            AUTO_ACCEPT, AUTO_BAN_ENABLED, AUTO_HOVER, AUTO_LOCK_IN,
+            AUTO_RANDOM_SKIN, AUTO_REQUEUE,
+        )
+
+        auto = self.view_model.state.automation if self.view_model else None
+        if auto is None or not auto.running:
+            self.automation_status.set_status(
+                "Automation off", Tone.NEUTRAL,
+                "Nothing will run automatically.",
+            )
+            return
+        if auto.paused:
+            self.automation_status.set_status(
+                "Automation paused", Tone.WARNING,
+                "Automations are on but held until you resume.",
+            )
+            return
+
+        enabled = []
+        if self.config is not None:
+            labels = [
+                (AUTO_ACCEPT, "accept ready checks"),
+                (AUTO_HOVER, "hover a champion"),
+                (AUTO_LOCK_IN, "lock in"),
+                (AUTO_BAN_ENABLED, "ban"),
+                (AUTO_REQUEUE, "requeue on dodge"),
+                (AUTO_RANDOM_SKIN, "pick a random skin"),
+            ]
+            for key, label in labels:
+                try:
+                    if self.config.get(key, False):
+                        enabled.append(label)
+                except Exception:
+                    continue
+
+        if not enabled:
+            # Running with nothing switched on is a real state and a confusing
+            # one — say so rather than implying something will happen.
+            self.automation_status.set_status(
+                "Automation on", Tone.WARNING,
+                "No automations are switched on, so nothing will happen.",
+            )
+            return
+
+        if len(enabled) > 3:
+            detail = "Will {}, {} and {} more.".format(
+                ", ".join(enabled[:2]), enabled[2], len(enabled) - 3
+            )
+        else:
+            detail = "Will {}.".format(
+                " and ".join([", ".join(enabled[:-1]), enabled[-1]]).strip(", ")
+                if len(enabled) > 1 else enabled[0]
+            )
+        self.automation_status.set_status("Automation on", Tone.SUCCESS, detail)
 
     # ------------------------------------------------------------- actions
     def _on_find_match(self) -> None:
-        """Start matchmaking search via QueueManager."""
-        from services.queue_manager import start_matchmaking
-        start_matchmaking(self.lcu)
+        """
+        Start matchmaking.
+
+        NOTE: this still calls the LCU directly because there is no
+        start-matchmaking method on any service yet (QueueManager only
+        resolves queue ids/names). A `QueueService.start_search()` seam
+        should own this so the view stops knowing LCU endpoints.
+        """
+        if not (self.lcu and getattr(self.lcu, "is_connected", False)):
+            return
+        try:
+            self.lcu.request("POST", "/lol-lobby/v2/lobby/matchmaking/search")
+        except Exception:
+            # Errors surface through state/activity rather than crashing the view.
+            pass
 
     def update_phase(self, phase: str) -> None:
         """Legacy push-style entry point, retained for callers that use it."""

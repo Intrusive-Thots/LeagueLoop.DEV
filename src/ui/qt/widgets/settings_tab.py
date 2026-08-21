@@ -230,11 +230,9 @@ class QtSettingsTab(QWidget):
     def _on_save_status(self) -> None:
         text = self.txt_status.text().strip()
         self._set_cfg("custom_status", text)
-        if self.lcu and getattr(self.lcu, "is_connected", False):
-            try:
-                self.lcu.request("PUT", "/lol-chat/v1/me", {"statusMessage": text})
-            except Exception:
-                pass
+        # The window owns the LCU write so there is exactly one call and one
+        # result message. Doing it here as well used to fire the request twice
+        # and report a failure for a status that had in fact been set.
         self.status_saved.emit(text)
 
     def _on_rebind_hotkey(self, key: str, label: str) -> None:

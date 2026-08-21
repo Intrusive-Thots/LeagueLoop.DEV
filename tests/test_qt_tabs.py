@@ -23,46 +23,95 @@ class TestQtTabWidgets(unittest.TestCase):
         if hasattr(self, "temp_dir"):
             self.temp_dir.cleanup()
 
-    def test_play_tab_initialization_and_toggles(self):
+    def test_play_tab_reports_automation_rather_than_duplicating_it(self):
+        """
+        Play used to carry four raw QCheckBoxes mirroring the Automation
+        screen. They rendered as checkboxes while every other surface uses the
+        painted switch, and they read config keys directly — so the card could
+        say "off" while the header said "Automation on". Play now reports live
+        state and links to the one screen that changes it.
+        """
         from ui.qt.widgets.play_tab import QtPlayTab
 
         tab = QtPlayTab(container=self.container)
-        self.assertIsNotNone(tab.chk_auto_accept)
-        self.assertIsNotNone(tab.chk_auto_lock)
         self.assertIsNotNone(tab.btn_find_match)
+        self.assertIsNotNone(tab.automation_status)
+        self.assertIsNotNone(tab.btn_automation)
 
-        # Toggle setting
-        tab.chk_auto_accept.setChecked(True)
-        self.assertTrue(self.container.config.get("auto_accept"))
-        tab.chk_auto_accept.setChecked(False)
-        self.assertFalse(self.container.config.get("auto_accept"))
+        for gone in ("chk_auto_accept", "chk_auto_lock", "chk_auto_requeue",
+                     "chk_auto_skin"):
+            self.assertFalse(hasattr(tab, gone),
+                             "{} is back; Play is duplicating Automation".format(gone))
 
         tab.update_phase("ChampSelect")
-        self.assertIn("ChampSelect", tab.phase_indicator.text())
 
-    def test_diagnostics_tab_and_match_history(self):
+    def test_play_tab_asks_the_shell_to_open_automation(self):
+        from ui.qt.widgets.play_tab import QtPlayTab
+
+        tab = QtPlayTab(container=self.container)
+        seen = []
+        tab.automation_requested.connect(lambda: seen.append(1))
+        tab.btn_automation.click()
+        self.assertEqual(seen, [1])
+
+    def test_diagnostics_reports_health_not_telemetry(self):
+        """
+        Diagnostics used to be four counters that read zero on a fresh launch
+        above an empty SQLite table, with "Prune Cache" as its only action.
+        It now answers the question the page name implies.
+        """
         from ui.qt.widgets.diagnostics_tab import QtDiagnosticsTab
 
-        # Insert a sample match into DB
-        self.container.db.record_match({
-            "game_id": 999111,
-            "champion_id": 103,
-            "champion_name": "Ahri",
-            "win": True,
-            "kills": 12,
-            "deaths": 1,
-            "assists": 8,
-            "duration_s": 1500,
-            "queue_id": 420,
-        })
+        tab = QtDiagnosticsTab(container=self.container)
+        keys = [key for key, _widget in tab._checks]
+        self.assertEqual(
+            keys, ["client", "accounts", "automation", "champions", "history"]
+        )
+        for _key, widget in tab._checks:
+            self.assertTrue(widget.text(), "a health row rendered with no state")
+
+    def test_a_disconnected_client_says_what_to_do(self):
+        from ui.qt.widgets.diagnostics_tab import QtDiagnosticsTab
 
         tab = QtDiagnosticsTab(container=self.container)
-        self.assertEqual(tab.table.rowCount(), 1)
-        self.assertEqual(tab.table.item(0, 1).text(), "Ahri")
-        self.assertEqual(tab.table.item(0, 2).text(), "WIN")
+        text, _tone, detail = tab._check_client()
+        self.assertEqual(text, "Not connected")
+        self.assertIn("League Client", detail)
 
-        # Test prune button doesn't raise
-        tab.btn_prune_cache.click()
+    def test_missing_champion_data_is_flagged_as_a_problem(self):
+        from ui.qt.widgets.diagnostics_tab import QtDiagnosticsTab
+
+        tab = QtDiagnosticsTab(container=self.container)
+        tab.assets = type("A", (), {"champ_data": {}, "champion_data_error": "boom"})()
+        text, tone, detail = tab._check_champions()
+        self.assertEqual(text, "Failed to load")
+        self.assertEqual(detail, "boom")
+
+    def test_developer_details_start_hidden(self):
+        from ui.qt.widgets.diagnostics_tab import QtDiagnosticsTab
+
+        tab = QtDiagnosticsTab(container=self.container)
+        self.assertFalse(tab.details_card.isVisibleTo(tab))
+        tab.btn_details.click()
+        self.assertTrue(tab.details_card.isVisibleTo(tab))
+        self.assertIn("Hide", tab.btn_details.text())
+
+    def test_the_report_is_copyable_text(self):
+        from ui.qt.widgets.diagnostics_tab import QtDiagnosticsTab
+
+        tab = QtDiagnosticsTab(container=self.container)
+        report = tab.report_text()
+        self.assertIn("LeagueLoop diagnostics", report)
+        self.assertIn("Client", report)
+        # The detail line carries the actionable half; text() alone loses it.
+        self.assertIn("League Client", report)
+
+    def test_zero_latency_is_not_reported_as_a_measurement(self):
+        from ui.qt.widgets.diagnostics_tab import QtDiagnosticsTab
+
+        tab = QtDiagnosticsTab(container=self.container)
+        tab._render_metrics()
+        self.assertNotIn("0.0 ms", tab.metrics_label.text())
 
     def test_settings_tab_and_status_save(self):
         from ui.qt.widgets.settings_tab import QtSettingsTab

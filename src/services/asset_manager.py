@@ -44,6 +44,9 @@ except OSError:
 
 DDRAGON_VER = "14.1.1"
 
+#: Queue sentinel telling a download worker to exit.
+_WORKER_STOP = object()
+
 _cached_ddragon_ver = None
 
 
@@ -458,7 +461,12 @@ class AssetManager:
         # while ensuring high-priority UI requests preempt low-priority background pre-loads.
         self._download_queue = queue.PriorityQueue()
         self._queue_counter = 0
+        self._shutdown_event = threading.Event()
+        #: Why champion data is missing, or "" when it loaded. Read by the UI.
+        self.champion_data_error = ""
+        self._loader_thread = None
         from core.constants import DOWNLOAD_WORKER_COUNT
+        self._worker_count = DOWNLOAD_WORKER_COUNT
         for _ in range(DOWNLOAD_WORKER_COUNT):
             threading.Thread(target=self._download_worker, daemon=True).start()
 
@@ -485,6 +493,8 @@ class AssetManager:
             item = self._download_queue.get()
             try:
                 func = item[-1] if isinstance(item, tuple) else item
+                if func is _WORKER_STOP:
+                    return
                 func()
             except Exception as e:  # pylint: disable=broad-exception-caught
                 Logger.error("asset_manager.py", f"Handled exception: {type(e).__name__}: {e}")
@@ -498,9 +508,69 @@ class AssetManager:
         else:
             print(f"[Assets] {msg}")
 
+    #: Attempts made before giving up on champion data at startup.
+    CHAMPION_LOAD_ATTEMPTS = 3
+    #: Seconds between attempts. Grows each try.
+    CHAMPION_RETRY_BACKOFF_S = 3.0
+
     def start_loading(self):
         """Start loading assets in a background thread."""
-        threading.Thread(target=self._load_all, daemon=True).start()
+        self._loader_thread = threading.Thread(target=self._load_all, daemon=True)
+        self._loader_thread.start()
+
+    def retry_champion_data(self) -> bool:
+        """
+        Try the champion download again, now.
+
+        One failed attempt at startup used to mean no champions for the whole
+        session — every champion screen empty until the app was restarted.
+        The UI can call this from its empty state.
+        """
+        self._fetch_latest_version()
+        return bool(self._load_champion_data())
+
+    def _load_champion_data_with_retry(self) -> bool:
+        """
+        Retry a failed champion download a few times before giving up.
+
+        Data Dragon is a CDN and a cold start races the network coming up, so
+        a single attempt at launch fails often enough to matter.
+        """
+        delay = self.CHAMPION_RETRY_BACKOFF_S
+        for attempt in range(1, self.CHAMPION_LOAD_ATTEMPTS + 1):
+            if self._load_champion_data():
+                return True
+            if attempt < self.CHAMPION_LOAD_ATTEMPTS:
+                self.log(
+                    "Champion data attempt {} of {} failed; retrying in {:.0f}s"
+                    .format(attempt, self.CHAMPION_LOAD_ATTEMPTS, delay)
+                )
+                if self._shutdown_event.wait(delay):
+                    return False
+                delay *= 2
+        self.log("Champion data unavailable: {}".format(self.champion_data_error))
+        return False
+
+    def shutdown(self) -> None:
+        """
+        Stop the download workers and release the HTTP session.
+
+        `__init__` starts DOWNLOAD_WORKER_COUNT threads in a bare `while True`
+        and nothing ever stopped them. They are daemons so the process still
+        exits, but every AssetManager built in a test leaked a fresh set, and
+        the requests.Session was never closed.
+        """
+        self._shutdown_event.set()
+        try:
+            for _ in range(self._worker_count):
+                # A sentinel per worker; each one exits on receiving it.
+                self._download_queue.put((0, 0, _WORKER_STOP))
+        except Exception:
+            pass
+        try:
+            self.session.close()
+        except Exception:
+            pass
 
     def _fetch_latest_version(self):
         """Fetches the latest Data Dragon version."""
@@ -545,16 +615,36 @@ class AssetManager:
         except Exception as e:  # pylint: disable=broad-exception-caught
             Logger.error("asset_manager.py", f"Handled exception: {type(e).__name__}: {e}")
 
-        self._load_champion_data()
+        self._load_champion_data_with_retry()
         self._load_meraki_data()
         self.log("Assets Loaded.")
 
     def _load_champion_data(self):
+        """
+        Load champion.json, from cache when present, else from Data Dragon.
+
+        The download used to be `session.get(url).json()` straight into the
+        cache file: no status check, so a 404 page or an error body was
+        written to disk as though it were champion data, and only discovered
+        on the next read. Validate first, write second.
+        """
         path = os.path.join(CACHE_DIR, "champion.json")
         try:
             if not os.path.exists(path):
                 url = f"https://ddragon.leagueoflegends.com/cdn/{self.ddragon_ver}/data/en_US/champion.json"
-                data = self.session.get(url, timeout=10).json()
+                response = self.session.get(url, timeout=10)
+                if response.status_code != 200:
+                    raise RuntimeError(
+                        "Data Dragon returned HTTP {} for {}".format(
+                            response.status_code, self.ddragon_ver
+                        )
+                    )
+                data = response.json()
+                if not isinstance(data, dict) or not data.get("data"):
+                    raise RuntimeError(
+                        "Data Dragon returned no champion data for version {}"
+                        .format(self.ddragon_ver)
+                    )
                 with open(path, "w", encoding="utf-8") as f:
                     json.dump(data, f)
 
@@ -583,14 +673,20 @@ class AssetManager:
 
             # Task 158: Build pre-normalized champion search index
             self._build_champ_search_index()
+            self.champion_data_error = ""
+            return True
 
         except Exception as e:  # pylint: disable=broad-exception-caught
             Logger.error("asset_manager.py", f"Handled exception: {type(e).__name__}: {e}")
+            # Record it so the UI can say what went wrong and offer a retry,
+            # rather than showing an empty roster with no explanation.
+            self.champion_data_error = "{}: {}".format(type(e).__name__, e)
             try:
                 if os.path.exists(path):
                     os.remove(path)
             except OSError as e:
                 Logger.warning("asset_manager.py", f"Failed to remove file {path}: {e}")
+            return False
 
     def _load_meraki_data(self):
         """Load detailed champion data (including roles) from Meraki Analytics."""
@@ -644,6 +740,21 @@ class AssetManager:
                     os.remove(path)
             except OSError as e:
                 Logger.warning("asset_manager.py", f"Failed to remove file {path}: {e}")
+
+    def get_champ_roles(self, champ_id) -> tuple:
+        """Positions a champion is played in, e.g. ("MIDDLE", "TOP").
+
+        The Qt champion grid, the champ-select view model and the priority
+        engine all look this up with getattr/hasattr. It did not exist, so
+        every role filter chip in the UI silently matched every champion.
+
+        Returns an empty tuple when the role data has not loaded, which
+        callers must treat as "unknown", not as "matches everything".
+        """
+        try:
+            return tuple(self.champ_roles.get(int(champ_id), ()) or ())
+        except (TypeError, ValueError):
+            return ()
 
     def _build_champ_search_index(self) -> None:
         """Task 158 & 161: Rebuilds pre-normalized champion search index with initials and pre-computed search features."""

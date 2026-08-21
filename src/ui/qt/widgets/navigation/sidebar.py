@@ -107,7 +107,6 @@ class QtNavigationSidebar(QFrame):
         ("champ_select", "Champ Select", "◆"),
         ("automation", "Automation", "⚙"),
         ("priority", "Priority", "★"),
-        ("aram", "ARAM", "❄"),
         ("bans", "Bans", "✕"),
         ("profile", "Profile", "◉"),
         ("accounts", "Accounts", "👤"),

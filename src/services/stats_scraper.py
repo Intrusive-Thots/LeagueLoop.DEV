@@ -58,9 +58,21 @@ _CLEAN_TRANS = str.maketrans("", "", " '.")
 
 # Derived baseline dictionaries for other game modes.
 # Ranked tends to be slightly lower (lane matchup pressure), Arena higher (pick power).
-BASELINE_RANKED_WINRATES = {k: round(v - 1.5, 1) for k, v in BASELINE_ARAM_WINRATES.items()}
-BASELINE_ARENA_WINRATES = {k: round(v + 2.0, 1) for k, v in BASELINE_ARAM_WINRATES.items()}
-BASELINE_QUICKPLAY_WINRATES = {k: round(v - 0.5, 1) for k, v in BASELINE_ARAM_WINRATES.items()}
+# The three "derived" tables that used to live here were
+#     RANKED   = ARAM - 1.5
+#     ARENA    = ARAM + 2.0
+#     QUICKPLAY = ARAM - 0.5
+# — arithmetic performed on a hand-written table, presented to the user as
+# per-mode win rates. They are gone. A number nobody measured is not data.
+#
+# BASELINE_ARAM_WINRATES above is likewise hand-written, not fetched. It is
+# retained only as a last-resort *ordering* hint for automation (better than
+# alphabetical when picking between two champions with no other signal) and
+# is never shown to the user. `get_winrate()` returns None unless the number
+# was actually scraped; see `winrate_source()`.
+BASELINE_RANKED_WINRATES = BASELINE_ARAM_WINRATES
+BASELINE_ARENA_WINRATES = BASELINE_ARAM_WINRATES
+BASELINE_QUICKPLAY_WINRATES = BASELINE_ARAM_WINRATES
 
 # Queue ID → dataset mapping for dynamic resolution
 _QUEUE_DATASET_MAP = {
@@ -206,14 +218,41 @@ class StatsScraper:
         self._fetch_live_data_background(self.mode)
 
     def get_winrate(self, champ_name):
-        """Look up a champion's win rate depending on mode. Returns 50.0 if completely unknown."""
-        # ⚡ Bolt: Fast-path string manipulation.
-        # Use str.translate instead of chained .replace calls to perform the cleanup in a single
-        # optimized C pass and avoid allocating multiple intermediate strings on the heap.
+        """
+        A champion's win rate for the current mode, or **None**.
+
+        None means "we do not know" and the caller must show nothing. This
+        used to fall back to a hand-written table and, failing that, to a flat
+        `50.0` — so every champion always had a plausible-looking percentage,
+        none of it measured, and the tile tooltip credited it to Lolalytics.
+
+        Use `get_ordering_hint()` if you need a number to break ties inside
+        automation. That one never reaches the screen.
+        """
         clean = champ_name.translate(_CLEAN_TRANS).lower()
-        if self.mode in self.live_winrates and clean in self.live_winrates[self.mode]:
-            return self.live_winrates[self.mode][clean]
+        live = self.live_winrates.get(self.mode) or {}
+        return live.get(clean)
+
+    def get_ordering_hint(self, champ_name) -> float:
+        """
+        A number for ranking champions internally. **Never display this.**
+
+        Prefers real scraped data; falls back to the hand-written baseline,
+        then to 50.0. It exists so automation can break a tie deterministically
+        rather than alphabetically, and for no other reason.
+        """
+        clean = champ_name.translate(_CLEAN_TRANS).lower()
+        live = self.live_winrates.get(self.mode) or {}
+        if clean in live:
+            return live[clean]
         return self.win_rates.get(clean, 50.0)
+
+    def winrate_source(self) -> str:
+        """"lolalytics" when the numbers were scraped, "" when there are none."""
+        return "lolalytics" if self.live_winrates.get(self.mode) else ""
+
+    def has_live_winrates(self) -> bool:
+        return bool(self.live_winrates.get(self.mode))
 
     @property
     def is_offline(self) -> bool:

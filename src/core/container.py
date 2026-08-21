@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Optional, TYPE_CHECKING
 
+from utils.logger import Logger
+
 if TYPE_CHECKING:
     from services.api_handler import LCUClient
     from services.asset_manager import AssetManager
@@ -44,6 +46,7 @@ class ApplicationContainer:
         self.account_manager: Optional[AccountManager] = None
         self.client_state = None
         self.automation_controller = None
+        self.bootstrap_errors: list = []
 
     def create_automation(
         self,
@@ -119,78 +122,96 @@ class ApplicationContainer:
             self.client_state.start()
         return self.client_state
 
+    # ------------------------------------------------------------ bootstrap
     def bootstrap(
         self,
         *,
         launch_client_func=None,
+        automation_hooks: Optional[dict] = None,
         start_assets: bool = True,
-        start_automation: bool = True,
         start_client_state: bool = False,
+        apply_automation_config: bool = False,
+        start_automation: bool = True,
         start_api: bool = True,
-        api_port: int = 8337,
-        log_func=None,
-        stop_func=None,
-        stats_func=None,
-        window_func=None,
-        queue_func=None,
+        **kwargs,
     ) -> "ApplicationContainer":
         """
-        Unified bootstrap sequence (composition root) for all app shells.
-        Constructs and coordinates the full service graph:
-        1. Assets loading & State.assets sync
-        2. Account manager
-        3. Automation engine & lifecycle controller
-        4. Client state service (syncs LCU into ApplicationState)
-        5. Local API server (port 8337 for mobile companion & local integrations)
-        """
-        from utils.logger import Logger
+        Bring every lazily-created service up, once, in one place.
 
-        # 1. Assets
-        if start_assets and hasattr(self, "assets") and self.assets:
+        `__init__` only constructs the cheap services. Everything else — the
+        automation engine, the account manager, asset downloading, the LCU
+        state poller — used to be started imperatively by `core/main.py`, the
+        CustomTkinter shell. The Qt shell built a container and a window and
+        never reimplemented that sequence, so those services simply did not
+        exist there: automation toggles wrote config keys nothing read,
+        `champ_data` stayed empty so four screens had no champions, and the
+        Accounts screen came up permanently disabled.
+
+        That was the same mistake four times. Both shells now call this, so a
+        service added here reaches both by construction.
+
+        `start_client_state` is off by default and deliberately so: the state
+        service only publishes *changes*, so starting it before the UI has
+        subscribed means the first values are delivered to nobody. Start it
+        after the views exist — `ui.qt.app.application.build()` does.
+
+        Failures are reported and swallowed per-service. One unavailable
+        subsystem must degrade its own screen, not prevent the app starting.
+        """
+        errors = []
+
+        if start_assets:
             try:
                 self.assets.start_loading()
             except Exception as exc:
-                Logger.warning("Container", f"Asset loading start failed: {exc}")
+                errors.append(("assets", exc))
 
         try:
-            from core.state import State
-            State.assets = self.assets
-        except Exception:
-            pass
+            self.create_automation(**(automation_hooks or {}))
+            self.create_automation_controller()
+        except Exception as exc:
+            errors.append(("automation", exc))
 
-        # 2. Account Manager
-        self.create_account_manager(launch_client_func=launch_client_func)
+        try:
+            self.create_account_manager(launch_client_func=launch_client_func)
+        except Exception as exc:
+            errors.append(("accounts", exc))
 
-        # 3. Automation Controller & Engine
-        self.create_automation_controller(
-            log_func=log_func,
-            stop_func=stop_func,
-            stats_func=stats_func,
-            window_func=window_func,
-            queue_func=queue_func,
-        )
-        if start_automation and self.automation_controller is not None:
+        try:
+            self.create_client_state_service(autostart=start_client_state)
+        except Exception as exc:
+            errors.append(("client state", exc))
+
+        if start_api:
+            try:
+                from services import local_api
+                local_api.start_api_server(self)
+            except Exception as exc:
+                errors.append(("api server", exc))
+
+        if apply_automation_config and self.automation_controller is not None:
             try:
                 self.automation_controller.apply_config()
             except Exception as exc:
-                Logger.warning("Container", f"Could not apply automation config: {exc}")
+                errors.append(("automation config", exc))
 
-        # 4. Client state service
-        self.create_client_state_service(autostart=start_client_state)
-
-        # 5. Local API Server
-        if start_api:
-            try:
-                from services.local_api import start_api_server
-                self._api_ip, self._api_port = start_api_server(self, port=api_port, bind_local=True)
-            except Exception as exc:
-                Logger.warning("Container", f"Local API server start failed: {exc}")
+        for name, exc in errors:
+            Logger.error("Container", f"{name} unavailable: {exc}")
+        self.bootstrap_errors = errors
 
         return self
 
     def shutdown(self) -> None:
         """Best-effort teardown of long-lived services."""
         self.automation_controller = None
+        # The asset manager starts a pool of download workers in its
+        # constructor and nothing ever stopped them; every container built in
+        # a test leaked a fresh set.
+        if getattr(self, "assets", None) is not None:
+            try:
+                self.assets.shutdown()
+            except Exception:
+                pass
         if getattr(self, "client_state", None) is not None:
             try:
                 self.client_state.stop()

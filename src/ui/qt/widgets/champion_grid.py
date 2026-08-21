@@ -112,6 +112,8 @@ class QtChampionGrid(QWidget):
     champion_selected = Signal(int, str)
     champion_activated = Signal(int, str)          # double-click / Enter
     champion_context_menu = Signal(int, object)
+    #: Emitted with the favourite champion keys after any change.
+    favorites_changed = Signal(list)
 
     ROLES = [
         ("ALL", "All"), ("TOP", "Top"), ("JUNGLE", "Jungle"),
@@ -126,12 +128,16 @@ class QtChampionGrid(QWidget):
         self,
         asset_manager=None,
         scraper=None,
+        config=None,
         tile_size: TileSize = TileSize.MD,
         parent: Optional[QWidget] = None,
     ):
         super().__init__(parent)
         self.assets = asset_manager
         self.scraper = scraper
+        #: Needed to persist favourites. Optional, so the grid still builds
+        #: standalone in tests and screenshot tooling.
+        self.config = config
         self.tile_size = tile_size
 
         self.current_role = "ALL"
@@ -151,7 +157,6 @@ class QtChampionGrid(QWidget):
 
         self.icons = ChampionIconProvider(asset_manager=asset_manager, parent=self)
         self.icons.icon_ready.connect(self._on_icon_ready)
-        self.champion_context_menu.connect(self._show_champion_context_menu)
 
         self._setup_ui()
         self.load_champions()
@@ -234,10 +239,13 @@ class QtChampionGrid(QWidget):
         self.grid_layout.setAlignment(Qt.AlignTop | Qt.AlignLeft)
 
         self.scroll_area.setWidget(self.grid_container)
+        # See eventFilter(): the viewport resizes independently of this widget.
+        self.scroll_area.viewport().installEventFilter(self)
         root.addWidget(self.scroll_area, 1)
 
         # --- empty state (§54) -------------------------------------------
         self._has_champion_data = True
+        self._retrying = False
         self.empty_label = QLabel("No champions match your search.", self)
         self.empty_label.setAlignment(Qt.AlignCenter)
         self.empty_label.setStyleSheet(
@@ -245,6 +253,18 @@ class QtChampionGrid(QWidget):
         )
         self.empty_label.setVisible(False)
         root.addWidget(self.empty_label)
+
+        # A failed download used to be terminal for the whole session: the
+        # only way to get champions back was to restart the app.
+        from ui.qt.components.button import ButtonSize, ButtonVariant, LLButton
+
+        self.btn_retry = LLButton(
+            "Try again", variant=ButtonVariant.SECONDARY,
+            size=ButtonSize.SM, parent=self,
+        )
+        self.btn_retry.setVisible(False)
+        self.btn_retry.clicked.connect(self._on_retry)
+        root.addWidget(self.btn_retry, 0, Qt.AlignCenter)
 
     def _make_filter_button(self, label: str, checked: bool) -> QPushButton:
         btn = QPushButton(label, self)
@@ -305,6 +325,7 @@ class QtChampionGrid(QWidget):
 
         for cid, name, key in self._champion_rows():
             winrate = self.scraper.get_winrate(name) if self.scraper else None
+            wr_source = self.scraper.winrate_source() if self.scraper else ""
             model = ChampionTileModel(
                 champ_id=cid,
                 name=name,
@@ -315,6 +336,7 @@ class QtChampionGrid(QWidget):
                 banned=key in self._banned,
                 disabled=key in self._disabled,
                 winrate=winrate,
+                winrate_source=wr_source,
             )
             tile = LLChampionTile(
                 model, size=self.tile_size,
@@ -323,9 +345,64 @@ class QtChampionGrid(QWidget):
             tile.clicked.connect(self._on_tile_clicked)
             tile.double_clicked.connect(self.champion_activated.emit)
             tile.context_menu_requested.connect(self.champion_context_menu.emit)
+            # ...and to our own menu. The signal was only ever re-emitted for
+            # callers that never existed, so right-clicking a champion did
+            # nothing at all — which is why "Favourites" was a filter with no
+            # way to put anything in it.
+            tile.context_menu_requested.connect(self._show_champion_context_menu)
             self.tiles[cid] = tile
 
+        self.load_favorites()
         self._apply_filters()
+
+    def _can_retry(self) -> bool:
+        return callable(getattr(self.assets, "retry_champion_data", None))
+
+    def _on_retry(self) -> None:
+        """
+        Re-download champion data off the GUI thread, then rebuild.
+
+        The download is network-bound; doing it inline freezes the window for
+        as long as the CDN takes to answer or time out.
+        """
+        if self._retrying or not self._can_retry():
+            return
+        self._retrying = True
+        self.btn_retry.setEnabled(False)
+        self.btn_retry.setText("Trying…")
+
+        from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
+
+        grid = self
+
+        class _Signals(QObject):
+            done = Signal()
+
+        class _Task(QRunnable):
+            def __init__(self, signals):
+                super().__init__()
+                self._signals = signals
+
+            def run(self):
+                try:
+                    grid.assets.retry_champion_data()
+                except Exception:
+                    pass
+                finally:
+                    try:
+                        self._signals.done.emit()
+                    except RuntimeError:
+                        pass
+
+        self._retry_signals = _Signals(self)
+        self._retry_signals.done.connect(self._on_retry_finished)
+        QThreadPool.globalInstance().start(_Task(self._retry_signals))
+
+    def _on_retry_finished(self) -> None:
+        self._retrying = False
+        self.btn_retry.setEnabled(True)
+        self.btn_retry.setText("Try again")
+        self.load_champions()
 
     # ------------------------------------------------- external state setters
     def set_scraper(self, scraper) -> None:
@@ -376,6 +453,7 @@ class QtChampionGrid(QWidget):
         for tile in self.tiles.values():
             m = tile.model
             winrate = self.scraper.get_winrate(m.name) if self.scraper else m.winrate
+            wr_source = self.scraper.winrate_source() if self.scraper else ""
             tile.set_model(
                 ChampionTileModel(
                     champ_id=m.champ_id, name=m.name, key=m.key,
@@ -385,6 +463,7 @@ class QtChampionGrid(QWidget):
                     banned=m.key in self._banned,
                     disabled=m.key in self._disabled,
                     winrate=winrate,
+                    winrate_source=wr_source,
                 )
             )
         self._apply_filters()
@@ -409,9 +488,11 @@ class QtChampionGrid(QWidget):
                     roles = getter(m.champ_id) or []
                 except Exception:
                     roles = []
-                if roles and self.current_role.upper() not in [
+                if self.current_role.upper() not in [
                     str(r).upper() for r in roles
                 ]:
+                    # An unknown role is not a match. Treating it as one is
+                    # what made every role chip a no-op.
                     return False
         return True
 
@@ -433,16 +514,32 @@ class QtChampionGrid(QWidget):
         if shown == 0 and not self._has_champion_data:
             # Distinguish "your search matched nothing" from "we have no
             # champion data at all" - they need completely different actions.
+            reason = getattr(self.assets, "champion_data_error", "") or ""
             self.empty_label.setText(
-                "Champion data has not loaded yet.\n\n"
+                "Champion data has not loaded.\n\n"
                 "LeagueLoop downloads the champion list from Riot's Data "
-                "Dragon on first run. Check your connection, or open the "
-                "League Client once so it can be fetched."
+                "Dragon. " + (
+                    "The last attempt failed: {}".format(reason) if reason
+                    else "It has not finished downloading yet."
+                )
             )
+            self.btn_retry.setVisible(bool(reason) and self._can_retry())
+        elif shown == 0 and self.quick_filter == "FAVORITES" and not self._favorites:
+            # A filter with nothing behind it and no way to fill it is the
+            # worst kind of empty state: it reads as a broken feature.
+            self.empty_label.setText(
+                "No favourites yet.\n\n"
+                "Right-click any champion and choose Add to Favourites."
+            )
+            self.btn_retry.setVisible(False)
         elif shown == 0:
             self.empty_label.setText("No champions match your search.")
+            self.btn_retry.setVisible(False)
+        else:
+            self.btn_retry.setVisible(False)
         self.empty_label.setVisible(shown == 0)
         self.scroll_area.setVisible(shown > 0)
+        self._maybe_relayout()
 
     def _column_count(self) -> int:
         tile_w = _TILE_WIDTHS.get(self.tile_size, CHAMPION_TILE_MD[0])
@@ -475,6 +572,26 @@ class QtChampionGrid(QWidget):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
+        self._maybe_relayout()
+
+    def eventFilter(self, watched, event) -> bool:
+        """
+        Recount columns when the *viewport* resizes, not just this widget.
+
+        Column count is derived from `scroll_area.viewport().width()`, but the
+        viewport is resized by the scroll area independently of this widget —
+        when a scrollbar appears, when a splitter moves, or simply later in
+        the layout pass. Watching only our own resizeEvent meant the grid kept
+        whatever column count it happened to compute first, which is why a
+        540px panel rendered three columns in space that fits five.
+        """
+        from PySide6.QtCore import QEvent
+
+        if watched is self.scroll_area.viewport() and event.type() == QEvent.Resize:
+            self._maybe_relayout()
+        return super().eventFilter(watched, event)
+
+    def _maybe_relayout(self) -> None:
         if self.tiles and self._column_count() != self._columns:
             self._relayout()
 
@@ -583,8 +700,60 @@ class QtChampionGrid(QWidget):
         menu.exec(global_pos)
 
     def _toggle_favorite(self, key: str) -> None:
+        """
+        Mark or unmark a favourite, and remember it.
+
+        This used to mutate an in-memory set and nothing else, so even when
+        the menu was reachable your favourites were gone on the next launch.
+        """
         if key in self._favorites:
             self._favorites.remove(key)
         else:
             self._favorites.add(key)
+        self._save_favorites()
         self._refresh_models()
+        self.favorites_changed.emit(sorted(self._favorites))
+
+    # ------------------------------------------------------------ storage
+    def _favorite_ids(self):
+        """Favourites as champion ids. Keys are a rendering detail."""
+        ids = []
+        for tile in self.tiles.values():
+            if tile.model.key in self._favorites:
+                ids.append(int(tile.model.champ_id))
+        return sorted(ids)
+
+    def _save_favorites(self) -> None:
+        if self.config is None:
+            return
+        try:
+            from core.config_keys import FAVORITE_CHAMPIONS
+
+            self.config.set(FAVORITE_CHAMPIONS, self._favorite_ids())
+        except Exception:
+            pass
+
+    def load_favorites(self) -> None:
+        """
+        Restore favourites from config.
+
+        Ids on disk, keys in the grid: an id survives a Data Dragon rename,
+        and a key that no longer exists is simply dropped.
+        """
+        if self.config is None:
+            return
+        try:
+            from core.config_keys import FAVORITE_CHAMPIONS, read_champion_ids
+
+            ids = set(read_champion_ids(self.config, FAVORITE_CHAMPIONS))
+        except Exception:
+            return
+
+        keys = set()
+        for cid in ids:
+            tile = self.tiles.get(int(cid))
+            if tile is not None:
+                keys.add(tile.model.key)
+        if keys != self._favorites:
+            self._favorites = keys
+            self._refresh_models()

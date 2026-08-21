@@ -342,21 +342,18 @@ class QtAccountsTab(QWidget):
 
     def _accounts(self) -> List[Tuple[int, Dict[str, Any]]]:
         """
-        (stable index, account) pairs in display order.
+        (stable index, account) pairs, in the order the user arranged them.
 
-        The index carried here is the account's position in the stored list -
-        the same index `login_account`, `set_default_account` and the switcher
-        expect. Display order and storage order are deliberately allowed to
-        differ: `get_accounts_display()` sorts by recency for the eye while
-        keeping the real index for the click.
+        The index is the account's position in the stored list — the same
+        index `login_account`, `set_default_account` and the switcher expect.
         """
-        display = getattr(self.accounts_service, "get_accounts_display", None)
-        if callable(display):
-            try:
-                return [(int(i), dict(a)) for i, a in (display() or [])]
-            except Exception:
-                pass
-
+        # Stored order, not recency order.
+        #
+        # This used to render `get_accounts_display()`, which sorts by
+        # `last_used`. The reorder arrows call `move_account()`, which changes
+        # *stored* order — so pressing one swapped two rows in the file and the
+        # screen re-sorted straight back. The arrows appeared to do nothing.
+        # An order the user sets by hand must be the order they see.
         getter = getattr(self.accounts_service, "get_accounts", None)
         if not callable(getter):
             return []
@@ -373,6 +370,39 @@ class QtAccountsTab(QWidget):
             except Exception:
                 pass
         return -1
+
+    @staticmethod
+    def _last_used_label(value) -> str:
+        """
+        "used 3 days ago", or "" when never.
+
+        The list is ordered by hand now, so recency has to be *shown* rather
+        than implied by position.
+        """
+        if not value:
+            return "never used"
+        try:
+            from datetime import datetime
+
+            when = datetime.fromisoformat(str(value))
+        except Exception:
+            return ""
+
+        delta = datetime.now() - when
+        days = delta.days
+        if days < 0:
+            return ""
+        if days == 0:
+            hours = delta.seconds // 3600
+            if hours < 1:
+                return "used just now"
+            return "used {}h ago".format(hours)
+        if days == 1:
+            return "used yesterday"
+        if days < 30:
+            return "used {} days ago".format(days)
+        months = days // 30
+        return "used {} month{} ago".format(months, "" if months == 1 else "s")
 
     def _credentials_ok(self, index: int) -> bool:
         """
@@ -548,11 +578,12 @@ class QtAccountsTab(QWidget):
 
         region = str(account.get("region") or "")
         tagline = str(account.get("tagline") or "")
+        last_used = self._last_used_label(account.get("last_used"))
         # A Riot ID often already carries the shard ("Name#EUW"), and printing
         # it twice reads like a bug.
         if region and region.lower() in tagline.lower():
             region = ""
-        detail_text = " - ".join(p for p in (tagline, region) if p)
+        detail_text = " - ".join(p for p in (tagline, region, last_used) if p)
         if detail_text:
             detail = QLabel(detail_text, row)
             detail.setStyleSheet(

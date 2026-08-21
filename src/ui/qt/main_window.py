@@ -47,10 +47,12 @@ from ui.qt.widgets.diagnostics_tab import QtDiagnosticsTab
 from ui.qt.widgets.navigation.sidebar import QtNavigationSidebar
 from ui.qt.widgets.play_tab import QtPlayTab
 from ui.qt.widgets.champion_list_tab import (
-    QtAramTab,
     QtBanListTab,
     QtPriorityTab,
 )
+# The dedicated ARAM screen (bench sniper, auto-reroll, sort by win rate) was
+# written but never imported, so the generic champion-list tab was standing in
+# for it and none of those controls existed.
 from ui.qt.widgets.loot_tab import QtLootTab
 from ui.qt.widgets.profile_tab import QtProfileTab
 from ui.qt.widgets.settings_tab import QtSettingsTab
@@ -82,7 +84,18 @@ class LeagueLoopMainWindow(QMainWindow):
         self.config = getattr(container, "config", None) if container else None
 
         self.setWindowTitle("LeagueLoop")
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)
+        # "Always on top" was a Settings toggle that wrote a config key nothing
+        # read. The League Client raises itself when a lobby or a draft starts,
+        # so without this the app disappears behind it at exactly the moment
+        # you need it — and there was no way to get it back short of alt-tab.
+        self._always_on_top = True
+        if self.config is not None:
+            try:
+                self._always_on_top = bool(self.config.get("always_on_top", True))
+            except Exception:
+                self._always_on_top = True
+
+        self.setWindowFlags(self._window_flags())
         self.setMinimumSize(MIN_WIDTH, MIN_HEIGHT)
         self.setStyleSheet(get_global_stylesheet())
 
@@ -153,6 +166,7 @@ class LeagueLoopMainWindow(QMainWindow):
 
         # Wire automation master toggle and emergency stop buttons (§17)
         self._wire_automation()
+        self._wire_configure_actions()
 
         # Start focus on navigation rather than letting the first focusable
         # widget (a window control) claim the focus ring on launch.
@@ -185,6 +199,35 @@ class LeagueLoopMainWindow(QMainWindow):
                     signal.connect(self._on_stop_automation)
                 except Exception:
                     pass
+
+        # Play reports automation state and hands off to the screen that
+        # owns it; that hand-off has to actually go somewhere.
+        play_page = self.tab_pages.get("play")
+        jump = getattr(play_page, "automation_requested", None)
+        if jump is not None:
+            try:
+                jump.connect(lambda: self.sidebar.select_tab("automation"))
+            except Exception:
+                pass
+
+        # The Always-on-top switch has to reach the window, not just config.
+        settings_page = self.tab_pages.get("settings")
+        row = getattr(settings_page, "row_ontop", None)
+        if row is not None:
+            try:
+                row.toggled.connect(self.set_always_on_top)
+            except Exception:
+                pass
+
+        # Developer Mode has to reach the Diagnostics screen, not just config.
+        dev_row = getattr(settings_page, "row_devmode", None)
+        diagnostics_page = self.tab_pages.get("diagnostics")
+        setter = getattr(diagnostics_page, "set_developer_mode", None)
+        if dev_row is not None and callable(setter):
+            try:
+                dev_row.toggled.connect(setter)
+            except Exception:
+                pass
 
         automation_page = self.tab_pages.get("automation")
         if automation_page is not None:
@@ -220,12 +263,30 @@ class LeagueLoopMainWindow(QMainWindow):
     def _on_status_saved(self, status_text: str) -> None:
         """Push custom status message to LCU via chat API."""
         lcu = getattr(self.container, "lcu", None) if self.container else None
-        if lcu is not None and getattr(lcu, "is_connected", False):
-            try:
-                lcu.request("PUT", "/lol-chat/v1/me", json={"statusMessage": status_text})
-                self.toast_requested.emit("Status updated on League Client.", "Status Saved", Tone.SUCCESS)
-            except Exception as exc:
-                self.toast_requested.emit(f"Could not update status: {exc}", "Status Error", Tone.WARNING)
+        if lcu is None or not getattr(lcu, "is_connected", False):
+            self.toast_requested.emit(
+                "Saved. It will be applied the next time the League Client connects.",
+                "Status Saved", Tone.NEUTRAL,
+            )
+            return
+        try:
+            # ApiHandler.request(method, endpoint, data) — there is no `json`
+            # keyword. Passing one raised TypeError on every save.
+            resp = lcu.request("PUT", "/lol-chat/v1/me", {"statusMessage": status_text})
+        except Exception as exc:
+            self.toast_requested.emit(
+                f"Could not update status: {exc}", "Status Error", Tone.WARNING)
+            return
+        code = getattr(resp, "status_code", None)
+        if resp is None or (code is not None and not 200 <= code < 300):
+            self.toast_requested.emit(
+                "The League Client refused the status change."
+                + (f" (HTTP {code})" if code else ""),
+                "Status Error", Tone.WARNING,
+            )
+        else:
+            self.toast_requested.emit(
+                "Status updated on League Client.", "Status Saved", Tone.SUCCESS)
 
     def _on_automation_configure(self, key: str) -> None:
         """Navigate to the appropriate tab to configure an automation rule further."""
@@ -233,8 +294,15 @@ class LeagueLoopMainWindow(QMainWindow):
             self.sidebar.select_tab("priority")
         elif key == "auto_ban_enabled":
             self.sidebar.select_tab("bans")
-        elif key == "aram_bench_swap" or key == "aram_auto_reroll":
-            self.sidebar.select_tab("aram")
+        elif key in ("aram_bench_swap", "aram_auto_reroll"):
+            # ARAM is a mode on the Priority screen now, not its own tab.
+            self.sidebar.select_tab("priority")
+            page = self.tab_pages.get("priority")
+            setter = getattr(page, "set_mode", None)
+            if callable(setter):
+                from core.config_keys import ARAM_PRIORITY_LIST
+
+                setter(ARAM_PRIORITY_LIST)
 
     def _subscribe_to_global_events(self) -> None:
         """Subscribe to background bus events and surface as user-facing toasts."""
@@ -269,6 +337,49 @@ class LeagueLoopMainWindow(QMainWindow):
         except Exception:
             pass
 
+    def _wire_configure_actions(self) -> None:
+        """
+        Hook up the per-automation "configure" affordances.
+
+        `configure_requested` carried a config key and was connected to
+        nothing, so "Ban list" and "Priorities" on the Automation screen were
+        decorative.
+        """
+        page = self.tab_pages.get("automation")
+        signal = getattr(page, "configure_requested", None)
+        if signal is not None:
+            try:
+                signal.connect(self._on_configure_requested)
+            except Exception:
+                pass
+
+    def _on_configure_requested(self, key: str) -> None:
+        """Open the right editor for an automation, or jump to its screen."""
+        from core.config_keys import AUTO_BAN_ENABLED, AUTO_LOCK_IN
+
+        if key == AUTO_BAN_ENABLED:
+            try:
+                from ui.qt.widgets.ban_list_dialog import QtBanListDialog
+
+                dialog = QtBanListDialog(
+                    config=self.config,
+                    assets=getattr(self.container, "assets", None),
+                    parent=self,
+                )
+                dialog.exec()
+            except Exception:
+                # A broken editor must not take the shell down; the Bans
+                # screen is still reachable from navigation.
+                self.sidebar.select_tab("bans")
+            return
+
+        if key == AUTO_LOCK_IN:
+            self.sidebar.select_tab("priority")
+            return
+
+        # Anything else: the screen that owns it is the honest fallback.
+        self.sidebar.select_tab("automation")
+
     def _on_stop_automation(self) -> None:
         """Emergency stop. Must work from any screen that offers it (§17)."""
         controller = self._automation_controller()
@@ -283,7 +394,6 @@ class LeagueLoopMainWindow(QMainWindow):
             "champ_select": QtChampSelectTab,
             "automation": QtAutomationTab,
             "priority": QtPriorityTab,
-            "aram": QtAramTab,
             "bans": QtBanListTab,
             "profile": QtProfileTab,
             "accounts": QtAccountsTab,
@@ -349,9 +459,7 @@ class LeagueLoopMainWindow(QMainWindow):
         if page is not None:
             self.tab_stack.setCurrentWidget(page)
             if self.container and getattr(self.container, "scraper", None):
-                if key == "aram":
-                    self.container.scraper.set_mode("ARAM")
-                elif key == "priority":
+                if key == "priority":
                     self.container.scraper.set_mode("Ranked")
             if self.container and getattr(self.container, "state_manager", None):
                 try:
@@ -363,6 +471,56 @@ class LeagueLoopMainWindow(QMainWindow):
                     self.config.set("qt_last_tab", key)
                 except Exception:
                     pass
+
+    # ------------------------------------------------------- window layer
+    def _window_flags(self):
+        flags = Qt.FramelessWindowHint | Qt.Window
+        if getattr(self, "_always_on_top", True):
+            flags |= Qt.WindowStaysOnTopHint
+        return flags
+
+    def set_always_on_top(self, enabled: bool) -> None:
+        """
+        Apply the Always-on-top setting immediately.
+
+        Changing window flags on a visible window hides it in Qt, so the
+        re-show is not optional — without it, toggling the setting makes the
+        window vanish.
+        """
+        enabled = bool(enabled)
+        if enabled == getattr(self, "_always_on_top", None):
+            return
+        self._always_on_top = enabled
+
+        was_visible = self.isVisible()
+        geometry = self.geometry()
+        self.setWindowFlags(self._window_flags())
+        self.setGeometry(geometry)
+        if was_visible:
+            self.show()
+
+    def _surface(self, take_focus: bool = False) -> None:
+        """
+        Bring the window back in front of the client.
+
+        Deliberately does not steal the keyboard by default: raising a window
+        over the game while you are typing is worse than being behind it.
+        Stealth mode suppresses this entirely.
+        """
+        if self.config is not None:
+            try:
+                if self.config.get("stealth_mode", False):
+                    return
+            except Exception:
+                pass
+
+        if self.isMinimized():
+            self.showNormal()
+        elif not self.isVisible():
+            self.show()
+        self.raise_()
+        if take_focus:
+            self.activateWindow()
 
     def _on_phase_changed(self, phase: str) -> None:
         """Jump to Champ Select when the draft starts; cleanly recover on dodge."""
@@ -381,6 +539,12 @@ class LeagueLoopMainWindow(QMainWindow):
                     self.container.scraper.set_mode_by_queue_id(queue_id)
             if "champ_select" in self.tab_pages:
                 self.sidebar.select_tab("champ_select")
+            # The draft is the one moment the app is time-critical (§80), and
+            # the client has just raised itself over us.
+            self._surface()
+        elif phase == GameflowPhase.READY_CHECK.value:
+            # A match was found and you have seconds to accept.
+            self._surface()
         elif last_phase == GameflowPhase.CHAMP_SELECT.value and phase in (
             GameflowPhase.LOBBY.value,
             GameflowPhase.MATCHMAKING.value,
@@ -508,7 +672,7 @@ class LeagueLoopMainWindow(QMainWindow):
         """Toggle automation master power via shortcut."""
         ctrl = self._automation_controller()
         if ctrl is not None:
-            new_state = not ctrl.is_master_enabled
+            new_state = not ctrl.master_enabled()
             ctrl.set_master(new_state)
             self.toast_requested.emit(
                 f"Automation {'enabled' if new_state else 'disabled'}",

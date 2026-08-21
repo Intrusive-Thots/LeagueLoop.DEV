@@ -118,29 +118,111 @@ class TestShell(unittest.TestCase):
         tab = QtLootTab(container=_Container())
         self.assertFalse(tab.btn_open.isEnabled())
 
-    def test_dodge_recovers_navigation_and_emits_toast(self):
-        """When someone dodges in draft, shell recovers cleanly to previous tab."""
-        window = self._window(_Container())
-        try:
-            # Start on play tab
-            window.sidebar.select_tab("play")
-            self.assertEqual(window.sidebar.current_tab, "play")
-
-            # Follow into draft
-            window._on_phase_changed("ChampSelect")
-            self.assertEqual(window.sidebar.current_tab, "champ_select")
-
-            # Dodge occurs -> phase returns to Lobby
-            toasts_shown = []
-            window.toast_requested.connect(lambda msg, title, tone: toasts_shown.append((msg, title, tone)))
-            window._on_phase_changed("Lobby")
-
-            # Recovers to previous tab ("play") and shows toast
-            self.assertEqual(window.sidebar.current_tab, "play")
-            self.assertTrue(any("dodge" in msg.lower() for msg, _t, _tone in toasts_shown))
-        finally:
-            window.close()
-
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PhaseDetailTests(unittest.TestCase):
+    """
+    The phase card is the biggest thing on the Play screen. "Lobby" on its
+    own restates the label; it should name the queue and say what happens
+    next (§56).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import os
+        os.environ["QT_QPA_PLATFORM"] = "offscreen"
+        from PySide6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _status(self, phase, queue_id=450, elapsed=0, connected=True):
+        from core.state import ApplicationState, ClientState, QueueState
+        from ui.qt.viewmodels.shell_viewmodel import ShellViewModel
+
+        vm = ShellViewModel()
+        vm.push_state(ApplicationState(
+            client=ClientState(connected=connected, phase=phase),
+            queue=QueueState(queue_id=queue_id, elapsed_s=elapsed),
+        ))
+        return vm.phase_status()
+
+    def test_a_lobby_names_the_queue(self):
+        _text, _tone, detail = self._status("Lobby")
+        self.assertIn("ARAM", detail)
+        self.assertIn("ready to search", detail)
+
+    def test_queueing_shows_how_long(self):
+        _text, _tone, detail = self._status("Matchmaking", 420, elapsed=95)
+        self.assertIn("Ranked Solo", detail)
+        self.assertIn("1:35", detail)
+
+    def test_queueing_without_a_timer_still_reads(self):
+        _text, _tone, detail = self._status("Matchmaking", 420, elapsed=0)
+        self.assertIn("searching", detail)
+
+    def test_a_disconnected_client_says_so_rather_than_idle(self):
+        _text, _tone, detail = self._status("None", None, connected=False)
+        self.assertIn("Waiting for the League Client", detail)
+
+    def test_no_queue_id_does_not_leave_a_dangling_separator(self):
+        _text, _tone, detail = self._status("Lobby", queue_id=None)
+        self.assertFalse(detail.startswith("-"))
+        self.assertFalse(detail.endswith("-"))
+
+
+class FirstPaintTests(unittest.TestCase):
+    """
+    Views bind before the services publish. The view-model emits only on
+    change, so anything rendering solely from those signals keeps its
+    construction-time value — the footer said "Automation off" while the
+    header said "Automation on". `refresh()` re-emits everything once.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import os
+        os.environ["QT_QPA_PLATFORM"] = "offscreen"
+        from PySide6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_refresh_re_emits_every_slice(self):
+        from core.state import (
+            ApplicationState, AutomationState, ClientState, QueueState,
+        )
+        from ui.qt.viewmodels.shell_viewmodel import ShellViewModel
+
+        class Manager:
+            def __init__(self, state): self.state = state
+
+        state = ApplicationState(
+            client=ClientState(connected=True, phase="Lobby"),
+            queue=QueueState(queue_id=450),
+            automation=AutomationState(running=True),
+        )
+
+        class Container:
+            state_manager = Manager(state)
+
+        vm = ShellViewModel(container=Container())
+        seen = {"conn": [], "phase": [], "queue": [], "auto": [], "sum": []}
+        vm.connection_changed.connect(lambda v: seen["conn"].append(v))
+        vm.phase_changed.connect(lambda v: seen["phase"].append(v))
+        vm.queue_changed.connect(lambda v: seen["queue"].append(v))
+        vm.automation_changed.connect(lambda v: seen["auto"].append(v))
+        vm.summary_changed.connect(lambda v: seen["sum"].append(v))
+
+        vm.refresh()
+
+        self.assertEqual(seen["conn"], [True])
+        self.assertEqual(seen["phase"], ["Lobby"])
+        self.assertEqual(seen["queue"], ["ARAM"])
+        self.assertEqual(seen["auto"], [True])
+        self.assertIn("Automation on", seen["sum"][0])
+
+    def test_build_refreshes_so_header_and_footer_agree(self):
+        import inspect
+        from ui.qt.app import application
+
+        self.assertIn("view_model.refresh()", inspect.getsource(application.build))

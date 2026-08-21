@@ -12,9 +12,14 @@ three near-identical files that drift apart.
 """
 from __future__ import annotations
 
+from core.config_keys import (
+    ARAM_PRIORITY_LIST,
+    BAN_LIST,
+    PRIORITY_LIST,
+)
 from typing import List, Optional
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
@@ -26,7 +31,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ui.qt.components.button import ButtonVariant, LLButton
+from ui.qt.components.button import ButtonSize, ButtonVariant, LLButton
+from ui.qt.components.modal import LLConfirmModal
 from ui.qt.components.card import LLSection
 from ui.qt.theme.colors import (
     BORDER_ACCENT,
@@ -39,16 +45,28 @@ from ui.qt.theme.colors import (
     TEXT_SECONDARY,
 )
 from ui.qt.theme.radii import RADIUS_MD
-from ui.qt.theme.spacing import CONTENT_MARGIN, SPACE_LG, SPACE_MD, SPACE_SM
-from ui.qt.theme.typography import TEXT_BODY, TEXT_PAGE_TITLE
+from ui.qt.theme.spacing import CONTENT_MARGIN, SPACE_LG, SPACE_MD, SPACE_SM, SPACE_XS
+from ui.qt.theme.typography import TEXT_BODY, TEXT_CAPTION, TEXT_PAGE_TITLE
 from ui.qt.widgets.champion_grid import QtChampionGrid
+
+
+#: Portrait size in the priority list, and the row it sits in.
+LIST_ICON_SIZE = 28
+LIST_ROW_HEIGHT = 40
+
+
+#: Portrait size in the priority list, and the row height it sits in.
+LIST_ICON_SIZE = 28
+LIST_ROW_HEIGHT = 40
 
 
 class QtChampionListTab(QWidget):
     """Roster on the left, an ordered champion list on the right."""
 
     #: Subclasses override these.
-    CONFIG_KEY = "priority_list"
+    CONFIG_KEY = PRIORITY_LIST
+    #: (config key, label) pairs offered as a mode switch, or () for none.
+    MODES: tuple = ()
     TITLE = "Priority"
     LIST_TITLE = "Pick priority order"
     EMPTY_TEXT = (
@@ -70,6 +88,8 @@ class QtChampionListTab(QWidget):
         self.scraper = getattr(container, "scraper", None) if container else None
 
         self._setup_ui()
+        self._sync_mode_buttons()
+        self._sync_scraper_mode()
         self._load_list()
 
     # ------------------------------------------------------------------ UI
@@ -87,13 +107,41 @@ class QtChampionListTab(QWidget):
         root.addLayout(columns, 1)
 
         left = LLSection("Champion roster", parent=self)
-        self.grid = QtChampionGrid(asset_manager=self.assets, scraper=self.scraper, parent=left)
+        # Shares the roster grid's icon provider so portraits in the list come
+        # from the same cache rather than a second set of downloads.
+        from ui.qt.services.champion_icons import ChampionIconProvider
+
+        self.icons = ChampionIconProvider(asset_manager=self.assets, parent=self)
+        self.icons.icon_ready.connect(self._on_list_icon_ready)
+        self._pending_icons = {}
+
+        self.grid = QtChampionGrid(asset_manager=self.assets, scraper=self.scraper, config=self.config, parent=left)
         self.grid.champion_selected.connect(self._on_champion_clicked)
         self.grid.champion_activated.connect(self._on_champion_clicked)
         left.add_widget(self.grid, 1)
         columns.addWidget(left, 3)
 
         right = LLSection(self.LIST_TITLE, parent=self)
+
+        # Summoner's Rift and ARAM were two separate navigation entries editing
+        # two config keys through two near-identical screens — which is how one
+        # of them ended up with a paste button that crashed on a method the
+        # other had under a different name. One screen, one implementation, a
+        # mode switch.
+        if self.MODES:
+            mode_row = QHBoxLayout()
+            mode_row.setSpacing(SPACE_XS)
+            self._mode_buttons = {}
+            for key, label in self.MODES:
+                btn = LLButton(
+                    label, variant=ButtonVariant.GHOST, size=ButtonSize.SM, parent=right
+                )
+                btn.setCheckable(True)
+                btn.clicked.connect(lambda _c, k=key: self.set_mode(k))
+                mode_row.addWidget(btn)
+                self._mode_buttons[key] = btn
+            mode_row.addStretch(1)
+            right.add_layout(mode_row)
 
         self.list_widget = QListWidget(right)
         self.list_widget.setDragDropMode(QAbstractItemView.InternalMove)
@@ -146,7 +194,26 @@ class QtChampionListTab(QWidget):
         self.btn_sort = LLButton("Sort by winrate", parent=right)
         self.btn_sort.setToolTip("Sort champions by Lolalytics win rate (highest first)")
         self.btn_sort.clicked.connect(self._on_sort_by_winrate)
+        # Disabled is a designed state (§63). Win rates are only available
+        # when they have actually been fetched; without them this button
+        # would reorder your list by a constant.
+        _live = self._can_sort()
+        self.btn_sort.setEnabled(_live)
+        self.btn_sort.setToolTip(
+            "Order your list by community win rate" if _live
+            else "Win rate data is not available, so there is nothing to sort by"
+        )
         buttons.addWidget(self.btn_sort)
+
+        # Most people already keep this list somewhere else — a Discord
+        # message, a spreadsheet, a tier-list page. Retyping sixty champions
+        # one click at a time is why a list like this goes stale.
+        self.btn_paste = LLButton("Paste list", parent=right)
+        self.btn_paste.setToolTip(
+            "Import champion names from your clipboard, in the order pasted"
+        )
+        self.btn_paste.clicked.connect(self._on_paste_list)
+        buttons.addWidget(self.btn_paste)
 
         self.btn_remove = LLButton("Remove", parent=right)
         self.btn_remove.clicked.connect(self._on_remove_selected)
@@ -178,12 +245,17 @@ class QtChampionListTab(QWidget):
 
     def _display_name(self, champ_id: int) -> str:
         name = self._champ_name(champ_id)
-        if self.scraper and self.CONFIG_KEY != "ban_list":
+        if self.scraper and self.CONFIG_KEY != BAN_LIST:
             wr = self.scraper.get_winrate(name)
-            return f"{name}  ({wr:.1f}% WR)"
+            # None means nobody measured it. Showing "50.0% WR" for every
+            # champion — which is what the old fallback did — is worse than
+            # showing nothing, because it looks like data.
+            if wr is not None:
+                return f"{name}  ({wr:.1f}% WR)"
         return name
 
     def _load_list(self) -> None:
+        self._pending_icons = {}
         self.list_widget.clear()
         if self.config:
             for cid in self.config.get(self.CONFIG_KEY, []) or []:
@@ -195,9 +267,80 @@ class QtChampionListTab(QWidget):
         self._sync_grid_badges()
 
     def _append_item(self, champ_id: int) -> None:
-        item = QListWidgetItem(self._champ_name(champ_id))
+        """
+        One row: rank, champion portrait, name.
+
+        A ranked list of bare names is the hardest possible way to recognise
+        sixty champions. The portrait is how you actually know who is who, and
+        the icon provider already holds the art the roster grid uses.
+        """
+        item = QListWidgetItem()
         item.setData(Qt.UserRole, champ_id)
+        item.setSizeHint(QSize(0, LIST_ROW_HEIGHT))
         self.list_widget.addItem(item)
+        self.list_widget.setItemWidget(item, self._make_row(champ_id))
+
+    def _make_row(self, champ_id: int) -> QWidget:
+        row = QWidget(self.list_widget)
+        row.setStyleSheet("background: transparent;")
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(SPACE_SM, 2, SPACE_SM, 2)
+        layout.setSpacing(SPACE_SM)
+
+        rank = QLabel("", row)
+        rank.setFixedWidth(24)
+        rank.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        rank.setStyleSheet(
+            TEXT_CAPTION.qss(color=TEXT_MUTED) + " background: transparent;"
+        )
+        layout.addWidget(rank)
+
+        icon = QLabel(row)
+        icon.setFixedSize(LIST_ICON_SIZE, LIST_ICON_SIZE)
+        icon.setScaledContents(True)
+        icon.setStyleSheet(
+            "background-color: {}; border-radius: {}px;".format(
+                SURFACE_PANEL_HOVER, RADIUS_MD
+            )
+        )
+        self._apply_icon(icon, champ_id)
+        layout.addWidget(icon)
+
+        name = QLabel(self._display_name(champ_id), row)
+        name.setStyleSheet(
+            TEXT_BODY.qss(color=TEXT_PRIMARY) + " background: transparent;"
+        )
+        layout.addWidget(name, 1)
+
+        row.rank_label = rank
+        row.champ_id = champ_id
+        return row
+
+    def _apply_icon(self, label, champ_id: int) -> None:
+        """Set the portrait now if cached, and register for the async result."""
+        key = ""
+        mapping = getattr(self.assets, "id_to_key", None)
+        if isinstance(mapping, dict):
+            key = str(mapping.get(int(champ_id), "") or "")
+        if not key:
+            return
+        self._pending_icons.setdefault(key, []).append(label)
+        pixmap = self.icons.pixmap(key, LIST_ICON_SIZE)
+        if pixmap is not None and not pixmap.isNull():
+            label.setPixmap(pixmap)
+
+    def _on_list_icon_ready(self, key: str, size: int) -> None:
+        if size != LIST_ICON_SIZE:
+            return
+        pixmap = self.icons.pixmap(key, LIST_ICON_SIZE)
+        if pixmap is None or pixmap.isNull():
+            return
+        for label in list(self._pending_icons.get(key, [])):
+            try:
+                label.setPixmap(pixmap)
+            except RuntimeError:
+                # The row was rebuilt between the request and the reply.
+                continue
 
     def current_ids(self) -> List[int]:
         return [
@@ -207,15 +350,17 @@ class QtChampionListTab(QWidget):
 
     def _renumber_items(self) -> None:
         for i in range(self.list_widget.count()):
-            item = self.list_widget.item(i)
-            cid = item.data(Qt.UserRole)
-            item.setText("#{}  {}".format(i + 1, self._display_name(cid)))
+            widget = self.list_widget.itemWidget(self.list_widget.item(i))
+            if widget is not None and hasattr(widget, "rank_label"):
+                widget.rank_label.setText(str(i + 1))
 
     def _sync_grid_badges(self) -> None:
         ids = self.current_ids()
         self.grid.set_priority_ids(ids)
         self.list_stack.setCurrentIndex(1 if ids else 0)
-        self.btn_sort.setEnabled(bool(ids))
+        # Sorting needs both a list *and* something to sort it by. This used
+        # to re-enable on list contents alone, undoing the data check.
+        self.btn_sort.setEnabled(bool(ids) and self._can_sort())
         self.btn_remove.setEnabled(bool(ids))
         self.btn_clear.setEnabled(bool(ids))
         self.hint.setVisible(bool(ids))
@@ -237,12 +382,102 @@ class QtChampionListTab(QWidget):
         self._renumber_items()
         self._save()
 
+    def _on_paste_list(self) -> None:
+        """
+        Replace or extend this list from the clipboard.
+
+        Unresolved names are reported rather than dropped: a list that
+        silently lost four entries is worse than one that tells you.
+        """
+        from PySide6.QtWidgets import QApplication
+
+        clipboard = QApplication.clipboard()
+        text = clipboard.text() if clipboard is not None else ""
+        if not text.strip():
+            self.hint.setText("Clipboard is empty — copy a list of champions first.")
+            self.hint.setVisible(True)
+            return
+
+        from services.champion_list_import import parse_champion_list
+
+        result = parse_champion_list(text, assets=self.assets)
+        if not result.ok:
+            self.hint.setText(result.summary)
+            self.hint.setVisible(True)
+            return
+
+        current = len(self.current_ids())
+        message = "{}\n\nThis replaces the {} champion{} currently in the list.".format(
+            result.summary, current, "" if current == 1 else "s"
+        )
+        if result.unknown:
+            message += "\n\nNot recognised: {}".format(", ".join(result.unknown))
+
+        dialog = LLConfirmModal(
+            "Import {} champions?".format(len(result.champion_ids)),
+            message, "Replace list", parent=self, destructive=bool(current),
+        )
+        if dialog.exec() != LLConfirmModal.Accepted:
+            return
+
+        self._pending_icons = {}
+        self.list_widget.clear()
+        for cid in result.champion_ids:
+            self._append_item(cid)
+        self._renumber_items()
+        self._sync_grid_badges()
+        self._save()
+        self.hint.setText(result.summary)
+        self.hint.setVisible(True)
+
+    def set_mode(self, config_key: str) -> None:
+        """Switch which list this screen edits, and reload it."""
+        if config_key == self.CONFIG_KEY:
+            self._sync_mode_buttons()
+            return
+        self.CONFIG_KEY = config_key
+        for key, btn in getattr(self, "_mode_buttons", {}).items():
+            btn.setChecked(key == config_key)
+        self._sync_scraper_mode()
+        self._load_list()
+        self._sync_mode_buttons()
+
+    def _sync_scraper_mode(self) -> None:
+        """Win rates must come from the queue the list is for.
+
+        Switching to ARAM used to leave the scraper on Ranked, so every
+        `(xx.x% WR)` beside an ARAM champion — and the winrate sort — used
+        Summoner's Rift numbers.
+        """
+        if not self.scraper:
+            return
+        try:
+            self.scraper.set_mode(
+                "ARAM" if self.CONFIG_KEY == ARAM_PRIORITY_LIST else "Ranked"
+            )
+        except Exception:
+            pass
+
+    def _sync_mode_buttons(self) -> None:
+        for key, btn in getattr(self, "_mode_buttons", {}).items():
+            btn.setChecked(key == self.CONFIG_KEY)
+
+    def _can_sort(self) -> bool:
+        return bool(self.scraper and self.scraper.has_live_winrates())
+
     def _on_sort_by_winrate(self) -> None:
         ids = self.current_ids()
         if not ids:
             return
-        if self.scraper:
-            ids.sort(key=lambda cid: self.scraper.get_winrate(self._champ_name(cid)), reverse=True)
+        if not (self.scraper and self.scraper.has_live_winrates()):
+            # Refuse rather than silently reordering by a constant. The button
+            # is disabled for this reason too; this is the belt-and-braces.
+            return
+        ids.sort(
+            key=lambda cid: self.scraper.get_winrate(self._champ_name(cid)) or 0.0,
+            reverse=True,
+        )
+        self._pending_icons = {}
         self.list_widget.clear()
         for cid in ids:
             self._append_item(cid)
@@ -257,23 +492,36 @@ class QtChampionListTab(QWidget):
             self._save()
 
     def _on_clear_all(self) -> None:
+        self._pending_icons = {}
         self.list_widget.clear()
         self._save()
 
 
 class QtPriorityTab(QtChampionListTab):
-    """Ranked pick priorities used by the Draft Assistant (§8)."""
+    """
+    Pick priority, for both Summoner's Rift and ARAM (§8).
 
-    CONFIG_KEY = "priority_list"
+    These were two navigation entries and two screens. The lists genuinely are
+    different — Summoner's Rift priorities are role-aware picks, ARAM
+    priorities drive bench sniping — but they are the same interaction, so
+    they are one screen with a mode switch. If you only play ARAM you now only
+    see one place to configure it.
+    """
+
+    CONFIG_KEY = PRIORITY_LIST
     TITLE = "Priority"
     LIST_TITLE = "Pick priority order"
+    MODES = (
+        (PRIORITY_LIST, "Summoner's Rift"),
+        (ARAM_PRIORITY_LIST, "ARAM"),
+    )
 
     def __init__(self, container=None, view_model=None, parent=None):
         super().__init__(container=container, view_model=view_model, parent=parent)
         # Name kept from the first Qt prototype; some callers/tests use it.
         self.prio_list_widget = self.list_widget
         if self.scraper:
-            self.scraper.set_mode("Ranked")
+            self._sync_scraper_mode()
             self.grid.set_scraper(self.scraper)
             self._renumber_items()
 
@@ -285,7 +533,7 @@ class QtPriorityTab(QtChampionListTab):
 class QtAramTab(QtChampionListTab):
     """ARAM champion priorities used by Priority Sniper in ARAM queues."""
 
-    CONFIG_KEY = "aram_priority_list"
+    CONFIG_KEY = ARAM_PRIORITY_LIST
     TITLE = "ARAM"
     LIST_TITLE = "ARAM priority order"
     EMPTY_TEXT = (
@@ -304,7 +552,7 @@ class QtAramTab(QtChampionListTab):
 class QtBanListTab(QtChampionListTab):
     """Ordered ban list (§8)."""
 
-    CONFIG_KEY = "ban_list"
+    CONFIG_KEY = BAN_LIST
     TITLE = "Bans"
     LIST_TITLE = "Ban order"
     EMPTY_TEXT = (

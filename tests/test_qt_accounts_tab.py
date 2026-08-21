@@ -1,9 +1,14 @@
 """
 The Accounts screen must switch into the account the user clicked.
 
-Display order (most recent first) and storage order are deliberately
-different, so every row has to carry the stored index rather than its
-position on screen.
+Rows render in **stored** order — the order the user arranges with the
+reorder arrows. The screen previously rendered `get_accounts_display()`,
+which sorts by `last_used`; since the arrows change stored order, pressing
+one swapped two rows in the file and the screen re-sorted straight back, so
+the arrows appeared to do nothing.
+
+Every row still carries the stored index rather than its screen position,
+which is what `login_account`, `set_default_account` and the switcher expect.
 """
 import os
 import unittest
@@ -19,7 +24,8 @@ class FakeAccountsService:
         {"label": "Smurf", "username": "smurf", "last_used": "2026-06-01T00:00:00"},
         {"label": "Fresh", "username": "fresh", "last_used": None},
     ]
-    DISPLAY_ORDER = [1, 0, 2]
+    #: Rows render in stored order now, so this mirrors STORED.
+    DISPLAY_ORDER = [0, 1, 2]
 
     def __init__(self):
         self.logins = []
@@ -62,11 +68,6 @@ class FakeAccountsService:
         self.STORED.pop(index)
         self.DISPLAY_ORDER = list(range(len(self.STORED)))
 
-    def move_account(self, idx: int, direction: int):
-        new_idx = idx + direction
-        if 0 <= new_idx < len(self.STORED):
-            self.STORED[idx], self.STORED[new_idx] = self.STORED[new_idx], self.STORED[idx]
-
 
 class FakeContainer:
     def __init__(self, service):
@@ -87,21 +88,23 @@ class QtAccountsTabTests(unittest.TestCase):
     def _switch_buttons(self):
         return [b for b in self.tab._buttons if b.text() == "Switch"]
 
-    def test_rows_render_in_display_order(self):
+    def test_rows_render_in_stored_order(self):
+        """The order the user arranged, not one the app re-derives."""
         from PySide6.QtWidgets import QLabel
         names = []
         for row in self.tab._rows:
             label = row.findChild(QLabel)
             if label is not None:
                 names.append(label.text())
-        self.assertEqual(names, ["Smurf", "Main", "Fresh"])
+        self.assertEqual(names, ["Main", "Smurf", "Fresh"])
 
     def test_clicking_a_row_switches_to_the_account_shown_on_it(self):
         buttons = self._switch_buttons()
         self.assertEqual(len(buttons), 3)
 
-        # Second row on screen is "Main", which is stored at index 0.
-        buttons[1].click()
+        # First row is "Main", stored index 0. (Row 1 is "Smurf", the active
+        # account, whose Switch is correctly disabled.)
+        buttons[0].click()
         self.assertEqual(self.service.logins, [0])
 
         # A switch in flight locks the list; nothing else can be started.
@@ -125,7 +128,7 @@ class QtAccountsTabTests(unittest.TestCase):
         for row in tab._rows:
             from ui.qt.components.badge import LLBadge
             texts.append([b.text() for b in row.findChildren(LLBadge)])
-        # Display order is Smurf, Main, Fresh.
+        # Stored order is Main, Smurf, Fresh; index 2 is "Fresh".
         self.assertNotIn("No password", texts[0])
         self.assertNotIn("No password", texts[1])
         self.assertIn("No password", texts[2])
@@ -150,13 +153,13 @@ class QtAccountsTabTests(unittest.TestCase):
 
         from ui.qt.widgets.accounts_tab import QtAccountsTab
         tab = QtAccountsTab(container=FakeContainer(Dupe()))
-        labels = [l.text() for l in tab._rows[0].findChildren(QLabel)]
-        self.assertIn("Name#EUW1", labels)
-        self.assertNotIn("Name#EUW1 - EUW1", labels)
+        detail = " ".join(l.text() for l in tab._rows[0].findChildren(QLabel))
+        self.assertIn("Name#EUW1", detail)
+        self.assertNotIn("Name#EUW1 - EUW1", detail)
 
     def test_active_row_cannot_switch_to_itself(self):
-        # "Smurf" (stored index 1) is active and is rendered first.
-        self.assertFalse(self._switch_buttons()[0].isEnabled())
+        # "Smurf" is stored index 1 and is active; it renders second.
+        self.assertFalse(self._switch_buttons()[1].isEnabled())
 
     def test_set_default_uses_the_stored_index(self):
         defaults = [b for b in self.tab._buttons if b.text() == "Set default"]
@@ -168,9 +171,9 @@ class QtAccountsTabTests(unittest.TestCase):
         self.assertTrue(all(not b.isEnabled() for b in self.tab._buttons))
 
         self.tab._set_busy(False)
-        # Row 0 is the active account ("Smurf"); it must still refuse a switch.
-        self.assertFalse(self._switch_buttons()[0].isEnabled())
-        self.assertTrue(self._switch_buttons()[1].isEnabled())
+        # Row 1 is the active account ("Smurf"); it must still refuse a switch.
+        self.assertFalse(self._switch_buttons()[1].isEnabled())
+        self.assertTrue(self._switch_buttons()[0].isEnabled())
 
     def test_falls_back_to_plain_getter_when_display_api_is_absent(self):
         """An older account service without the display API must still work."""
@@ -274,12 +277,12 @@ class QtAccountsCrudTests(unittest.TestCase):
             "AccountEditorModal",
             lambda d: d.field_label.set_text("Renamed"),
         )
-        # Second row on screen is "Main", stored at index 0.
+        # Second row on screen is "Smurf", stored at index 1.
         self._buttons("Edit")[1].click()
 
         self.assertEqual(len(self.service.edited), 1)
         index, kwargs = self.service.edited[0]
-        self.assertEqual(index, 0)
+        self.assertEqual(index, 1)
         self.assertEqual(kwargs["label"], "Renamed")
 
     def test_editing_without_touching_the_password_sends_none(self):
@@ -302,8 +305,8 @@ class QtAccountsCrudTests(unittest.TestCase):
 
     def test_removing_the_default_promotes_another(self):
         self._auto_accept("LLConfirmModal")
-        # "Main" is stored index 0 and is the default; it is the second row.
-        self._buttons("Remove")[1].click()
+        # "Main" is stored index 0 and is the default; it is the first row.
+        self._buttons("Remove")[0].click()
         self.assertEqual(self.service.deleted, [0])
         self.assertTrue(self.service.defaults,
                         "no account was promoted to default")
@@ -502,15 +505,93 @@ class ThreadAffinityTests(unittest.TestCase):
                          "the stored accounts vanished after a failed switch")
         self.assertIn("sign out", self.tab.active_status.text().lower())
 
-    def test_reorder_accounts_moves_account_order(self):
-        # Initial order is Main (0), Smurf (1), Fresh (2)
-        self.assertEqual(self.service.STORED[0]["username"], "main")
-        self.assertEqual(self.service.STORED[1]["username"], "smurf")
 
-        # Move index 0 down
-        self.tab._on_move(0, 1)
-        self.app.processEvents()
+class ReorderTests(unittest.TestCase):
+    """
+    The reorder arrows must visibly move a row.
 
-        # New order should be Smurf (0), Main (1), Fresh (2)
-        self.assertEqual(self.service.STORED[0]["username"], "smurf")
-        self.assertEqual(self.service.STORED[1]["username"], "main")
+    They call `move_account()`, which changes stored order. The screen used to
+    render `get_accounts_display()`, which sorts by `last_used` — so the swap
+    happened in the file and the display re-sorted straight back. The arrows
+    looked broken.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from PySide6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _tab(self):
+        from ui.qt.widgets.accounts_tab import QtAccountsTab
+
+        class Service(FakeAccountsService):
+            def get_active_index(self_inner): return -1
+            def get_default_account_index(self_inner): return -1
+
+            def move_account(self_inner, index, direction):
+                target = index + direction
+                if 0 <= target < len(self_inner.STORED):
+                    self_inner.STORED[index], self_inner.STORED[target] = (
+                        self_inner.STORED[target], self_inner.STORED[index]
+                    )
+
+        self.service = Service()
+        return QtAccountsTab(container=FakeContainer(self.service))
+
+    def _names(self, tab):
+        from PySide6.QtWidgets import QLabel
+        return [row.findChild(QLabel).text() for row in tab._rows]
+
+    def test_moving_a_row_down_changes_what_is_on_screen(self):
+        tab = self._tab()
+        self.assertEqual(self._names(tab), ["Main", "Smurf", "Fresh"])
+
+        down = [b for b in tab._buttons if b.text() == "▼"]
+        self.assertTrue(down, "no reorder controls rendered")
+        down[0].click()
+
+        self.assertEqual(self._names(tab), ["Smurf", "Main", "Fresh"])
+
+    def test_recency_is_shown_rather_than_used_as_ordering(self):
+        tab = self._tab()
+        detail = " ".join(
+            l.text() for l in tab._rows[2].findChildren(type(tab._rows[2]).__mro__[0])
+        ) if False else ""
+        from PySide6.QtWidgets import QLabel
+        detail = " ".join(l.text() for l in tab._rows[2].findChildren(QLabel))
+        self.assertIn("never used", detail)
+
+
+class LastUsedLabelTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from PySide6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _label(self, value):
+        from ui.qt.widgets.accounts_tab import QtAccountsTab
+        return QtAccountsTab._last_used_label(value)
+
+    def test_never(self):
+        self.assertEqual(self._label(None), "never used")
+
+    def test_relative_days(self):
+        from datetime import datetime, timedelta
+        self.assertEqual(
+            self._label((datetime.now() - timedelta(days=1)).isoformat()),
+            "used yesterday",
+        )
+        self.assertIn(
+            "days ago",
+            self._label((datetime.now() - timedelta(days=5)).isoformat()),
+        )
+
+    def test_months(self):
+        from datetime import datetime, timedelta
+        self.assertIn(
+            "month",
+            self._label((datetime.now() - timedelta(days=70)).isoformat()),
+        )
+
+    def test_garbage_is_dropped_not_shown(self):
+        self.assertEqual(self._label("not-a-date"), "")

@@ -72,7 +72,11 @@ class ChampionTileModel:
     banned: bool = False
     disabled: bool = False           # e.g. already picked by a teammate
     error: bool = False              # art or data failed to load
-    winrate: Optional[float] = None  # Lolalytics winrate percentage (e.g. 52.8)
+    #: Community win rate, or None when nobody measured it. None must render
+    #: as *nothing* — never as a placeholder percentage.
+    winrate: Optional[float] = None
+    #: Where the number came from, e.g. "lolalytics". Empty when unattributed.
+    winrate_source: str = ""
 
     @property
     def selectable(self) -> bool:
@@ -139,7 +143,13 @@ class LLChampionTile(QFrame):
         m = self.model
         bits = [m.name]
         if m.winrate is not None:
-            bits.append(f"{m.winrate:.1f}% WR (Lolalytics)")
+            # Attribution only when there is something to attribute. This
+            # used to read "(Lolalytics)" on numbers from a hand-written table.
+            source = getattr(m, "winrate_source", "") or ""
+            bits.append(
+                f"{m.winrate:.1f}% WR ({source})" if source
+                else f"{m.winrate:.1f}% WR"
+            )
         if m.priority:
             bits.append("Priority #{}".format(m.priority))
         if m.favorite:

@@ -60,15 +60,11 @@ class TestQtNewTabsAndComponents(unittest.TestCase):
 
         tab = QtLootTab(container=self.container)
         self.assertIsNotNone(tab.btn_refresh)
-        self.assertIsNotNone(tab.btn_claim)
         self.assertIsNotNone(tab.btn_open)
-        self.assertIsNotNone(tab.chk_claim_first)
-        self.assertIsNotNone(tab.chk_craft_keys)
         self.assertIsNotNone(tab.status)
 
-        # Test refresh and claim callbacks without crashing
+        # Test refresh callback without crashing
         tab.refresh()
-        tab._on_claim_rewards()
 
     def test_accounts_tab_initialization_and_crud(self):
         from ui.qt.widgets.accounts_tab import QtAccountsTab

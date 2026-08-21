@@ -90,25 +90,32 @@ def launch_riot_client() -> None:
 
 def create_container() -> Any:
     """
-    Build the real service graph using the unified bootstrap composition root.
-    Returns None if construction fails.
+    Build the real service graph. Returns None if construction fails.
+
+    Delegates the startup sequence to `ApplicationContainer.bootstrap()`,
+    which both shells share. The Qt shell used to build a container and a
+    window and never run that sequence, so automation, the account manager
+    and asset downloading simply did not exist here.
     """
     try:
         from core.container import ApplicationContainer  # type: ignore
 
         container = ApplicationContainer()
-        container.bootstrap(
-            launch_client_func=launch_riot_client,
-            start_assets=True,
-            start_automation=True,
-            start_client_state=False,  # Started in build() after window subscribes
-            start_api=True,
-        )
-        return container
     except Exception as exc:
         print(f"[LeagueLoop] Could not build ApplicationContainer: {exc}", file=sys.stderr)
         print("[LeagueLoop] Falling back to UI-only mode.", file=sys.stderr)
         return None
+
+    # One startup sequence, shared with the legacy shell. Anything added to
+    # `bootstrap()` reaches both shells; that is the whole point of it.
+    # The state service is started later, in build(), once the window's
+    # view-model is subscribed.
+    container.bootstrap(launch_client_func=launch_riot_client)
+
+    for name, exc in getattr(container, "bootstrap_errors", []):
+        print(f"[LeagueLoop] {name} unavailable: {exc}", file=sys.stderr)
+
+    return container
 
 
 def create_window(container: Any = None):
@@ -148,6 +155,19 @@ def build(with_services: bool = True) -> Tuple[QApplication, Any, Any]:
             controller.apply_config()
         except Exception as exc:
             print(f"[LeagueLoop] Could not apply automation config: {exc}", file=sys.stderr)
+
+    # Bring every bound view up to date from authoritative state.
+    #
+    # Views bind in the window's constructor, which happens before the
+    # services above have published anything. The view-model only emits its
+    # granular signals when a slice *changes*, so a view that renders solely
+    # on those signals keeps whatever it was constructed with — the footer
+    # read "Automation off" while the header two rows up read "Automation on".
+    # `refresh()` was written for exactly this and was never called.
+    try:
+        window.view_model.refresh()
+    except Exception as exc:
+        print(f"[LeagueLoop] Initial state refresh failed: {exc}", file=sys.stderr)
 
     return app, window, container
 

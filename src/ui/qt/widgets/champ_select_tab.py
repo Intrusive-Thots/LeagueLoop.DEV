@@ -202,6 +202,7 @@ class QtChampSelectTab(QWidget):
         self.available_section = LLSection("Available champions", parent=self)
         self.grid = QtChampionGrid(
             asset_manager=getattr(self.container, "assets", None),
+            config=getattr(self.container, "config", None),
             tile_size=TileSize.SM,
             parent=self.available_section,
         )

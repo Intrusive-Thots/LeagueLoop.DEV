@@ -62,7 +62,7 @@ class QtSystemTray(QSystemTrayIcon):
     def _toggle_automation(self) -> None:
         ctrl = getattr(self.main_window.container, "automation_controller", None) if self.main_window.container else None
         if ctrl is not None:
-            ctrl.set_master(not ctrl.is_master_enabled)
+            ctrl.set_master(not ctrl.master_enabled())
 
     def _quit(self) -> None:
         app = QApplication.instance()

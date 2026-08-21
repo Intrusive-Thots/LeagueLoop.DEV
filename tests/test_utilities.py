@@ -24,8 +24,8 @@ from utils.logger import Logger
 
 class TestConstantsAndVersion(unittest.TestCase):
     def test_version_format(self):
-        # Format: 1-{month}-{days_left_in_year}-{HHMM}
-        pattern = r"^1-\d{2}-\d{1,3}-\d{4}$"
+        # Format: {major}-{month}-{days_left_in_year}-{HHMM}
+        pattern = r"^[12]-\d{2}-\d{1,3}-\d{4}$"
         assert re.match(pattern, __version__) is not None
 
     def test_queue_constants(self):

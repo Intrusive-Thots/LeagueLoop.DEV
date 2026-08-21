@@ -227,17 +227,37 @@ class ShellViewModel(QObject):
         phase = self._state.client.phase or GameflowPhase.NONE.value
         label = phase_label(phase)
 
+        # Name the queue wherever one applies. "Lobby" on its own tells you
+        # something you can already see; "Lobby - ARAM - ready to search" is
+        # the sentence you actually wanted (§56, product vocabulary).
+        queue = queue_label(self._state.queue.queue_id, self._state.queue.queue_name)
+
+        def with_queue(text: str) -> str:
+            return "{} - {}".format(queue, text) if queue else text
+
         if phase == GameflowPhase.CHAMP_SELECT.value:
-            return (label, Tone.ACCENT, "Draft in progress")
+            return (label, Tone.ACCENT, with_queue("draft in progress"))
         if phase == GameflowPhase.READY_CHECK.value:
-            return (label, Tone.WARNING, "Accept or decline")
+            return (label, Tone.WARNING, with_queue("accept or decline"))
         if phase == GameflowPhase.MATCHMAKING.value:
-            return (label, Tone.INFO, "Searching for a match")
+            elapsed = self._state.queue.elapsed_s or 0
+            waited = (
+                "in queue {:d}:{:02d}".format(int(elapsed) // 60, int(elapsed) % 60)
+                if elapsed else "searching for a match"
+            )
+            return (label, Tone.INFO, with_queue(waited))
         if phase == GameflowPhase.IN_PROGRESS.value:
-            return (label, Tone.INFO, "Match running")
+            return (label, Tone.INFO, with_queue("match running"))
+        if phase == GameflowPhase.LOBBY.value:
+            return (label, Tone.NEUTRAL, with_queue("ready to search"))
         if phase == GameflowPhase.NONE.value:
-            return (label, Tone.NEUTRAL, "Nothing in progress")
-        return (label, Tone.NEUTRAL, "")
+            connected = self._state.client.connected
+            return (
+                label, Tone.NEUTRAL,
+                "Nothing in progress" if connected
+                else "Waiting for the League Client",
+            )
+        return (label, Tone.NEUTRAL, with_queue(""))
 
     def automation_status(self) -> Tuple[str, Tone, str]:
         """(text, tone, detail) for the automation indicator (§2.5)."""

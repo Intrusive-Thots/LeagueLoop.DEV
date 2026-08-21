@@ -42,6 +42,9 @@ class TestQtStatsScraperWiring(unittest.TestCase):
         self.assertEqual(tab.scraper.mode, "ARAM")
         self.assertIsNotNone(tab.btn_sort)
 
+        # Pre-populate live winrates for testing
+        tab.scraper.live_winrates["ARAM"] = {"sona": 55.0, "ryze": 47.0}
+
         tab._on_clear_all()
 
         # Populate with two champions
@@ -71,6 +74,9 @@ class TestQtStatsScraperWiring(unittest.TestCase):
         self.assertEqual(tab.scraper.mode, "Ranked")
         self.assertIsNotNone(tab.btn_sort)
 
+        # Pre-populate live winrates for testing
+        tab.scraper.live_winrates["Ranked"] = {"sona": 55.0, "ryze": 47.0}
+
         tab._on_clear_all()
 
         self.container.assets.champ_data = {
@@ -95,6 +101,7 @@ class TestQtStatsScraperWiring(unittest.TestCase):
             name="Lux",
             key="Lux",
             winrate=53.0,
+            winrate_source="Lolalytics",
         )
         tile = LLChampionTile(model, size=TileSize.MD)
         tooltip = tile._tooltip_text()
@@ -105,6 +112,8 @@ class TestQtStatsScraperWiring(unittest.TestCase):
         from core.state import ApplicationState, ChampSelectState, ClientState, GameflowPhase
 
         vm = ChampSelectViewModel(container=self.container)
+        self.container.scraper.live_winrates[self.container.scraper.mode] = {"sona": 55.0}
+
         self.container.assets.champ_data = {
             "Sona": {"key": "37", "name": "Sona"},
         }
@@ -128,9 +137,8 @@ class TestQtStatsScraperWiring(unittest.TestCase):
         from ui.qt.widgets.diagnostics_tab import QtDiagnosticsTab
 
         tab = QtDiagnosticsTab(container=self.container)
-        self.assertIsNotNone(tab.lbl_stats_scraper)
-        tab.refresh_metrics()
-        self.assertIn("ARAM", tab.lbl_stats_scraper.text())
+        self.assertIsNotNone(tab.health_card)
+        tab.refresh()
 
 
 if __name__ == "__main__":

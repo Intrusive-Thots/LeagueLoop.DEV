@@ -252,7 +252,11 @@ class ChampSelectViewModel(QObject):
 
         reasons = []
         if wr is not None:
-            reasons.append(f"{wr:.1f}% WR (Lolalytics)")
+            # Attribute only a number that actually came from somewhere.
+            source = scraper.winrate_source() if scraper else ""
+            reasons.append(
+                f"{wr:.1f}% WR ({source})" if source else f"{wr:.1f}% WR"
+            )
         reasons.append(result.reason)
         if role:
             reasons.append("{} selected".format(ROLE_LABELS.get(role, role.title())))

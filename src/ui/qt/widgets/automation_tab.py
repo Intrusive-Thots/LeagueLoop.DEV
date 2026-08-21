@@ -11,6 +11,15 @@ hunting.
 """
 from __future__ import annotations
 
+from core.config_keys import (
+    AUTO_ACCEPT,
+    AUTO_BAN_ENABLED,
+    AUTO_HOVER,
+    AUTO_LOCK_IN,
+    AUTO_RANDOM_SKIN,
+    AUTO_REQUEUE,
+    AUTOMATION_MASTER,
+)
 from typing import Dict, List, Optional, Tuple
 
 from PySide6.QtCore import Qt, Signal
@@ -26,21 +35,23 @@ from ui.qt.theme.typography import TEXT_BODY, TEXT_PAGE_TITLE
 
 #: (config key, group, name, explanation, default, config-action label)
 AUTOMATION_CONTROLS: List[Tuple[str, str, str, str, bool, str]] = [
-    ("auto_accept", "Ready Check", "Auto Accept",
+    (AUTO_ACCEPT, "Ready Check", "Auto Accept",
      "Accepts the Ready Check as soon as a match is found.", False, ""),
-    ("auto_hover", "Champion Select", "Auto Hover",
+    (AUTO_HOVER, "Champion Select", "Auto Hover",
      "Hovers your top available champion so your team can see it.", False, ""),
-    ("auto_lock_in", "Champion Select", "Auto Lock In",
+    (AUTO_LOCK_IN, "Champion Select", "Auto Lock In",
      "Locks in your champion once it is selected.", False, "Priorities"),
-    ("auto_ban_enabled", "Champion Select", "Auto Ban",
+    (AUTO_BAN_ENABLED, "Champion Select", "Auto Ban",
      "Bans from your ban list, skipping champions teammates are hovering.",
      False, "Ban list"),
-    ("auto_set_roles", "Champion Select", "Auto Set Roles",
-     "Applies your preferred role assignment when the lobby allows it.",
-     False, ""),
-    ("auto_random_skin", "Champion Select", "Random Skin",
+    # "Auto Set Roles" was removed. It advertised applying your preferred
+    # role assignment, and there is no role-assignment code anywhere in the
+    # engine — the switch wrote `auto_set_roles`, which nothing has ever read.
+    # A control for a feature that does not exist is worse than a missing
+    # feature: it makes the real ones look unreliable too.
+    (AUTO_RANDOM_SKIN, "Champion Select", "Random Skin",
      "Picks a random owned skin after locking in.", True, ""),
-    ("auto_requeue", "After the game", "Auto Requeue",
+    (AUTO_REQUEUE, "After the game", "Auto Requeue",
      "Starts a new queue after a dodge or a finished match.", False, ""),
     ("auto_honor_enabled", "After the game", "Auto Honor",
      "Honors a teammate, preferring friends then top performers.", False, ""),
@@ -166,7 +177,7 @@ class QtAutomationTab(QWidget):
             if row is not None:
                 row.set_checked(bool(self.config.get(key, default)))
 
-        self.master_toggle.set_checked(bool(self.config.get("automation_master", True)))
+        self.master_toggle.set_checked(bool(self.config.get(AUTOMATION_MASTER, True)))
         self._refresh_details()
 
     def _refresh_details(self) -> None:
@@ -174,7 +185,7 @@ class QtAutomationTab(QWidget):
         if not self.config:
             return
         count = len(self.config.get("priority_list", []) or [])
-        row = self.rows.get("auto_lock_in")
+        row = self.rows.get(AUTO_LOCK_IN)
         if row is not None:
             row.set_detail(
                 "{} priorit{} configured".format(count, "y" if count == 1 else "ies")
@@ -196,7 +207,7 @@ class QtAutomationTab(QWidget):
     # -------------------------------------------------------------- actions
     def _on_master_toggled(self, checked: bool) -> None:
         if self.config:
-            self.config.set("automation_master", checked)
+            self.config.set(AUTOMATION_MASTER, checked)
         for row in self.rows.values():
             row.set_enabled_state(checked,
                                   "" if checked else "Master switch is off")
@@ -207,5 +218,5 @@ class QtAutomationTab(QWidget):
     def _on_row_toggled(self, key: str, value: bool) -> None:
         if self.config:
             self.config.set(key, value)
-        if key == "auto_lock_in":
+        if key == AUTO_LOCK_IN:
             self._refresh_details()

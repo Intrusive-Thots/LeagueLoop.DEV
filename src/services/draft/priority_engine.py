@@ -8,6 +8,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from core.config_keys import (
+    ARAM_PRIORITY_LIST,
+    BAN_LIST,
+    PRIORITY_LIST,
+    read_champion_ids,
+    role_ban_key,
+    role_priority_key,
+)
+
 from services.draft.role_detector import RoleDetector
 from services.draft.validation import ActionValidator
 
@@ -37,13 +46,23 @@ class PriorityEngine:
         self,
         session: Dict[str, Any],
         custom_priorities: Optional[List[int]] = None,
+        aram: Optional[bool] = None,
     ) -> Optional[DraftEvaluationResult]:
         """
         Determines the best available champion to pick.
-        Evaluates role-specific priority list first, then general list, then fallbacks.
+
+        Order: caller override, then the ARAM list when this is ARAM, then the
+        role-specific list, then the general list.
+
+        `aram` is inferred from the session's queue id when not passed, so
+        callers that do not know or care still get the right list.
         """
         role = RoleDetector.detect_role_from_session(session)
-        priority_list = custom_priorities or self._get_pick_priorities_for_role(role)
+        if aram is None:
+            aram = self._is_aram(session)
+        priority_list = custom_priorities or self._get_pick_priorities_for_role(
+            role, aram=aram
+        )
 
         if not priority_list:
             return None
@@ -95,43 +114,66 @@ class PriorityEngine:
 
         return None
 
-    def _get_pick_priorities_for_role(self, role: str) -> List[int]:
-        """Reads priority list for the role from config, fallback to default priority."""
+    @staticmethod
+    def _is_aram(session: Dict[str, Any]) -> bool:
+        """
+        ARAM by queue id, from the session the client gave us.
+
+        450 is ARAM; 720 is ARAM Clash. Unknown queues are treated as not
+        ARAM, so an unrecognised mode falls back to the general list rather
+        than picking nothing.
+        """
+        for candidate in (
+            (session or {}).get("queueId"),
+            ((session or {}).get("gameConfig") or {}).get("queueId"),
+        ):
+            try:
+                if int(candidate) in (450, 720):
+                    return True
+            except (TypeError, ValueError):
+                continue
+        return False
+
+    def _get_pick_priorities_for_role(self, role: str, aram: bool = False) -> List[int]:
+        """
+        Pick priorities: role-specific, else the general list.
+
+        Key names come from `core.config_keys` because this used to read a
+        literal that the UI did not write.
+        """
         if not self.config:
             return []
 
-        # Role-specific priority key e.g. "priority_TOP", "priority_MIDDLE"
-        role_key = f"priority_{role}" if role else "priority_list"
-        raw_list = self.config.get(role_key, [])
-        if not raw_list and role:
-            # Fallback to general priority_list
-            raw_list = self.config.get("priority_list", [])
+        if aram:
+            aram_list = read_champion_ids(self.config, ARAM_PRIORITY_LIST)
+            if aram_list:
+                return aram_list
+            # No ARAM list configured is a real answer: fall back to the
+            # general list rather than picking nothing.
 
-        # Ensure integers
-        result = []
-        for item in raw_list:
-            try:
-                result.append(int(item))
-            except (ValueError, TypeError):
-                continue
-        return result
+        if role:
+            role_list = read_champion_ids(self.config, role_priority_key(role))
+            if role_list:
+                return role_list
+
+        return read_champion_ids(self.config, PRIORITY_LIST)
 
     def _get_ban_priorities_for_role(self, role: str) -> List[int]:
-        """Reads ban list from config."""
+        """
+        Ban priorities: role-specific, else the list the Bans screen writes.
+
+        This read `ban_priority`, which nothing has ever written. The Bans
+        screen writes `ban_list`, so every configured ban was ignored.
+        """
         if not self.config:
             return []
 
-        raw_list = self.config.get(f"ban_priority_{role}", []) if role else []
-        if not raw_list:
-            raw_list = self.config.get("ban_priority", [])
+        if role:
+            role_list = read_champion_ids(self.config, role_ban_key(role))
+            if role_list:
+                return role_list
 
-        result = []
-        for item in raw_list:
-            try:
-                result.append(int(item))
-            except (ValueError, TypeError):
-                continue
-        return result
+        return read_champion_ids(self.config, BAN_LIST)
 
     def _is_champion_valid_for_role(self, champ_id: int, role: str) -> bool:
         """Checks if champion is canonically played in this role via AssetManager metadata."""
