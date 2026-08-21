@@ -1,14 +1,27 @@
-# LeagueLoop.DEV Feature Roadmap
+# LeagueLoop.DEV Product & Technical Roadmap
 
-## Completed Milestones
-- [x] **Sprint 1**: Deprecate remaining CustomTkinter code completely and simplify launcher.
-- [x] **Sprint 2**: Refactor lifecycle management via `ApplicationManager` and dependency container (`ApplicationContainer`).
-- [x] **Sprint 3**: `LCUTransport` wrapper with exponential backoff, reconnect handles, and typed `EventBus` connection notifications.
-- [x] **Sprint 4**: Frameless PySide6 Qt GUI shell with Riot Games design tokens (`#C8AA6E`, `#080E18`), vector icons, and stacked view pages.
-- [x] **Sprint 5**: CI/CD pipeline automation with GitHub Actions (`.github/workflows/ci.yml`).
-- [x] **Sprint 6**: Thread-safe SQLite relational database layer (`DatabaseManager`) for settings, history, and asset metadata.
+## Vision
+LeagueLoop is the premier autonomous companion overlay for League of Legends, delivering zero-blocking LCU automation, real-time draft intelligence, and sleek CustomTkinter / native Win32 overlay visuals.
 
----
+## Roadmap Milestones
 
-## Overall Status
-All 6 Sprint Milestones are **100% Completed**, fully integrated, and verified against the automated unit test suite (`164 / 164 passing`).
+### Milestone 1: Stability & Test Automation (COMPLETE)
+- Comprehensive unit and integration testing across `src/core/`, `src/services/`, and `src/ui/`.
+- Headless CI execution without GUI display server or Tkinter Tcl dependencies.
+- Automated release validation (`tools/build_validator.py`).
+
+### Milestone 2: Automation & LCU Integration (COMPLETE)
+- Instantaneous Auto-Accept and Priority Sniper with custom ban rules.
+- Draft Assistant with teammate hover dodge and respect algorithm.
+- Arena Synergy Picker V5 with dual/fallback priority arrays.
+- Auto-Honor system with algorithmic teammate evaluation and rate limit retry resilience.
+
+### Milestone 3: Advanced Overlay & UX Enhancements (ONGOING)
+- Win32 topmost window docking above Riot and League Client windows.
+- Draggable compact "Orb" mode for low-profile drafting.
+- Dynamic toast alerts and responsive layout resizing.
+
+### Milestone 4: Future Capability Expansion (PLANNED)
+- Expanded in-client telemetry and post-game analytical summaries.
+- Enhanced multi-account fast switching via encrypted credential store.
+- Custom theme pack support and community ARAM priority sharing.
