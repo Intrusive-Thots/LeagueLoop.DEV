@@ -7,7 +7,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import MagicMock
 
-from services.loot_service import ClaimResult, LootItem, LootService, OpenPlan, OpenResult
+from services.loot_service import LootItem, LootService, OpenPlan, OpenResult
 
 
 class DummyResponse:

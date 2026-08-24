@@ -18,7 +18,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Optional
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QWidget
 
 from ui.qt.theme.colors import (
@@ -119,13 +119,15 @@ class LLStatus(QWidget):
         layout.addWidget(self._glyph)
 
         self._label = QLabel(self)
-        self._label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Preferred)
+        self._label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
         layout.addWidget(self._label)
 
         self._detail = QLabel(self)
         self._detail.setVisible(False)
         self._detail.setWordWrap(True)
+        self._detail.setMinimumWidth(0)
         self._detail.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        self._detail.minimumSizeHint = lambda: QSize(0, self._detail.fontMetrics().height())
         layout.addWidget(self._detail, 1)
 
         self.set_status(text, tone, detail)
@@ -178,3 +180,16 @@ class LLStatus(QWidget):
         looking in the wrong place.
         """
         return self._detail.text().lstrip("· ").strip()
+
+    def sizeHint(self):
+        from PySide6.QtCore import QSize
+        w = self._glyph.minimumSizeHint().width() + self._label.minimumSizeHint().width() + 16
+        if self._detail.isVisible() and self._detail.text():
+            w += self._detail.minimumSizeHint().width() + 8
+        return QSize(w, super().sizeHint().height())
+
+    def minimumSizeHint(self):
+        from PySide6.QtCore import QSize
+        # Glyph + Label + spacing
+        w = self._glyph.minimumSizeHint().width() + self._label.minimumSizeHint().width() + 16
+        return QSize(w, super().minimumSizeHint().height())

@@ -129,7 +129,7 @@ class QtAutomationTab(QWidget):
         master_row.addStretch(1)
 
         self.btn_stop = LLButton(
-            "Stop automation", variant=ButtonVariant.DANGER, parent=master_card
+            "Stop", variant=ButtonVariant.DANGER, parent=master_card
         )
         # Starts disabled. It was constructed enabled and only ever gated in
         # `_render_state`, which returns early without a view model — so the
@@ -321,3 +321,8 @@ class QtAutomationTab(QWidget):
         Logger.info("AutomationTab", f"{key} set to {value}", key=key, value=value)
         if key == AUTO_LOCK_IN:
             self._refresh_details()
+
+    def minimumSizeHint(self):
+        from PySide6.QtCore import QSize
+        hint = super().minimumSizeHint()
+        return QSize(500, hint.height())

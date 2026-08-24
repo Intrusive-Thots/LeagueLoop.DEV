@@ -141,19 +141,158 @@ class RiotClientAPI:
             Logger.warning("RiotClientAPI", "Sign out failed: no response")
         return False
 
+    #: The Riot-identity flow: start opens a prompt, complete answers it.
+    RSO_RESET = "/rso-authenticator/v1/authentication"
+    RSO_START = "/rso-authenticator/v1/authentication/riot-identity/start"
+    RSO_COMPLETE = "/rso-authenticator/v1/authentication/riot-identity/complete"
+
+    def _log_authenticator_endpoints(self) -> None:
+        """Ask the client which authenticator endpoints it actually has.
+
+        Called only after a sign-in has already failed. The verb and path for
+        this flow have now been wrong twice — POST on the bare resource
+        answered `405 WRONG_METHOD`, and DELETE reset the prompt (204) without
+        creating one, so the follow-up PUT still said `invalid_prompt`.
+
+        The Riot Client publishes its own API description. Reading it turns
+        the next failure into a fact instead of a third guess.
+        """
+        for endpoint in ("/swagger/v3/openapi.json", "/help"):
+            res = self.request("GET", endpoint, silent=True)
+            if res is None or getattr(res, "status_code", 0) != 200:
+                continue
+            try:
+                doc = res.json()
+            except Exception as exc:
+                Logger.debug("RiotClientAPI", f"{endpoint} was not JSON", exc=exc)
+                continue
+
+            paths = doc.get("paths") if isinstance(doc, dict) else None
+            found = []
+            if isinstance(paths, dict):
+                for path, spec in paths.items():
+                    if "rso-authenticator" not in str(path):
+                        continue
+                    methods = sorted(
+                        m.upper() for m in (spec or {})
+                        if m.lower() in ("get", "put", "post", "delete", "patch")
+                    )
+                    found.append(f"{path} [{', '.join(methods) or '?'}]")
+            elif isinstance(doc, dict):
+                # `/help` answers as {"functions": {...}, "events": {...}}.
+                found = [k for k in doc.get("functions", {})
+                         if "rso-authenticator" in str(k)]
+
+            if found:
+                Logger.error(
+                    "RiotClientAPI",
+                    "The client's authenticator endpoints are: "
+                    + "; ".join(sorted(found)),
+                    source=endpoint, count=len(found),
+                )
+                return
+        Logger.warning(
+            "RiotClientAPI",
+            "Could not read the client's API description, so the correct "
+            "authenticator endpoint is still unknown.",
+        )
+
+    def _reset_authentication(self) -> bool:
+        """Clear any half-finished authentication before starting a new one.
+
+        204 on a real client. 404 is equally fine — it means there was
+        nothing to clear, which is the state we want to be in.
+        """
+        res = self.request("DELETE", self.RSO_RESET)
+        code = getattr(res, "status_code", None)
+        if res is not None and code in (200, 201, 204, 404):
+            Logger.debug("RiotClientAPI", "Authentication reset.", status=code)
+            return True
+        Logger.warning(
+            "RiotClientAPI",
+            f"Could not reset authentication (HTTP {code}); continuing anyway.",
+            status=code,
+        )
+        # Not fatal: a failed reset only matters if a prompt was already open.
+        return True
+
+    def _start_riot_identity(self) -> bool:
+        """Open an authentication prompt for username/password sign-in.
+
+        This is the step that was missing. `PUT` on the bare resource
+        *answers* a prompt; nothing was ever creating one, so it returned
+        `invalid_prompt` after the account had already been signed out.
+        """
+        payload = {
+            "clientId": "riot-client",
+            "language": "",
+            "platform": "windows",
+            "remember": False,
+        }
+        res = self.request("POST", self.RSO_START, data=payload)
+        code = getattr(res, "status_code", None)
+        if res is not None and code in (200, 201, 204):
+            Logger.info("RiotClientAPI", "Authentication prompt opened.", status=code)
+            return True
+
+        detail = ""
+        allowed = ""
+        try:
+            if res is not None:
+                detail = (res.text or "")[:200]
+                allowed = res.headers.get("Allow", "") or res.headers.get("allow", "")
+        except Exception as exc:
+            Logger.debug("RiotClientAPI", "Response unreadable", exc=exc)
+
+        Logger.error(
+            "RiotClientAPI",
+            "Could not open an authentication prompt (HTTP {}){}. {}".format(
+                code,
+                f" — this URI allows: {allowed}" if allowed else "",
+                detail,
+            ).strip(),
+            status=code, allow=allowed or None, endpoint=self.RSO_START,
+        )
+        return False
+
     def sign_in(self, username: str, password: str, persist: bool = False) -> dict:
         """
         Sign in with username/password via the Riot Client authenticator.
-        Uses PUT /rso-authenticator/v1/authentication.
-        Returns the response body dict (caller should check 'type' and 'error' fields).
+
+        Three steps, because the authenticator is a state machine:
+
+          DELETE .../authentication                     clear anything open
+          POST   .../authentication/riot-identity/start open a prompt
+          PUT    .../riot-identity/complete             answer it
+
+        Only the last step was ever being made, which is why a real sign-in
+        returned 201 `{"error": "invalid_prompt"}` — *after* the account had
+        been signed out. Nothing had opened a prompt for it to answer.
+
+        Returns the response body dict (caller should check 'type' and
+        'error'). Credentials are never sent unless a prompt was opened.
         """
+        self._reset_authentication()
+        if not self._start_riot_identity():
+            self._log_authenticator_endpoints()
+            return {"type": "error", "error": "could_not_start_authentication"}
+
         payload = {
             "username": username,
             "password": password,
-            "persistLogin": persist,
+            "remember": bool(persist),
             "language": "en_US",
         }
-        res = self.request("PUT", "/rso-authenticator/v1/authentication", data=payload)
+        res = self.request("PUT", self.RSO_COMPLETE, data=payload)
+        if res is not None and getattr(res, "status_code", 0) == 404:
+            # Older clients keep the credential submission on the bare
+            # resource. Try it rather than failing on a path difference.
+            Logger.info(
+                "RiotClientAPI",
+                "riot-identity/complete is not present; using the legacy path.",
+            )
+            payload["persistLogin"] = bool(persist)
+            res = self.request("PUT", self.RSO_RESET, data=payload)
         if res and res.status_code in [200, 201]:
             try:
                 body = res.json()
@@ -168,6 +307,10 @@ class RiotClientAPI:
                     return body
                 elif error:
                     Logger.warning("RiotClientAPI", f"Sign-in error: {error}")
+                    if error == "invalid_prompt":
+                        # Still no prompt. Report the real endpoint list so
+                        # this stops being guesswork.
+                        self._log_authenticator_endpoints()
                     return body
                 else:
                     Logger.info("RiotClientAPI", f"Sign-in response type: {auth_type}")
@@ -227,13 +370,20 @@ class RiotClientAPI:
         return False
 
 
+class CredentialEncryptionError(RuntimeError):
+    """Raised when Windows DPAPI cannot protect a password.
+
+    Callers must treat this as "the account was not saved", never as a
+    warning to log and carry on past.
+    """
+
+
 class AccountManager:
     """Manages encrypted Riot account credentials and login automation."""
 
-    def __init__(self, lcu=None, launch_client_func=None, state_manager=None):
+    def __init__(self, lcu=None, launch_client_func=None):
         self.lcu = lcu
         self._launch_client_func = launch_client_func
-        self.state_manager = state_manager
         self.riot_client = RiotClientAPI()
         self._accounts: List[Dict[str, Any]] = []
         self._active_idx: int = -1
@@ -245,28 +395,11 @@ class AccountManager:
         # Migration: Ensure existing accounts have new fields
         self._load()
         self._migrate_accounts()
-        self._sync_state()
 
         # Switching/sign-out sequencing lives in services.accounts so the two
         # operations cannot drift apart. This class keeps ownership of
         # storage, encryption and the account list.
         self._switcher = self._build_switcher()
-
-    def _sync_state(self) -> None:
-        """Publish account state to central StateManager."""
-        if self.state_manager is not None:
-            try:
-                active_name = None
-                if 0 <= self._active_idx < len(self._accounts):
-                    active_name = self._accounts[self._active_idx].get("username")
-                all_names = tuple(a.get("username", "") for a in self._accounts)
-                self.state_manager.update_account(
-                    active_account=active_name,
-                    all_accounts=all_names,
-                    is_switching=bool(getattr(self, "is_switching", False)),
-                )
-            except Exception:
-                pass
 
     def _build_switcher(self):
         """Construct the AccountSwitcher, or None if the subsystem is absent."""
@@ -287,7 +420,7 @@ class AccountManager:
             password_provider=self.get_password,
             on_success=self._mark_active,
             on_signed_out=self._mark_signed_out,
-            kill_games=self._kill_game_processes,
+            kill_games=lambda: self._kill_game_processes(None),
             launch_client=self._launch_riot_client,
             bus=EventBus,
         )
@@ -300,13 +433,11 @@ class AccountManager:
                 self._accounts[idx]["last_used"] = datetime.now().isoformat()
             self._active_idx = idx
             self._save()
-        self._sync_state()
 
     def _mark_signed_out(self) -> None:
         with self._lock:
             self._active_idx = -1
             self._save()
-        self._sync_state()
 
     def _migrate_accounts(self):
         """
@@ -317,9 +448,12 @@ class AccountManager:
         accounts.json on every single startup.
         """
         dirty = False
+        # `wallet` is deliberately absent. It was seeded as {"be": 0, "rp": 0}
+        # for every account and read by nothing in the UI, so accounts.json
+        # carried a plausible zero balance for a feature that does not exist.
+        # `region` is likewise not invented here — "NA1" was being written for
+        # accounts nobody had told us the shard for.
         defaults = {
-            "wallet": lambda: {"be": 0, "rp": 0},
-            "region": lambda: "NA1",
             "last_used": lambda: None,
             "is_default": lambda: False,
         }
@@ -344,9 +478,17 @@ class AccountManager:
                 None, None, None, 0
             )
             return base64.b64encode(encrypted).decode("ascii")
-        except Exception as e:
-            Logger.error("AccountManager", f"Encryption failed: {e}")
-            return ""
+        except Exception as exc:
+            # Returning "" here stored an empty password as if it had worked:
+            # `add_account` reported success, the account was silently
+            # unusable, and it only surfaced later as a "No password" badge
+            # with no explanation — under a caption promising DPAPI
+            # encryption. Fail loudly instead so the editor can say so.
+            Logger.error("AccountManager", "Encryption failed.", exc=exc)
+            raise CredentialEncryptionError(
+                "Windows could not encrypt the password for this account. "
+                "The account was not saved."
+            ) from exc
 
     @staticmethod
     def _decrypt(encrypted_b64: str) -> str:
@@ -459,6 +601,9 @@ class AccountManager:
 
     def add_account(self, label: str, username: str, password: str, tagline: str = "", region: str = "NA1") -> int:
         """Add a new account. Returns the index of the new account.
+
+        Raises `CredentialEncryptionError` if the password cannot be
+        encrypted; nothing is stored in that case.
         
         Args:
             label: Display name for the account (e.g. 'Main')
@@ -467,15 +612,21 @@ class AccountManager:
             tagline: In-game Riot ID (e.g. 'IntrusiveThots#NTRSV'), optional
             region: The server shard region (e.g. 'NA1', 'EUW')
         """
+        # Encrypt before taking the lock and before building the record, so
+        # a failure cannot leave a half-written account behind.
+        password_enc = self._encrypt(password)
         with self._lock:
             account = {
                 "label": label.strip(),
                 "username": username.strip(),
-                "password_enc": self._encrypt(password),
+                "password_enc": password_enc,
                 "tagline": tagline.strip(),
                 "region": region.strip(),
                 "last_used": None,
-                "wallet": {"be": 0, "rp": 0},
+                # No wallet key. It was written as {"be": 0, "rp": 0} for
+                # every account and read by nothing, so the file carried a
+                # plausible-looking zero balance for a feature that was never
+                # built. `_update_wallet` fills it in if it ever runs.
                 "is_default": False
             }
             self._accounts.append(account)
@@ -690,7 +841,14 @@ class AccountManager:
             return
 
         try:
-            res = self.lcu.request("GET", "/lol-inventory/v1/wallet", silent=True)
+            # The bare endpoint returns HTTP 400: the LCU requires the
+            # currencies to be named. Without them this logged a 400 on every
+            # poll and the wallet was never populated.
+            res = self.lcu.request(
+                "GET",
+                '/lol-inventory/v1/wallet?currencyTypes=["lol_blue_essence","RP"]',
+                silent=True,
+            )
             if not (res is not None and res.status_code == 200):
                 return
             wallet_data = res.json()
@@ -727,8 +885,8 @@ class AccountManager:
                     killed_any = True
                     if log_func:
                         log_func(f"Stopped {proc_name}")
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("AccountManager", "_kill_game_processes suppressed an error", exc=exc)
         return killed_any
 
     # ─────────── Account switching ───────────
@@ -789,8 +947,8 @@ class AccountManager:
                 if handle is not None:
                     try:
                         handle.dispose()
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        Logger.debug("AccountManager", "_execute suppressed an error", exc=exc)
 
         threading.Thread(target=_execute, daemon=True).start()
 
@@ -822,8 +980,8 @@ class AccountManager:
                 if handle is not None:
                     try:
                         handle.dispose()
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        Logger.debug("AccountManager", "_execute suppressed an error", exc=exc)
 
         threading.Thread(target=_execute, daemon=True).start()
 
@@ -841,8 +999,8 @@ class AccountManager:
             if message:
                 try:
                     log_func(message)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    Logger.debug("AccountManager", "_on_progress suppressed an error", exc=exc)
 
         try:
             return EventBus.on(EVENT_SWITCH_PROGRESS, _on_progress)
@@ -900,10 +1058,10 @@ class AccountManager:
                         path = val.split('"')[1] if '"' in val else val.split(' ')[0]
                         if os.path.exists(path) and path not in candidates:
                             fallback_candidates.append(path)
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                except Exception as exc:
+                    Logger.debug("AccountManager", "_launch_riot_client suppressed an error", exc=exc)
+        except Exception as exc:
+            Logger.debug("AccountManager", "_launch_riot_client suppressed an error", exc=exc)
 
         for fc in fallback_candidates:
             if fc not in candidates:

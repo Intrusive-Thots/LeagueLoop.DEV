@@ -115,7 +115,7 @@ class QtDiagnosticsTab(QWidget):
             name.setStyleSheet(
                 TEXT_MICRO.qss(color=TEXT_SECONDARY) + " background: transparent;"
             )
-            name.setFixedWidth(150)
+            name.setFixedWidth(180)
             row_layout.addWidget(name)
 
             status = LLStatus("Checking…", Tone.NEUTRAL, "", parent=row)

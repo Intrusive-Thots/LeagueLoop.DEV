@@ -117,7 +117,7 @@ class QtPlayTab(QWidget):
         auto_row.addStretch(1)
 
         self.btn_automation = LLButton(
-            "Automation settings",
+            "Settings",
             variant=ButtonVariant.SECONDARY,
             size=ButtonSize.SM,
             parent=self.automation_card,

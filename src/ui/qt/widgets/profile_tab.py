@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -128,12 +128,15 @@ class QtProfileTab(QWidget):
         name_col = QVBoxLayout()
         name_col.setSpacing(2)
         self.summoner_name = QLabel("Not signed in", self.identity_card)
+        self.summoner_name.setMinimumWidth(0)
+        self.summoner_name.minimumSizeHint = lambda: QSize(100, self.summoner_name.sizeHint().height())
         self.summoner_name.setStyleSheet(TEXT_DISPLAY.qss(color=TEXT_PRIMARY))
         name_col.addWidget(self.summoner_name)
 
         self.summoner_detail = QLabel("Connect the League Client to see your profile",
                                       self.identity_card)
         self.summoner_detail.setWordWrap(True)
+        self.summoner_detail.setMinimumWidth(0)
         self.summoner_detail.setStyleSheet(
             TEXT_CAPTION.qss(color=TEXT_MUTED) + " background: transparent;"
         )
@@ -164,7 +167,7 @@ class QtProfileTab(QWidget):
             empty_card,
         )
         empty_body.setWordWrap(True)
-        empty_body.setWordWrap(True)
+        empty_body.setMinimumWidth(0)
         empty_body.setStyleSheet(
             TEXT_BODY.qss(color=TEXT_MUTED) + " background: transparent;"
         )
@@ -388,3 +391,8 @@ class QtProfileTab(QWidget):
                 row_layout.addWidget(label)
 
             self.matches_card.add_widget(row)
+
+    def minimumSizeHint(self):
+        from PySide6.QtCore import QSize
+        hint = super().minimumSizeHint()
+        return QSize(500, hint.height())

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -69,6 +69,7 @@ class LLSettingRow(QWidget):
         text_col.setSpacing(1)
 
         self.name_label = QLabel(name, self)
+        self.name_label.setMinimumWidth(0)
         self.name_label.setStyleSheet(
             TEXT_BODY_STRONG.qss(color=TEXT_PRIMARY) + " background: transparent;"
         )
@@ -76,6 +77,7 @@ class LLSettingRow(QWidget):
 
         self.description_label = QLabel(description, self)
         self.description_label.setWordWrap(True)
+        self.description_label.setMinimumWidth(0)
         self.description_label.setStyleSheet(
             TEXT_CAPTION.qss(color=TEXT_MUTED) + " background: transparent;"
         )
@@ -87,6 +89,7 @@ class LLSettingRow(QWidget):
         # --- detail (e.g. "3 priorities configured") ----------------------
         self.detail_label = QLabel(detail, self)
         self.detail_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.detail_label.setMinimumWidth(0)
         self.detail_label.setStyleSheet(
             TEXT_CAPTION.qss(color=TEXT_MUTED) + " background: transparent;"
         )
@@ -127,6 +130,7 @@ class LLSettingRow(QWidget):
         self.action_button: Optional[LLButton] = None
         action_slot = QWidget(self)
         action_slot.setFixedWidth(ACTION_COLUMN_WIDTH)
+        action_slot.minimumSizeHint = lambda: QSize(ACTION_COLUMN_WIDTH, action_slot.sizeHint().height())
         action_slot.setStyleSheet("background: transparent;")
         slot_layout = QHBoxLayout(action_slot)
         slot_layout.setContentsMargins(0, 0, 0, 0)
@@ -188,3 +192,8 @@ class LLSettingRow(QWidget):
         if self.toggle is not None:
             base = "{} - {}".format(base, "On" if self.toggle.isChecked() else "Off")
         self.setToolTip("{}{}".format(base, "\n" + desc if desc else ""))
+
+    def minimumSizeHint(self):
+        from PySide6.QtCore import QSize
+        hint = super().minimumSizeHint()
+        return QSize(300, hint.height())

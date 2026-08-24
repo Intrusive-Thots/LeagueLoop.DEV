@@ -12,7 +12,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Optional
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QPushButton, QWidget
 
 from ui.qt.theme.colors import (
@@ -146,6 +146,12 @@ class LLButton(QPushButton):
                 outline: none;
             }}
         """)
+
+    def minimumSizeHint(self) -> QSize:
+        hint = super().minimumSizeHint()
+        if self._size == ButtonSize.SM:
+            return QSize(min(96, hint.width()), hint.height())
+        return hint
 
 
 class LLIconButton(QPushButton):

@@ -112,13 +112,15 @@ class QtLootTab(QWidget):
         action_row.addStretch(1)
 
         self.btn_refresh = LLButton(
-            "Refresh", variant=ButtonVariant.SECONDARY, parent=action_card
+            "Refresh", variant=ButtonVariant.SECONDARY,
+            size=ButtonSize.SM, parent=action_card
         )
         self.btn_refresh.clicked.connect(self.refresh)
         action_row.addWidget(self.btn_refresh)
 
         self.btn_open = LLButton(
-            "Open all", variant=ButtonVariant.PRIMARY, parent=action_card
+            "Open all", variant=ButtonVariant.PRIMARY,
+            size=ButtonSize.SM, parent=action_card
         )
         self.btn_open.setEnabled(False)
         self.btn_open.setToolTip(
@@ -142,6 +144,7 @@ class QtLootTab(QWidget):
         # looked, the honest text is that we have not looked (§54).
         self.empty_label = QLabel("Loot has not been read yet.", self.empty_card)
         self.empty_label.setWordWrap(True)
+        self.empty_label.setMinimumWidth(0)
         self.empty_label.setStyleSheet(
             TEXT_BODY.qss(color=TEXT_MUTED) + " background: transparent;"
         )
@@ -164,6 +167,7 @@ class QtLootTab(QWidget):
         # excluded from the list below — so it gets said here explicitly.
         self.forge_note = QLabel("", self.list_card)
         self.forge_note.setWordWrap(True)
+        self.forge_note.setMinimumWidth(0)
         self.forge_note.setStyleSheet(
             TEXT_BODY.qss(color=TEXT_SECONDARY) + " background: transparent;"
         )
@@ -295,6 +299,7 @@ class QtLootTab(QWidget):
         if recipe:
             detail = QLabel(recipe, widget)
             detail.setWordWrap(True)
+            detail.setMinimumWidth(0)
             detail.setStyleSheet(
                 TEXT_CAPTION.qss(color=TEXT_MUTED) + " background: transparent;"
             )
@@ -402,3 +407,8 @@ class QtLootTab(QWidget):
         Logger.info("LootTab", f"Open finished: {detail}",
                     opened=opened, failed=failed, skipped=skipped,
                     keys_crafted=keys)
+
+    def minimumSizeHint(self):
+        from PySide6.QtCore import QSize
+        hint = super().minimumSizeHint()
+        return QSize(500, hint.height())
