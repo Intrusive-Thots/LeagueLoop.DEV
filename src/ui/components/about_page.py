@@ -18,8 +18,8 @@ class AboutPage(ctk.CTkToplevel):
             x = master.winfo_rootx() + (master.winfo_width() // 2) - (self.winfo_width() // 2)
             y = master.winfo_rooty() + (master.winfo_height() // 2) - (self.winfo_height() // 2)
             self.geometry(f"+{int(x)}+{int(y)}")
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("AboutPage", "__init__ suppressed an error", exc=exc)
             
         self._setup_ui()
         self.focus_force()

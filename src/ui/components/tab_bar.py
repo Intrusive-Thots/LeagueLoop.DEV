@@ -7,6 +7,7 @@ Optional short labels via `labels` map: internal name → display text.
 import customtkinter as ctk  # type: ignore
 from .factory import get_color, get_font
 from .hover import apply_click_animation
+from utils.logger import Logger
 
 
 class TabBar(ctk.CTkFrame):
@@ -44,8 +45,8 @@ class TabBar(ctk.CTkFrame):
                 try:
                     from ui.ui_shared import CTkTooltip
                     CTkTooltip(btn, tab_name)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    Logger.debug("TabBar", "__init__ suppressed an error", exc=exc)
 
         self.current_tab = None
         if default_tab and default_tab in self.buttons:

@@ -204,7 +204,7 @@ class TestLCUClient(unittest.TestCase):
 
         # Queue mutation requests while offline
         self.client.request("POST", "/lol-lobby/v2/lobby", {"queueId": 420}, silent=True)
-        self.client.request("POST", "/lol-champ-select/v1/session/actions/1/complete", silent=True)
+        self.client.request("POST", "/lol-chat/v1/me", {"statusMessage": "Testing"}, silent=True)
 
         telemetry = self.client.get_offline_retry_telemetry()
         self.assertEqual(telemetry["current_queue_len"], 2)

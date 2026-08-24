@@ -4,6 +4,7 @@ import customtkinter as ctk
 
 from utils.path_utils import get_asset_path, get_data_dir
 from ui.components.factory import get_color, get_font, make_input
+from utils.logger import Logger
 
 _CLEAN_TRANS = str.maketrans("", "", " '.")
 
@@ -147,7 +148,7 @@ class ChampionInput(ctk.CTkFrame):
             try:
                 self.after_cancel(self._debounce_timer)
                 self._debounce_timer = None
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("ChampionInput", "destroy suppressed an error", exc=exc)
         super().destroy()
 

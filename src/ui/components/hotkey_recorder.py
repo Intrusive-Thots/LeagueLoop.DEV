@@ -5,6 +5,7 @@ import keyboard  # type: ignore
 from ui.ui_shared import CTkTooltip  # type: ignore
 from ui.components.factory import get_color, get_font  # type: ignore
 from ui.components.hover import apply_click_animation  # type: ignore
+from utils.logger import Logger
 
 class HotkeyRecorder(ctk.CTkButton):
     """A button that records keyboard shortcuts when clicked.
@@ -200,15 +201,15 @@ class HotkeyRecorder(ctk.CTkButton):
             try:
                 keyboard.unhook(self._hook)
                 self._hook = None
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("HotkeyRecorder", "destroy suppressed an error", exc=exc)
 
         if getattr(self, "_pulse_job", None) is not None:
             try:
                 self.after_cancel(self._pulse_job)
                 self._pulse_job = None
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("HotkeyRecorder", "destroy suppressed an error", exc=exc)
 
         if not hasattr(self, "_font") or not self.winfo_exists():
             return
@@ -218,5 +219,5 @@ class HotkeyRecorder(ctk.CTkButton):
         except Exception:
             try:
                 tk.Button.destroy(self)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("HotkeyRecorder", "destroy suppressed an error", exc=exc)

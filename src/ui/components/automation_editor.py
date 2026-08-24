@@ -6,6 +6,7 @@ import customtkinter as ctk  # type: ignore
 
 from ui.components.factory import get_color, get_font, make_card  # type: ignore
 from core.constants import SPACING_SM, SPACING_MD, INNER_GAP  # type: ignore
+from utils.logger import Logger
 
 
 class AutomationEditor(ctk.CTkToplevel):
@@ -22,28 +23,28 @@ class AutomationEditor(ctk.CTkToplevel):
         self.title(f"Edit: {self._get_display_name()}")
         try:
             self.overrideredirect(True)
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("AutomationEditor", "__init__ suppressed an error", exc=exc)
         self.geometry("380x480")
         self.resizable(False, False)
         self.configure(fg_color=get_color("colors.accent.gold", "#C8AA6E"))
         
         try:
             self.attributes("-topmost", True)
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("AutomationEditor", "__init__ suppressed an error", exc=exc)
 
         # Center on parent and bring to front
         self.transient(master.winfo_toplevel())
         self.grab_set()
         try:
             self.lift()
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("AutomationEditor", "__init__ suppressed an error", exc=exc)
         try:
             self.focus_force()
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("AutomationEditor", "__init__ suppressed an error", exc=exc)
         self.after(10, self._center_on_parent)
 
         self._build_ui()
@@ -57,18 +58,18 @@ class AutomationEditor(ctk.CTkToplevel):
             self.geometry(f"380x480+{px}+{py}")
             try:
                 self.attributes("-topmost", True)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("AutomationEditor", "_center_on_parent suppressed an error", exc=exc)
             try:
                 self.lift()
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("AutomationEditor", "_center_on_parent suppressed an error", exc=exc)
             try:
                 self.focus_force()
-            except Exception:
-                pass
-        except Exception:
-            pass
+            except Exception as exc:
+                Logger.debug("AutomationEditor", "_center_on_parent suppressed an error", exc=exc)
+        except Exception as exc:
+            Logger.debug("AutomationEditor", "_center_on_parent suppressed an error", exc=exc)
 
     def _setup_drag(self, widget):
         """Allow window dragging via the header bar."""
@@ -423,8 +424,8 @@ class AutomationEditor(ctk.CTkToplevel):
             from ui.components.ban_list_window import BanListWindow
             root = self.master.winfo_toplevel() if self.master else self
             BanListWindow.open_window(root, self.config, self.assets)
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("AutomationEditor", "_open_ban_list_editor suppressed an error", exc=exc)
 
     def _build_common_show_icon(self):
         """Standard setting for enabling/disabling the mainpage quick access icon."""
@@ -505,8 +506,8 @@ class AutomationEditor(ctk.CTkToplevel):
         if self.master and hasattr(self.master, "_update_all_quick_icons"):
             try:
                 self.master._update_all_quick_icons()
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("AutomationEditor", "_on_save suppressed an error", exc=exc)
 
         # Show toast
         try:
@@ -515,8 +516,8 @@ class AutomationEditor(ctk.CTkToplevel):
                 f"{self._get_display_name()} settings saved",
                 theme="success", icon="✓"
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("AutomationEditor", "_on_save suppressed an error", exc=exc)
 
         self.grab_release()
         self.destroy()

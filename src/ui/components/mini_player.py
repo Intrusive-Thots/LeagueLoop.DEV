@@ -1,6 +1,7 @@
 import customtkinter as ctk # type: ignore
 from ui.components.factory import get_color, get_font # type: ignore
 from ui.ui_shared import CTkTooltip # type: ignore
+from utils.logger import Logger
 
 class MiniPlayer(ctk.CTkToplevel):
     def __init__(self, master, config=None, **kwargs):
@@ -66,8 +67,8 @@ class MiniPlayer(ctk.CTkToplevel):
     def update_state(self, phase: str):
         try:
             self.lbl_status.configure(text=f"Phase: {phase}")
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("MiniPlayer", "update_state suppressed an error", exc=exc)
 
     def show(self):
         self.deiconify()

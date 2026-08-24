@@ -127,13 +127,20 @@ ERROR_LOG_PATH = os.path.join(_LOG_DIR, "error.log")
 JSONL_LOG_PATH = os.path.join(_LOG_DIR, "session.jsonl")
 
 
+def _safe_timestamp(created: float) -> datetime:
+    try:
+        return datetime.fromtimestamp(created).astimezone()
+    except (OSError, ValueError):
+        return datetime.fromtimestamp(max(86400.0, created)).astimezone()
+
+
 # ---------------------------------------------------------------- handlers
 
 class _LocalTimeFormatter(logging.Formatter):
     """Full local timestamp with milliseconds and UTC offset."""
 
     def formatTime(self, record, datefmt=None):  # noqa: N802 (stdlib name)
-        stamp = datetime.fromtimestamp(record.created).astimezone()
+        stamp = _safe_timestamp(record.created)
         if datefmt:
             return stamp.strftime(datefmt)
         return stamp.strftime("%Y-%m-%d %H:%M:%S.") + (
@@ -145,7 +152,7 @@ class _JsonLinesFormatter(logging.Formatter):
     """One JSON object per record, for tooling and the support bundle."""
 
     def format(self, record: logging.LogRecord) -> str:
-        stamp = datetime.fromtimestamp(record.created).astimezone()
+        stamp = _safe_timestamp(record.created)
         payload: Dict[str, Any] = {
             "ts": stamp.isoformat(timespec="milliseconds"),
             "level": getattr(record, "ll_level", record.levelname),

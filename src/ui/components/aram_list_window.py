@@ -6,6 +6,7 @@ import ctypes
 import customtkinter as ctk
 from ui.components.factory import get_color, get_font
 from ui.components.priority_grid import PriorityIconGrid
+from utils.logger import Logger
 
 _LEAGUE_TITLES = {"league of legends"}
 _RIOT_TITLES = {"riot client"}
@@ -48,8 +49,8 @@ def _get_league_client_rect():
             rect = ctypes.wintypes.RECT()
             user32.GetWindowRect(hwnd, ctypes.byref(rect))
             return (rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top)
-    except Exception:
-        pass
+    except Exception as exc:
+        Logger.debug("AramListWindow", "_get_league_client_rect suppressed an error", exc=exc)
     return None
 
 
@@ -67,15 +68,15 @@ class AramListWindow(ctk.CTkToplevel):
         # Borderless: single custom header only (no Windows title bar double-header)
         try:
             self.overrideredirect(True)
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("AramListWindow", "__init__ suppressed an error", exc=exc)
         self.resizable(True, True)
         self.configure(fg_color=get_color("colors.accent.gold", "#C8AA6E"))
 
         try:
             self.attributes("-topmost", True)
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("AramListWindow", "__init__ suppressed an error", exc=exc)
 
         self._build_ui()
         self._setup_dragging()
@@ -86,8 +87,8 @@ class AramListWindow(ctk.CTkToplevel):
         try:
             self.lift()
             self.focus_force()
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("AramListWindow", "__init__ suppressed an error", exc=exc)
 
     def _build_ui(self):
         self.outer_frame = ctk.CTkFrame(
@@ -192,8 +193,8 @@ class AramListWindow(ctk.CTkToplevel):
         try:
             if self.winfo_exists():
                 self.geometry(f"{drawer_w}x{drawer_h}+{target_x}+{target_y}")
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("AramListWindow", "_apply_geometry suppressed an error", exc=exc)
 
     def _set_initial_geometry(self):
         w, h = 800, 480

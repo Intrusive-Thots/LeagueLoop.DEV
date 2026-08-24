@@ -1,5 +1,6 @@
 import tkinter as tk
 from ui.components.factory import get_color
+from utils.logger import Logger
 
 class LolToggle(tk.Canvas):
     """Custom Riot-style animated sliding toggle switch using pure Canvas for maximum fidelity."""
@@ -16,8 +17,8 @@ class LolToggle(tk.Canvas):
             self._state = self.variable.get()
             try:
                 self.variable.trace_add("write", self._on_var_changed)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("LolToggle", "__init__ suppressed an error", exc=exc)
 
         self.color_inactive = get_color("colors.background.card", "#1E2328")
         self.color_active = "#A88A4E" # C8AA6E dimmed
@@ -121,8 +122,8 @@ class LolToggle(tk.Canvas):
             try:
                 self.after_cancel(self._anim_job)
                 self._anim_job = None
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("LolToggle", "destroy suppressed an error", exc=exc)
         super().destroy()
 
 

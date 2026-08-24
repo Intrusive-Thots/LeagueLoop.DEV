@@ -218,8 +218,8 @@ class LootTool(ctk.CTkFrame):
 
         try:
             self.after(0, _ui)
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("LootTool", "_on_log suppressed an error", exc=exc)
 
     def _set_busy(self, busy: bool) -> None:
         self._busy = busy
@@ -229,8 +229,8 @@ class LootTool(ctk.CTkFrame):
             self.btn_claim.configure(state=state)
             self.btn_refresh.configure(state=state)
             self.btn_stop.configure(state="normal" if busy else "disabled")
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("LootTool", "_set_busy suppressed an error", exc=exc)
 
     def _request_stop(self) -> None:
         self._stop = True
@@ -247,14 +247,14 @@ class LootTool(ctk.CTkFrame):
         for w in self._row_widgets:
             try:
                 w.destroy()
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("LootTool", "_clear_list suppressed an error", exc=exc)
         self._row_widgets.clear()
         try:
             if self.empty_lbl.winfo_exists():
                 self.empty_lbl.pack_forget()
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("LootTool", "_clear_list suppressed an error", exc=exc)
 
     def _render_rows(self, rows: List[Dict[str, Any]]) -> None:
         self._clear_list()
@@ -373,14 +373,14 @@ class LootTool(ctk.CTkFrame):
                         duration=3500,
                         theme="success" if "Claimed" in msg else "neutral",
                     )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    Logger.debug("LootTool", "done suppressed an error", exc=exc)
                 self.refresh()
 
             try:
                 self.after(0, done)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("LootTool", "work suppressed an error", exc=exc)
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -421,8 +421,8 @@ class LootTool(ctk.CTkFrame):
 
             try:
                 self.after(0, done)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("LootTool", "work suppressed an error", exc=exc)
 
         self.status_lbl.configure(text="Scanning…")
         threading.Thread(target=work, daemon=True).start()
@@ -474,14 +474,14 @@ class LootTool(ctk.CTkFrame):
                         duration=4000,
                         theme="success" if "Opened" in summary else "error",
                     )
-                except Exception:
-                    pass
+                except Exception as exc:
+                    Logger.debug("LootTool", "done suppressed an error", exc=exc)
                 self.refresh()
 
             try:
                 self.after(0, done)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("LootTool", "work suppressed an error", exc=exc)
 
         self.status_lbl.configure(text="Opening…")
         threading.Thread(target=work, daemon=True).start()

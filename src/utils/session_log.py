@@ -333,6 +333,32 @@ def install_crash_handlers(enable_faulthandler: bool = True) -> None:
     atexit.register(session_summary, "process exit")
 
 
+def install_qt_message_handler() -> None:
+    """Redirect Qt debug/warning/critical messages to Python logging.
+
+    Otherwise warnings from native C++ code print to stderr and are lost
+    when starting from a Windows shortcut.
+    """
+    try:
+        from PySide6.QtCore import qInstallMessageHandler, QtMsgType
+
+        def _qt_message_handler(msg_type, context, msg):
+            if msg_type == QtMsgType.QtDebugMsg:
+                Logger.debug("Qt", msg)
+            elif msg_type == QtMsgType.QtInfoMsg:
+                Logger.info("Qt", msg)
+            elif msg_type == QtMsgType.QtWarningMsg:
+                Logger.warning("Qt", msg)
+            elif msg_type == QtMsgType.QtCriticalMsg:
+                Logger.error("Qt", msg)
+            elif msg_type == QtMsgType.QtFatalMsg:
+                Logger.critical("Qt", msg)
+
+        qInstallMessageHandler(_qt_message_handler)
+    except Exception as exc:
+        Logger.debug(TAG, f"Could not install Qt message handler: {exc}")
+
+
 # ------------------------------------------------------------ support data
 
 def support_bundle(dest_dir: Optional[str] = None) -> str:

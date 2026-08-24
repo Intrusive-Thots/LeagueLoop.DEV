@@ -64,7 +64,7 @@ class TestQtStatsScraperWiring(unittest.TestCase):
 
         # Test sort by winrate (Sona 55.0% > Ryze 47.0%)
         tab._on_sort_by_winrate()
-        self.assertEqual(tab._current_ids(), [37, 13])
+        self.assertEqual(tab.current_ids(), [37, 13])
 
     def test_champion_list_tab_scraper_and_sort(self):
         from ui.qt.widgets.champion_list_tab import QtPriorityTab

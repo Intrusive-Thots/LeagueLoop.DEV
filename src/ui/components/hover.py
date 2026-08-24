@@ -202,5 +202,5 @@ def stop_queue_pulse(widget, restore_color=None):
                 widget.inner.configure(fg_color=restore_color)
             else:
                 widget.configure(fg_color=restore_color)
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("Hover", "stop_queue_pulse suppressed an error", exc=exc)

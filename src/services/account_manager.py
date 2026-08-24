@@ -381,9 +381,10 @@ class CredentialEncryptionError(RuntimeError):
 class AccountManager:
     """Manages encrypted Riot account credentials and login automation."""
 
-    def __init__(self, lcu=None, launch_client_func=None):
+    def __init__(self, lcu=None, launch_client_func=None, state_manager=None):
         self.lcu = lcu
         self._launch_client_func = launch_client_func
+        self.state_manager = state_manager
         self.riot_client = RiotClientAPI()
         self._accounts: List[Dict[str, Any]] = []
         self._active_idx: int = -1
@@ -395,11 +396,28 @@ class AccountManager:
         # Migration: Ensure existing accounts have new fields
         self._load()
         self._migrate_accounts()
+        self._sync_state()
 
         # Switching/sign-out sequencing lives in services.accounts so the two
         # operations cannot drift apart. This class keeps ownership of
         # storage, encryption and the account list.
         self._switcher = self._build_switcher()
+
+    def _sync_state(self) -> None:
+        """Publish account state to central StateManager."""
+        if self.state_manager is not None:
+            try:
+                active_name = None
+                if 0 <= self._active_idx < len(self._accounts):
+                    active_name = self._accounts[self._active_idx].get("username")
+                all_names = tuple(a.get("username", "") for a in self._accounts)
+                self.state_manager.update_account(
+                    active_account=active_name,
+                    all_accounts=all_names,
+                    is_switching=bool(getattr(self, "is_switching", False)),
+                )
+            except Exception as exc:
+                Logger.debug("AccountManager", "_sync_state suppressed an error", exc=exc)
 
     def _build_switcher(self):
         """Construct the AccountSwitcher, or None if the subsystem is absent."""
@@ -433,11 +451,13 @@ class AccountManager:
                 self._accounts[idx]["last_used"] = datetime.now().isoformat()
             self._active_idx = idx
             self._save()
+        self._sync_state()
 
     def _mark_signed_out(self) -> None:
         with self._lock:
             self._active_idx = -1
             self._save()
+        self._sync_state()
 
     def _migrate_accounts(self):
         """

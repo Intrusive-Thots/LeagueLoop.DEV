@@ -4,6 +4,7 @@ from ui.components.factory import get_color, get_font, get_radius
 from ui.components.champion_input import ChampionInput
 from ui.ui_shared import CTkTooltip
 from core.constants import SPACING_SM, SPACING_MD
+from utils.logger import Logger
 
 class DraftTool(ctk.CTkFrame):
     """Draft Assistant: Auto-hovers and auto-bans based on assigned position."""
@@ -135,8 +136,8 @@ class DraftTool(ctk.CTkFrame):
         try:
             from ui.components.toast import ToastManager
             ToastManager.get_instance().show("Draft Profiles Saved", theme="success", icon="🛡️")
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("DraftTool", "_save_config suppressed an error", exc=exc)
 
         # Item #132: Store timer ID so it can be cancelled if widget is destroyed
         self._revert_timer = self.after(1000, self._revert_save_button, orig_text, orig_color)
@@ -151,7 +152,7 @@ class DraftTool(ctk.CTkFrame):
             try:
                 self.after_cancel(self._revert_timer)
                 self._revert_timer = None
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("DraftTool", "destroy suppressed an error", exc=exc)
         super().destroy()
 

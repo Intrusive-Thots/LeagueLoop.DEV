@@ -104,26 +104,19 @@ class TestTokenLoader(unittest.TestCase):
 class TestLoggerGetLogs(unittest.TestCase):
     def setUp(self):
         self.original_logs = getattr(Logger, '_logs', None)
-        self.original_prune = getattr(Logger, '_prune', None)
         Logger._logs = []
-        Logger._prune = MagicMock()
 
     def tearDown(self):
         if self.original_logs is not None:
             Logger._logs = self.original_logs
         else:
             delattr(Logger, '_logs')
-        if self.original_prune is not None:
-            Logger._prune = self.original_prune
-        else:
-            delattr(Logger, '_prune')
 
     def test_get_logs_empty(self):
         if not hasattr(Logger, 'get_logs'):
             self.skipTest("Logger does not have get_logs attribute")
         logs = Logger.get_logs()
         self.assertEqual(logs, [])
-        Logger._prune.assert_called_once()
 
     def test_get_logs_no_filter_no_limit(self):
         if not hasattr(Logger, 'get_logs'):

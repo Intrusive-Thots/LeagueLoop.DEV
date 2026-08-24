@@ -182,6 +182,7 @@ class QtChampionListTab(QWidget):
         right.add_widget(self.aram_rules)
 
         self.list_widget = QListWidget(right)
+        self.prio_list_widget = self.list_widget
         self.list_widget.setDragDropMode(QAbstractItemView.InternalMove)
         self.list_widget.setSelectionMode(QAbstractItemView.SingleSelection)
         self.list_widget.model().rowsMoved.connect(self._on_rows_moved)

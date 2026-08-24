@@ -3,6 +3,7 @@ import customtkinter as ctk  # type: ignore
 
 from ui.components.factory import get_color, get_font, get_radius, make_button, make_divider  # type: ignore
 from ui.ui_shared import CTkTooltip  # type: ignore
+from utils.logger import Logger
 
 CARD_PAD = 10
 
@@ -102,8 +103,8 @@ class SessionHeader(ctk.CTkFrame):
             try:
                 from services.queue_manager import get_categorized_lobby_types
                 self._mode_groups = get_categorized_lobby_types()
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("SessionHeader", "update_available_modes suppressed an error", exc=exc)
 
     def _show_mode_menu(self, event):
         menu = tk.Menu(self, tearoff=0, bg="#1A2332", fg="#F0E6D2",

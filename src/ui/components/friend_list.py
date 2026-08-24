@@ -208,8 +208,8 @@ class FriendPriorityList(ctk.CTkFrame):
         )
         try:
             self.scroll._scrollbar.configure(width=6)
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("FriendList", "_build_ui suppressed an error", exc=exc)
         self.scroll.pack(fill="both", expand=True)
         apply_smooth_scroll(self.scroll)
 
@@ -305,16 +305,16 @@ class FriendPriorityList(ctk.CTkFrame):
         # Marshal render to main thread
         try:
             EventBus.invoke_thread_safe(self, self._safe_render)
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("FriendList", "_process_friends suppressed an error", exc=exc)
 
     def _safe_render(self):
         """Thread-safe render wrapper."""
         try:
             if self.winfo_exists():
                 self._render_list()
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("FriendList", "_safe_render suppressed an error", exc=exc)
 
     # ─────────── Auto-Join Toggle ───────────
 
@@ -378,8 +378,8 @@ class FriendPriorityList(ctk.CTkFrame):
         for w in self._row_widgets:
             try:
                 w.destroy()
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("FriendList", "_render_list suppressed an error", exc=exc)
         self._row_widgets.clear()
 
         for w in self.list_parent.winfo_children():
@@ -488,20 +488,20 @@ class FriendPriorityList(ctk.CTkFrame):
             try:
                 from ui.components.toast import ToastManager
                 ToastManager.get_instance().show("Automation engine not available.", icon="⚠️", theme="error")
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("FriendList", "_on_mass_invite suppressed an error", exc=exc)
 
     def destroy(self):
         try:
             from core.events import EventBus
             EventBus.off("friends_event", self._on_friends_event)
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("FriendList", "destroy suppressed an error", exc=exc)
         if getattr(self, "_refresh_timer", None) is not None:
             try:
                 self.after_cancel(self._refresh_timer)
                 self._refresh_timer = None
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("FriendList", "destroy suppressed an error", exc=exc)
         super().destroy()
 
