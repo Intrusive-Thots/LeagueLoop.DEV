@@ -6,14 +6,10 @@ double-click restore, automation toggle, and clean minimize-to-tray handling.
 """
 from __future__ import annotations
 
-import os
-from typing import Optional, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 
 from PySide6.QtCore import QObject, Qt
-from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
-
-from utils.path_utils import get_asset_path
 
 if TYPE_CHECKING:
     from ui.qt.main_window import LeagueLoopMainWindow
@@ -29,9 +25,11 @@ class QtSystemTray(QSystemTrayIcon):
         self._setup_tray()
 
     def _setup_tray(self) -> None:
-        icon_path = get_asset_path("assets/app.ico") or get_asset_path("assets/icon.png")
-        if icon_path and os.path.exists(icon_path):
-            self.setIcon(QIcon(icon_path))
+        # Same resolved file as the application and the window, so the tray
+        # can never end up showing a different icon from the taskbar.
+        from ui.qt.services.app_icon import apply_to
+
+        apply_to(self)
         self.setToolTip("LeagueLoop")
 
         menu = QMenu()

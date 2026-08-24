@@ -85,8 +85,8 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         try:
             myappid = "league.loop.app.v1"
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("Main", "__init__ suppressed an error", exc=exc)
             
         self.title("LeagueLoop")
         try:
@@ -161,7 +161,15 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         # Already built by bootstrap(); just take the reference.
         self.account_manager = self.container.account_manager
         if hasattr(self, "sidebar"):
-            self.sidebar.set_account_manager(self.account_manager)
+            # The reason travels with the None. Without it the panel could
+            # only say "unavailable", which tells the user nothing they can
+            # act on.
+            reason = ""
+            if self.account_manager is None:
+                getter = getattr(self.container, "failure_reason", None)
+                if callable(getter):
+                    reason = getter("accounts")
+            self.sidebar.set_account_manager(self.account_manager, reason)
 
         self._setup_window_dragging()
         self.after(500, lambda: apply_focus_states_recursive(self.sidebar))
@@ -219,6 +227,17 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                 self.automation.pause()
 
     def _auto_load_default_account(self):
+        # Scheduled with `after()` at startup, so it fires whatever happened
+        # during bootstrap. With the account service down this raised
+        # AttributeError inside a Tk callback — swallowed into the log, and
+        # the user just saw auto-login silently never happen.
+        if self.account_manager is None:
+            Logger.info(
+                "SYS",
+                "Skipping auto-login: the account service is not available "
+                "this run.",
+            )
+            return
         if not self.lcu.is_connected:
             default_idx = self.account_manager.get_default_account_index()
             if default_idx >= 0:
@@ -252,12 +271,12 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
             Logger.debug("SYS", f"Engine stop error: {e}")
         try:
             keyboard.unhook_all()
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("Main", "_on_close suppressed an error", exc=exc)
         try:
             self.destroy()
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("Main", "_on_close suppressed an error", exc=exc)
         Logger.info("SYS", "Shutdown complete.")
         os._exit(0)
 
@@ -393,8 +412,8 @@ def _kill_other_instances():
         try:
             for parent in current_proc.parents():
                 ignored_pids.add(parent.pid)
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("Main", "_kill_other_instances suppressed an error", exc=exc)
 
         for proc in psutil.process_iter(["pid", "name", "cmdline"]):
             try:
@@ -416,5 +435,5 @@ def _kill_other_instances():
                     proc.terminate()
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
-    except Exception:
-        pass
+    except Exception as exc:
+        Logger.debug("Main", "_kill_other_instances suppressed an error", exc=exc)

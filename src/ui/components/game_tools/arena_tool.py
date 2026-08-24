@@ -5,6 +5,7 @@ from ui.components.factory import get_color, get_font
 from ui.components.champion_input import ChampionInput
 from ui.components.toast import ToastManager
 from utils.path_utils import get_asset_path
+from utils.logger import Logger
 
 _CLEAN_TRANS = str.maketrans("", "", " '.")
 
@@ -163,8 +164,15 @@ class ArenaTool(ctk.CTkFrame):
             scrollbar_button_color=get_color("colors.text.disabled"),
             scrollbar_button_hover_color=get_color("colors.text.muted"), scrollbar_fg_color="transparent"
         )
-        try: self.list_frame._scrollbar.configure(width=6)
-        except Exception: pass
+        try:
+            # Reaching into CustomTkinter's private `_scrollbar` is fragile by
+            # nature — it is not API and has moved between releases — so a
+            # failure here means a slightly wider scrollbar, not a broken
+            # screen. Worth a line in the log all the same, because "the
+            # scrollbar looks wrong after an upgrade" is otherwise unfindable.
+            self.list_frame._scrollbar.configure(width=6)
+        except Exception as exc:
+            Logger.debug("ArenaTool", "Could not thin the scrollbar", exc=exc)
         self.list_frame.pack(fill="x", padx=10, pady=(0, 10))
 
     # ───────────── Callbacks ─────────────
@@ -253,8 +261,8 @@ class ArenaTool(ctk.CTkFrame):
         
         try:
             ToastManager.get_instance().show(f"Added: {tm_resolved} → {me_resolved}", icon="🤝", theme="success")
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("ArenaTool", "_add_pair suppressed an error", exc=exc)
 
     def _toggle_pair(self, idx):
         pairs = self._get_pairs()

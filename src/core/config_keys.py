@@ -41,9 +41,36 @@ AUTO_RANDOM_SKIN = "auto_random_skin"
 #: Skip banning a champion a teammate is hovering.
 AUTO_BAN_RESPECT_HOVERS = "auto_ban_respect_hovers"
 
+#: Auto-join a friend's lobby, and whose lobbies count.
+AUTO_JOIN_ENABLED = "auto_join_enabled"
+AUTO_JOIN_LIST = "auto_join_list"
+#: Honor a teammate after the game, and how the target is chosen.
+AUTO_HONOR_ENABLED = "auto_honor_enabled"
+HONOR_STRATEGY = "honor_strategy"
+#: Click through the post-game screens.
+SKIP_STATS_ENABLED = "skip_stats_enabled"
+#: ARAM: swap to a higher-priority champion from the bench, and reroll.
+ARAM_BENCH_SWAP = "aram_bench_swap"
+ARAM_AUTO_REROLL = "aram_auto_reroll"
+#: Watch lobby chat for abuse and warn. Off by default: it reads every
+#: message in the lobby, which the user should opt into knowingly.
+CHAT_WARDEN_ENABLED = "chat_warden_enabled"
+#: Leave the draft when a named player is on your team. This force-closes
+#: the League Client, so it is gated on its own switch as well as the list.
+DODGE_BLACKLIST_ENABLED = "dodge_blacklist_enabled"
+DODGE_BLACKLIST = "dodge_blacklist"
+
 # --- shell ---------------------------------------------------------------
 QT_LAST_TAB = "qt_last_tab"
 RUN_IN_TRAY = "run_in_tray"
+#: Keep the window pinned above the League Client, which raises itself when a
+#: lobby or a draft starts.
+ALWAYS_ON_TOP = "always_on_top"
+#: Follow the League Client's window: move with it, hide when it minimises,
+#: come back when it restores. Off means the window stays where it was put.
+ATTACH_TO_CLIENT = "attach_to_client"
+#: Which side of the client the companion prefers to sit on.
+COMPANION_SIDE = "companion_side"
 
 
 def role_priority_key(role: str) -> str:

@@ -69,24 +69,36 @@ DEFAULT_CONFIG = {
     "hotkey_toggle_automation": "ctrl+shift+a",
     "hotkey_find_match": "ctrl+shift+f",
     "hotkey_compact_mode": "ctrl+shift+m",
+    # The bench sniper's legacy home. `enabled` defaulted to True with ten
+    # champions nobody chose, so a fresh install would swap toward a
+    # developer's favourites in ARAM without ever being switched on. Both are
+    # now empty/off; the ARAM screen writes `aram_bench_swap` and
+    # `aram_priority_list`, and this survives only to keep old configs working.
     "priority_picker": {
-        "enabled": True,
-        "list": [
-            "Nautilus",
-            "Xerath",
-            "Nunu & Willump",
-            "Master Yi",
-            "Veigar",
-            "Lux",
-            "Heimerdinger",
-            "Nidalee",
-            "Pyke",
-            "Jhin"
-        ]
+        "enabled": False,
+        "list": []
     },
+    # Engine and UI must agree on these, or the screen shows a switch in the
+    # opposite position to the behaviour. They were read with a default of
+    # True in the engine and rendered with False in the UI.
+    "auto_ban_enabled": False,
+    "auto_ban_respect_hovers": True,
+    "automation_master": True,
+    "auto_join_enabled": False,
+    "auto_join_list": [],
+    "auto_honor_enabled": True,
+    "honor_strategy": "random",
+    "aram_bench_swap": False,
+    "aram_auto_reroll": False,
+    "chat_warden_enabled": False,
+    "dodge_blacklist_enabled": False,
+    "dodge_blacklist": "",
     "arena_pairs": [],
     "arena_auto_lock": False,
-    "arena_synergy_enabled": True,
+    # No Arena screen exists, so this cannot be turned off from anywhere.
+    # Shipping it on meant Arena automation ran unannounced and
+    # unconfigurable. See INCOMPLETE.md §2.
+    "arena_synergy_enabled": False,
     "run_in_tray": True,
     "skip_stats_enabled": True,
     "auto_runes_enabled": False,

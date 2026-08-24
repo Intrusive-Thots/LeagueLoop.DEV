@@ -26,7 +26,7 @@ from ui.qt.theme.colors import (
     COLOR_WARNING,
     TEXT_MUTED,
 )
-from ui.qt.theme.spacing import SPACE_SM, SPACE_XS
+from ui.qt.theme.spacing import SPACE_SM, SPACE_XS, ICON_SM
 from ui.qt.theme.typography import TEXT_DISPLAY, TEXT_MICRO
 
 #: Seconds at or below which each state applies.
@@ -89,7 +89,7 @@ class LLTimer(QWidget):
         top.setAlignment(Qt.AlignRight)
 
         self.icon = QLabel(self)
-        self.icon.setFixedWidth(14)
+        self.icon.setFixedWidth(ICON_SM)
         self.icon.setAlignment(Qt.AlignCenter)
         top.addWidget(self.icon)
 

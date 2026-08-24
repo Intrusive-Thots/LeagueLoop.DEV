@@ -214,8 +214,8 @@ class DraftActions:
             body_json = res.json() if res is not None else None
             if isinstance(body_json, dict):
                 detail = str(body_json.get("message") or "")
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("DraftActions", "_apply suppressed an error", exc=exc)
         return DraftResult(False, DraftError.REJECTED, detail)
 
     # ------------------------------------------------------------ queries

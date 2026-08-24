@@ -12,6 +12,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QDialog,
     QDoubleSpinBox,
+    QSizePolicy,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from core.config_keys import ATTACH_TO_CLIENT
 from ui.qt.components.button import ButtonSize, ButtonVariant, LLButton
 from ui.qt.components.card import LLCard, LLSeparator
 from ui.qt.components.setting_row import LLSettingRow
@@ -47,6 +49,11 @@ class QtSettingsTab(QWidget):
     """User preferences, grouped by mental model."""
 
     status_saved = Signal(str)
+    #: Emitted when "Run in system tray" changes, so the window can show or
+    #: hide the tray icon now rather than at the next launch.
+    tray_preference_changed = Signal(bool)
+    #: Emitted after a hotkey is rebound, so the window can re-register it.
+    hotkeys_changed = Signal()
 
     def __init__(
         self,
@@ -91,7 +98,7 @@ class QtSettingsTab(QWidget):
             "Closing the window keeps LeagueLoop running in the tray.",
             parent=general,
         )
-        self.row_tray.toggled.connect(lambda v: self._set_cfg("run_in_tray", v))
+        self.row_tray.toggled.connect(self._on_tray_toggled)
         general.add_widget(self.row_tray)
         general.add_widget(LLSeparator(parent=general))
 
@@ -111,6 +118,19 @@ class QtSettingsTab(QWidget):
         )
         self.row_ontop.toggled.connect(lambda v: self._set_cfg("always_on_top", v))
         general.add_widget(self.row_ontop)
+        general.add_widget(LLSeparator(parent=general))
+
+        # The window follows the client by default. Without a control for it,
+        # anyone who wanted the panel on a second monitor had no way to say so
+        # — it would be dragged back beside the client on the next tick.
+        self.row_attach = LLSettingRow(
+            "Attach to the League Client",
+            "Sits beside the client window and follows it when it moves, "
+            "hides while it is minimised, and comes back with it.",
+            parent=general,
+        )
+        self.row_attach.toggled.connect(self._on_attach_toggled)
+        general.add_widget(self.row_attach)
         body.addWidget(general)
 
         # --- Timing --------------------------------------------------------
@@ -120,8 +140,15 @@ class QtSettingsTab(QWidget):
         self.spin_delay.setRange(0.0, 10.0)
         self.spin_delay.setSingleStep(0.5)
         self.spin_delay.setSuffix(" s")
-        self.spin_delay.setFixedWidth(90)
-        self.spin_delay.setFixedHeight(CONTROL_HEIGHT_MD)
+        # Was setFixedWidth(90)/setFixedHeight(32). The theme's padding plus
+        # the two spin buttons need 99x37, so the fixed size clipped the
+        # arrows and the " s" suffix. A minimum keeps it compact without
+        # asking for less room than the control needs to draw itself.
+        self.spin_delay.setMinimumWidth(max(90, self.spin_delay.sizeHint().width()))
+        self.spin_delay.setMinimumHeight(
+            max(CONTROL_HEIGHT_MD, self.spin_delay.minimumSizeHint().height())
+        )
+        self.spin_delay.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.spin_delay.valueChanged.connect(
             lambda v: self._set_cfg("accept_delay", float(v))
         )
@@ -153,7 +180,7 @@ class QtSettingsTab(QWidget):
         presence.add_layout(status_row)
 
         hint = QLabel(
-            "Shown on your Riot profile. Applied immediately when connected.",
+            "Shown on your Riot profile. Applied when the League Client is connected.",
             presence,
         )
         hint.setStyleSheet(
@@ -206,6 +233,18 @@ class QtSettingsTab(QWidget):
         scroll.setWidget(holder)
         root.addWidget(scroll, 1)
 
+    def _on_attach_toggled(self, enabled: bool) -> None:
+        """Apply immediately as well as saving it.
+
+        Writing the key alone would make this one more control that changes a
+        setting nothing acts on until the next launch.
+        """
+        self._set_cfg(ATTACH_TO_CLIENT, bool(enabled))
+        window = self.window()
+        setter = getattr(window, "set_attached_to_client", None)
+        if callable(setter):
+            setter(bool(enabled))
+
     # --------------------------------------------------------------- state
     def _load_config_state(self) -> None:
         if not self.config:
@@ -213,6 +252,7 @@ class QtSettingsTab(QWidget):
         self.row_tray.set_checked(bool(self.config.get("run_in_tray", True)))
         self.row_stealth.set_checked(bool(self.config.get("stealth_mode", False)))
         self.row_ontop.set_checked(bool(self.config.get("always_on_top", True)))
+        self.row_attach.set_checked(bool(self.config.get(ATTACH_TO_CLIENT, True)))
         self.row_devmode.set_checked(bool(self.config.get("developer_mode", False)))
         self.spin_delay.setValue(float(self.config.get("accept_delay", 2.0)))
         self.txt_status.setText(str(self.config.get("custom_status", "")))
@@ -226,6 +266,17 @@ class QtSettingsTab(QWidget):
     def _set_cfg(self, key: str, value) -> None:
         if self.config:
             self.config.set(key, value)
+
+    def _on_tray_toggled(self, value: bool) -> None:
+        """Take effect now.
+
+        The tray icon is created once at startup, so this used to do nothing
+        until a restart — and `closeEvent` additionally requires the icon to
+        be *visible*, so turning the setting on and closing the window exited
+        the app instead of minimising it.
+        """
+        self._set_cfg("run_in_tray", value)
+        self.tray_preference_changed.emit(bool(value))
 
     def _on_save_status(self) -> None:
         text = self.txt_status.text().strip()
@@ -241,6 +292,11 @@ class QtSettingsTab(QWidget):
         if dlg.exec() == QDialog.Accepted:
             new_key = dlg.recorded_sequence
             self._set_cfg(key, new_key)
+            # `keyboard.add_hotkey` is only called once, during window
+            # construction. Without this the new shortcut did nothing until a
+            # restart while the label claimed otherwise, and the old one
+            # stayed registered.
+            self.hotkeys_changed.emit()
             widget = self.hotkey_labels.get(key)
             if widget is not None:
                 widget.setText(new_key.upper() if new_key else "Not set")

@@ -24,6 +24,23 @@ TITLEBAR_HEIGHT = 32          # retained for the standalone Orb / overlay chrome
 SIDEBAR_WIDTH = 200
 SIDEBAR_WIDTH_COMPACT = 64
 FOOTER_HEIGHT = 30
+
+# --- companion panel ------------------------------------------------------
+#: The compact panel's footprint. Lived as a bare `setFixedSize(280, 72)`
+#: inside the widget, which made it invisible to anything reasoning about
+#: layout — including the code that has to decide whether it fits beside the
+#: League Client.
+ORB_WIDTH = 280
+ORB_HEIGHT = 72
+#: Space between the League Client's edge and the companion panel.
+COMPANION_GAP = SPACE_SM
+
+#: Toast width. Was a bare 300 in the component.
+TOAST_WIDTH = 300
+#: The little status glyph column shared by status rows, activity rows and
+#: the draft timeline. Three components each had their own number (10, 12,
+#: 14) for the same visual element, which is why they never lined up.
+GLYPH_WIDTH = 12
 CONTENT_MARGIN = SPACE_XL
 
 # --- Control heights (§34) ---
@@ -55,6 +72,7 @@ __all__ = [
     "SPACE_XXS", "SPACE_XS", "SPACE_SM", "SPACE_MD", "SPACE_LG", "SPACE_XL", "SPACE_XXL",
     "HEADER_HEIGHT", "TITLEBAR_HEIGHT", "SIDEBAR_WIDTH", "SIDEBAR_WIDTH_COMPACT",
     "FOOTER_HEIGHT", "CONTENT_MARGIN",
+    "ORB_WIDTH", "ORB_HEIGHT", "COMPANION_GAP", "TOAST_WIDTH", "GLYPH_WIDTH",
     "CONTROL_HEIGHT_SM", "CONTROL_HEIGHT_MD", "CONTROL_HEIGHT_LG", "ROW_HEIGHT", "NAV_ITEM_HEIGHT",
     "ICON_XS", "ICON_SM", "ICON_MD", "ICON_LG", "ICON_XL",
     "CHAMPION_TILE_SM", "CHAMPION_TILE_MD", "CHAMPION_TILE_LG", "CHAMPION_TILE_SIZE",

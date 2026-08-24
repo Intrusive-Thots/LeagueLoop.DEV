@@ -208,8 +208,8 @@ class Toast(ctk.CTkFrame):
             try:
                 if getattr(p["widget"], "winfo_exists", lambda: False)():
                     p["widget"].destroy()
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("Toast", "_cleanup_confetti suppressed an error", exc=exc)
         self._particles.clear()
 
     def destroy(self):
@@ -217,8 +217,8 @@ class Toast(ctk.CTkFrame):
             try:
                 self.after_cancel(self._dismiss_job)
                 self._dismiss_job = None
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("Toast", "destroy suppressed an error", exc=exc)
         self._cleanup_confetti()
         super().destroy()
 
@@ -254,8 +254,8 @@ class ToastManager:
             oldest = self._toasts[0]
             try:
                 oldest.dismiss()
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("Toast", "show suppressed an error", exc=exc)
             if oldest in self._toasts:
                 self._toasts.remove(oldest)
 

@@ -14,6 +14,7 @@ reachable emergency stop (§17) are always present.
 """
 from __future__ import annotations
 
+import time
 from typing import List, Optional
 
 from PySide6.QtCore import Qt, Signal
@@ -51,6 +52,7 @@ from ui.qt.viewmodels.champ_select_viewmodel import (
     Confidence,
     TIMELINE_PHASES,
 )
+from utils.logger import Logger
 
 _CONFIDENCE_TONE = {
     Confidence.HIGH: Tone.SUCCESS,
@@ -210,8 +212,11 @@ class QtChampSelectTab(QWidget):
         self.grid.champion_selected.connect(
             lambda cid, _key: self._on_select(cid)
         )
+        # Double-click selects. It used to go straight to `_on_lock_in`,
+        # which commits the draft action — one accidental double-click ended
+        # your pick, with no confirmation and no undo.
         self.grid.champion_activated.connect(
-            lambda cid, _key: self._on_lock_in(champion_id=cid)
+            lambda cid, _key: self._on_select(cid)
         )
         self.available_section.add_widget(self.grid, 1)
         # The roster absorbs whatever vertical space is left over.
@@ -264,14 +269,75 @@ class QtChampSelectTab(QWidget):
         action_card.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         root.addWidget(action_card)
 
+        # --- not-in-a-draft state (§54) -----------------------------------
+        self.idle_notice = LLCard(title="Champion select", parent=self)
+        idle_body = QLabel(
+            "You are not in champion select.\n\n"
+            "When a draft starts this screen fills in with your "
+            "recommendation, your backups and the live roster.",
+            self.idle_notice,
+        )
+        idle_body.setWordWrap(True)
+        idle_body.setStyleSheet(
+            TEXT_BODY.qss(color=TEXT_MUTED) + " background: transparent;"
+        )
+        self.idle_notice.add_widget(idle_body)
+        self.idle_notice.setVisible(False)
+        root.addWidget(self.idle_notice)
+        root.addStretch(1)
+
+        #: Everything that only makes sense inside a draft.
+        self._draft_widgets = (
+            self.timeline, self.rec_card, self.backup_section,
+            self.available_section, action_card,
+        )
+
+    def _set_draft_visible(self, visible: bool) -> None:
+        for widget in getattr(self, "_draft_widgets", ()):
+            widget.setVisible(visible)
+        self.idle_notice.setVisible(not visible)
+
+    def _render_idle(self) -> None:
+        """What the screen shows when there is no draft.
+
+        The timer is the important part: with `remaining_s == 0` the timer
+        component classifies as EXPIRED and reads "TIME UP 00:00" — which,
+        with no draft running, is alarming and wrong.
+        """
+        self._set_draft_visible(False)
+        self.role_badge.set_badge("Not in a draft", Tone.NEUTRAL)
+        self.timer.set_remaining(0.0, "Waiting")
+        self._selected_id = 0
+        if not self._flashing():
+            auto = self.vm._app_state.automation
+            self.automation_status.set_status(
+                "Automation on" if auto.running else "Automation off",
+                Tone.SUCCESS if auto.running else Tone.NEUTRAL,
+                "Nothing to do until a draft starts.",
+            )
+        self.btn_stop.setEnabled(bool(self.vm._app_state.automation.running))
+
     # ------------------------------------------------------------ actions
+    #: How long a result message holds the status line against the next
+    #: state push. `_render` runs on every publish — once a second during the
+    #: draft — and used to overwrite "Hovering", "Locked in" and
+    #: "Could not do that: <reason>" before they could be read, so a failed
+    #: action looked exactly like a silent no-op.
+    FLASH_SECONDS = 6.0
+
+    def _flash(self, title: str, tone, detail: str = "") -> None:
+        """Show a result, and hold it briefly against the render loop."""
+        self._flash_until = time.monotonic() + self.FLASH_SECONDS
+        self.automation_status.set_status(title, tone, detail)
+
+    def _flashing(self) -> bool:
+        return time.monotonic() < getattr(self, "_flash_until", 0.0)
+
     def _report(self, result, champion_id: int = 0) -> None:
         """Say what happened, in the status line the user is already reading."""
         if result.ok:
             return
-        self.automation_status.set_status(
-            "Could not do that", Tone.WARNING, result.message
-        )
+        self._flash("Could not do that", Tone.WARNING, result.message)
 
     def _on_select(self, champion_id: int) -> None:
         """
@@ -309,14 +375,21 @@ class QtChampSelectTab(QWidget):
             )
             return
 
+        banning = self._pending_type() == "ban"
         result = self._actions.lock_in(champ)
         if result.ok:
-            self.automation_status.set_status(
-                "Locked in", Tone.SUCCESS, ""
+            self._flash(
+                "Banned" if banning else "Locked in", Tone.SUCCESS,
+                "{} is out of the draft.".format(self._champ_label(champ))
+                if banning else "",
             )
         else:
             self._report(result, champ)
         self._sync_lock_button()
+
+    def _champ_label(self, champ_id: int) -> str:
+        tile = self.grid.tiles.get(int(champ_id)) if self.grid.tiles else None
+        return tile.model.name if tile is not None else str(champ_id)
 
     def _on_override(self) -> None:
         """
@@ -326,38 +399,95 @@ class QtChampSelectTab(QWidget):
         post-draft automations you probably still want.
         """
         controller = getattr(self.container, "automation_controller", None)
-        if controller is not None:
-            try:
-                controller.pause(True)
-            except Exception:
-                pass
-        self.automation_status.set_status(
-            "Manual", Tone.NEUTRAL,
-            "Automation is paused - select a champion and lock in yourself.",
-        )
+        if controller is None:
+            self._flash(
+                "Automation is not running", Tone.NEUTRAL,
+                "There is nothing to take over from.",
+            )
+            self._sync_lock_button()
+            return
+
+        paused = bool(getattr(self.vm._app_state.automation, "paused", False))
+        try:
+            # Nothing in the Qt shell ever called resume, so one press of this
+            # button paused champ-select automation for the rest of the
+            # session with no way back.
+            controller.pause(not paused)
+        except Exception as exc:
+            Logger.error("ChampSelectTab", "Could not change the pause state.", exc=exc)
+            self._flash(
+                "Could not pause automation", Tone.DANGER, str(exc),
+            )
+            self._sync_lock_button()
+            return
+
+        if paused:
+            self._flash(
+                "Automation resumed", Tone.SUCCESS,
+                "It will choose and lock for you again.",
+            )
+        else:
+            self._flash(
+                "Manual", Tone.NEUTRAL,
+                "Automation is paused - select a champion and lock in yourself.",
+            )
+        self._sync_override_button()
         self._sync_lock_button()
 
+    def _sync_override_button(self) -> None:
+        paused = bool(getattr(self.vm._app_state.automation, "paused", False))
+        self.btn_override.setText("Resume automation" if paused else "Pick manually")
+        self.btn_override.setToolTip(
+            "Let automation choose again" if paused
+            else "Stop automation choosing for you, and pick yourself"
+        )
+
+    def _pending_type(self) -> str:
+        """"pick", "ban" or "" — read from state, never over the network."""
+        try:
+            return self.vm.pending_action_type
+        except Exception as exc:
+            Logger.debug("ChampSelectTab", "pending type unavailable", exc=exc)
+            return ""
+
     def _sync_lock_button(self) -> None:
-        """Disabled is a designed state (§63): say why it is unavailable."""
+        """Disabled is a designed state (§63): say why it is unavailable.
+
+        The label follows the pending action. It was hardcoded "Lock in"
+        while `DraftActions.lock_in` commits whatever action is in progress —
+        so on your ban turn the button said "Lock in", banned the champion,
+        and then reported "Locked in".
+        """
         state = self.vm.state
-        if state.locked_in:
+        pending = self._pending_type()
+        banning = pending == "ban"
+        self.btn_lock.setText("Ban" if banning else "Lock in")
+
+        if not state.active:
+            self.btn_lock.setEnabled(False)
+            self.btn_lock.setToolTip("You are not in champion select")
+            return
+        if state.locked_in and not banning:
             self.btn_lock.setEnabled(False)
             self.btn_lock.setToolTip("You have already locked in")
             return
         if not self._selected_id:
             self.btn_lock.setEnabled(False)
-            self.btn_lock.setToolTip("Select a champion first")
+            self.btn_lock.setToolTip(
+                "Select a champion to ban" if banning
+                else "Select a champion first"
+            )
             return
-        can = True
-        if self._actions is not None:
-            try:
-                can = self._actions.can_act()
-            except Exception:
-                can = False
+
+        can = bool(pending)
         self.btn_lock.setEnabled(can)
-        self.btn_lock.setToolTip(
-            "Lock in your selection" if can else "It is not your turn yet"
-        )
+        if not can:
+            self.btn_lock.setToolTip("It is not your turn yet")
+        else:
+            self.btn_lock.setToolTip(
+                "Ban this champion - this cannot be undone" if banning
+                else "Lock in your selection"
+            )
 
     # ------------------------------------------------------------- render
     def _make_tile(self, rec, size: TileSize, priority=None) -> LLChampionTile:
@@ -383,6 +513,15 @@ class QtChampSelectTab(QWidget):
     def _render(self) -> None:
         vm = self.vm
 
+        # Not in a draft is a real state and the screen had none: it kept the
+        # full roster, enabled Pick/Stop buttons, "No recommendation" (which
+        # looks exactly like a genuinely blocked draft) and a timer stuck on
+        # "TIME UP 00:00".
+        if not vm.state.active:
+            self._render_idle()
+            return
+        self._set_draft_visible(True)
+
         self.role_badge.set_badge(vm.role_label, Tone.ACCENT)
         self.timer.set_remaining(vm.remaining_s, vm.timer_label())
         self.timeline.set_current(vm.timeline_index())
@@ -396,7 +535,9 @@ class QtChampSelectTab(QWidget):
         self._recommended_tile = None
 
         if rec.valid:
-            self._recommended_tile = self._make_tile(rec, TileSize.LG, priority=1)
+            self._recommended_tile = self._make_tile(
+                rec, TileSize.LG, priority=rec.rank + 1
+            )
             self.rec_tile_holder.addWidget(self._recommended_tile)
             self.rec_name.setText(rec.name)
             self.rec_confidence.set_badge(
@@ -419,8 +560,10 @@ class QtChampSelectTab(QWidget):
         self._clear_layout(self.backup_row)
         self._backup_tiles = []
         backups = vm.backups
-        for index, backup in enumerate(backups):
-            tile = self._make_tile(backup, TileSize.SM, priority=index + 2)
+        for backup in backups:
+            # The badge is the champion's real position in the user's list,
+            # not its index in this filtered row.
+            tile = self._make_tile(backup, TileSize.SM, priority=backup.rank + 1)
             self._backup_tiles.append(tile)
             self.backup_row.addWidget(tile)
         self.backup_row.addStretch(1)
@@ -440,22 +583,32 @@ class QtChampSelectTab(QWidget):
             tone, label = Tone.SUCCESS, "Locked in"
         else:
             tone, label = Tone.SUCCESS, "Automation ready"
-        self.automation_status.set_status(label, tone, summary)
+        if not self._flashing():
+            self.automation_status.set_status(label, tone, summary)
         self.btn_stop.setEnabled(auto.running)
+        self._sync_override_button()
 
     def _sync_grid_state(self) -> None:
         """Mirror bans and taken picks onto the roster tiles (§9)."""
         state = self.vm.state
         try:
             from services.draft import ActionValidator  # type: ignore
-        except Exception:
+        except Exception as exc:
+            # Leaving the previous draft's markings on the tiles is worse than
+            # showing none: the roster silently lies about what is available.
+            Logger.error("ChampSelectTab", "Draft validator unavailable.", exc=exc)
+            self.grid.set_banned([])
+            self.grid.set_disabled([])
             return
 
         session = self.vm._session_dict()
         try:
             banned_ids = ActionValidator.get_banned_champion_ids(session)
             picked_ids = ActionValidator.get_picked_champion_ids(session)
-        except Exception:
+        except Exception as exc:
+            Logger.error("ChampSelectTab", "Could not read the draft state.", exc=exc)
+            self.grid.set_banned([])
+            self.grid.set_disabled([])
             return
 
         def to_keys(ids):
@@ -465,6 +618,11 @@ class QtChampSelectTab(QWidget):
                 if tile is not None:
                     keys.append(tile.model.key)
             return keys
+
+        # Owned/pickable. `set_owned` had no caller anywhere, so every tile
+        # was built owned=True and the grid's OWNED filter did nothing.
+        pickable = state.pickable_champion_ids or ()
+        self.grid.set_owned(to_keys(pickable) if pickable else None)
 
         self.grid.set_banned(to_keys(banned_ids))
         self.grid.set_disabled(to_keys(picked_ids - {state.selected_champion_id}))

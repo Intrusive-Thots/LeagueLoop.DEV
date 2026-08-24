@@ -41,6 +41,7 @@ from ui.qt.theme.colors import (
 )
 from ui.qt.theme.radii import RADIUS_SM
 from ui.qt.theme.typography import FONT_FAMILY_PRIMARY, WEIGHT_BOLD
+from utils.logger import Logger
 
 #: Cap the in-memory pixmap cache. Roughly 170 champions x a couple of sizes.
 DEFAULT_CACHE_SIZE = 400
@@ -59,15 +60,15 @@ def _candidate_dirs(asset_manager=None) -> List[str]:
         from utils.path_utils import get_data_dir  # type: ignore
 
         dirs.append(os.path.join(get_data_dir(), "cache"))
-    except Exception:
-        pass
+    except Exception as exc:
+        Logger.debug("ChampionIcons", "_candidate_dirs suppressed an error", exc=exc)
 
     try:
         from utils.path_utils import get_asset_path  # type: ignore
 
         dirs.append(get_asset_path("assets"))
-    except Exception:
-        pass
+    except Exception as exc:
+        Logger.debug("ChampionIcons", "_candidate_dirs suppressed an error", exc=exc)
 
     # Repo-relative fallback for `python run_qt.py` from a source checkout.
     here = os.path.abspath(os.path.dirname(__file__))

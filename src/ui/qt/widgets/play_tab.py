@@ -30,6 +30,7 @@ from ui.qt.theme.colors import TEXT_SECONDARY
 from ui.qt.theme.spacing import CONTENT_MARGIN, SPACE_LG, SPACE_MD
 from ui.qt.theme.typography import TEXT_PAGE_TITLE
 from ui.qt.viewmodels.activity_viewmodel import ActivityViewModel
+from utils.logger import Logger
 
 
 class QtPlayTab(QWidget):
@@ -37,6 +38,8 @@ class QtPlayTab(QWidget):
 
     #: Asks the shell to open the Automation screen.
     automation_requested = Signal()
+    #: (message, title, tone) — surfaced by the window as a toast.
+    toast_requested = Signal(str, str, object)
 
     def __init__(
         self,
@@ -234,12 +237,51 @@ class QtPlayTab(QWidget):
         should own this so the view stops knowing LCU endpoints.
         """
         if not (self.lcu and getattr(self.lcu, "is_connected", False)):
+            self._report(
+                "The League Client is not connected.", "Cannot search", Tone.WARNING
+            )
             return
+
+        Logger.info("PlayTab", "Find Match pressed.")
         try:
-            self.lcu.request("POST", "/lol-lobby/v2/lobby/matchmaking/search")
-        except Exception:
-            # Errors surface through state/activity rather than crashing the view.
-            pass
+            resp = self.lcu.request("POST", "/lol-lobby/v2/lobby/matchmaking/search")
+        except Exception as exc:
+            Logger.error("PlayTab", "Starting matchmaking failed.", exc=exc)
+            self._report(f"Could not start the search: {exc}", "Search failed",
+                         Tone.DANGER)
+            return
+
+        code = getattr(resp, "status_code", None)
+        if resp is None or (code is not None and not 200 <= code < 300):
+            # A non-2xx here is the normal way the client says "no lobby",
+            # "queue is locked" or "you are on a dodge timer". Swallowing it
+            # made the screen's only primary action a visible no-op.
+            detail = ""
+            try:
+                detail = (resp.text or "")[:160] if resp is not None else ""
+            except Exception as exc:
+                Logger.debug("PlayTab", "Response body unreadable", exc=exc)
+            Logger.warning(
+                "PlayTab",
+                f"The client refused to start matchmaking (HTTP {code}). {detail}".strip(),
+                status=code,
+            )
+            self._report(
+                "The League Client would not start the search."
+                + (f" (HTTP {code})" if code else "")
+                + "\n\nMake sure a lobby is open and you are not on a dodge timer.",
+                "Search not started", Tone.WARNING,
+            )
+            return
+
+        Logger.action("PlayTab", "Started matchmaking")
+
+    def _report(self, message: str, title: str, tone) -> None:
+        """Say what happened. Silence is what made this button feel broken."""
+        try:
+            self.toast_requested.emit(message, title, tone)
+        except Exception as exc:
+            Logger.debug("PlayTab", "Could not emit the toast", exc=exc)
 
     def update_phase(self, phase: str) -> None:
         """Legacy push-style entry point, retained for callers that use it."""

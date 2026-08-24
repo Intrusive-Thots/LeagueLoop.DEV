@@ -10,13 +10,14 @@ import sys
 import threading
 import queue
 import time
+import uuid
 from typing import Any, Dict, List, Optional, Tuple
 from collections import OrderedDict
 
 try:
     import customtkinter as ctk  # type: ignore
 except Exception:  # pragma: no cover - headless / Qt-only contexts
-    # The PySide6 shell and headless tests import this service without a Tk
+    # Headless tests import this service without a Tk
     # stack available. Icon *data* still works; only CTkImage construction
     # needs the toolkit, and those paths return None below.
     ctk = None  # type: ignore
@@ -565,12 +566,12 @@ class AssetManager:
             for _ in range(self._worker_count):
                 # A sentinel per worker; each one exits on receiving it.
                 self._download_queue.put((0, 0, _WORKER_STOP))
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("AssetManager", "shutdown suppressed an error", exc=exc)
         try:
             self.session.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("AssetManager", "shutdown suppressed an error", exc=exc)
 
     def _fetch_latest_version(self):
         """Fetches the latest Data Dragon version."""
@@ -5230,21 +5231,77 @@ class AssetManager:
         except KeyError:
             return str(champ_id)
 
+    #: How many times to retry promoting a finished download into the cache,
+    #: and how long to wait between attempts.
+    _REPLACE_ATTEMPTS = 4
+    _REPLACE_BACKOFF_S = 0.08
+
     def _simple_download(self, url, path):
+        """Fetch one asset into the cache, atomically.
+
+        Two Windows failures showed up in `error.log` and both came from
+        sharing one fixed temp name:
+
+        * ``[Errno 13] Permission denied: champion_X.png.tmp`` — two writers
+          opened the *same* temp file. `_pending_downloads` de-duplicates
+          within one process; it cannot know about a second instance of the
+          app, and four were started within five minutes.
+        * ``[WinError 32] The process cannot access the file because it is
+          being used by another process`` — the destination was open for
+          reading (PIL, or another instance) at the moment of the replace.
+          Windows, unlike POSIX, refuses the rename instead of letting the
+          old inode live on until the reader closes it.
+
+        So: a temp name unique to this process and this attempt, and a short
+        retry around the replace. Neither failure loses data — the asset is
+        already downloaded, and the cached copy would be byte-identical — so
+        giving up is a WARNING about a slow next launch, not an ERROR.
+        """
         try:
             # Enable SSL verification for security
             r = self.session.get(url, timeout=10)
-            if r.status_code == 200:
-                tmp_path = f"{path}.tmp"
+            if r.status_code != 200:
+                Logger.warning("asset_manager.py", f"Failed {url} -> {r.status_code}")
+                return
+
+            tmp_path = "{}.{}.{}.tmp".format(path, os.getpid(), uuid.uuid4().hex[:8])
+            try:
                 with open(tmp_path, "wb") as f:
                     f.write(r.content)
                 # Atomic replace guarantees os.path.exists(path) is only true
                 # when the file is 100% complete and valid for Image.open to read.
-                os.replace(tmp_path, path)
-            else:
-                Logger.warning("asset_manager.py", f"Failed {url} -> {r.status_code}")
+                self._replace_with_retry(tmp_path, path)
+            finally:
+                # A temp file left behind is a cache directory that grows
+                # forever, which is how this one reached six figures of files.
+                if os.path.exists(tmp_path):
+                    try:
+                        os.remove(tmp_path)
+                    except OSError as exc:
+                        Logger.debug(
+                            "asset_manager.py",
+                            f"Could not remove a temp file: {tmp_path}", exc=exc,
+                        )
         except Exception as e:  # pylint: disable=broad-exception-caught
             Logger.error("asset_manager.py", f"Exception {url} -> {e}")
+
+    def _replace_with_retry(self, tmp_path, path):
+        """Promote a temp file into the cache, tolerating a brief lock."""
+        last = None
+        for attempt in range(self._REPLACE_ATTEMPTS):
+            try:
+                os.replace(tmp_path, path)
+                return
+            except OSError as exc:
+                last = exc
+                time.sleep(self._REPLACE_BACKOFF_S * (attempt + 1))
+        Logger.warning(
+            "asset_manager.py",
+            "Could not update the cached copy of {} — it is open elsewhere. "
+            "The asset is fine for this run; it will be fetched again next "
+            "launch.".format(os.path.basename(path)),
+            exc=last,
+        )
 
     def _start_download(self, url, path, priority=5):
         """Helper to start a download if not already in progress."""

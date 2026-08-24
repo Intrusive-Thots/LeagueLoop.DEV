@@ -17,6 +17,9 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLay
 from ui.qt.components.badge import LLBadge
 from ui.qt.components.button import ButtonSize, ButtonVariant, LLButton
 from ui.qt.components.status import LLStatus, Tone
+from ui.qt.services.companion_anchor import CompanionAnchor
+from ui.qt.theme.spacing import ORB_HEIGHT, ORB_WIDTH, ICON_LG
+from utils.logger import Logger
 from ui.qt.components.timer import LLTimer
 from ui.qt.theme.colors import (
     BORDER_DEFAULT,
@@ -54,13 +57,33 @@ class QtOrbWidget(QWidget):
             | Qt.Tool
         )
         self.setAttribute(Qt.WA_TranslucentBackground, True)
-        self.setFixedSize(280, 72)
+        self.setFixedSize(ORB_WIDTH, ORB_HEIGHT)
 
         self._setup_ui()
+
+        # Attached to the League Client, not floating wherever it was last
+        # dragged. The anchor owns the geometry; this widget only tells it
+        # when the client's window changed.
+        self.anchor = CompanionAnchor(self)
 
         if view_model is not None:
             view_model.state_changed.connect(self._render_state)
             self._render_state()
+
+    def _follow_client(self, state) -> None:
+        """Keep the panel beside the League Client as it moves."""
+        window = getattr(state, "client_window", None)
+        if window is None:
+            return
+        try:
+            self.anchor.apply(window)
+        except Exception as exc:
+            Logger.error("Orb", "Could not reposition the panel.", exc=exc)
+
+    def reposition(self) -> None:
+        """Place the panel now, from whatever state we last saw."""
+        if self.view_model is not None:
+            self._follow_client(self.view_model.state)
 
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -105,7 +128,7 @@ class QtOrbWidget(QWidget):
         self.btn_restore = QPushButton("⛶", self.card)
         self.btn_restore.setToolTip("Restore full LeagueLoop window")
         self.btn_restore.setCursor(Qt.PointingHandCursor)
-        self.btn_restore.setFixedSize(24, 24)
+        self.btn_restore.setFixedSize(ICON_LG, ICON_LG)
         self.btn_restore.setStyleSheet(f"""
             QPushButton {{
                 color: {TEXT_MUTED};
@@ -129,6 +152,7 @@ class QtOrbWidget(QWidget):
         if self.view_model is None:
             return
         state = self.view_model.state
+        self._follow_client(state)
         phase_str = state.client.phase.value if hasattr(state.client.phase, "value") else str(state.client.phase)
         self.lbl_phase.setText(f"● {phase_str}")
 

@@ -13,6 +13,61 @@ from typing import Any, Callable, Dict, Optional, Tuple
 from core.events import EventBus, EventType
 
 
+@dataclass(frozen=True)
+class ClientWindowState:
+    """Where the League Client's window is on screen.
+
+    Published by ``ClientWindowTracker``, consumed by ``CompanionAnchor``
+    to keep the companion panel glued to the client.
+
+    Frozen so it is hashable and can live inside ``ApplicationState``.
+    """
+
+    found: bool = False
+    hwnd: int = 0
+    x: int = 0
+    y: int = 0
+    width: int = 0
+    height: int = 0
+    visible: bool = False
+    minimized: bool = False
+    #: HMONITOR of the display the window is on. 0 = unknown.
+    monitor: int = 0
+    #: Effective DPI of that display. 96 = 100 %. 0 = unknown.
+    dpi: int = 0
+
+    @property
+    def usable(self) -> bool:
+        """True when the client is visible, not minimised, and has a rect."""
+        return (
+            self.found
+            and self.visible
+            and not self.minimized
+            and self.width > 0
+            and self.height > 0
+        )
+
+    @property
+    def scale(self) -> float:
+        """Display scale factor derived from DPI (96 DPI = 1.0×)."""
+        return (self.dpi or 96) / 96.0
+
+    @property
+    def rect(self) -> Tuple[int, int, int, int]:
+        """(x, y, width, height) — the format ``place_companion`` expects."""
+        return (self.x, self.y, self.width, self.height)
+
+    @property
+    def geometry_key(self) -> Tuple:
+        """A hashable snapshot used to suppress duplicate publishes."""
+        return (
+            self.found, self.hwnd,
+            self.x, self.y, self.width, self.height,
+            self.visible, self.minimized,
+            self.monitor, self.dpi,
+        )
+
+
 class AppState:
     """Legacy mutable application state for backward compatibility."""
     def __init__(self):
@@ -86,6 +141,18 @@ class ChampSelectState:
     my_team: Tuple[Dict[str, Any], ...] = ()
     their_team: Tuple[Dict[str, Any], ...] = ()
     actions: Tuple[Dict[str, Any], ...] = ()
+    #: The draft's own queue id. Without it `PriorityEngine._is_aram()` is
+    #: always False, so the screen recommends from the Summoner's Rift list
+    #: while the engine — reading the real session — picks from the ARAM one.
+    queue_id: Optional[int] = None
+    #: Every champion the client considers banned. Completed ban *actions*
+    #: are not the whole picture — the session carries its own `bans` block —
+    #: and a frozen dataclass must stay hashable, so this is a flat tuple of
+    #: ids rather than the raw structure.
+    banned_champion_ids: Tuple[int, ...] = ()
+    #: Champions this account can pick right now. Empty means "not known",
+    #: which callers must not read as "all of them".
+    pickable_champion_ids: Tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -126,6 +193,7 @@ class ApplicationState:
     automation: AutomationState = field(default_factory=AutomationState)
     account: AccountState = field(default_factory=AccountState)
     ui: UIState = field(default_factory=UIState)
+    client_window: ClientWindowState = field(default_factory=ClientWindowState)
 
 
 class StateManager:
@@ -190,6 +258,14 @@ class StateManager:
         with self._lock:
             new_ui = dataclasses.replace(self._state.ui, **kwargs)
             self._state = dataclasses.replace(self._state, ui=new_ui)
+            self._notify_state_change()
+            return self._state
+
+    def update_client_window(self, **kwargs) -> ApplicationState:
+        """Atomically update ClientWindowState fields."""
+        with self._lock:
+            new_cw = dataclasses.replace(self._state.client_window, **kwargs)
+            self._state = dataclasses.replace(self._state, client_window=new_cw)
             self._notify_state_change()
             return self._state
 

@@ -15,6 +15,7 @@ from typing import Optional
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QCursor, QGuiApplication, QMouseEvent, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QApplication, QWidget
+from utils.logger import Logger
 
 # Win32 extended styles (click-through)
 _GWL_EXSTYLE = -20
@@ -172,9 +173,9 @@ class TransparentOverlayWidget(QWidget):
             else:
                 ex &= ~_WS_EX_TRANSPARENT
             set_long(hwnd, _GWL_EXSTYLE, ex)
-        except Exception:
+        except Exception as exc:
             # Overlay still works without click-through
-            pass
+            Logger.debug("TransparentOverlay", "_apply_win32_exstyle suppressed an error", exc=exc)
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)

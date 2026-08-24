@@ -1,0 +1,16 @@
+# LeagueLoop — PySide6 migration dependencies
+#
+# Kept separate from requirements.txt on purpose: the production
+# CustomTkinter build should not pull PySide6 into PyInstaller output while
+# the migration is in progress (UI/UX Master Plan §73 — the old UI is only
+# removed at Stage 10).
+#
+# Install into the dev venv with:
+#     .venv\Scripts\python.exe -m pip install -r requirements-qt.txt
+#
+# Only PySide6-Essentials is required. The full PySide6 / PySide6-Addons
+# packages add QtWebEngine, Qt3D, Charts, Multimedia and friends — several
+# hundred MB the Qt shell does not use.
+
+PySide6-Essentials==6.11.0
+shiboken6==6.11.0

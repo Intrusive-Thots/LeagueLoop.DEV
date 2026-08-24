@@ -742,8 +742,8 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                 try:
                     from core.events import EventBus
                     EventBus.emit("config_event", app.config.cfg)
-                except:
-                    pass
+                except Exception as exc:
+                    Logger.debug("LocalApi", "do_POST suppressed an error", exc=exc)
 
             self.send_response(200)
             self._set_cors_headers()

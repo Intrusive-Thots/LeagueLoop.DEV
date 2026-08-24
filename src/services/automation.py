@@ -4,6 +4,7 @@ Automation Engine module.
 import json
 import random
 import subprocess
+import sys
 import threading
 import time
 import traceback
@@ -16,6 +17,15 @@ from .api_handler import LCUClient  # type: ignore
 from .asset_manager import AssetManager, ConfigManager  # type: ignore
 from services.draft.priority_engine import PriorityEngine
 from utils.logger import Logger  # type: ignore
+from core.config_keys import (
+    ARAM_BENCH_SWAP,
+    ARAM_AUTO_REROLL,
+    AUTO_HONOR_ENABLED,
+    AUTO_JOIN_ENABLED,
+    CHAT_WARDEN_ENABLED,
+    DODGE_BLACKLIST,
+    DODGE_BLACKLIST_ENABLED,
+)
 from core.constants import (
     QUEUE_ARENA, QUEUE_ARENA_3V6, QUEUE_DRAFT, QUEUE_RANKED_SOLO, QUEUE_RANKED_FLEX,
     TICK_SLEEP_DEFAULT, TICK_SLEEP_CHAMPSELECT,
@@ -63,7 +73,9 @@ class AutomationEngine:
         self.setup_done: bool = False
         self.last_phase: str = "None"
         self.current_queue_id: Optional[int] = None
-        self._blacklist = [name.strip().lower() for name in self.config.get("dodge_blacklist", "").split(",") if name.strip()]
+        # Read per draft, not once at construction: the list was previously
+        # frozen at startup, so editing it required restarting the app.
+        self._blacklist: list = []
         self._toxic_keywords = ["kys", "int", "troll", "run it down", "nword", "f slur"]
         self._chat_warden_warned = False
 
@@ -101,7 +113,6 @@ class AutomationEngine:
         self._auto_joined_friends_cooldown: dict = {}  # friend_name.lower() -> expiry_timestamp
         self._current_auto_joined_friend: Optional[str] = None
         self._current_auto_joined_party_id: Optional[str] = None
-        self.paused: bool = False
 
     def start(self, start_paused: bool = False) -> None:
         """Starts the automation loop in a background thread."""
@@ -157,8 +168,8 @@ class AutomationEngine:
         if timer is not None:
             try:
                 timer.cancel()
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("Automation", "_cancel_accept_timer suppressed an error", exc=exc)
 
     def resume(self) -> None:
         """Resumes automation actions."""
@@ -235,13 +246,13 @@ class AutomationEngine:
                             Logger.info("AutoLoop", "Game detected (process). Keeping window visible.")
                             try:
                                 self.lcu.set_in_game_mode(True)
-                            except Exception:
-                                pass
+                            except Exception as exc:
+                                Logger.debug("Automation", "_loop suppressed an error", exc=exc)
                         elif self.last_phase == "InProgress":
                             try:
                                 self.lcu.set_in_game_mode(False)
-                            except Exception:
-                                pass
+                            except Exception as exc:
+                                Logger.debug("Automation", "_loop suppressed an error", exc=exc)
                             if wf is not None:
                                 if self.config.get("stealth_mode", False):
                                     wf("restore_quiet")
@@ -298,8 +309,8 @@ class AutomationEngine:
                     polled = phase_req.json()
                     if isinstance(polled, str) and polled:
                         phase = polled
-                except Exception:
-                    pass
+                except Exception as exc:
+                    Logger.debug("Automation", "_tick suppressed an error", exc=exc)
         else:
             f_phase = self.executor.submit(self.lcu.request, "GET", "/lol-gameflow/v1/gameflow-phase", None, True)
 
@@ -368,8 +379,8 @@ class AutomationEngine:
         # Keep in-game flag consistent even if we entered via process inference
         try:
             self.lcu.set_in_game_mode(phase == "InProgress")
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("Automation", "_tick suppressed an error", exc=exc)
 
         if phase != "ChampSelect" and self.last_phase == "ChampSelect":
             # Leaving the draft resets the once-per-draft log guards, so the
@@ -415,7 +426,7 @@ class AutomationEngine:
                         from core.events import EventBus
                         EventBus.emit("lobby_event", lobby_data)
                     except Exception as e:
-                        pass
+                        Logger.debug("Automation", "_tick suppressed an error", exc=e)
             except Exception as e:
                 Logger.debug("AutoLoop", f"Lobby data fetch error: {e}")
 
@@ -428,7 +439,7 @@ class AutomationEngine:
             except Exception as e:
                 Logger.debug("AutoLoop", f"Session data fetch error: {e}")
 
-        if getattr(self, "paused", False):
+        if self.paused:
             # Pause used to be checked inside `_handle_champ_select` alone, so
             # a "paused" engine still accepted ready checks, honored, skipped
             # stats and joined friend lobbies.
@@ -502,17 +513,13 @@ class AutomationEngine:
             # The timer fires seconds later. Emergency stop, pause, or the
             # switch being turned off in the meantime all used to be ignored,
             # so "stop" during the accept delay still accepted the match.
-            if getattr(self, "running", True) is False or getattr(self, "paused", False):
+            if not self.running or self.paused:
                 return
             if not self.config.get("auto_accept"):
                 return
-            resp = self.lcu.request("POST", "/lol-matchmaking/v1/ready-check/accept")
-            code = getattr(resp, "status_code", None)
-            if resp is None or (isinstance(code, int) and not 200 <= code < 300):
-                self._log(
-                    "Ready check accept was refused by the client"
-                    + (f" (HTTP {code})." if code else ".")
-                )
+            if not self._act("POST", "/lol-matchmaking/v1/ready-check/accept",
+                             what="Accepted the ready check",
+                             delay_s=round(delay, 2)):
                 return
             self.ready_check_accepted = True
             self._log("Ready Check Accepted!")
@@ -520,6 +527,54 @@ class AutomationEngine:
         self._accept_timer = threading.Timer(delay, _do_accept)
         self._accept_timer.daemon = True
         self._accept_timer.start()
+
+    # ------------------------------------------------------------ actions
+    def _act(self, method, endpoint, data=None, *, what="", **detail):
+        """Perform a mutating LCU call and record what actually happened.
+
+        Every draft PATCH in this file used to discard its result.
+        `LCUClient.request` returns `None` on transport failure and never
+        raises, so "Draft: Locking Pick Ahri" was logged whether or not the
+        client accepted it — a rejected lock was invisible and never retried.
+
+        Returns True only when the client accepted the call.
+        """
+        label = what or f"{method} {endpoint}"
+        try:
+            resp = self.lcu.request(method, endpoint, data)
+        except Exception as exc:
+            Logger.error("Automation", f"{label} — request failed", exc=exc,
+                         endpoint=endpoint, **detail)
+            self._log(f"{label} failed: {exc}")
+            return False
+
+        if resp is None:
+            Logger.warning(
+                "Automation",
+                f"{label} — no response from the League Client "
+                f"(not connected, or the request was queued)",
+                endpoint=endpoint, **detail,
+            )
+            self._log(f"{label} did not reach the client.")
+            return False
+
+        code = getattr(resp, "status_code", None)
+        if code is not None and not 200 <= code < 300:
+            body = ""
+            try:
+                body = (resp.text or "")[:200]
+            except Exception as exc:
+                Logger.debug("Automation", "_act suppressed an error", exc=exc)
+            Logger.error(
+                "Automation",
+                f"{label} — the client refused it (HTTP {code}) {body}".strip(),
+                endpoint=endpoint, status=code, **detail,
+            )
+            self._log(f"{label} was refused by the client (HTTP {code}).")
+            return False
+
+        Logger.action("Automation", label, endpoint=endpoint, status=code, **detail)
+        return True
 
     def _handle_dodge_requeue(self, phase, prev_phase=None):
         """Re-enter matchmaking when somebody else dodges the draft.
@@ -542,7 +597,8 @@ class AutomationEngine:
                 self._last_search_state_time = now
             
             if not state or state.get("searchState") != "Searching":
-                self.lcu.request("POST", "/lol-lobby/v2/lobby/matchmaking/search")
+                self._act("POST", "/lol-lobby/v2/lobby/matchmaking/search",
+                          what="Restarted matchmaking after a dodge")
                 self._log("Dodge detected. Restarting Matchmaking...")
                 self._last_search_state_time = 0
 
@@ -779,8 +835,8 @@ class AutomationEngine:
                                     if res3 and res3.status_code in (200, 201, 204):
                                         success = True
                                         break
-                except Exception:
-                    pass
+                except Exception as exc:
+                    Logger.debug("Automation", "_equip_random_skin suppressed an error", exc=exc)
 
             if success:
                 self._log(f"Equipped: {skin_name}")
@@ -824,8 +880,56 @@ class AutomationEngine:
         except Exception as e:
             Logger.debug("Auto", f"Rune equip error: {e}")
 
+    def _dodge_blacklist(self) -> list:
+        """The blacklist as it is configured right now."""
+        raw = self.config.get(DODGE_BLACKLIST, "") or ""
+        if isinstance(raw, (list, tuple)):
+            entries = list(raw)
+        else:
+            entries = str(raw).split(",")
+        self._blacklist = [e.strip().lower() for e in entries if str(e).strip()]
+        return self._blacklist
+
+    def _force_close_client(self, reason: str) -> bool:
+        """Close the League Client.
+
+        This is the most destructive thing the engine does — it terminates
+        the client mid-draft. It used to run unguarded: no switch, no
+        try/except, and Windows-only `creationflags` that raise on any other
+        platform straight into the tick's error killswitch.
+        """
+        if sys.platform != "win32":
+            Logger.warning(
+                "Automation",
+                "Refusing to force-close the client: that is Windows-only.",
+                reason=reason,
+            )
+            return False
+        try:
+            subprocess.run(
+                ["taskkill", "/IM", "LeagueClient.exe", "/F"],
+                creationflags=subprocess.CREATE_NO_WINDOW,
+                timeout=10,
+            )
+        except Exception as exc:
+            Logger.error(
+                "Automation", f"Could not close the client ({reason}).", exc=exc
+            )
+            return False
+        Logger.action(
+            "Automation", f"Force-closed the League Client: {reason}",
+            reason=reason,
+        )
+        return True
+
     def _handle_auto_dodge(self, session):
-        if not self._blacklist: return
+        # Two gates, deliberately. The list alone used to be enough, so a
+        # stale value left in config.json would kill the client mid-draft
+        # with no way to see the list, let alone clear it.
+        if not self.config.get(DODGE_BLACKLIST_ENABLED, False):
+            return
+        if not self._dodge_blacklist():
+            return
         
         my_cell = session.get("localPlayerCellId")
         my_team = session.get("myTeam", [])
@@ -845,10 +949,15 @@ class AutomationEngine:
                 
                 if name in self._blacklist or full_name in self._blacklist:
                     self._log(f"BLACKLIST MATCH: {full_name}. Dodging immediately.")
-                    subprocess.run(["taskkill", "/IM", "LeagueClient.exe", "/F"], creationflags=subprocess.CREATE_NO_WINDOW)
+                    self._force_close_client(f"blacklisted player {full_name}")
                     return
 
     def _handle_chat_warden(self, session):
+        # Reads every message in the lobby. That is a thing to opt into, not
+        # something to do by default with no switch and no screen admitting
+        # it happens.
+        if not self.config.get(CHAT_WARDEN_ENABLED, False):
+            return
         chat_room = session.get("chatDetails", {}).get("chatRoomName")
         if not chat_room: return
         
@@ -927,7 +1036,9 @@ class AutomationEngine:
         
         if current_hover != ban_id and (now - getattr(self, "_last_synergy_patch", 0) > 0.5):
             self._log(f"Arena: Hovering Ban {arena_ban}")
-            self.lcu.request("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}", data={"championId": ban_id})
+            self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
+                      {"championId": ban_id},
+                      what=f"Arena: hovered ban {arena_ban}", champion_id=ban_id)
             self._last_synergy_patch = now
             self._synergy_patch_time = now
             
@@ -936,9 +1047,9 @@ class AutomationEngine:
             if time_since_patch > 0.5 and (instant_ban or time_left_ms <= 2000) and (now - getattr(self, "_last_synergy_patch", 0) > 0.5):
                 log_msg = "(Instant)" if instant_ban else "(<2s left)"
                 self._log(f"Arena: Locking Ban {arena_ban} {log_msg}")
-                res = self.lcu.request("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}", data={"championId": ban_id, "completed": True})
-                if res and res.status_code not in (200, 204):
-                    Logger.error("Auto", f"Arena ban lock FAILED: {res.status_code} {res.text[:200]}")
+                self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
+                          {"championId": ban_id, "completed": True},
+                          what=f"Arena: banned {arena_ban}", champion_id=ban_id)
                 self._last_synergy_patch = now
 
     def _handle_arena_pick(self, session, me, action, banned_ids):
@@ -1035,7 +1146,10 @@ class AutomationEngine:
         if mapped_my_id != 0 and current_hover != mapped_my_id:
             if now - getattr(self, "_last_synergy_patch", 0) > 0.5:
                 self._log(f"Arena: Selecting {mapped_me_champ}...")
-                self.lcu.request("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}", data={"championId": mapped_my_id})
+                self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
+                          {"championId": mapped_my_id},
+                          what=f"Arena: hovered {mapped_me_champ}",
+                          champion_id=mapped_my_id)
                 self._last_synergy_patch = now
                 self._synergy_patch_time = now
         else:
@@ -1050,7 +1164,10 @@ class AutomationEngine:
                         champ_str = mapped_me_champ if mapped_my_id != 0 else self.assets.get_champ_name(current_hover)
                         log_msg = "(Teammate Locked)" if teammate_locked else "(<2s left)"
                         self._log(f"Arena: Locking Pick {champ_str} {log_msg}")
-                        self.lcu.request("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}", data={"championId": lock_target, "completed": True})
+                        self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
+                                  {"championId": lock_target, "completed": True},
+                                  what=f"Arena: locked in {champ_str}",
+                                  champion_id=lock_target)
                         self._last_synergy_patch = now
 
     def _perform_draft_assistant(self, session):
@@ -1119,7 +1236,7 @@ class AutomationEngine:
                     self._log(f"Draft: could not read your ban list ({exc})")
                     ban_candidates = []
 
-                if not ban_candidates and not getattr(self, "_warned_empty_bans", False):
+                if not ban_candidates and not self._warned_empty_bans:
                     # Switched on with an empty list is a real state, and a
                     # silent one. Say it once rather than letting the phase
                     # pass with nothing happening.
@@ -1138,19 +1255,24 @@ class AutomationEngine:
                     self._log(f"Draft: Skipping ban {ban_name} because a teammate is hovering it.")
                     continue
 
-                last_action_time = getattr(self, "_last_draft_action_time", 0.0)
-                if my_action.get("championId") != ban_id and (now - last_action_time > 0.5):
+                if my_action.get("championId") != ban_id and (now - self._last_draft_action_time > 0.5):
                     self._log(f"Draft: Hovering Ban {ban_name}")
-                    self.lcu.request("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}", data={"championId": ban_id})
+                    self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
+                              {"championId": ban_id},
+                              what=f"Draft: hovered ban {ban_name}",
+                              champion_id=ban_id, role=assigned or "unassigned")
                     self._last_draft_action_time = now
                 elif my_action.get("championId") == ban_id:
                     # Committing a ban is gated on Auto Ban, not on Auto Lock
                     # In. They are separate decisions: someone who wanted bans
                     # handled but picks made by hand got a ban that hovered
                     # forever and was never spent.
-                    if now - last_action_time > 0.5:
+                    if now - self._last_draft_action_time > 0.5:
                         self._log(f"Draft: Locking Ban {ban_name}")
-                        self.lcu.request("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}", data={"championId": ban_id, "completed": True})
+                        self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
+                                  {"championId": ban_id, "completed": True},
+                                  what=f"Draft: banned {ban_name}",
+                                  champion_id=ban_id, role=assigned or "unassigned")
                         self._last_draft_action_time = now
                 break
 
@@ -1194,7 +1316,7 @@ class AutomationEngine:
                 decision = None
 
             if decision is None:
-                if not getattr(self, "_warned_empty_picks", False):
+                if not self._warned_empty_picks:
                     self._warned_empty_picks = True
                     self._log(
                         "Draft: no champion in your priority list is available."
@@ -1226,12 +1348,19 @@ class AutomationEngine:
                     )
                     if may_hover and my_action.get("championId") != pick_id and (now - self._last_draft_action_time > 0.5):
                         self._log(f"Draft: Hovering Pick {pick_name}")
-                        self.lcu.request("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}", data={"championId": pick_id})
+                        self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
+                                  {"championId": pick_id},
+                                  what=f"Draft: hovered {pick_name}",
+                                  champion_id=pick_id, role=assigned or "unassigned")
                         self._last_draft_action_time = now
                     elif my_action.get("championId") == pick_id and self.config.get("auto_lock_in", False):
                         if now - self._last_draft_action_time > 0.5:
                             self._log(f"Draft: Locking Pick {pick_name}")
-                            self.lcu.request("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}", data={"championId": pick_id, "completed": True})
+                            self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
+                                      {"championId": pick_id, "completed": True},
+                                      what=f"Draft: locked in {pick_name}",
+                                      champion_id=pick_id,
+                                      role=assigned or "unassigned")
                             self._last_draft_action_time = now
 
     def _aram_priority_names(self):
@@ -1311,7 +1440,9 @@ class AutomationEngine:
             return
 
         self._log(f"ARAM: Rerolling {my_name or my_champ_id} (not in your top {self.REROLL_ACCEPTABLE_RANK})")
-        self.lcu.request("POST", "/lol-champ-select/v1/session/my-selection/reroll")
+        self._act("POST", "/lol-champ-select/v1/session/my-selection/reroll",
+                  what=f"ARAM: rerolled {my_name or my_champ_id}",
+                  champion_id=my_champ_id)
         self._last_reroll_time = now
 
     def _perform_priority_sniper(self, session, priority_list):
@@ -1364,7 +1495,9 @@ class AutomationEngine:
             if now - self._last_priority_swap < PRIORITY_SWAP_COOLDOWN: return
             
             self._log(f"Sniper: Found {best_bench_champ}! Swapping...")
-            self.lcu.request("POST", f"/lol-champ-select/v1/session/bench/swap/{best_bench_id}")
+            self._act("POST", f"/lol-champ-select/v1/session/bench/swap/{best_bench_id}",
+                      what=f"ARAM: swapped to {best_bench_champ} from the bench",
+                      champion_id=best_bench_id)
             self._last_priority_swap = now
             # Reset skin flag so we re-equip for the new champion
             self._skin_equipped = False
@@ -1443,8 +1576,8 @@ class AutomationEngine:
                 time.sleep(0.15)
                 self.lcu.request("DELETE", "/lol-lobby/v2/lobby", silent=True)
                 time.sleep(0.25)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("Automation", "leave_friend_lobby_and_cooldown suppressed an error", exc=exc)
 
         if friends_to_cooldown:
             names_str = ", ".join(sorted(friends_to_cooldown))
@@ -1477,7 +1610,7 @@ class AutomationEngine:
         if phase in ("InProgress", "ChampSelect", "ReadyCheck"):
             return
 
-        if not self.config.get("auto_join_enabled", True):
+        if not self.config.get(AUTO_JOIN_ENABLED, False):
             return
 
         now = time.time()
@@ -1599,7 +1732,7 @@ class AutomationEngine:
             self._honor_attempts = 0
             return
 
-        auto_honor = self.config.get("auto_honor_enabled", False)
+        auto_honor = self.config.get(AUTO_HONOR_ENABLED, True)
         skip_stats = self.config.get("skip_stats_enabled", True)
 
         if not auto_honor and not skip_stats:

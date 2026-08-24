@@ -1,6 +1,6 @@
 """
 Central event bus for cross-component communication.
-Pure Python implementation to safely bridge Tkinter -> PySide6 migration.
+Pure Python implementation, deliberately independent of any UI toolkit.
 Use EventBus (the singleton instance) globally.
 
 Improvements:
@@ -188,7 +188,8 @@ class _EventBus:
         Thread-safe UI update invocation.
         
         For CustomTkinter: uses widget.after() to marshal to main thread.
-        For PySide6 (future): will use QMetaObject.invokeMethod().
+        Callers on a background thread must marshal to the UI thread
+        themselves (`widget.after(0, ...)` in Tk).
         """
         if hasattr(widget, "after"):
             widget.after(0, lambda: callback(*args))

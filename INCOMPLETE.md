@@ -1,6 +1,6 @@
 # LeagueLoop — Register of Unfinished Work
 
-Version at time of writing: **2-08-132-1935**
+Version at time of writing: **2-08-131-2240**
 Audited: 21 August 2026. Every entry below was read in the source, not inferred.
 
 ---
@@ -53,8 +53,110 @@ finally run for real, in the order I expect them to break.
 | Emergency stop during the accept delay still accepted the match: the `threading.Timer` was never cancelled and re-checked nothing when it fired | `automation.py` |
 | Starting the app mid-draft left `current_queue_id` unset (the lobby endpoint 404s during champ select), so neither the Arena path nor the draft assistant ran | `automation.py` |
 
-16 regression tests were added (`tests/test_dead_controls.py`, plus one in
-`test_winrate_honesty.py`). Suite: **385 passing.**
+### Logging pass (second sweep)
+
+| Fix | Files |
+|---|---|
+| Log lines had **no date** (`datefmt='%H:%M:%S'`) and **no level name**, so a file covering two days was unreadable and an ERROR looked like a DEBUG | `utils/logger.py` |
+| No traceback was ever recorded — `Logger.error` took a string and nothing else | `utils/logger.py` |
+| Nothing marked where one run ended and the next began; no record of version, platform, Python, Qt, or the config the run used | `utils/session_log.py` |
+| An unhandled exception on a **worker thread** — where most of this app's work happens — went to a stderr nobody sees. So did Qt's own warnings, and a native crash left nothing at all | `utils/session_log.py` |
+| Startup failures (container, client state, automation config, first refresh) printed to `sys.stderr`, invisible when launched from a shortcut or a `.bat` that closes | `ui/qt/app/application.py` |
+| **106 `except Exception: pass`** handlers across the codebase discarded the error silently | 28 files, via `tools/log_silent_excepts.py` |
+| Every draft PATCH, ready-check accept, reroll and bench swap discarded its result and logged success either way | `services/automation.py` (`_act`) |
+| No record of LCU connect/disconnect or gameflow phase transitions; repeated poll failures logged at DEBUG forever | `services/client_state_service.py` |
+| The account switch — the flow that has never been observed against a real client — left no trail of which phase it reached | `services/accounts/switcher.py` |
+| Loot crafting, the one irreversible operation, recorded nothing about what it opened | `services/loot_service.py` |
+| Hotkey binding failures were swallowed, so an app with **no working hotkeys** looked identical to one where the user pressed the wrong keys | `ui/qt/main_window.py` |
+| "Find Match" swallowed every failure (§1.5) — now checks the status and reports it | `ui/qt/widgets/play_tab.py` |
+| "Prune image cache" discarded its result dict and every failure (§1.6) | `ui/qt/widgets/diagnostics_tab.py` |
+| A page's own `toast_requested` was a signal into the void | `ui/qt/main_window.py` |
+
+**What a run now leaves behind**, in `%LOCALAPPDATA%\LeagueLoop\logs`:
+
+* `debug.log` — everything, `2026-08-21 19:47:03.418 +0000  ACTION   AutoLoop  [Automation] Draft: locked in Ahri  (champion_id=103)`
+* `error.log` — WARNING and above with full tracebacks
+* `session.jsonl` — one JSON object per record, for tooling
+* `crash.log` — native tracebacks from `faulthandler`
+
+`ACTION` is a level of its own: anything that changed the user's account or
+their data — a pick, a ban, an accept, a loot craft, an account switch. When
+the question is "what did it actually do", that is the only level you need.
+
+The Diagnostics screen now has a **Logs** card showing the session id, the
+folder, and this run's warning/error tally, with buttons to open the folder
+and to save a redacted support bundle (a zip of the logs plus a manifest;
+`accounts.json` and `config.json` are deliberately excluded, and credential
+shaped keys are replaced with `<redacted>` at write time).
+
+A test (`tests/test_logging.py::SilentHandlerTests`) fails the build if a new
+`except Exception: pass` is added anywhere in `src/`.
+
+---
+
+33 regression tests were added across `tests/test_dead_controls.py`,
+`tests/test_logging.py` and `test_winrate_honesty.py`. Suite: **410 passing.**
+
+### Completion pass — §10 worked through in order
+
+**First — things that acted on the account without being asked (§10.1–5)**
+
+| Fix | Where |
+|---|---|
+| `dodge_blacklist` force-closed the League Client with **no switch, no try/except and Windows-only flags** that raised into the tick's error killswitch everywhere else. Now behind `dodge_blacklist_enabled`, re-read per draft instead of frozen at startup, refuses to run off Windows, and has an editor (the list was previously unreachable — a stale value kept killing the client with no way to find out why) | `automation.py`, `blacklist_dialog.py` |
+| Loot crafts, draft actions, ready-check accepts and honors were **queued while disconnected and replayed on the next connect** — irreversible actions firing minutes later, multiplied, with no UI. `NEVER_QUEUE_PREFIXES` keeps them out of that queue, and `_craft` stops on the first not-connected result instead of looping | `api_handler.py`, `loot_service.py` |
+| `priority_picker` shipped **enabled with ten champions nobody chose**, so a fresh install bench-swapped toward a developer's favourites. Now empty and off | `config_manager.py` |
+| The chat warden read **every lobby message every tick, gated on nothing**, with no screen admitting it existed. Off by default, with a row that says what it does | `automation.py`, `automation_tab.py` |
+| `_encrypt` logged and returned `""` on DPAPI failure, so the account was stored with an empty password and reported as added. Raises `CredentialEncryptionError` now; nothing is stored | `account_manager.py` |
+| Engine and UI **disagreed on six defaults** — `auto_join_enabled` read True and rendered False, so invites were auto-accepted while the switch showed off. A test now fails the build if any switch's shipped default differs from what the screen renders | `config_manager.py`, `automation_tab.py` |
+| Arena automation was on by default with **no screen anywhere**. Off until there is one | `config_manager.py` |
+| `wallet: {"be": 0, "rp": 0}` and `region: "NA1"` were written for every account and read by nothing. Both removed; region is now optional and says it is not used for signing in | `account_manager.py`, `account_editor.py` |
+
+**Second — the draft (§10.6–11)**
+
+| Fix | Where |
+|---|---|
+| The screen and the engine now describe the same draft: `queue_id` and the bans are carried through state, so `_is_aram()` works and ARAM stops recommending from the Summoner's Rift list | `state.py`, `client_state_service.py`, `champ_select_viewmodel.py` |
+| `can_act()` was a **blocking LCU GET on the GUI thread, once a second**, during the phase where latency matters most. Derived from state now | `champ_select_viewmodel.py` |
+| The commit button was hardcoded "Lock in" while `lock_in` commits whatever is in progress — on a ban turn it said "Lock in", banned the champion, then reported "Locked in". It reads **Ban** on a ban turn and says so | `champ_select_tab.py` |
+| Double-click committed an irreversible draft action with no confirmation. It selects | `champ_select_tab.py` |
+| "Pick manually" paused automation and **nothing ever resumed it** — one press killed champ-select automation for the session. The button is now a toggle that says "Resume automation" | `champ_select_tab.py` |
+| There was **no "not in a draft" state**: full roster, live buttons, and a timer permanently reading "TIME UP 00:00" | `champ_select_tab.py` |
+| Result messages were destroyed within a second by the render loop, so failures read as silent no-ops. They hold for six seconds | `champ_select_tab.py` |
+| Confidence came from a **hardcoded rank** (LOW was unreachable), backups came from a different list than the recommendation, and each backup's badge was its index in the filtered row rather than the rank the user configured. All three read real values now | `priority_engine.py`, `champ_select_viewmodel.py` |
+| `set_owned` had no caller, so every champion rendered as owned. The pickable set is fetched once per draft and applied | `client_state_service.py`, `champ_select_tab.py` |
+| Stale ban markings from the previous draft stayed on the tiles when the validator failed | `champ_select_tab.py` |
+
+**Third — controls that lied (§10.12–16)**
+
+| Fix | Where |
+|---|---|
+| **Opening the Automation screen wrote config**, persisting every default as though chosen | `automation_tab.py` |
+| With the master switch off at startup, every row below stayed enabled and interactive | `automation_tab.py` |
+| Turning the master switch **on** wrote config and nothing else — the engine stayed stopped until restart while the row read "on" | `automation_tab.py` |
+| The screen never re-read itself, so the hotkey, the tray menu and the HTTP API could leave it showing the opposite of reality | `automation_tab.py` |
+| "N priorities configured" counted one list, so role-only users were told they had none and Auto Lock In was greyed out when it would have worked | `automation_tab.py` |
+| The emergency stop was constructed **enabled** and only gated in a method that returns early without a view model | `automation_tab.py` |
+| "Run in system tray" needed a restart — and with it on but the icon not yet shown, closing the window **exited the app instead of minimising** | `settings_tab.py`, `main_window.py` |
+| Rebinding a hotkey did nothing until restart while the label updated immediately, and the old shortcut stayed registered | `settings_tab.py`, `main_window.py` |
+| Loot reported "Loot opened" with a success tone when nothing opened and every craft failed. It reports opened / failed / skipped / keys forged | `loot_tab.py` |
+| Key forging runs **first** and is irreversible, and fragments were excluded from the preview — the one step never shown was the first one to happen | `loot_service.py`, `loot_tab.py` |
+| "Ban list" was connected to two handlers, so it navigated to the Bans tab *and* opened a drifted modal on top of it | `main_window.py` |
+
+**Fourth — structural (§10.17–21)**
+
+| Fix | Where |
+|---|---|
+| Drag-reorder **destroyed the row being dragged** — `setItemWidget` does not survive `InternalMove`, so the champion became a permanently blank row and `_renumber_items` skipped it forever. The list rebuilds from the ids | `champion_list_tab.py` |
+| The ARAM bench sniper and auto-reroll switches lived only on an unreachable screen, so the engine read two keys nothing could write — and "configure" for both landed on a screen with neither control. Both now live on the Priority screen in ARAM mode | `champion_list_tab.py` |
+| `aram_tab.py` is a re-export shim (the bridge cannot delete files; remove it whenever you like) | `aram_tab.py` |
+| The Loot open, the loot refresh and the whole Profile load ran **on the GUI thread** — the window was unpaintable throughout, so the "Refreshing…" status never rendered | `background.py`, `loot_tab.py`, `profile_tab.py` |
+| `Profile.error` carried two useful sentences and had no reader; "no games" and "the request failed" looked identical | `profile_tab.py` |
+| EventBus subscriptions were disposed in `closeEvent`, which a page in a `QStackedWidget` never receives — they outlived the widget for the process lifetime | `accounts_tab.py` |
+
+Suite: **455 passing**, up from 410. All ten screens build real widgets with
+no empty-state fallbacks; the only warning in a clean headless run is the
+`keyboard` package being absent on Linux.
 
 ---
 
@@ -154,8 +256,8 @@ finally run for real, in the order I expect them to break.
 
 ### 1.5 Play
 
-- `play_tab.py:236` — **"Find Match"**, the screen's single primary action,
-  swallows every failure (`except Exception: pass`) and non-2xx responses do
+- ~~`play_tab.py:236`~~ **FIXED** — **"Find Match"**, the screen's single primary action,
+  swallowed every failure (`except Exception: pass`) and non-2xx responses do
   not raise at all — no lobby, queue locked, dodge timer all present as a
   visible no-op. The *hotkey* for the same action has toast feedback; the
   button is strictly worse. → Check `status_code`, emit the existing toast,
@@ -200,7 +302,7 @@ finally run for real, in the order I expect them to break.
   lookup, which is keyed on display names, so those champions show no WR and
   the winrate sort silently sinks them to the bottom of the saved order. →
   Resolve from `assets.champ_data[key]["name"]`.
-- `diagnostics_tab.py:374` — "Prune image cache" swallows every failure and
+- ~~`diagnostics_tab.py:374`~~ **FIXED** — "Prune image cache" swallowed every failure and
   discards the `{removed_files, freed_bytes, …}` the service returns. A
   permission error is indistinguishable from a successful no-op. → Show what
   was freed; surface the exception.
@@ -337,7 +439,8 @@ And one that silently overrides the user:
 Every one of these is a bare `except Exception: pass` (or a discarded return)
 around the call that does the work.
 
-- `automation.py:1090, 1099, 1175, 1180` — **every draft PATCH discards its
+- ~~`automation.py:1090, 1099, 1175, 1180`~~ **FIXED** (routed through `_act`,
+  which checks the status and records the outcome) — **every draft PATCH discarded its
   result.** `LCUClient.request` returns `None` on failure and never raises, so
   "Draft: Locking Pick X" is logged whether or not the client accepted it, and
   `_last_draft_action_time` advances either way — a rejected lock is never
@@ -472,7 +575,57 @@ The window is frozen and unpaintable for the duration of each of these.
 
 ---
 
-## 8. Never verified against a real client — expected order of failure
+## 8. First real run — what it proved
+
+`qt_startup.log` from a live Windows session (6,098 lines) is the first
+evidence this repository has ever had. Two things came out of it, both now
+fixed:
+
+### 8.1 The sign-out/sign-in failure, diagnosed
+
+    [RiotClientAPI] REQ -> DELETE /rso-auth/v1/session
+    [RiotClientAPI] RES <- 204 /rso-auth/v1/session
+    [RiotClientAPI] Signed out successfully
+    [RiotClientAPI] REQ -> PUT /rso-authenticator/v1/authentication
+    [RiotClientAPI] RES <- 201 /rso-authenticator/v1/authentication
+    [RiotClientAPI] Sign-in error: invalid_prompt
+
+`PUT /rso-authenticator/v1/authentication` **answers** an authentication
+prompt; it does not create one. `sign_in` went straight to the PUT, so the
+authenticator had nothing to answer and rejected it with `invalid_prompt` —
+after the account had already been signed out. That is the whole reported
+bug: the switch signs you out and then cannot sign anyone in.
+
+**Fixed** — `RiotClientAPI._begin_authentication()` now does the
+`POST /rso-authenticator/v1/authentication` that opens the RSO session
+first, and `sign_in` refuses to send credentials if that step fails, so a
+failure no longer costs you the session you were already in.
+
+This was item 2 on the old prediction list. The prediction was right about
+the mechanism. It still needs one real run to confirm the fix, and the log
+will now say so in one line either way.
+
+### 8.2 The log was 94% noise about a healthy client
+
+    3255 x  HTTP 404 Error on GET /lol-lobby/v2/lobby
+    2500 x  HTTP 404 Error on GET /lol-matchmaking/v1/search
+
+`/lol-lobby/v2/lobby` returns 404 when you are not in a lobby, and
+`/lol-matchmaking/v1/search` returns 404 when you are not searching. Both are
+the client answering correctly. `_record_http_status_code` treated every
+`>= 400` as an error, logged each one at WARNING, and fed them into the
+sliding-window anomaly detector — which then fired 42 further warnings about
+an error rate it had manufactured itself. 5,755 of 6,098 lines.
+
+**Fixed** — `LCUClient.EXPECTED_404_ENDPOINTS` lists the endpoints where 404
+means "not right now". They are no longer counted, logged, or fed to the
+anomaly detector. Any other 404, and every other status, is unchanged.
+
+### 8.3 Still unproven
+
+Everything else below has still never run against a real client.
+
+### Expected order of failure, unchanged
 
 1. **Loot, entirely.** The only test that touches it asserts the button starts
    disabled. First to break: `_slot_loot_ids`' `chosen = primary_id if

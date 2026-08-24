@@ -6,7 +6,7 @@ availability constraints, and backup cascades.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from core.config_keys import (
     ARAM_PRIORITY_LIST,
@@ -30,6 +30,15 @@ class DraftEvaluationResult:
     role: str
     is_fallback: bool
     reason: str
+    #: Zero-based position in the list this came from. The view model was
+    #: deriving confidence from a hardcoded `0 if not is_fallback else 1`,
+    #: which made `Confidence.LOW` unreachable and turned a three-value badge
+    #: into a two-value fallback flag.
+    rank: int = 0
+    #: Which list was actually consulted. The recommendation came from the
+    #: role or ARAM list while the backups beside it came from the global
+    #: one, so the two rows could disagree.
+    source_list: Tuple[int, ...] = ()
 
 
 class PriorityEngine:
@@ -81,6 +90,8 @@ class PriorityEngine:
                     role=role,
                     is_fallback=(rank_idx > 0),
                     reason=f"Priority rank #{rank_idx + 1} for role '{role}'" if role else f"Priority rank #{rank_idx + 1}",
+                    rank=rank_idx,
+                    source_list=tuple(priority_list),
                 )
 
         return None

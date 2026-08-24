@@ -36,6 +36,7 @@ from ui.qt.theme.typography import (
     TEXT_CAPTION,
     TEXT_PAGE_TITLE,
 )
+from utils.logger import Logger
 
 
 class _DetectSignals(QObject):
@@ -60,8 +61,8 @@ class _DetectTask(QRunnable):
             detect = getattr(self._service, "detect_active_account", None)
             if callable(detect):
                 detect()
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("AccountsTab", "run suppressed an error", exc=exc)
         finally:
             try:
                 self._signals.finished.emit()
@@ -113,6 +114,7 @@ class QtAccountsTab(QWidget):
         self._setup_ui()
         self.refresh()
         self._subscribe_to_switches()
+        self._bind_disposal()
         self.detect()
 
         if view_model is not None:
@@ -208,6 +210,27 @@ class QtAccountsTab(QWidget):
         root.addWidget(scroll, 1)
 
     # ------------------------------------------------------------- events
+    def _bind_disposal(self) -> None:
+        """Dispose when the widget is destroyed, however that happens."""
+        handles = self._handles
+
+        def _drop() -> None:
+            for handle in list(handles):
+                try:
+                    handle.dispose()
+                except Exception as exc:
+                    Logger.debug(
+                        "AccountsTab", "Could not dispose a handle", exc=exc
+                    )
+            handles.clear()
+
+        try:
+            # A plain function, not a bound method: a bound method would keep
+            # the widget alive and the whole point is that it is going away.
+            self.destroyed.connect(lambda *_: _drop())
+        except Exception as exc:
+            Logger.debug("AccountsTab", "Could not bind disposal", exc=exc)
+
     def _subscribe_to_switches(self) -> None:
         """
         Follow the switcher's progress so the screen says what is happening.
@@ -236,8 +259,8 @@ class QtAccountsTab(QWidget):
         ):
             try:
                 self._handles.append(EventBus.on(channel, handler))
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("AccountsTab", "_subscribe_to_switches suppressed an error", exc=exc)
 
     def _set_busy(self, busy: bool) -> None:
         """
@@ -255,8 +278,8 @@ class QtAccountsTab(QWidget):
                     button.setEnabled(False)
                 else:
                     button.setEnabled(bool(button.property("llBaseEnabled")))
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("AccountsTab", "_set_busy suppressed an error", exc=exc)
 
     # --- worker-thread entry points: re-emit only, touch nothing ----------
     def _on_switch_started(self, progress=None, *_a, **_kw) -> None:
@@ -315,13 +338,24 @@ class QtAccountsTab(QWidget):
         )
         self.refresh()
 
-    def closeEvent(self, event) -> None:
+    def dispose(self) -> None:
+        """Drop every EventBus subscription this screen holds.
+
+        Tied to `destroyed`, not to `closeEvent`. A page living inside the
+        shell's QStackedWidget never receives a close event, so these three
+        subscriptions outlived the widget for the whole process — and
+        `_emit_safely` swallowing RuntimeError was the symptom of exactly
+        that: handlers firing into a deleted C++ object.
+        """
         for handle in self._handles:
             try:
                 handle.dispose()
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("AccountsTab", "Could not dispose a handle", exc=exc)
         self._handles.clear()
+
+    def closeEvent(self, event) -> None:
+        self.dispose()
         super().closeEvent(event)
 
     # -------------------------------------------------------------- render
@@ -367,8 +401,8 @@ class QtAccountsTab(QWidget):
         if callable(getter):
             try:
                 return int(getter())
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("AccountsTab", "_active_index suppressed an error", exc=exc)
         return -1
 
     @staticmethod
@@ -424,8 +458,8 @@ class QtAccountsTab(QWidget):
         if callable(getter):
             try:
                 return int(getter())
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("AccountsTab", "_default_index suppressed an error", exc=exc)
         return -1
 
     def detect(self) -> None:
@@ -436,8 +470,8 @@ class QtAccountsTab(QWidget):
             QThreadPool.globalInstance().start(
                 _DetectTask(self.accounts_service, self._detect_signals)
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("AccountsTab", "detect suppressed an error", exc=exc)
 
     def showEvent(self, event) -> None:
         # Re-check on every visit: the user may have signed in or out in the
@@ -478,7 +512,6 @@ class QtAccountsTab(QWidget):
             "username": identity.get("username") or "",
             "tagline": identity.get("tagline") or "",
             "label": identity.get("display_name") or "",
-            "region": "NA1",
         }
         # Deliberately opened as an *add*, not an edit: there is no stored
         # password, and the point of asking is to collect one.
@@ -683,8 +716,8 @@ class QtAccountsTab(QWidget):
         if callable(mover):
             try:
                 mover(index, direction)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("AccountsTab", "_on_move suppressed an error", exc=exc)
         self.refresh()
     def _usernames(self, excluding: int = -1):
         return [
@@ -725,8 +758,8 @@ class QtAccountsTab(QWidget):
             if callable(setter):
                 try:
                     setter(new_index)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    Logger.debug("AccountsTab", "_on_add suppressed an error", exc=exc)
 
         self.refresh()
 
@@ -819,8 +852,8 @@ class QtAccountsTab(QWidget):
             if remaining and callable(setter):
                 try:
                     setter(remaining[0][0])
-                except Exception:
-                    pass
+                except Exception as exc:
+                    Logger.debug("AccountsTab", "_on_remove suppressed an error", exc=exc)
 
         self.refresh()
 
@@ -829,8 +862,8 @@ class QtAccountsTab(QWidget):
         if callable(setter):
             try:
                 setter(index)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("AccountsTab", "_on_set_default suppressed an error", exc=exc)
         self.refresh()
 
     def _on_switch(self, index: int) -> None:

@@ -17,11 +17,20 @@ import sys
 from typing import Any, Optional, Tuple
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QGuiApplication, QIcon
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication
+
+from utils.logger import Logger, prune_old_logs
+from utils.session_log import (
+    install_crash_handlers,
+    install_qt_message_handler,
+    session_banner,
+    session_summary,
+)
 
 APP_NAME = "LeagueLoop"
 ORG_NAME = "LeagueLoop"
+TAG = "Startup"
 
 
 def _configure_dpi() -> None:
@@ -36,8 +45,8 @@ def _configure_dpi() -> None:
         QGuiApplication.setHighDpiScaleFactorRoundingPolicy(
             Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        Logger.debug("Application", "_configure_dpi suppressed an error", exc=exc)
 
 
 def create_app(argv: Optional[list] = None) -> QApplication:
@@ -47,21 +56,24 @@ def create_app(argv: Optional[list] = None) -> QApplication:
         return existing  # type: ignore[return-value]
 
     _configure_dpi()
+    # Before the first window exists: Windows reads the AppUserModelID when a
+    # window is created, and a process without one inherits python.exe's —
+    # which is why the taskbar showed a generic icon no matter what icon the
+    # window itself carried.
+    from ui.qt.services.app_icon import apply_to, install_identity
+
+    install_identity()
     app = QApplication(argv if argv is not None else sys.argv)
     app.setApplicationName(APP_NAME)
     app.setOrganizationName(ORG_NAME)
     app.setApplicationDisplayName(APP_NAME)
 
-    try:
-        from utils.path_utils import get_asset_path  # type: ignore
-
-        for candidate in ("assets/app.ico", "assets/icon.png"):
-            path = get_asset_path(candidate)
-            if path and os.path.exists(path):
-                app.setWindowIcon(QIcon(path))
-                break
-    except Exception:
-        pass
+    if not apply_to(app):
+        Logger.warning(
+            "Application",
+            "The application icon could not be applied; windows will use the "
+            "platform default.",
+        )
 
     return app
 
@@ -102,8 +114,12 @@ def create_container() -> Any:
 
         container = ApplicationContainer()
     except Exception as exc:
-        print(f"[LeagueLoop] Could not build ApplicationContainer: {exc}", file=sys.stderr)
-        print("[LeagueLoop] Falling back to UI-only mode.", file=sys.stderr)
+        Logger.error(
+            TAG,
+            "Could not build the service container — falling back to UI-only "
+            "mode. Nothing that needs the League Client will work.",
+            exc=exc,
+        )
         return None
 
     # One startup sequence, shared with the legacy shell. Anything added to
@@ -112,9 +128,9 @@ def create_container() -> Any:
     # view-model is subscribed.
     container.bootstrap(launch_client_func=launch_riot_client)
 
-    for name, exc in getattr(container, "bootstrap_errors", []):
-        print(f"[LeagueLoop] {name} unavailable: {exc}", file=sys.stderr)
-
+    # `session_banner` logs the bootstrap errors in full, with tracebacks.
+    # They used to go to a stderr that is invisible when the app is started
+    # from a shortcut or a .bat that closes on exit.
     return container
 
 
@@ -132,20 +148,48 @@ def build(with_services: bool = True) -> Tuple[QApplication, Any, Any]:
     Returns (app, window, container) so callers — including screenshot and
     visual-regression tooling — can drive the window themselves.
     """
+    install_crash_handlers()
     app = create_app()
+    install_qt_message_handler()
+
     container = create_container() if with_services else None
-    window = create_window(container)
+    session_banner(shell="qt", container=container, argv=sys.argv[1:])
+
+    try:
+        window = create_window(container)
+    except Exception as exc:
+        Logger.critical(TAG, "The main window could not be built.", exc=exc)
+        raise
 
     # Order matters. The state service publishes only what changed, so
     # starting it before the window's view-model has subscribed means the
     # first values go nowhere and the shell shows "Disconnected" with the
     # client open in champ select.
+    tracker = getattr(container, "client_window_tracker", None) if container else None
+    if tracker is not None:
+        try:
+            tracker.start()
+            Logger.info(TAG, "League Client window tracker started.")
+        except Exception as exc:
+            Logger.error(
+                TAG,
+                "Could not start the window tracker — the companion panel will "
+                "not follow the League Client.",
+                exc=exc,
+            )
+
     service = getattr(container, "client_state", None) if container else None
     if service is not None:
         try:
             service.start()
+            Logger.info(TAG, "Client state service started.")
         except Exception as exc:
-            print(f"[LeagueLoop] Could not start client state: {exc}", file=sys.stderr)
+            Logger.error(
+                TAG,
+                "Could not start the client state service — the app will not "
+                "notice the League Client connecting.",
+                exc=exc,
+            )
 
     # Come up in the state the user left it in, rather than making them flip
     # the master switch once per launch before anything runs.
@@ -153,8 +197,19 @@ def build(with_services: bool = True) -> Tuple[QApplication, Any, Any]:
     if controller is not None:
         try:
             controller.apply_config()
+            Logger.info(
+                TAG,
+                "Automation restored from config (master={}).".format(
+                    controller.master_enabled()
+                ),
+            )
         except Exception as exc:
-            print(f"[LeagueLoop] Could not apply automation config: {exc}", file=sys.stderr)
+            Logger.error(
+                TAG,
+                "Could not apply the saved automation settings — automation "
+                "is off for this run.",
+                exc=exc,
+            )
 
     # Bring every bound view up to date from authoritative state.
     #
@@ -167,20 +222,100 @@ def build(with_services: bool = True) -> Tuple[QApplication, Any, Any]:
     try:
         window.view_model.refresh()
     except Exception as exc:
-        print(f"[LeagueLoop] Initial state refresh failed: {exc}", file=sys.stderr)
+        Logger.error(
+            TAG,
+            "The initial state refresh failed — screens may show stale or "
+            "empty values until something changes.",
+            exc=exc,
+        )
 
+    Logger.info(TAG, "Startup complete; entering the event loop.")
     return app, window, container
 
 
-def run(with_services: bool = True) -> int:
-    """Build everything, show the window, and run the Qt event loop."""
-    app, window, container = build(with_services=with_services)
-    window.show()
+#: How long to let in-flight background work finish before giving up on it.
+#: Long enough for an LCU call to return, short enough that a hung request
+#: does not stop the app closing.
+SHUTDOWN_DRAIN_MS = 3000
+
+
+def _drain_background_work() -> None:
+    """Let the thread pool finish before Qt starts deleting widgets.
+
+    `crash.log` recorded two `Windows fatal exception: access violation`
+    inside `app.exec()`, both with a pool thread parked in
+    `profile_service.load()`. That is the shape: the event loop returns, Qt
+    begins destroying the window, and a worker still holding references to
+    widgets delivers its result into memory that has just been freed. A
+    RuntimeError would be the polite version of this; an access violation is
+    what happens when the timing is worse.
+
+    Draining first makes the ordering explicit rather than hoping the pool
+    happens to be idle.
+    """
     try:
-        return app.exec()
+        from PySide6.QtCore import QThreadPool
+
+        pool = QThreadPool.globalInstance()
+        if pool is None:
+            return
+        active = pool.activeThreadCount()
+        if active:
+            Logger.info(
+                TAG, f"Waiting for {active} background task(s) before closing."
+            )
+        if not pool.waitForDone(SHUTDOWN_DRAIN_MS):
+            Logger.warning(
+                TAG,
+                "Background work did not finish within "
+                f"{SHUTDOWN_DRAIN_MS}ms; closing anyway.",
+            )
+    except Exception as exc:
+        Logger.debug(TAG, "Could not drain the thread pool", exc=exc)
+
+
+def run(with_services: bool = True, single_instance: bool = True) -> int:
+    """Build everything, show the window, and run the Qt event loop.
+
+    `single_instance` is on by default. Four copies sharing one cache, one
+    config and one account store is not a configuration anybody chose — it is
+    what happens when the window is behind the League Client and the shortcut
+    gets double-clicked again.
+    """
+    app = create_app()
+
+    guard = None
+    if single_instance:
+        from ui.qt.services.single_instance import SingleInstance
+
+        guard = SingleInstance()
+        if not guard.acquire():
+            guard.raise_existing()
+            Logger.info(
+                TAG,
+                "LeagueLoop is already running; brought that window forward "
+                "instead of starting a second copy.",
+            )
+            return 0
+
+    app, window, container = build(with_services=with_services)
+    if guard is not None:
+        guard.activated.connect(window.surface_now)
+    window.show()
+    code = 1
+    try:
+        code = app.exec()
+        return code
     finally:
+        Logger.info(TAG, f"Event loop returned {code}; shutting down.")
+        if guard is not None:
+            guard.release()
+        _drain_background_work()
         if container is not None and hasattr(container, "shutdown"):
             try:
                 container.shutdown()
-            except Exception:
-                pass
+                Logger.info(TAG, "Services shut down cleanly.")
+            except Exception as exc:
+                Logger.error(TAG, "Shutdown did not complete cleanly.", exc=exc)
+        prune_old_logs()
+        session_summary(reason=f"normal exit (code {code})")

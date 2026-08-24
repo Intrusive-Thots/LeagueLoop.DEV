@@ -3,6 +3,7 @@ Hotkey Recorder Dialog — Interactive keybinding recorder for QtSettingsTab.
 """
 from __future__ import annotations
 
+from ui.qt.services.popup_size import size_to_content
 from typing import Optional
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeyEvent, QKeySequence
@@ -30,7 +31,9 @@ class QtHotkeyDialog(QDialog):
         self.recorded_sequence: str = current_key
 
         self.setWindowTitle(f"Rebind Hotkey: {action_name}")
-        self.setFixedSize(360, 200)
+        # Was setFixedSize(360, 200), which clipped the instruction text at
+        # 125% Windows scaling and above — the size was measured once, at
+        # 100%, and then frozen.
         self.setStyleSheet(f"""
             QDialog {{
                 background-color: #0A1428;
@@ -40,6 +43,7 @@ class QtHotkeyDialog(QDialog):
         """)
 
         self._setup_ui()
+        size_to_content(self, min_size=(360, 200), max_size=(520, 320))
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)

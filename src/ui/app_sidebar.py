@@ -73,17 +73,21 @@ class SidebarWidget(ctk.CTkFrame):
         self.header.pack(fill="x", pady=(SPACING_XS, SPACING_XS), padx=CARD_PAD)
         self.header.pack_propagate(False)
         
-        logo_path = get_asset_path("logo.png")
+        # Both of these were missing the "assets/" prefix, so neither path
+        # has ever existed and the header has been running without its logo
+        # since the file was written. The failure is invisible: the label is
+        # simply not created.
+        logo_path = get_asset_path("assets/logo.png")
         if not os.path.exists(logo_path):
-            logo_path = get_asset_path("icon.png")
+            logo_path = get_asset_path("assets/icon.png")
 
         self.logo_img = None
         if os.path.exists(logo_path):
             try:
                 pil_img = Image.open(logo_path)
                 self.logo_img = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(24, 24))
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("AppSidebar", "_setup_ui suppressed an error", exc=exc)
 
         if self.logo_img:
             self.lbl_logo = ctk.CTkLabel(self.header, image=self.logo_img, text="")
@@ -180,12 +184,12 @@ class SidebarWidget(ctk.CTkFrame):
                         ctrl = getattr(getattr(self.loot_tool, "card", None), "_toggle_controller", None)
                         if ctrl is not None and not getattr(ctrl, "is_expanded", True):
                             ctrl.toggle()
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        Logger.debug("AppSidebar", "_switch_tab suppressed an error", exc=exc)
                     try:
                         self.after(100, self.loot_tool.refresh)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        Logger.debug("AppSidebar", "_switch_tab suppressed an error", exc=exc)
                 self.spacer.pack(fill="both", expand=True)
 
             elif tab_name == "Play":
@@ -361,8 +365,8 @@ class SidebarWidget(ctk.CTkFrame):
         )
         try:
             self.automations_scroll._scrollbar.configure(width=6)
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("AppSidebar", "_setup_ui suppressed an error", exc=exc)
         apply_smooth_scroll(self.automations_scroll)
 
         # ── Master On/Off Switch ──
@@ -481,8 +485,8 @@ class SidebarWidget(ctk.CTkFrame):
                    self.var_auto_add_played, self.var_auto_ban]:
             try:
                 _v.trace_add("write", lambda *args: self._update_all_quick_icons())
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("AppSidebar", "_setup_ui suppressed an error", exc=exc)
         
         # (Divider removed — card containers provide visual separation)
 
@@ -708,13 +712,20 @@ class SidebarWidget(ctk.CTkFrame):
         self.switch_tab("Play")
 
     # ── Account Manager Injection ──
-    def set_account_manager(self, account_manager):
-        """Called from main.py after sidebar is built to inject the AccountManager."""
+    def set_account_manager(self, account_manager, unavailable_reason=""):
+        """Called from main.py after sidebar is built to inject the AccountManager.
+
+        `account_manager` may be None: the container is written to keep going
+        when an optional service fails, and accounts is one of those. Passing
+        the reason through means the panel can say *why* instead of showing a
+        feature that silently does nothing.
+        """
         self._account_manager = account_manager
         if self.accounts_tool is not None:
             self.accounts_tool.destroy()
         self.accounts_tool = AccountsTool(
-            self.main_body, account_manager, lcu=self.lcu
+            self.main_body, account_manager, lcu=self.lcu,
+            unavailable_reason=unavailable_reason,
         )
         self._accounts_tool_visible = True
 
@@ -724,8 +735,14 @@ class SidebarWidget(ctk.CTkFrame):
             return
 
         riot_running = False
-        if getattr(self, "_account_manager", None):
-            riot_running = self._account_manager.riot_client.is_riot_client_running()
+        manager = getattr(self, "_account_manager", None)
+        if manager is not None:
+            try:
+                riot_running = manager.riot_client.is_riot_client_running()
+            except Exception as exc:
+                Logger.debug(
+                    "Sidebar", "Could not check for the Riot Client", exc=exc,
+                )
 
         self._accounts_tool_visible = True
         
@@ -753,8 +770,13 @@ class SidebarWidget(ctk.CTkFrame):
                 self.img_off = ctk.CTkImage(Image.open(idle_path), size=(56, 56))
             if os.path.exists(active_path):
                 self.img_on = ctk.CTkImage(Image.open(active_path), size=(56, 56))
-        except Exception as e:
-            print(f"Icon load error: {e}")
+        except Exception as exc:
+            Logger.warning(
+                "AppSidebar",
+                "Could not load the tray status icons; the automation "
+                "indicator will have no artwork.",
+                exc=exc,
+            )
 
     def _on_dock_toggle(self):
         """Toggle window docking mode and update button appearance."""
@@ -781,8 +803,8 @@ class SidebarWidget(ctk.CTkFrame):
                 try:
                     if bool(tool.winfo_manager()):
                         return True
-                except Exception:
-                    pass
+                except Exception as exc:
+                    Logger.debug("AppSidebar", "_game_tool_active suppressed an error", exc=exc)
         return False
 
     def _pack_game_tool_container_if_needed(self):
@@ -805,8 +827,8 @@ class SidebarWidget(ctk.CTkFrame):
                     self.game_tool_container.pack(**kwargs)
             else:
                 self.game_tool_container.pack_forget()
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("AppSidebar", "_pack_game_tool_container_if_needed suppressed an error", exc=exc)
 
     def _update_game_tool_visibility(self, mode):
         if hasattr(self, "arena_tool"):
@@ -909,8 +931,8 @@ class SidebarWidget(ctk.CTkFrame):
         if connected and getattr(self, "loot_tool", None):
             try:
                 self.after(400, self.loot_tool.refresh)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("AppSidebar", "on_lcu_connection_changed suppressed an error", exc=exc)
 
     def set_power_state(self, state: bool):
         """Pure visual/logical toggle without user-cancel side effects."""
@@ -1006,8 +1028,8 @@ class SidebarWidget(ctk.CTkFrame):
                         if isinstance(q_name, str):
                             if mode_lower in q_name.lower():
                                 return int(q.get("id"))
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("AppSidebar", "_get_queue_id_for_mode suppressed an error", exc=exc)
         return 450 # Default to ARAM
 
     def _find_match(self):
@@ -1086,6 +1108,87 @@ class SidebarWidget(ctk.CTkFrame):
 
         threading.Thread(target=_execute_sync, daemon=True).start()
 
+    #: One quick-toggle icon's footprint: the button plus its padding.
+    QUICK_ICON_SIZE = 26
+    QUICK_ICON_PAD = 3
+
+    def _quick_icon_cell(self) -> int:
+        """One icon's real footprint, measured rather than assumed.
+
+        CustomTkinter applies its own widget scaling, so a button asked for
+        26px is not 26px on every machine. Measuring the button we actually
+        built is the difference between a column count that fits and one that
+        is off by a pixel per icon — which, at nine icons, is a whole icon.
+        """
+        widgets = getattr(self, "_quick_icon_widgets", None) or {}
+        for entry in widgets.values():
+            button = entry.get("btn")
+            if button is None:
+                continue
+            try:
+                width = max(button.winfo_reqwidth(), button.winfo_width())
+            except Exception:
+                width = 0
+            if width > 1:
+                return width + 2 * self.QUICK_ICON_PAD
+        return self.QUICK_ICON_SIZE + 2 * self.QUICK_ICON_PAD
+
+    def _quick_icon_columns(self, available: int) -> int:
+        """How many icons fit across `available` pixels. At least one."""
+        return max(1, int(available) // self._quick_icon_cell())
+
+    def _reflow_quick_icons(self, _event=None):
+        """Lay the quick toggles out on as many rows as they need.
+
+        Called on every resize of the bar, because the sidebar can be widened
+        and the row should use the space rather than staying at whatever count
+        it computed first.
+        """
+        bar = getattr(self, "quick_icon_bar", None)
+        widgets = getattr(self, "_quick_icon_widgets", None)
+        if not bar or not widgets:
+            return
+        try:
+            if not bar.winfo_exists():
+                return
+            available = bar.winfo_width()
+        except Exception as exc:
+            Logger.debug("AppSidebar", "Could not measure the icon bar", exc=exc)
+            return
+        if available <= 1:
+            # Before the first layout pass Tk reports 1px. Ask again once it
+            # has settled instead of computing a column count from nothing.
+            bar.after(50, self._reflow_quick_icons)
+            return
+
+        columns = self._quick_icon_columns(available)
+        if columns == getattr(self, "_quick_icon_columns_used", None):
+            return
+        self._quick_icon_columns_used = columns
+
+        # No column weights. A weighted column shares out the frame's width,
+        # and when the frame itself is squeezed that shrinks the buttons —
+        # 26px icons rendered at 18px. Icons keep their size; the row count
+        # gives way instead. Same rule as the champion grid.
+        for index in range(len(widgets) + 1):
+            bar.grid_columnconfigure(index, weight=0, uniform="")
+
+        position = 0
+        for entry in widgets.values():
+            button = entry.get("btn")
+            if button is None:
+                continue
+            # Icons can be hidden individually from Settings, and a hidden one
+            # must not leave a hole in the grid.
+            if not bool(self.config.get("show_icon_{}".format(entry["key"]), True)):
+                button.grid_remove()
+                continue
+            button.grid(
+                row=position // columns, column=position % columns,
+                padx=self.QUICK_ICON_PAD, pady=self.QUICK_ICON_PAD,
+            )
+            position += 1
+
     def _build_quick_automation_icon_bar(self):
         """Creates the row of quick automation toggle icons below the Find Match button."""
         if not hasattr(self, "quick_icon_bar") or not self.quick_icon_bar:
@@ -1120,7 +1223,12 @@ class SidebarWidget(ctk.CTkFrame):
                 hover_color="#253245",
                 cursor="hand2"
             )
-            btn.pack(side="left", expand=True, padx=1, pady=1)
+            # Placed by `_reflow_quick_icons()` below, not packed here.
+            # `pack(side="left")` fitted seven of the nine into the 260px bar,
+            # squeezed the eighth to 20px and gave the ninth — Auto-Ban — a
+            # width of 1px at x=0, i.e. no way to reach it at all. Tk shrinks
+            # and then drops rather than complaining, which is why nothing
+            # ever reported it.
 
             entry = {
                 "key": key,
@@ -1169,6 +1277,16 @@ class SidebarWidget(ctk.CTkFrame):
 
             self._update_quick_icon_entry(entry)
 
+        # Place them now, and again whenever the bar's width changes.
+        self._quick_icon_columns_used = None
+        self._reflow_quick_icons()
+        try:
+            self.quick_icon_bar.bind("<Configure>", self._reflow_quick_icons, add="+")
+        except Exception as exc:
+            Logger.debug(
+                "AppSidebar", "Could not watch the icon bar for resizes", exc=exc,
+            )
+
     def _update_quick_icon_entry(self, entry):
         """Updates a single quick icon button appearance based on its current ON/OFF state and visibility config."""
         if not entry or not entry.get("btn") or not entry["btn"].winfo_exists():
@@ -1178,12 +1296,19 @@ class SidebarWidget(ctk.CTkFrame):
         show_icon = bool(self.config.get(f"show_icon_{key}", True))
         btn = entry["btn"]
 
+        # Placement is `_reflow_quick_icons()`'s job, not this method's.
+        # This used to `pack()` the button here while the build loop had also
+        # packed it — two geometry managers for one widget, and the reason a
+        # row of nine 26px icons silently lost its last two in a 260px bar.
         if not show_icon:
-            btn.pack_forget()
+            btn.grid_remove()
+            self._quick_icon_columns_used = None
+            self._reflow_quick_icons()
             return
 
         if not bool(btn.winfo_manager()):
-            btn.pack(side="left", expand=True, padx=1, pady=1)
+            self._quick_icon_columns_used = None
+            self._reflow_quick_icons()
 
         is_on = entry["var"].get()
         label = entry["label"]
@@ -1207,8 +1332,8 @@ class SidebarWidget(ctk.CTkFrame):
             try:
                 state_str = "ON" if is_on else "OFF"
                 entry["tooltip"].configure(text=f"⚡ {label} — {state_str}\nClick to toggle")
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("AppSidebar", "_update_quick_icon_entry suppressed an error", exc=exc)
 
     def _update_all_quick_icons(self):
         """Refreshes all quick icon buttons to match current config/variable states."""
@@ -1384,8 +1509,8 @@ class SidebarWidget(ctk.CTkFrame):
                 theme="success",
                 duration=2000
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("AppSidebar", "_on_quick_status suppressed an error", exc=exc)
 
     def update_action_log(self, text):
         """Updates the action log."""
@@ -1650,7 +1775,11 @@ class SidebarWidget(ctk.CTkFrame):
                 c_name = self.assets.get_champ_name(c_id)
                 if c_name:
                     wr = self.scraper.get_winrate(c_name)
-                    if wr > 0:
+                    # None means "not measured", not "zero". This was
+                    # `if wr > 0`, which raised TypeError out of the Tk
+                    # callback 78 times in one session and dropped the whole
+                    # lobby stats panel every time.
+                    if wr is not None and wr > 0:
                         stats_found = True
                         row = ctk.CTkFrame(self.stats_content, fg_color="transparent")
                         row.pack(fill="x", pady=2)

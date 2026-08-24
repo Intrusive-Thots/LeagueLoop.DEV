@@ -83,8 +83,8 @@ class AutomationController:
         if self._config is not None:
             try:
                 self._config.set(MASTER_KEY, bool(enabled))
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("AutomationController", "set_master suppressed an error", exc=exc)
         self.start() if enabled else self.stop()
 
     def pause(self, paused: bool = True) -> None:

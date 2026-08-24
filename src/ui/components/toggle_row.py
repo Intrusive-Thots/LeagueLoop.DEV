@@ -3,6 +3,7 @@ from PIL import ImageOps  # type: ignore
 from ui.components.factory import get_color, get_font
 from ui.components.lol_toggle import LolToggle  # type: ignore
 from ui.ui_shared import CTkTooltip  # type: ignore
+from utils.logger import Logger
 
 class ToggleRow(ctk.CTkFrame):
     """A reusable component for a toggle row with icon, label, toggle, and optional edit button."""
@@ -80,8 +81,8 @@ class ToggleRow(ctk.CTkFrame):
         if self._variable:
             try:
                 self._variable.trace_add("write", lambda *args: self.after(10, self._update_icon_state))
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("ToggleRow", "__init__ suppressed an error", exc=exc)
             self.after(100, self._update_icon_state)
     
     def _on_icon_loaded(self, ctk_img):
@@ -149,8 +150,8 @@ class ToggleRow(ctk.CTkFrame):
                 self.icon_label.configure(
                     text_color=get_color("colors.accent.gold") if not self._pulse_state else ""
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("ToggleRow", "_tick suppressed an error", exc=exc)
             self._pulse_job = self.after(1500, _tick)
         
         self._pulse_job = self.after(1500, _tick)
@@ -160,8 +161,8 @@ class ToggleRow(ctk.CTkFrame):
         if self._pulse_job:
             try:
                 self.after_cancel(self._pulse_job)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("ToggleRow", "_stop_pulse suppressed an error", exc=exc)
             self._pulse_job = None
         self._pulse_state = True
     
@@ -186,8 +187,8 @@ class ToggleRow(ctk.CTkFrame):
             )
             if hasattr(self.toggle, 'configure'):
                 pass  # LolToggle is a Canvas, doesn't support state
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("ToggleRow", "set_enabled suppressed an error", exc=exc)
     
     def destroy(self):
         """Clean up pulse animation on destroy."""

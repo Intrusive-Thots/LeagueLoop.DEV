@@ -2,12 +2,13 @@
 ApplicationContainer — lightweight dependency injection for LeagueLoop.
 
 Centralizes construction of core services so LeagueLoopApp no longer owns
-every dependency. Enables future testing and PySide6 migration without
-rewriting the app shell.
+every dependency. Enables testing the services without standing up a UI.
 """
 from __future__ import annotations
 
 from typing import Optional, TYPE_CHECKING
+
+import time
 
 from utils.logger import Logger
 
@@ -45,6 +46,7 @@ class ApplicationContainer:
         self.automation: Optional[AutomationEngine] = None
         self.account_manager: Optional[AccountManager] = None
         self.client_state = None
+        self.client_window_tracker = None
         self.automation_controller = None
         self.bootstrap_errors: list = []
 
@@ -97,6 +99,20 @@ class ApplicationContainer:
             self.automation, self.state_manager, self.config
         )
         return self.automation_controller
+
+    def create_client_window_tracker(self):
+        """
+        Track the League Client's window position on screen.
+
+        Without this the companion panel has no idea where the client is,
+        so it sits wherever it was last dragged instead of docking beside it.
+        """
+        from services.client_window_tracker import ClientWindowTracker
+
+        self.client_window_tracker = ClientWindowTracker(
+            state_manager=self.state_manager,
+        )
+        return self.client_window_tracker
 
     def create_client_state_service(self, autostart: bool = False, **kwargs):
         """
@@ -153,39 +169,53 @@ class ApplicationContainer:
         `start_client_state` is off by default and deliberately so: the state
         service only publishes *changes*, so starting it before the UI has
         subscribed means the first values are delivered to nobody. Start it
-        after the views exist — `ui.qt.app.application.build()` does.
+        after the views exist — `core.main.LeagueLoopApp` does.
 
         Failures are reported and swallowed per-service. One unavailable
         subsystem must degrade its own screen, not prevent the app starting.
         """
         errors = []
+        started: list = []
+        began = time.time()
+        Logger.info("Container", "Bootstrapping services…")
 
         if start_assets:
             try:
                 self.assets.start_loading()
+                started.append("assets")
             except Exception as exc:
                 errors.append(("assets", exc))
 
         try:
             self.create_automation(**(automation_hooks or {}))
             self.create_automation_controller()
+            started.append("automation")
         except Exception as exc:
             errors.append(("automation", exc))
 
         try:
             self.create_account_manager(launch_client_func=launch_client_func)
+            started.append("accounts")
         except Exception as exc:
             errors.append(("accounts", exc))
 
         try:
             self.create_client_state_service(autostart=start_client_state)
+            started.append("client state")
         except Exception as exc:
             errors.append(("client state", exc))
+
+        try:
+            self.create_client_window_tracker()
+            started.append("window tracker")
+        except Exception as exc:
+            errors.append(("window tracker", exc))
 
         if start_api:
             try:
                 from services import local_api
                 local_api.start_api_server(self)
+                started.append("api server")
             except Exception as exc:
                 errors.append(("api server", exc))
 
@@ -196,13 +226,41 @@ class ApplicationContainer:
                 errors.append(("automation config", exc))
 
         for name, exc in errors:
-            Logger.error("Container", f"{name} unavailable: {exc}")
+            Logger.error(
+                "Container",
+                f"Service '{name}' did not start — every feature that needs "
+                f"it is unavailable for this run.",
+                exc=exc, service=name,
+            )
+        Logger.info(
+            "Container",
+            "Bootstrap finished in {:.2f}s — started: {}; failed: {}".format(
+                time.time() - began,
+                ", ".join(started) or "nothing",
+                ", ".join(n for n, _ in errors) or "none",
+            ),
+            started=started, failed=[n for n, _ in errors],
+        )
         self.bootstrap_errors = errors
 
         return self
 
+    def failure_reason(self, service: str) -> str:
+        """One sentence saying why a service is missing, for the UI to show.
+
+        A screen that depends on a failed service should say so in the screen,
+        not leave the user with a feature that quietly does nothing while the
+        reason sits in a log file they will never open.
+        """
+        for name, exc in self.bootstrap_errors:
+            if name == service:
+                detail = str(exc).strip() or type(exc).__name__
+                return "The {} service did not start: {}".format(service, detail)
+        return ""
+
     def shutdown(self) -> None:
         """Best-effort teardown of long-lived services."""
+        Logger.info("Container", "Shutting services down…")
         self.automation_controller = None
         # The asset manager starts a pool of download workers in its
         # constructor and nothing ever stopped them; every container built in
@@ -210,22 +268,38 @@ class ApplicationContainer:
         if getattr(self, "assets", None) is not None:
             try:
                 self.assets.shutdown()
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.warning(
+                    "Container", "Could not shut down the asset manager cleanly.", exc=exc
+                )
+        if getattr(self, "client_window_tracker", None) is not None:
+            try:
+                self.client_window_tracker.stop()
+            except Exception as exc:
+                Logger.warning(
+                    "Container", "Could not shut down the window tracker cleanly.", exc=exc
+                )
+            self.client_window_tracker = None
         if getattr(self, "client_state", None) is not None:
             try:
                 self.client_state.stop()
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.warning(
+                    "Container", "Could not shut down the client state service cleanly.", exc=exc
+                )
             self.client_state = None
         if self.automation is not None:
             try:
                 self.automation.stop()
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.warning(
+                    "Container", "Could not shut down the automation engine cleanly.", exc=exc
+                )
             self.automation = None
         if hasattr(self, "db") and self.db is not None:
             try:
                 self.db.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.warning(
+                    "Container", "Could not shut down the database cleanly.", exc=exc
+                )

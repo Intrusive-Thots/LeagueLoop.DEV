@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
 
 from services.accounts.results import RIOT_ERROR_MAP, SwitchOutcome
+from utils.logger import Logger
 
 #: Poll interval when waiting for the client to change state.
 POLL_INTERVAL_S = 0.4
@@ -135,8 +136,8 @@ class RiotSession:
             try:
                 if predicate():
                     return True
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("Session", "wait_until suppressed an error", exc=exc)
             if now() >= deadline:
                 return False
             sleep(interval_s)

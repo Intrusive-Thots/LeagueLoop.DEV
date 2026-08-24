@@ -21,7 +21,7 @@ from ui.qt.theme.colors import (
     GOLD_PRIMARY,
     TEXT_MUTED,
 )
-from ui.qt.theme.spacing import SPACE_SM, SPACE_XS
+from ui.qt.theme.spacing import SPACE_SM, SPACE_XS, GLYPH_WIDTH
 from ui.qt.theme.typography import TEXT_MICRO
 
 DEFAULT_PHASES = ("READY", "ROLE", "PICK", "BAN", "CONFIRM")
@@ -68,7 +68,7 @@ class LLDraftTimeline(QWidget):
                 layout.addWidget(sep)
 
             glyph = QLabel(self)
-            glyph.setFixedWidth(10)
+            glyph.setFixedWidth(GLYPH_WIDTH)
             glyph.setAlignment(Qt.AlignCenter)
             layout.addWidget(glyph)
 

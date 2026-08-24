@@ -33,6 +33,7 @@ from ui.qt.components.status import LLStatus, Tone
 from ui.qt.theme.colors import TEXT_MUTED, TEXT_SECONDARY
 from ui.qt.theme.spacing import CONTENT_MARGIN, SPACE_LG, SPACE_MD, SPACE_SM
 from ui.qt.theme.typography import TEXT_CAPTION, TEXT_MICRO, TEXT_PAGE_TITLE
+from utils.logger import Logger
 
 
 class QtDiagnosticsTab(QWidget):
@@ -124,6 +125,49 @@ class QtDiagnosticsTab(QWidget):
             self._checks.append((key, status))
         body.addWidget(self.health_card)
 
+        # --- logs ---------------------------------------------------------
+        # Every run writes a complete timestamped record. This card is how
+        # the user finds it without being told a file path in a chat window.
+        self.logs_card = LLCard(title="Logs", parent=holder)
+
+        self.logs_status = LLStatus(
+            "Recording", Tone.NEUTRAL, "", parent=self.logs_card
+        )
+        self.logs_card.add_widget(self.logs_status)
+
+        self.logs_path_label = QLabel("", self.logs_card)
+        self.logs_path_label.setWordWrap(True)
+        self.logs_path_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.logs_path_label.setStyleSheet(
+            TEXT_MICRO.qss(color=TEXT_MUTED) + " background: transparent;"
+        )
+        self.logs_card.add_widget(self.logs_path_label)
+
+        logs_row = QHBoxLayout()
+        logs_row.setSpacing(SPACE_SM)
+        self.btn_open_logs = LLButton(
+            "Open log folder", variant=ButtonVariant.SECONDARY,
+            size=ButtonSize.SM, parent=self.logs_card,
+        )
+        self.btn_open_logs.setToolTip("Show the folder these files are written to")
+        self.btn_open_logs.clicked.connect(self._on_open_logs)
+        logs_row.addWidget(self.btn_open_logs)
+
+        self.btn_bundle = LLButton(
+            "Save a support bundle", variant=ButtonVariant.SECONDARY,
+            size=ButtonSize.SM, parent=self.logs_card,
+        )
+        self.btn_bundle.setToolTip(
+            "Zip this run's logs so they can be sent to someone.\n"
+            "Passwords and account names are never written to them."
+        )
+        self.btn_bundle.clicked.connect(self._on_support_bundle)
+        logs_row.addWidget(self.btn_bundle)
+        logs_row.addStretch(1)
+        self.logs_card.add_layout(logs_row)
+
+        body.addWidget(self.logs_card)
+
         # --- developer details (collapsed) --------------------------------
         details_header = QHBoxLayout()
         self.btn_details = LLButton(
@@ -194,6 +238,71 @@ class QtDiagnosticsTab(QWidget):
                 return widget
         return None
 
+    def _render_logs(self) -> None:
+        """Say what this run has recorded, and where it went."""
+        from utils.logger import Logger as _L
+
+        counts = _L.counts()
+        problems = _L.problem_count()
+        actions = counts.get("ACTION", 0)
+
+        detail = "{} action(s) taken, {} warning(s), {} error(s) this run.".format(
+            actions, counts.get("WARNING", 0),
+            counts.get("ERROR", 0) + counts.get("CRITICAL", 0),
+        )
+        if counts.get("ERROR", 0) or counts.get("CRITICAL", 0):
+            tone = Tone.DANGER
+            text = "Errors recorded"
+        elif counts.get("WARNING", 0):
+            tone = Tone.WARNING
+            text = "Warnings recorded"
+        else:
+            tone = Tone.SUCCESS
+            text = "No problems recorded"
+        self.logs_status.set_status(text, tone, detail)
+
+        broken = _L.handler_errors()
+        path_text = "Session {} — {}".format(_L.session_id(), _L.log_dir())
+        if broken:
+            path_text += "\nSome log files could not be opened: " + "; ".join(broken)
+        self.logs_path_label.setText(path_text)
+        return problems
+
+    def _on_open_logs(self) -> None:
+        from utils.logger import Logger as _L
+
+        path = _L.log_dir()
+        try:
+            from PySide6.QtCore import QUrl
+            from PySide6.QtGui import QDesktopServices
+
+            opened = QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+        except Exception as exc:
+            Logger.error("DiagnosticsTab", "Could not open the log folder.", exc=exc)
+            opened = False
+        if not opened:
+            # Never leave the user with nothing: the path is on screen and
+            # selectable even when the desktop refuses to open a window.
+            self.logs_status.set_status(
+                "Could not open the folder", Tone.WARNING,
+                f"Open it yourself: {path}",
+            )
+
+    def _on_support_bundle(self) -> None:
+        try:
+            from utils.session_log import support_bundle
+
+            archive = support_bundle()
+        except Exception as exc:
+            Logger.error("DiagnosticsTab", "Could not write a support bundle.", exc=exc)
+            self.logs_status.set_status(
+                "Could not save the bundle", Tone.DANGER, str(exc)
+            )
+            return
+        self.logs_status.set_status(
+            "Support bundle saved", Tone.SUCCESS, archive
+        )
+
     def refresh(self, *_args) -> None:
         """Re-run every check. Cheap: all of it is already-held state."""
         self._set("client", *self._check_client())
@@ -201,6 +310,7 @@ class QtDiagnosticsTab(QWidget):
         self._set("automation", *self._check_automation())
         self._set("champions", *self._check_champions())
         self._set("history", *self._check_history())
+        self._render_logs()
         if self._details_open:
             self._render_metrics()
 
@@ -296,8 +406,8 @@ class QtDiagnosticsTab(QWidget):
             from core.version import __version__
 
             lines.append("Version: {}".format(__version__))
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("DiagnosticsTab", "_render_metrics suppressed an error", exc=exc)
 
         if self.lcu is not None:
             try:
@@ -324,8 +434,8 @@ class QtDiagnosticsTab(QWidget):
                 lines.append(
                     "Websocket events: {}".format(ws.get("total_events", 0))
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("DiagnosticsTab", "_render_metrics suppressed an error", exc=exc)
 
         try:
             from services.image_cache import ImageCacheService
@@ -334,8 +444,8 @@ class QtDiagnosticsTab(QWidget):
             lines.append(
                 "Image cache: {} MB".format(stats.get("total_mb", 0.0))
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("DiagnosticsTab", "_render_metrics suppressed an error", exc=exc)
 
         self.metrics_label.setText("\n".join(lines) or "Nothing to report.")
 
@@ -365,17 +475,43 @@ class QtDiagnosticsTab(QWidget):
             self.btn_copy.setEnabled(False)
             from PySide6.QtCore import QTimer
 
-            QTimer.singleShot(1500, self._reset_copy)
+            # Context object: leaving the screen inside 1.5s otherwise
+            # resets a button that no longer exists.
+            QTimer.singleShot(1500, self, self._reset_copy)
 
     def _reset_copy(self) -> None:
         self.btn_copy.setText("Copy report")
         self.btn_copy.setEnabled(True)
 
     def _on_prune(self) -> None:
+        """Prune the image cache and say what it freed.
+
+        This used to discard the result dict and swallow every failure, so a
+        permission error on the cache folder looked exactly like a successful
+        no-op.
+        """
         try:
             from services.image_cache import ImageCacheService
 
-            ImageCacheService().clean_disk_cache()
-        except Exception:
-            pass
+            result = ImageCacheService().clean_disk_cache() or {}
+        except Exception as exc:
+            Logger.error("DiagnosticsTab", "Pruning the image cache failed.", exc=exc)
+            self.logs_status.set_status(
+                "Could not prune the image cache", Tone.DANGER, str(exc)
+            )
+            self._render_metrics()
+            return
+
+        removed = result.get("removed_files", 0)
+        freed = result.get("freed_mb", 0)
+        Logger.action(
+            "DiagnosticsTab",
+            f"Pruned the image cache: {removed} file(s), {freed} MB",
+            removed=removed, freed_mb=freed,
+        )
+        self.logs_status.set_status(
+            "Image cache pruned", Tone.SUCCESS,
+            f"Removed {removed} file(s), freeing {freed} MB."
+            if removed else "Nothing was old enough to remove.",
+        )
         self._render_metrics()

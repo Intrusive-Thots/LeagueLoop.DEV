@@ -21,6 +21,7 @@ from PySide6.QtCore import QObject, Signal
 from core.events import EventBus, EventType
 from core.state import ApplicationState, GameflowPhase
 from ui.qt.components.status import Tone
+from utils.logger import Logger
 
 # --- Presentation maps (§56: product vocabulary, never log-speak) ----------
 
@@ -113,16 +114,16 @@ class ShellViewModel(QObject):
             self._handles.append(
                 EventBus.on(EventType.STATE_CHANGED, self._on_state_event_ref)
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("ShellViewmodel", "_subscribe suppressed an error", exc=exc)
 
     def dispose(self) -> None:
         """Unsubscribe from the event bus."""
         for handle in self._handles:
             try:
                 handle.dispose()
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("ShellViewmodel", "dispose suppressed an error", exc=exc)
         self._handles.clear()
 
     def _on_state_event(self, payload: Any = None, *args, **kwargs) -> None:
@@ -141,8 +142,8 @@ class ShellViewModel(QObject):
             if not shiboken6.isValid(self):
                 self.dispose()
                 return
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("ShellViewmodel", "_on_state_event suppressed an error", exc=exc)
 
         state = None
         if isinstance(payload, dict):

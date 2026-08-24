@@ -93,12 +93,14 @@ class AccountEditorModal(LLModal):
         self.add_widget(self.field_tagline)
 
         self.field_region = LLTextField(
-            "Region",
+            "Region (optional)",
             placeholder="NA1",
-            helper="Shard code, e.g. " + ", ".join(COMMON_REGIONS[:4]) + ".",
+            helper="Shown on the account row. Signing in does not use it yet.",
             parent=self,
         )
-        self.field_region.set_text(str(acct.get("region") or "NA1"))
+        # No "NA1" default. Nothing reads this field, so filling it in for the
+        # user meant every account carried an invented shard.
+        self.field_region.set_text(str(acct.get("region") or ""))
         self.add_widget(self.field_region)
 
         for field in self._fields():
@@ -147,11 +149,6 @@ class AccountEditorModal(LLModal):
         if not self.editing and not self.field_password.text():
             self.field_password.set_error("A password is required to sign in.")
             first_bad = first_bad or self.field_password
-
-        region = self.field_region.text().strip()
-        if not region:
-            self.field_region.set_error("A region is required. NA1 if unsure.")
-            first_bad = first_bad or self.field_region
 
         tagline = self.field_tagline.text().strip()
         if tagline and "#" not in tagline:

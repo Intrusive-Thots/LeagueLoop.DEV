@@ -14,11 +14,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from PySide6.QtCore import QObject, Signal
 
 from core.state import ApplicationState, ChampSelectState, GameflowPhase
+from utils.logger import Logger
 
 
 class Confidence(Enum):
@@ -39,6 +40,10 @@ class Recommendation:
     reasons: List[str] = field(default_factory=list)
     is_fallback: bool = False
     winrate: Optional[float] = None  # Lolalytics winrate %
+    #: Zero-based position in the list this came from. The tile badge shows
+    #: `rank + 1`; it used to show the champion's index in the *filtered*
+    #: backup row, which is not a number the user ever configured.
+    rank: int = 0
 
     @property
     def valid(self) -> bool:
@@ -174,15 +179,57 @@ class ChampSelectViewModel(QObject):
             return "Will select {}.".format(self._recommendation.name)
         return "No eligible champion in your priority list."
 
+    @property
+    def pending_action(self):
+        """The draft action you can act on right now, or None.
+
+        Derived from state that has already been pushed to us. It used to be
+        answered by `DraftActions.can_act()`, a blocking LCU GET issued from
+        `_render()` — once per second, during the one phase where latency
+        matters most.
+        """
+        try:
+            from services.draft_actions import current_action
+
+            return current_action(self._session_dict())
+        except Exception as exc:
+            Logger.debug("ChampSelectViewmodel", "pending_action failed", exc=exc)
+            return None
+
+    @property
+    def pending_action_type(self) -> str:
+        """"pick", "ban" or "" — so the view can label its own button."""
+        action = self.pending_action
+        return getattr(action, "type", "") or ""
+
+    @property
+    def can_act(self) -> bool:
+        return self.pending_action is not None
+
     # ------------------------------------------------------------ internals
     def _session_dict(self) -> Dict[str, Any]:
-        """Rebuild the LCU-shaped session the draft services expect."""
-        return {
+        """Rebuild the LCU-shaped session the draft services expect.
+
+        `queueId` and the bans used to be omitted. `PriorityEngine._is_aram()`
+        was therefore always False, so in ARAM this screen recommended from
+        the Summoner's Rift list while the engine — reading the real session —
+        picked from the ARAM one. The screen contradicted what would happen.
+        """
+        session: Dict[str, Any] = {
             "localPlayerCellId": self._state.cell_id,
             "myTeam": list(self._state.my_team or ()),
             "theirTeam": list(self._state.their_team or ()),
             "actions": [list(self._state.actions or ())],
+            "bannedChampions": [
+                {"championId": cid}
+                for cid in (self._state.banned_champion_ids or ())
+            ],
         }
+        queue_id = self._state.queue_id
+        if queue_id:
+            session["queueId"] = queue_id
+            session["gameConfig"] = {"queueId": queue_id}
+        return session
 
     def _champ_name(self, champ_id: int) -> str:
         assets = getattr(self._container, "assets", None)
@@ -190,8 +237,8 @@ class ChampSelectViewModel(QObject):
         if callable(getter):
             try:
                 return getter(champ_id) or str(champ_id)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("ChampSelectViewmodel", "_champ_name suppressed an error", exc=exc)
         return str(champ_id)
 
     def _champ_key(self, champ_id: int) -> str:
@@ -257,7 +304,14 @@ class ChampSelectViewModel(QObject):
             reasons.append(
                 f"{wr:.1f}% WR ({source})" if source else f"{wr:.1f}% WR"
             )
-        reasons.append(result.reason)
+        # `result.reason` reads "Priority rank #1 for role 'MIDDLE'" — the raw
+        # role enum and an internal rank syntax, on the flagship card.
+        reasons.append(
+            "#{} in your {} list".format(
+                result.rank + 1,
+                ROLE_LABELS.get(role, role.title()) if role else "priority",
+            )
+        )
         if role:
             reasons.append("{} selected".format(ROLE_LABELS.get(role, role.title())))
         reasons.append("Available")
@@ -268,28 +322,42 @@ class ChampSelectViewModel(QObject):
             champion_id=result.champion_id,
             name=name,
             key=self._champ_key(result.champion_id),
-            confidence=self._confidence_for(0 if not result.is_fallback else 1,
-                                            result.is_fallback, role_matched),
+            confidence=self._confidence_for(
+                result.rank, result.is_fallback, role_matched
+            ),
+            rank=result.rank,
             reasons=reasons,
             is_fallback=result.is_fallback,
             winrate=wr,
         )
 
-        self._backups = self._compute_backups(session, result.champion_id)
+        self._backups = self._compute_backups(
+            session, result.champion_id, source_list=result.source_list
+        )
 
     def _compute_backups(
-        self, session: Dict[str, Any], chosen_id: int, limit: int = 4
+        self, session: Dict[str, Any], chosen_id: int,
+        source_list: Tuple[int, ...] = (), limit: int = 4,
     ) -> List[Recommendation]:
         """Next available priorities after the recommended one (§14)."""
         backups: List[Recommendation] = []
-        config = getattr(self._container, "config", None)
-        if config is None:
-            return backups
 
-        try:
-            raw = config.get("priority_list", []) or []
-        except Exception:
-            return backups
+        # The list the engine actually consulted. Reading `priority_list`
+        # directly meant that whenever a role or ARAM list was in play, the
+        # Backups row listed champions from a different list than the
+        # recommendation directly above it.
+        raw = list(source_list or ())
+        if not raw:
+            config = getattr(self._container, "config", None)
+            if config is None:
+                return backups
+            try:
+                from core.config_keys import PRIORITY_LIST, read_champion_ids
+
+                raw = read_champion_ids(config, PRIORITY_LIST)
+            except Exception as exc:
+                Logger.debug("ChampSelectViewmodel", "backup list unavailable", exc=exc)
+                return backups
 
         try:
             from services.draft import ActionValidator  # type: ignore
@@ -298,7 +366,7 @@ class ChampSelectViewModel(QObject):
 
         scraper = getattr(self._container, "scraper", None)
 
-        for champ_id in raw:
+        for rank, champ_id in enumerate(raw):
             try:
                 cid = int(champ_id)
             except (TypeError, ValueError):
@@ -309,11 +377,11 @@ class ChampSelectViewModel(QObject):
                 try:
                     if not ActionValidator.is_champion_available(cid, session, is_pick=True):
                         continue
-                except Exception:
-                    pass
+                except Exception as exc:
+                    Logger.debug("ChampSelectViewmodel", "_compute_backups suppressed an error", exc=exc)
             b_name = self._champ_name(cid)
             b_wr = scraper.get_winrate(b_name) if scraper else None
-            b_reasons = ["Backup"]
+            b_reasons = ["#{} in the same list".format(rank + 1)]
             if b_wr is not None:
                 b_reasons.append(f"{b_wr:.1f}% WR")
             backups.append(
@@ -321,9 +389,12 @@ class ChampSelectViewModel(QObject):
                     champion_id=cid,
                     name=b_name,
                     key=self._champ_key(cid),
-                    confidence=Confidence.MEDIUM,
+                    # Every backup used to be stamped MEDIUM regardless of
+                    # where it actually sat in the list.
+                    confidence=self._confidence_for(rank, True, True),
                     reasons=b_reasons,
                     winrate=b_wr,
+                    rank=rank,
                 )
             )
             if len(backups) >= limit:

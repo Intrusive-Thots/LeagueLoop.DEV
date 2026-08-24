@@ -39,6 +39,11 @@ from ui.qt.theme.spacing import SPACE_LG, SPACE_MD, SPACE_SM, SPACE_XL
 from ui.qt.theme.typography import TEXT_BODY, TEXT_SECTION_TITLE
 
 MODAL_MIN_WIDTH = 420
+#: A modal wider than this stops reading as a dialog and starts reading as
+#: the application having lost control of its own window.
+MODAL_MAX_WIDTH = 760
+MODAL_MIN_HEIGHT = 160
+MODAL_MAX_HEIGHT = 720
 
 
 class LLModal(QDialog):
@@ -116,6 +121,50 @@ class LLModal(QDialog):
         footer.addWidget(self.confirm_button)
 
         root.addLayout(footer)
+
+    # ------------------------------------------------------------- sizing
+    def showEvent(self, event):  # noqa: N802 (Qt override)
+        """Size to whatever the body ended up containing.
+
+        Modals are populated *after* `__init__` — `add_widget` is called by
+        the subclass — so the only honest moment to measure is the one just
+        before the dialog is shown. Doing it here means a two-line confirm and
+        a text editor with twenty rows both get the size they need, and
+        neither is hard-coded anywhere.
+        """
+        from ui.qt.services.popup_size import size_to_content
+
+        super().showEvent(event)
+        if not getattr(self, "_sized", False):
+            self._sized = True
+            size_to_content(
+                self,
+                min_size=(MODAL_MIN_WIDTH, MODAL_MIN_HEIGHT),
+                max_size=(MODAL_MAX_WIDTH, MODAL_MAX_HEIGHT),
+            )
+            self._centre_on_parent()
+
+    def _centre_on_parent(self) -> None:
+        """A frameless dialog gets no placement from the window manager."""
+        parent = self.parentWidget()
+        try:
+            if parent is not None and parent.isVisible():
+                origin = parent.frameGeometry()
+            else:
+                from PySide6.QtGui import QGuiApplication
+
+                screen = QGuiApplication.primaryScreen()
+                if screen is None:
+                    return
+                origin = screen.availableGeometry()
+            self.move(
+                origin.x() + (origin.width() - self.width()) // 2,
+                origin.y() + (origin.height() - self.height()) // 2,
+            )
+        except Exception as exc:
+            from utils.logger import Logger
+
+            Logger.debug("Modal", "Could not centre the dialog", exc=exc)
 
     # ---------------------------------------------------------------- body
     def add_widget(self, widget: QWidget, stretch: int = 0) -> None:

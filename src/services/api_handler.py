@@ -41,8 +41,13 @@ class LCUClient:
         self.base_url: Optional[str] = None
         self.is_connected: bool = False
         self.headers: Dict[str, str] = {}
-        from services.http_session_factory import create_pooled_session
-        self.session = create_pooled_session(pool_connections=20, pool_maxsize=20, max_retries=1)
+        self.session = requests.Session()
+        self.session.verify = False
+        
+        # 3.2 Connection pooling
+        adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=10, max_retries=1)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
         
         self._client_pid: Optional[int] = None
         
@@ -2286,8 +2291,8 @@ class LCUClient:
                     try:
                         from core.events import EventBus
                         EventBus.emit("lcu_sleep_wake_recovery", True)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        Logger.debug("ApiHandler", "connect suppressed an error", exc=exc)
 
                 if now - self._last_scan_time < self._backoff:
                     self._connection_state = ConnectionStateEnum.DISCONNECTED
@@ -2356,8 +2361,29 @@ class LCUClient:
             try:
                 from core.events import EventBus
                 EventBus.emit("lcu_sleep_wake_recovery", True)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("ApiHandler", "reset_sleep_wake_backoff suppressed an error", exc=exc)
+
+    #: Endpoints that must never be replayed from the offline queue.
+    #:
+    #: Loot crafting is irreversible. A craft issued while disconnected was
+    #: being queued and silently replayed on the next connect — minutes
+    #: later, possibly several times over, with no UI anywhere. An
+    #: irreversible action that did not happen is a retry the caller can
+    #: decide about; one that happens unattended is not.
+    NEVER_QUEUE_PREFIXES = (
+        "/lol-loot/v1/recipes",
+        "/lol-champ-select/v1/session/actions",
+        "/lol-champ-select/v1/session/my-selection",
+        "/lol-champ-select/v1/session/bench",
+        "/lol-matchmaking/v1/ready-check",
+        "/lol-honor-v2/v1/honor-player",
+    )
+
+    @classmethod
+    def _may_queue_offline(cls, endpoint: str) -> bool:
+        path = (endpoint or "").split("?", 1)[0]
+        return not path.startswith(cls.NEVER_QUEUE_PREFIXES)
 
     def request(
         self,
@@ -2369,7 +2395,8 @@ class LCUClient:
         """Generic wrapper for LCU requests."""
         if not self.is_connected:
             if not self.connect(silent=silent):
-                if method in ["POST", "PUT", "PATCH", "DELETE"]:
+                if method in ["POST", "PUT", "PATCH", "DELETE"] and \
+                        self._may_queue_offline(endpoint):
                     # 3.5 Offline Retry Queue: save state mutations for when we reconnect
                     # Item #179: Cap queue size to prevent unbounded growth
                     if len(self._offline_queue) < self._offline_queue_max:
@@ -2490,9 +2517,41 @@ class LCUClient:
 
         return None
 
+    #: Endpoints where 404 is the client's normal way of saying "not right
+    #: now" — you are not in a lobby, not searching, not in a draft. These are
+    #: answers, not failures.
+    #:
+    #: One real session logged 3,255 warnings for `GET /lol-lobby/v2/lobby`
+    #: and 2,500 for `GET /lol-matchmaking/v1/search`, all of them 404s from a
+    #: perfectly healthy client. That was 94% of the log file, it drove the
+    #: anomaly detector to fire 42 more warnings about a manufactured error
+    #: rate, and it buried the one line that actually mattered.
+    EXPECTED_404_ENDPOINTS = (
+        "/lol-lobby/v2/lobby",
+        "/lol-matchmaking/v1/search",
+        "/lol-champ-select/v1/session",
+        "/lol-champ-select/v1/current-champion",
+        "/lol-gameflow/v1/session",
+        "/lol-end-of-game/v1/eog-stats-block",
+        "/lol-honor-v2/v1/ballot",
+    )
+
+    @classmethod
+    def _is_expected_absence(cls, status_code: int, endpoint: str) -> bool:
+        """True when a 404 here means 'not currently', not 'something broke'."""
+        if status_code != 404:
+            return False
+        path = (endpoint or "").split("?", 1)[0].rstrip("/")
+        return any(
+            path == known or path.startswith(known + "/")
+            for known in cls.EXPECTED_404_ENDPOINTS
+        )
+
     def _record_http_status_code(self, status_code: int, method: str, endpoint: str) -> None:
         """Task 151 & 169: Records HTTP status codes; anomaly alerts use a sliding window (no 200 spam)."""
-        is_error = status_code >= 400
+        is_error = status_code >= 400 and not self._is_expected_absence(
+            status_code, endpoint
+        )
         with self._req_diag_lock:
             self._http_status_codes[status_code] = self._http_status_codes.get(status_code, 0) + 1
             if 200 <= status_code <= 299:
@@ -2746,8 +2805,8 @@ class LCUClient:
         if self._ws_executor:
             try:
                 self._ws_executor.shutdown(wait=False)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("ApiHandler", "stop_websocket suppressed an error", exc=exc)
             self._ws_executor = None
         # Item #181: Join thread with timeout for clean shutdown
         if self._ws_thread and self._ws_thread.is_alive():
@@ -2769,6 +2828,31 @@ class LCUClient:
                 self._ws_connection.send(json.dumps(msg))
             except Exception as e:
                 Logger.error("LCU_WS", f"Subscribe error: {e}")
+
+    #: How long to wait for a pong before calling the socket dead.
+    WS_PING_TIMEOUT_S = 10.0
+
+    def _ws_ping_succeeded(self, ws) -> bool:
+        """True when the peer answers a ping inside `WS_PING_TIMEOUT_S`.
+
+        Returns False rather than raising, because every failure here means
+        the same thing to the caller: reconnect. On a `websockets` build with
+        no usable pong waiter, a ping that sends without raising is taken as
+        alive — that is still strictly better evidence than silence.
+        """
+        try:
+            waiter = ws.ping()
+        except Exception as exc:
+            Logger.debug("LCU_WS", "Could not send a ping", exc=exc)
+            return False
+        wait = getattr(waiter, "wait", None)
+        if not callable(wait):
+            return True
+        try:
+            return bool(wait(self.WS_PING_TIMEOUT_S) is not False)
+        except Exception as exc:
+            Logger.debug("LCU_WS", "Waiting for the pong failed", exc=exc)
+            return False
 
     def _ws_loop(self):
         ctx = ssl.create_default_context()
@@ -2811,23 +2895,47 @@ class LCUClient:
                         except TimeoutError:
                             stale_timeout = self._effective_ws_stale_timeout()
                             stale_age = time.time() - self._ws_last_msg_timestamp
-                            if stale_age >= stale_timeout:
-                                # In-game: LCU is often quiet for long stretches — log at debug to cut noise
-                                log_fn = Logger.debug if self._in_game_mode else Logger.warning
-                                log_fn(
+                            if stale_age < stale_timeout:
+                                continue
+
+                            # Silence is not death. An idle client at the
+                            # lobby sends nothing for minutes at a time, and
+                            # treating that as a stale socket tore the
+                            # connection down and rebuilt it every 46 seconds
+                            # for hours — hundreds of WARNINGs in error.log,
+                            # a re-subscribe storm each time, and a
+                            # connection-drop count that made the diagnostics
+                            # screen report a healthy link as failing.
+                            #
+                            # So ask. A ping that round-trips proves the
+                            # socket is alive; only a ping that does not is a
+                            # reason to reconnect.
+                            if self._ws_ping_succeeded(ws):
+                                self._ws_last_msg_timestamp = time.time()
+                                Logger.debug(
                                     "LCU_WS",
-                                    f"Stale WebSocket connection ping timeout "
-                                    f"({stale_age:.1f}s >= {stale_timeout:.1f}s without messages"
-                                    f"{', in-game' if self._in_game_mode else ''}). Resetting connection.",
+                                    f"Quiet for {stale_age:.0f}s; ping "
+                                    "answered, so the connection is fine.",
                                 )
-                                self._ws_stale_reset_count += 1
-                                self._record_connection_drop(f"Stale WS ping timeout ({stale_age:.1f}s)")
-                                try:
-                                    ws.close()
-                                except Exception:
-                                    pass
-                                break
-                            continue
+                                continue
+
+                            log_fn = Logger.debug if self._in_game_mode else Logger.warning
+                            log_fn(
+                                "LCU_WS",
+                                f"WebSocket did not answer a ping after "
+                                f"{stale_age:.1f}s of silence"
+                                f"{', in-game' if self._in_game_mode else ''}. "
+                                "Resetting connection.",
+                            )
+                            self._ws_stale_reset_count += 1
+                            self._record_connection_drop(
+                                f"WS ping unanswered ({stale_age:.1f}s)"
+                            )
+                            try:
+                                ws.close()
+                            except Exception as exc:
+                                Logger.debug("ApiHandler", "_ws_loop suppressed an error", exc=exc)
+                            break
                         if not message:
                             continue
                             

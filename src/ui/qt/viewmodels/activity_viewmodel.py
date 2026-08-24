@@ -19,6 +19,7 @@ from PySide6.QtCore import QObject, Signal
 
 from core.events import EventBus, EventType
 from ui.qt.components.activity import ActivityEntry, ActivityKind
+from utils.logger import Logger
 
 #: event -> (template, kind, category, important)
 #: `{}` in a template is filled from the event payload where available.
@@ -114,8 +115,8 @@ class ActivityViewModel(QObject):
             self._handlers.append(handler)   # keep a strong reference
             try:
                 self._handles.append(EventBus.on(event_name, handler))
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("ActivityViewmodel", "_subscribe suppressed an error", exc=exc)
 
     def _make_handler(self, event_name: str) -> Callable:
         def _handler(payload: Any = None, *_args, **_kwargs) -> None:
@@ -128,7 +129,7 @@ class ActivityViewModel(QObject):
         for handle in self._handles:
             try:
                 handle.dispose()
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("ActivityViewmodel", "dispose suppressed an error", exc=exc)
         self._handles.clear()
         self._handlers.clear()

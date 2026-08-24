@@ -39,6 +39,7 @@ from ui.qt.theme.typography import (
     TEXT_DISPLAY,
     TEXT_PAGE_TITLE,
 )
+from ui.qt.services.background import run_in_background
 
 MAX_RECENT = 10
 MAX_CHAMPIONS = 5
@@ -132,6 +133,7 @@ class QtProfileTab(QWidget):
 
         self.summoner_detail = QLabel("Connect the League Client to see your profile",
                                       self.identity_card)
+        self.summoner_detail.setWordWrap(True)
         self.summoner_detail.setStyleSheet(
             TEXT_CAPTION.qss(color=TEXT_MUTED) + " background: transparent;"
         )
@@ -162,9 +164,13 @@ class QtProfileTab(QWidget):
             empty_card,
         )
         empty_body.setWordWrap(True)
+        empty_body.setWordWrap(True)
         empty_body.setStyleSheet(
             TEXT_BODY.qss(color=TEXT_MUTED) + " background: transparent;"
         )
+        #: Named, because the reason the panel is empty is worth saying and
+        #: `Profile.error` already carries it.
+        self.empty_label = empty_body
         empty_card.add_widget(empty_body)
         empty_layout.addWidget(empty_card)
         empty_layout.addStretch(1)
@@ -237,20 +243,53 @@ class QtProfileTab(QWidget):
                 widget.deleteLater()
 
     def refresh(self) -> None:
-        """Reload the profile from the client, falling back to local rows."""
+        """Reload the profile from the client, falling back to local rows.
+
+        Off the GUI thread. `ProfileService.load` is three blocking LCU
+        requests, and this is called from `__init__`, from `showEvent` and
+        from the connection-changed signal.
+        """
         if self.profile_service is None:
             self.match_count_badge.set_badge("No games loaded", Tone.NEUTRAL)
             self.stack.setCurrentIndex(0)
             return
 
-        try:
-            self.profile = self.profile_service.load(limit=MAX_RECENT)
-        except Exception:
-            self.profile = None
+        self.match_count_badge.set_badge("Loading…", Tone.NEUTRAL)
+        self._load_task = run_in_background(
+            lambda: self.profile_service.load(limit=MAX_RECENT),
+            on_done=self._on_profile_loaded,
+            on_error=self._on_profile_failed,
+            owner=self,
+            label="profile.load",
+        )
 
+    def _on_profile_failed(self, exc: Exception) -> None:
+        """Say the request failed. Collapsing it to None made "no games" and
+        "the call blew up" look identical."""
+        self.profile = None
+        self.match_count_badge.set_badge("Could not load", Tone.DANGER)
+        self.empty_label.setText(
+            "Your match history could not be read.\n\n{}".format(exc)
+        )
+        self.stack.setCurrentIndex(0)
+        self._render_identity()
+
+    def _on_profile_loaded(self, profile) -> None:
+        self.profile = profile
+        self._render_profile()
+
+    def _render_profile(self) -> None:
         if self.profile is None or not self.profile.matches:
             self.match_count_badge.set_badge("No games loaded", Tone.NEUTRAL)
+            # `Profile.error` is composed with two genuinely useful sentences
+            # and had no reader, so the screen showed fixed text instead.
+            message = getattr(self.profile, "error", "") if self.profile else ""
+            if message:
+                self.empty_label.setText(message)
             self.stack.setCurrentIndex(0)
+            # This used to return before the identity was drawn, so a
+            # connected client with no match history stayed on "Not signed in".
+            self._render_identity()
             return
 
         # Name the sample rather than implying it is your whole record.

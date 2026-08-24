@@ -47,6 +47,11 @@ SUMMONER_ENDPOINT = "/lol-summoner/v1/current-summoner"
 SEARCH_ENDPOINT = "/lol-matchmaking/v1/search"
 LOBBY_ENDPOINT = "/lol-lobby/v2/lobby"
 CHAMP_SELECT_ENDPOINT = "/lol-champ-select/v1/session"
+#: Champions this account can actually pick in this draft. Without it the
+#: roster renders every champion as owned and pickable, the grid's OWNED
+#: filter is a no-op, and clicking an unowned champion fires a hover the
+#: client rejects.
+PICKABLE_ENDPOINT = "/lol-champ-select/v1/pickable-champion-ids"
 
 #: Phases in which no lobby/queue information is meaningful.
 _NO_QUEUE_PHASES = (
@@ -102,6 +107,10 @@ class ClientStateService:
         self._last_queue: Optional[tuple] = None
         self._last_automation: Optional[tuple] = None
         self._summoner_loaded = False
+        #: Fetched once per draft, not once per tick — the set does not change
+        #: while a draft is running.
+        self._pickable_ids: tuple = ()
+        self._pickable_loaded = False
 
     # ------------------------------------------------------------- lifecycle
     def resync(self) -> None:
@@ -145,8 +154,31 @@ class ClientStateService:
             try:
                 connected = self.tick()
             except Exception as exc:  # a bad tick must not kill the loop
-                Logger.debug("ClientState", f"poll failed: {exc}")
+                # Repeated failures matter; one during a client restart does
+                # not. Escalate rather than logging at DEBUG forever, which is
+                # how a persistent fault stayed invisible for a whole session.
+                self._consecutive_poll_errors = (
+                    getattr(self, "_consecutive_poll_errors", 0) + 1
+                )
+                count = self._consecutive_poll_errors
+                if count == 1:
+                    Logger.debug("ClientState", "Poll failed.", exc=exc)
+                elif count == 5 or count % 50 == 0:
+                    Logger.warning(
+                        "ClientState",
+                        f"Polling the League Client has failed {count} times "
+                        f"in a row; live data is stale.",
+                        exc=exc, failures=count,
+                    )
                 connected = False
+            else:
+                if getattr(self, "_consecutive_poll_errors", 0):
+                    Logger.info(
+                        "ClientState",
+                        f"Polling recovered after "
+                        f"{self._consecutive_poll_errors} failure(s).",
+                    )
+                self._consecutive_poll_errors = 0
             self._stop.wait(
                 self._poll_interval_s if connected else self._idle_interval_s
             )
@@ -222,8 +254,8 @@ class ClientStateService:
         state = ConnectionStateEnum.CONNECTED if connected else ConnectionStateEnum.DISCONNECTED
         try:
             state = self._lcu.connection_state
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("ClientStateService", "_publish_connection suppressed an error", exc=exc)
 
         fields = {"connected": connected, "connection_state": state}
         if not connected:
@@ -265,6 +297,8 @@ class ClientStateService:
         else:
             # Reset rather than just flipping `active`: a leftover roster and
             # a frozen timer are worse than an honest empty state (§54).
+            self._pickable_loaded = False
+            self._pickable_ids = ()
             self._state.update_champ_select(
                 active=False, cell_id=-1, local_role="", timer_remaining_s=0.0,
                 locked_in=False, selected_champion_id=0,
@@ -339,6 +373,34 @@ class ClientStateService:
             for a in actions
         )
 
+        # The draft's own queue id, not the lobby's. The lobby endpoint 404s
+        # once champ select starts, so reading it from there left the screen
+        # unable to tell ARAM from Summoner's Rift.
+        queue_id = session.get("queueId") or (
+            session.get("gameConfig") or {}
+        ).get("queueId")
+
+        banned = set()
+        for group in (session.get("bans") or {}).values():
+            if isinstance(group, (list, tuple)):
+                for cid in group:
+                    try:
+                        banned.add(int(cid))
+                    except (TypeError, ValueError):
+                        continue
+        for entry in (session.get("bannedChampions") or ()):
+            try:
+                banned.add(int((entry or {}).get("championId") or 0))
+            except (TypeError, ValueError):
+                continue
+        for action in actions:
+            if action.get("type") == "ban" and action.get("completed"):
+                try:
+                    banned.add(int(action.get("championId") or 0))
+                except (TypeError, ValueError):
+                    continue
+        banned.discard(0)
+
         self._state.update_champ_select(
             active=True,
             cell_id=cell_id,
@@ -349,7 +411,34 @@ class ClientStateService:
             my_team=my_team,
             their_team=their_team,
             actions=actions,
+            queue_id=int(queue_id) if queue_id else None,
+            banned_champion_ids=tuple(sorted(banned)),
+            pickable_champion_ids=self._read_pickable(),
         )
+
+    def _read_pickable(self) -> tuple:
+        """Champions this account can pick, fetched once per draft."""
+        if self._pickable_loaded:
+            return self._pickable_ids
+        payload = self._get_json(PICKABLE_ENDPOINT)
+        if payload is None:
+            # Unknown, not empty. Callers must not read a miss as "you own
+            # nothing" — the grid would render an empty roster.
+            return self._pickable_ids
+        ids = []
+        for cid in (payload or ()):
+            try:
+                ids.append(int(cid))
+            except (TypeError, ValueError):
+                continue
+        self._pickable_ids = tuple(sorted(set(ids)))
+        self._pickable_loaded = True
+        Logger.info(
+            "ClientState",
+            f"{len(self._pickable_ids)} champions are pickable this draft.",
+            count=len(self._pickable_ids),
+        )
+        return self._pickable_ids
 
     @staticmethod
     def _queue_name(queue_id: Optional[int]) -> str:

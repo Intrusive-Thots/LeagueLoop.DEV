@@ -29,7 +29,7 @@ from ui.qt.theme.colors import (
     TEXT_SECONDARY,
 )
 from ui.qt.theme.radii import RADIUS_MD
-from ui.qt.theme.spacing import SPACE_MD, SPACE_SM, SPACE_XS
+from ui.qt.theme.spacing import SPACE_MD, SPACE_SM, SPACE_XS, TOAST_WIDTH, ICON_MD
 from ui.qt.theme.typography import TEXT_BODY, TEXT_BODY_STRONG, TEXT_CAPTION
 
 
@@ -91,7 +91,7 @@ class LLToast(QFrame):
 
         # Dismiss button
         btn_close = QPushButton("✕", self)
-        btn_close.setFixedSize(18, 18)
+        btn_close.setFixedSize(ICON_MD, ICON_MD)
         btn_close.setCursor(Qt.PointingHandCursor)
         btn_close.setStyleSheet(f"""
             QPushButton {{
@@ -107,7 +107,7 @@ class LLToast(QFrame):
         btn_close.clicked.connect(self.dismiss)
         layout.addWidget(btn_close)
 
-        self.setFixedWidth(300)
+        self.setFixedWidth(TOAST_WIDTH)
 
         # Opacity animation
         self.opacity_effect = QGraphicsOpacityEffect(self)
@@ -116,7 +116,9 @@ class LLToast(QFrame):
 
         # Timer for auto-dismiss
         if duration_ms > 0:
-            QTimer.singleShot(duration_ms, self.dismiss)
+            # Context object: a toast dismissed by hand before its timer
+            # expires must not be dismissed again after deletion.
+            QTimer.singleShot(duration_ms, self, self.dismiss)
 
     def show_animated(self) -> None:
         self.show()

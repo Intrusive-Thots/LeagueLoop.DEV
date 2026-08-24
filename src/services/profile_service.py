@@ -218,8 +218,8 @@ class ProfileService:
                 name = getter(champion_id)
                 if name:
                     return str(name)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("ProfileService", "_champ_name suppressed an error", exc=exc)
         # A bare id is honest; inventing a name is not.
         return str(champion_id) if champion_id else ""
 

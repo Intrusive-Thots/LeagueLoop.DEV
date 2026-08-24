@@ -14,15 +14,27 @@ from datetime import datetime
 from ui.components.factory import get_color, get_font, get_radius
 from ui.ui_shared import CTkTooltip
 from core.constants import SPACING_SM, SPACING_MD
+from utils.logger import Logger
 
 
 class AccountsTool(ctk.CTkFrame):
     """Multi-account manager with encrypted credential storage."""
 
-    def __init__(self, master, account_manager, lcu=None, **kw):
+    def __init__(self, master, account_manager, lcu=None, unavailable_reason="", **kw):
         super().__init__(master, fg_color=get_color("colors.background.panel", "#0F1A24"), corner_radius=8, **kw)
         self.acct_mgr = account_manager
         self.lcu = lcu
+        #: Why there is no account manager, when there is none. The container
+        #: is built to degrade — "Service 'accounts' did not start, every
+        #: feature that needs it is unavailable for this run" — but this panel
+        #: called `account_manager.get_accounts()` in its constructor, so a
+        #: `None` manager raised `AttributeError` out of `setup_ui()` and
+        #: **the whole application failed to launch**. One optional service
+        #: taking down the entire app is the opposite of degrading.
+        self.unavailable_reason = unavailable_reason or (
+            "" if account_manager is not None
+            else "The account service did not start this run."
+        )
 
         self._expanded = False
         self._adding = False
@@ -74,7 +86,15 @@ class AccountsTool(ctk.CTkFrame):
         self.btn_add.pack(side="right")
         CTkTooltip(self.btn_add, "Add Account")
 
+    @property
+    def available(self) -> bool:
+        """True when there is an account manager to talk to."""
+        return self.acct_mgr is not None
+
     def _update_header_count(self):
+        if not self.available:
+            self.lbl_count.configure(text="")
+            return
         count = self.acct_mgr.get_account_count()
         if count > 0:
             self.lbl_count.configure(text=f"({count})")
@@ -245,8 +265,8 @@ class AccountsTool(ctk.CTkFrame):
         )
         try:
             self.list_frame._scrollbar.configure(width=6)
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("AccountsTool", "_build_body suppressed an error", exc=exc)
         self.list_frame.pack(fill="both", expand=True)
 
     # ─────────── Collapse ───────────
@@ -266,6 +286,13 @@ class AccountsTool(ctk.CTkFrame):
     # ─────────── Form ───────────
     def _show_add_form(self):
         """Show the add-account form."""
+        if not self.available:
+            Logger.warning(
+                "AccountsTool",
+                "Add account was reached with no account service: "
+                + self.unavailable_reason,
+            )
+            return
         if not self._expanded:
             self._toggle_collapse()
 
@@ -370,8 +397,8 @@ class AccountsTool(ctk.CTkFrame):
                 f"Account {action}: {label}",
                 icon="🔐", theme="success"
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("AccountsTool", "_save_form suppressed an error", exc=exc)
 
     def _flash_field(self, entry):
         """Red flash on invalid field."""
@@ -382,6 +409,11 @@ class AccountsTool(ctk.CTkFrame):
     # ─────────── Active Detection ───────────
     def _detect_active(self):
         """Background detection of which account is currently logged in."""
+        # Nothing to detect with. Without this, simply *expanding* the
+        # ACCOUNTS section started a thread that raised AttributeError on a
+        # None manager — off the GUI thread, where the user sees nothing.
+        if not self.available:
+            return
         # Item #116: Prevent duplicate threads from rapid expand/collapse
         if self._detect_in_progress:
             return
@@ -392,6 +424,12 @@ class AccountsTool(ctk.CTkFrame):
                 self.acct_mgr.detect_active_account()
                 if self.winfo_exists():
                     self.after(0, self._render_accounts)
+            except Exception as exc:
+                # A background thread that raises takes its failure with it.
+                Logger.error(
+                    "AccountsTool",
+                    "Could not detect the active account.", exc=exc,
+                )
             finally:
                 self._detect_in_progress = False
         threading.Thread(target=_detect, daemon=True).start()
@@ -400,6 +438,11 @@ class AccountsTool(ctk.CTkFrame):
     def _render_accounts(self):
         for widget in self.list_frame.winfo_children():
             widget.destroy()
+
+        if not self.available:
+            self._update_header_count()
+            self._render_unavailable_state()
+            return
 
         accounts = self.acct_mgr.get_accounts()
         active_idx = self.acct_mgr.get_active_index()
@@ -561,6 +604,51 @@ class AccountsTool(ctk.CTkFrame):
                 cursor="hand2"
             ).pack(side="left")
 
+    def _render_unavailable_state(self):
+        """Say the accounts feature is off, and why.
+
+        Deliberately not the empty state: "no accounts saved yet" invites you
+        to add one, and the Add button would then fail. This says the feature
+        is unavailable for this run, gives the reason, and offers nothing that
+        cannot work.
+        """
+        frame = ctk.CTkFrame(self.list_frame, fg_color="transparent")
+        frame.pack(fill="x", pady=8, padx=6)
+
+        ctk.CTkLabel(
+            frame,
+            text="Accounts are unavailable",
+            font=get_font("caption", "bold"),
+            text_color=get_color("colors.state.warning", "#FFB020"),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 4))
+
+        ctk.CTkLabel(
+            frame,
+            text=self.unavailable_reason,
+            font=("Inter", 10),
+            text_color=get_color("colors.text.muted"),
+            anchor="w",
+            justify="left",
+            wraplength=240,
+        ).pack(fill="x", padx=(8, 0))
+
+        ctk.CTkLabel(
+            frame,
+            text="Everything else still works. The error log has the details.",
+            font=("Inter", 10),
+            text_color=get_color("colors.text.muted"),
+            anchor="w",
+            justify="left",
+            wraplength=240,
+        ).pack(fill="x", padx=(8, 0), pady=(4, 0))
+
+        if hasattr(self, "btn_add"):
+            try:
+                self.btn_add.configure(state="disabled")
+            except Exception as exc:
+                Logger.debug("AccountsTool", "Could not disable Add", exc=exc)
+
     def _render_empty_state(self):
         """Rich empty state with explanation."""
         empty_frame = ctk.CTkFrame(self.list_frame, fg_color="transparent")
@@ -614,15 +702,15 @@ class AccountsTool(ctk.CTkFrame):
         try:
             from ui.components.toast import ToastManager
             ToastManager.get_instance().show(msg, icon="🔐", duration=3000)
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("AccountsTool", "_log_message suppressed an error", exc=exc)
 
         sidebar = self._get_sidebar()
         if sidebar:
             try:
                 sidebar.update_action_log(msg)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("AccountsTool", "_log_message suppressed an error", exc=exc)
 
     def _login_account(self, idx):
         """Trigger login for the specified account."""
@@ -653,8 +741,8 @@ class AccountsTool(ctk.CTkFrame):
                 ToastManager.get_instance().show(
                     f"Removed: {label}", icon="🗑️", theme="warning"
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("AccountsTool", "_delete_account suppressed an error", exc=exc)
 
     def _move_account(self, idx, direction):
         self.acct_mgr.move_account(idx, direction)

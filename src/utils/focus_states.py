@@ -7,6 +7,7 @@ Applies a colored ring to focused interactive elements.
 
 import customtkinter as ctk
 from ui.components.factory import get_color
+from utils.logger import Logger
 
 
 # Focus ring color
@@ -55,8 +56,8 @@ def apply_focus_ring(widget, color=None, width=2):
     def _on_focus_in(event):
         try:
             widget.configure(border_width=width, border_color=focus_color)
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("FocusStates", "_on_focus_in suppressed an error", exc=exc)
 
     def _on_focus_out(event):
         try:
@@ -64,8 +65,8 @@ def apply_focus_ring(widget, color=None, width=2):
                 border_width=widget._orig_border_width,
                 border_color=widget._orig_border_color
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("FocusStates", "_on_focus_out suppressed an error", exc=exc)
 
     widget.bind("<FocusIn>", _on_focus_in, add="+")
     widget.bind("<FocusOut>", _on_focus_out, add="+")
@@ -73,8 +74,8 @@ def apply_focus_ring(widget, color=None, width=2):
     # Make the widget focusable via Tab
     try:
         widget.configure(takefocus=True)
-    except Exception:
-        pass
+    except Exception as exc:
+        Logger.debug("FocusStates", "apply_focus_ring suppressed an error", exc=exc)
 
 
 def scroll_to_widget(scrollable_frame, widget):
@@ -109,8 +110,8 @@ def scroll_to_widget(scrollable_frame, widget):
             new_y = y1 + fraction_diff
             new_y = max(0.0, min(1.0 - visible_fraction, new_y))
             canvas.yview_moveto(new_y)
-    except Exception:
-        pass
+    except Exception as exc:
+        Logger.debug("FocusStates", "scroll_to_widget suppressed an error", exc=exc)
 
 
 def apply_focus_states_recursive(container, skip_types=None):
@@ -162,8 +163,8 @@ def apply_focus_states_recursive(container, skip_types=None):
         for child in widget.winfo_exists() and widget.winfo_children() or []:
             try:
                 _walk(child)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("FocusStates", "_walk suppressed an error", exc=exc)
 
     _walk(container)
 

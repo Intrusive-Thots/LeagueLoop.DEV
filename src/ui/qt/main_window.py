@@ -56,7 +56,11 @@ from ui.qt.widgets.champion_list_tab import (
 from ui.qt.widgets.loot_tab import QtLootTab
 from ui.qt.widgets.profile_tab import QtProfileTab
 from ui.qt.widgets.settings_tab import QtSettingsTab
+from core.config_keys import ATTACH_TO_CLIENT, COMPANION_SIDE
+from ui.qt.services.companion_anchor import CompanionAnchor
+from ui.qt.services.companion_position import SIDE_LEFT, SIDE_RIGHT
 from ui.qt.widgets.status_bar import LLStatusBar
+from utils.logger import Logger
 
 DEFAULT_WIDTH = 980
 DEFAULT_HEIGHT = 660
@@ -84,6 +88,14 @@ class LeagueLoopMainWindow(QMainWindow):
         self.config = getattr(container, "config", None) if container else None
 
         self.setWindowTitle("LeagueLoop")
+        # Explicit rather than inherited from the QApplication: a frameless
+        # window still contributes its own icon to the taskbar and to Alt-Tab,
+        # and `check_scaling.py` builds this window without going through
+        # `create_app`, so relying on inheritance meant the icon was missing
+        # in exactly the runs that render it.
+        from ui.qt.services.app_icon import apply_to as _apply_app_icon
+
+        _apply_app_icon(self)
         # "Always on top" was a Settings toggle that wrote a config key nothing
         # read. The League Client raises itself when a lobby or a draft starts,
         # so without this the app disappears behind it at exactly the moment
@@ -127,6 +139,17 @@ class LeagueLoopMainWindow(QMainWindow):
         from ui.qt.widgets.orb_widget import QtOrbWidget
         self.orb = QtOrbWidget(container=self.container, view_model=self.view_model)
         self.orb.restore_requested.connect(self.toggle_orb_mode)
+
+        # The main window is the companion panel, so it attaches to the League
+        # Client exactly as the orb does. Previously only the orb did, which is
+        # why the full window sat wherever it was last dragged while the orb
+        # tracked the client correctly — two behaviours for one concept.
+        self.anchor = CompanionAnchor(
+            self,
+            preferred_side=self._configured_side(),
+            enabled=self._attach_enabled(),
+        )
+        self.view_model.state_changed.connect(self._follow_client)
 
         # --- Body: navigation + content ----------------------------------
         body = QWidget(root_widget)
@@ -184,7 +207,12 @@ class LeagueLoopMainWindow(QMainWindow):
         self._bind_hotkeys()
 
         # Auto-login default account on launch (§220)
-        QTimer.singleShot(2500, self._auto_load_default_account)
+        # `self` as the context object, not just the callable. Without it,
+        # a window closed inside 2.5 seconds still gets this invocation, and
+        # PySide6 calls a bound method whose C++ half has been deleted — a
+        # segfault, not an exception. This is the same crash class as the two
+        # access violations in crash.log, with a timer instead of a worker.
+        QTimer.singleShot(2500, self, self._auto_load_default_account)
 
     # -------------------------------------------------------- automation
     def _automation_controller(self):
@@ -197,8 +225,20 @@ class LeagueLoopMainWindow(QMainWindow):
             if signal is not None:
                 try:
                     signal.connect(self._on_stop_automation)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    Logger.debug("MainWindow", "_wire_automation suppressed an error", exc=exc)
+
+            # Any page may report a result. Without this a page's own
+            # `toast_requested` is a signal into the void — which is how the
+            # Play screen's Find Match button ended up silent on every failure.
+            page_toast = getattr(page, "toast_requested", None)
+            if page_toast is not None:
+                try:
+                    page_toast.connect(self.toast_requested)
+                except Exception as exc:
+                    Logger.debug(
+                        "MainWindow", "Could not wire a page's toasts", exc=exc
+                    )
 
         # Play reports automation state and hands off to the screen that
         # owns it; that hand-off has to actually go somewhere.
@@ -207,17 +247,30 @@ class LeagueLoopMainWindow(QMainWindow):
         if jump is not None:
             try:
                 jump.connect(lambda: self.sidebar.select_tab("automation"))
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("MainWindow", "_wire_automation suppressed an error", exc=exc)
 
-        # The Always-on-top switch has to reach the window, not just config.
+        # Settings changes that need the window, not just a config write.
         settings_page = self.tab_pages.get("settings")
+        for signal_name, handler in (
+            ("tray_preference_changed", self.set_run_in_tray),
+            ("hotkeys_changed", self.rebind_hotkeys),
+        ):
+            signal = getattr(settings_page, signal_name, None)
+            if signal is not None:
+                try:
+                    signal.connect(handler)
+                except Exception as exc:
+                    Logger.debug(
+                        "MainWindow", f"Could not wire {signal_name}", exc=exc
+                    )
+
         row = getattr(settings_page, "row_ontop", None)
         if row is not None:
             try:
                 row.toggled.connect(self.set_always_on_top)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("MainWindow", "_wire_automation suppressed an error", exc=exc)
 
         # Developer Mode has to reach the Diagnostics screen, not just config.
         dev_row = getattr(settings_page, "row_devmode", None)
@@ -226,8 +279,8 @@ class LeagueLoopMainWindow(QMainWindow):
         if dev_row is not None and callable(setter):
             try:
                 dev_row.toggled.connect(setter)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("MainWindow", "_wire_automation suppressed an error", exc=exc)
 
         automation_page = self.tab_pages.get("automation")
         if automation_page is not None:
@@ -235,15 +288,8 @@ class LeagueLoopMainWindow(QMainWindow):
             if toggle is not None and controller is not None:
                 try:
                     toggle.toggled.connect(controller.set_master)
-                except Exception:
-                    pass
-
-            config_sig = getattr(automation_page, "configure_requested", None)
-            if config_sig is not None:
-                try:
-                    config_sig.connect(self._on_automation_configure)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    Logger.debug("MainWindow", "_wire_automation suppressed an error", exc=exc)
 
         settings_page = self.tab_pages.get("settings")
         if settings_page is not None:
@@ -251,14 +297,14 @@ class LeagueLoopMainWindow(QMainWindow):
             if status_sig is not None:
                 try:
                     status_sig.connect(self._on_status_saved)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    Logger.debug("MainWindow", "_wire_automation suppressed an error", exc=exc)
 
         if controller is not None:
             try:
                 controller.publish()
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("MainWindow", "_wire_automation suppressed an error", exc=exc)
 
     def _on_status_saved(self, status_text: str) -> None:
         """Push custom status message to LCU via chat API."""
@@ -288,21 +334,6 @@ class LeagueLoopMainWindow(QMainWindow):
             self.toast_requested.emit(
                 "Status updated on League Client.", "Status Saved", Tone.SUCCESS)
 
-    def _on_automation_configure(self, key: str) -> None:
-        """Navigate to the appropriate tab to configure an automation rule further."""
-        if key == "auto_lock_in":
-            self.sidebar.select_tab("priority")
-        elif key == "auto_ban_enabled":
-            self.sidebar.select_tab("bans")
-        elif key in ("aram_bench_swap", "aram_auto_reroll"):
-            # ARAM is a mode on the Priority screen now, not its own tab.
-            self.sidebar.select_tab("priority")
-            page = self.tab_pages.get("priority")
-            setter = getattr(page, "set_mode", None)
-            if callable(setter):
-                from core.config_keys import ARAM_PRIORITY_LIST
-
-                setter(ARAM_PRIORITY_LIST)
 
     def _subscribe_to_global_events(self) -> None:
         """Subscribe to background bus events and surface as user-facing toasts."""
@@ -334,8 +365,8 @@ class LeagueLoopMainWindow(QMainWindow):
 
             EventBus.on(EVENT_SWITCH_FINISHED, _on_switch_finished)
             EventBus.on("toast_requested", _on_toast_event)
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("MainWindow", "_subscribe_to_global_events suppressed an error", exc=exc)
 
     def _wire_configure_actions(self) -> None:
         """
@@ -350,31 +381,46 @@ class LeagueLoopMainWindow(QMainWindow):
         if signal is not None:
             try:
                 signal.connect(self._on_configure_requested)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("MainWindow", "_wire_configure_actions suppressed an error", exc=exc)
 
     def _on_configure_requested(self, key: str) -> None:
-        """Open the right editor for an automation, or jump to its screen."""
-        from core.config_keys import AUTO_BAN_ENABLED, AUTO_LOCK_IN
+        """Open the right editor for an automation, or jump to its screen.
+
+        This is the only handler for `configure_requested`. There used to be
+        two connected to it, so "Ban list" navigated to the Bans tab *and*
+        opened a modal on top of it.
+        """
+        from core.config_keys import (
+            ARAM_AUTO_REROLL, ARAM_BENCH_SWAP, ARAM_PRIORITY_LIST,
+            AUTO_BAN_ENABLED, AUTO_LOCK_IN, DODGE_BLACKLIST_ENABLED,
+        )
 
         if key == AUTO_BAN_ENABLED:
-            try:
-                from ui.qt.widgets.ban_list_dialog import QtBanListDialog
-
-                dialog = QtBanListDialog(
-                    config=self.config,
-                    assets=getattr(self.container, "assets", None),
-                    parent=self,
-                )
-                dialog.exec()
-            except Exception:
-                # A broken editor must not take the shell down; the Bans
-                # screen is still reachable from navigation.
-                self.sidebar.select_tab("bans")
+            # The Bans screen, not the drifted dialog. `QtBanListDialog` was
+            # a second implementation with no paste, no portrait rows and no
+            # import confirmation, so which editor you got depended on how
+            # you had arrived at it.
+            self.sidebar.select_tab("bans")
             return
 
         if key == AUTO_LOCK_IN:
             self.sidebar.select_tab("priority")
+            return
+
+        if key in (ARAM_BENCH_SWAP, ARAM_AUTO_REROLL):
+            # ARAM is a mode on the Priority screen, and the two ARAM rules
+            # now live there — this used to land on a screen with neither.
+            self.sidebar.select_tab("priority")
+            setter = getattr(self.tab_pages.get("priority"), "set_mode", None)
+            if callable(setter):
+                setter(ARAM_PRIORITY_LIST)
+            return
+
+        if key == DODGE_BLACKLIST_ENABLED:
+            from ui.qt.widgets.blacklist_dialog import QtBlacklistDialog
+
+            QtBlacklistDialog(config=self.config, parent=self).exec()
             return
 
         # Anything else: the screen that owns it is the honest fallback.
@@ -464,13 +510,13 @@ class LeagueLoopMainWindow(QMainWindow):
             if self.container and getattr(self.container, "state_manager", None):
                 try:
                     self.container.state_manager.update_ui(current_tab=key)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    Logger.debug("MainWindow", "_on_tab_switched suppressed an error", exc=exc)
             if self.config is not None:
                 try:
                     self.config.set("qt_last_tab", key)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    Logger.debug("MainWindow", "_on_tab_switched suppressed an error", exc=exc)
 
     # ------------------------------------------------------- window layer
     def _window_flags(self):
@@ -511,8 +557,8 @@ class LeagueLoopMainWindow(QMainWindow):
             try:
                 if self.config.get("stealth_mode", False):
                     return
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("MainWindow", "_surface suppressed an error", exc=exc)
 
         if self.isMinimized():
             self.showNormal()
@@ -521,6 +567,26 @@ class LeagueLoopMainWindow(QMainWindow):
         self.raise_()
         if take_focus:
             self.activateWindow()
+
+    def surface_now(self) -> None:
+        """Come to the front because the user asked for the app again.
+
+        Distinct from `_surface()`: that one is the app deciding to interrupt,
+        so it respects stealth mode and does not steal the keyboard. This is a
+        direct request — someone double-clicked the shortcut — and the honest
+        answer to it is the window, in front, focused. Refusing here is what
+        made a second launch look like nothing happened, which is how four
+        copies ended up running.
+        """
+        if self.compact_mode:
+            self.set_compact_mode(False)
+            return
+        if self.isMinimized():
+            self.showNormal()
+        elif not self.isVisible():
+            self.show()
+        self.raise_()
+        self.activateWindow()
 
     def _on_phase_changed(self, phase: str) -> None:
         """Jump to Champ Select when the draft starts; cleanly recover on dodge."""
@@ -586,8 +652,8 @@ class LeagueLoopMainWindow(QMainWindow):
         if pos_x is not None and pos_y is not None:
             try:
                 self.move(int(pos_x), int(pos_y))
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("MainWindow", "_restore_window_state suppressed an error", exc=exc)
 
         if last_tab and last_tab in self.tab_pages:
             self.sidebar.select_tab(last_tab)
@@ -604,59 +670,187 @@ class LeagueLoopMainWindow(QMainWindow):
                     "qt_window_y": self.y(),
                 }
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("MainWindow", "_save_window_state suppressed an error", exc=exc)
 
-    def _bind_hotkeys(self) -> None:
-        """Bind global keyboard shortcuts."""
+    def set_run_in_tray(self, enabled: bool) -> None:
+        """Show or hide the tray icon straight away."""
+        tray = getattr(self, "tray", None)
+        if tray is None:
+            return
+        try:
+            tray.show() if enabled else tray.hide()
+        except Exception as exc:
+            Logger.error("MainWindow", "Could not change the tray icon.", exc=exc)
+            return
+        Logger.info("MainWindow", f"Tray icon {'shown' if enabled else 'hidden'}.")
+
+    def rebind_hotkeys(self) -> None:
+        """Re-register the global shortcuts from config.
+
+        Rebinding used to require a restart, and the previous shortcut stayed
+        registered in the meantime.
+        """
         try:
             import keyboard
 
-            if not self.config:
-                return
+            keyboard.remove_all_hotkeys()
+        except Exception as exc:
+            Logger.debug("Hotkeys", "Nothing to unbind", exc=exc)
+        self._bind_hotkeys()
 
-            launch_key = self.config.get("hotkey_launch_client", "ctrl+shift+l")
-            toggle_key = self.config.get("hotkey_toggle_automation", "ctrl+shift+a")
-            compact_key = self.config.get("hotkey_compact_mode", "ctrl+shift+m")
-            find_key = self.config.get("hotkey_find_match", "ctrl+shift+f")
+    def _bind_hotkeys(self) -> None:
+        """Bind global keyboard shortcuts, and say so when they do not bind.
 
-            if launch_key:
-                try:
-                    keyboard.add_hotkey(launch_key, self._hotkey_launch_client, suppress=False)
-                except Exception:
-                    pass
-            if toggle_key:
-                try:
-                    keyboard.add_hotkey(toggle_key, self._hotkey_toggle_automation, suppress=False)
-                except Exception:
-                    pass
-            if compact_key:
-                try:
-                    keyboard.add_hotkey(compact_key, self.toggle_orb_mode, suppress=False)
-                except Exception:
-                    pass
-            if find_key:
-                try:
-                    keyboard.add_hotkey(find_key, self._hotkey_find_match, suppress=False)
-                except Exception:
-                    pass
-        except Exception:
-            pass
+        Every failure here used to be swallowed, so an app with no working
+        hotkeys was indistinguishable from one where the user had pressed the
+        wrong keys.
+        """
+        try:
+            import keyboard
+        except Exception as exc:
+            Logger.warning(
+                "Hotkeys",
+                "Global hotkeys are unavailable — the `keyboard` package is "
+                "not installed, so none of the shortcuts will work.",
+                exc=exc,
+            )
+            return
+
+        if not self.config:
+            Logger.warning("Hotkeys", "No config; hotkeys were not bound.")
+            return
+
+        bindings = (
+            ("hotkey_launch_client", "ctrl+shift+l", self._hotkey_launch_client,
+             "Launch Client"),
+            ("hotkey_toggle_automation", "ctrl+shift+a",
+             self._hotkey_toggle_automation, "Toggle Automation"),
+            ("hotkey_compact_mode", "ctrl+shift+m", self.toggle_orb_mode,
+             "Compact Mode"),
+            ("hotkey_find_match", "ctrl+shift+f", self._hotkey_find_match,
+             "Find Match"),
+        )
+
+        bound, failed = [], []
+        for key, default, handler, label in bindings:
+            sequence = self.config.get(key, default)
+            if not sequence:
+                continue
+            try:
+                keyboard.add_hotkey(sequence, handler, suppress=False)
+                bound.append(f"{label}={sequence}")
+            except Exception as exc:
+                failed.append(label)
+                Logger.error(
+                    "Hotkeys",
+                    f"'{sequence}' could not be bound to {label} — that "
+                    f"shortcut will do nothing.",
+                    exc=exc, action=label, sequence=sequence,
+                )
+
+        if bound:
+            Logger.info("Hotkeys", "Bound: " + ", ".join(bound), bound=bound)
+        if failed:
+            Logger.warning(
+                "Hotkeys",
+                "These shortcuts are not active: " + ", ".join(failed),
+                failed=failed,
+            )
+
+    # --------------------------------------------------- attach to client
+    def _config_flag(self, key: str, default):
+        if self.config is None:
+            return default
+        try:
+            return self.config.get(key, default)
+        except Exception as exc:
+            Logger.debug("MainWindow", f"Could not read {key}", exc=exc)
+            return default
+
+    def _attach_enabled(self) -> bool:
+        return bool(self._config_flag(ATTACH_TO_CLIENT, True))
+
+    def _configured_side(self) -> str:
+        side = str(self._config_flag(COMPANION_SIDE, SIDE_RIGHT)).lower()
+        return side if side in (SIDE_LEFT, SIDE_RIGHT) else SIDE_RIGHT
+
+    def set_attached_to_client(self, enabled: bool) -> None:
+        """Turn following on or off at runtime.
+
+        Turning it off leaves the window exactly where it is rather than
+        snapping it somewhere — the user just said they want to place it
+        themselves.
+        """
+        enabled = bool(enabled)
+        self.anchor.enabled = enabled
+        if self.config is not None:
+            try:
+                self.config.set(ATTACH_TO_CLIENT, enabled)
+            except Exception as exc:
+                Logger.debug("MainWindow", "Could not save attach setting", exc=exc)
+        if enabled:
+            self._follow_client()
+
+    def _follow_client(self, *_args) -> None:
+        """Move with the League Client's window.
+
+        In orb mode the orb is the visible surface and owns its own anchor;
+        moving a hidden main window would fight the user's next restore.
+        """
+        if self.compact_mode or not self.anchor.enabled:
+            return
+        window = getattr(self.view_model.state, "client_window", None)
+        if window is None:
+            return
+        try:
+            self.anchor.apply(window)
+        except Exception as exc:
+            Logger.error("MainWindow", "Could not reposition the window.", exc=exc)
+
+    # -------------------------------------------------------- window mode
+    @property
+    def compact_mode(self) -> bool:
+        """True when the orb is the visible surface."""
+        return bool(getattr(self, "_compact_mode", False))
+
+    def set_compact_mode(self, compact: bool) -> None:
+        """Switch between the full window and the orb, in one direction only.
+
+        This used to branch on `self.isVisible()`, which is not the question
+        being asked: a *minimised* window is still visible in Qt, so pressing
+        the compact hotkey while minimised swapped in the orb, and pressing it
+        again brought back a window that had never really gone away — two
+        surfaces on screen, or none.
+        """
+        compact = bool(compact)
+        if compact == self.compact_mode:
+            return
+        self._compact_mode = compact
+
+        if self.orb is None:
+            return
+        if compact:
+            self.hide()
+            self.orb.show()
+            self.orb.reposition()
+        else:
+            self.orb.hide()
+            self.showNormal()
+            self._follow_client()
+            self.raise_()
+            self.activateWindow()
+
+        state_manager = getattr(self.container, "state_manager", None) if self.container else None
+        if state_manager is not None:
+            try:
+                state_manager.update_ui(compact_mode=compact)
+            except Exception as exc:
+                Logger.debug("MainWindow", "Could not publish compact mode", exc=exc)
 
     def toggle_orb_mode(self) -> None:
         """Toggle between full main window and floating mini orb mode (§16 & §27)."""
-        if hasattr(self, "orb") and self.orb is not None:
-            if self.isVisible():
-                self.hide()
-                self.orb.show()
-                if self.container and getattr(self.container, "state_manager", None):
-                    self.container.state_manager.update_ui(compact_mode=True)
-            else:
-                self.orb.hide()
-                self.showNormal()
-                self.activateWindow()
-                if self.container and getattr(self.container, "state_manager", None):
-                    self.container.state_manager.update_ui(compact_mode=False)
+        self.set_compact_mode(not self.compact_mode)
 
     def _hotkey_launch_client(self) -> None:
         """Launch the Riot Client / League Client via shortcut."""
@@ -709,7 +903,13 @@ class LeagueLoopMainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         self._save_window_state()
-        if self.config and self.config.get("run_in_tray", True) and hasattr(self, "tray") and self.tray.isVisible():
+        # Not gated on `tray.isVisible()`. With the setting on but the icon
+        # not yet shown, closing the window exited the app instead of
+        # minimising — the opposite of what the setting says.
+        tray = getattr(self, "tray", None)
+        if self.config and self.config.get("run_in_tray", True) and tray is not None:
+            if not tray.isVisible():
+                self.set_run_in_tray(True)
             self.hide()
             self.tray.showMessage(
                 "LeagueLoop",
@@ -722,6 +922,6 @@ class LeagueLoopMainWindow(QMainWindow):
 
         try:
             self.view_model.dispose()
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("MainWindow", "closeEvent suppressed an error", exc=exc)
         super().closeEvent(event)

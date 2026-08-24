@@ -60,8 +60,8 @@ class SystemTrayApp:
         if self.icon:
             try:
                 self.icon.stop()
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("TrayIcon", "stop suppressed an error", exc=exc)
 
     # --- Actions ---
     
@@ -88,13 +88,13 @@ class SystemTrayApp:
                 if hasattr(self.app_root.sidebar, "switch_tab"):
                     self.app_root.after(0, lambda: self.app_root.sidebar.switch_tab("Settings"))
                     self.app_root.after(50, self._sync_show)
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("TrayIcon", "_open_settings suppressed an error", exc=exc)
 
     def _quit_app(self, icon=None, item=None):
         try:
             if hasattr(self.app_root, "after"):
                 # Call the actual destroy method of the Tk root
                 self.app_root.after(0, self.app_root.destroy)
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("TrayIcon", "_quit_app suppressed an error", exc=exc)

@@ -29,12 +29,25 @@ class AccountEditorTests(unittest.TestCase):
         """Not one per submit — that turns one form into three round trips."""
         dialog = self._new()
         dialog.field_tagline.set_text("no-hash")
-        dialog.field_region.set_text("")
         self.assertFalse(dialog.validate())
         self.assertTrue(dialog.field_username.has_error())
         self.assertTrue(dialog.field_password.has_error())
         self.assertTrue(dialog.field_tagline.has_error())
-        self.assertTrue(dialog.field_region.has_error())
+
+    def test_region_is_optional(self):
+        """Nothing reads it. `switch_to`/`sign_in` never see it, and its only
+        other use is the caption on the account row — so blocking someone on
+        it made them fill in a value that changes nothing."""
+        dialog = self._new()
+        dialog.field_username.set_text("someone")
+        dialog.field_password.set_text("pw")
+        dialog.field_region.set_text("")
+        self.assertTrue(dialog.validate())
+        self.assertFalse(dialog.field_region.has_error())
+
+    def test_no_region_is_invented_for_a_new_account(self):
+        dialog = self._new()
+        self.assertEqual(dialog.field_region.text().strip(), "")
 
     def test_riot_id_pasted_into_the_username_field_is_caught(self):
         dialog = self._new()

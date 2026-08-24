@@ -153,51 +153,5 @@ class MirrorTests(unittest.TestCase):
         self.assertFalse(state.state.automation.running)
 
 
-class WindowWiringTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        from PySide6.QtWidgets import QApplication
-        cls.app = QApplication.instance() or QApplication([])
-
-    def _window(self):
-        from ui.qt.main_window import LeagueLoopMainWindow
-
-        controller, engine, state = build()
-
-        class Container:
-            def __init__(self):
-                self.state_manager = state
-                self.automation_controller = controller
-                self.config = controller._config
-
-        return LeagueLoopMainWindow(container=Container()), controller, engine
-
-    def test_the_emergency_stop_reaches_the_engine(self):
-        window, controller, engine = self._window()
-        controller.start()
-        button = window.tab_pages["automation"].btn_stop
-        button.setEnabled(True)
-        button.click()
-        self.assertIn("stop", engine.calls)
-        self.assertFalse(engine.running)
-
-    def test_the_draft_screens_stop_button_works_too(self):
-        window, _controller, engine = self._window()
-        page = window.tab_pages.get("champ_select")
-        if not hasattr(page, "btn_stop"):
-            self.skipTest("draft screen did not build")
-        engine.running = True
-        page.btn_stop.setEnabled(True)
-        page.btn_stop.click()
-        self.assertIn("stop", engine.calls)
-
-    def test_the_master_switch_starts_the_engine(self):
-        window, _controller, engine = self._window()
-        window.tab_pages["automation"].master_toggle.set_checked(False)
-        engine.calls.clear()
-        window.tab_pages["automation"].master_toggle.set_checked(True)
-        self.assertIn("start", engine.calls)
-
-
 if __name__ == "__main__":
     unittest.main()

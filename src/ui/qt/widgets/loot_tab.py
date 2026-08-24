@@ -32,6 +32,8 @@ from ui.qt.theme.typography import (
     TEXT_CAPTION,
     TEXT_PAGE_TITLE,
 )
+from ui.qt.services.background import run_in_background
+from utils.logger import Logger
 
 
 class QtLootTab(QWidget):
@@ -119,7 +121,10 @@ class QtLootTab(QWidget):
             "Open all", variant=ButtonVariant.PRIMARY, parent=action_card
         )
         self.btn_open.setEnabled(False)
-        self.btn_open.setToolTip("Opening loot cannot be undone")
+        self.btn_open.setToolTip(
+            "Opening loot cannot be undone.\n"
+            "Key fragments are forged into keys first."
+        )
         self.btn_open.clicked.connect(self._on_open_all)
         action_row.addWidget(self.btn_open)
 
@@ -155,6 +160,15 @@ class QtLootTab(QWidget):
         holder_layout.setContentsMargins(0, 0, 0, 0)
         holder_layout.setSpacing(SPACE_MD)
         self.list_card = LLCard(title="Will be opened", parent=holder)
+        # Key forging happens first and is irreversible, and fragments are
+        # excluded from the list below — so it gets said here explicitly.
+        self.forge_note = QLabel("", self.list_card)
+        self.forge_note.setWordWrap(True)
+        self.forge_note.setStyleSheet(
+            TEXT_BODY.qss(color=TEXT_SECONDARY) + " background: transparent;"
+        )
+        self.forge_note.setVisible(False)
+        self.list_card.add_widget(self.forge_note)
         holder_layout.addWidget(self.list_card)
         holder_layout.addStretch(1)
         scroll.setWidget(holder)
@@ -185,19 +199,39 @@ class QtLootTab(QWidget):
             self.refresh()
 
     def refresh(self) -> None:
-        """Ask the loot service what is openable right now."""
+        """Ask the loot service what is openable right now.
+
+        Off the GUI thread: `summarize_openable` is `fetch_loot` plus one
+        recipes GET per openable stack, and it is called from the
+        connection-changed signal — so simply connecting to League froze the
+        window for the duration.
+        """
         if self.loot is None:
             self._render_rows([])
             return
         self._has_read = True
-        try:
-            rows = self.loot.summarize_openable() or []
-        except Exception as exc:
-            self.status.set_status("Could not read loot", Tone.DANGER, str(exc))
-            self._render_rows([])
-            return
+        self.btn_refresh.setEnabled(False)
+        self.status.set_status("Reading your loot…", Tone.NEUTRAL, "")
+        self._refresh_task = run_in_background(
+            lambda: self.loot.summarize_openable() or [],
+            on_done=self._on_rows_read,
+            on_error=self._on_read_failed,
+            owner=self,
+            label="loot.summarize_openable",
+        )
 
+    def _on_read_failed(self, exc: Exception) -> None:
+        self.btn_refresh.setEnabled(True)
+        self.status.set_status("Could not read loot", Tone.DANGER, str(exc))
+        self._render_rows([])
+
+    def _on_rows_read(self, rows) -> None:
+        self.btn_refresh.setEnabled(True)
+        self._apply_rows(rows or [])
+
+    def _apply_rows(self, rows) -> None:
         self._rows = rows
+        self._sync_forge_note()
         openable = [r for r in rows if r.get("can_open")]
         total = sum(int(r.get("will_open") or 0) for r in openable)
 
@@ -289,9 +323,82 @@ class QtLootTab(QWidget):
         if not callable(opener):
             return
         self.btn_open.setEnabled(False)
-        try:
-            opener()
-            self.status.set_status("Loot opened", Tone.SUCCESS, "Refreshing")
-        except Exception as exc:
-            self.status.set_status("Could not open loot", Tone.DANGER, str(exc))
+        self.btn_refresh.setEnabled(False)
+        self.status.set_status("Opening…", Tone.NEUTRAL, "Talking to the client.")
+
+        # The whole multi-pass open — key forging, up to four passes, a GET
+        # per stack per pass, N craft POSTs and the sleeps between them —
+        # used to run here, on the GUI thread. The window was unpaintable
+        # throughout, so this very status line never rendered.
+        self._open_task = run_in_background(
+            opener,
+            on_done=self._on_open_finished,
+            on_error=self._on_open_failed,
+            owner=self,
+            label="loot.open_all",
+        )
+
+    def _on_open_failed(self, exc: Exception) -> None:
+        Logger.error("LootTab", "Opening loot failed.", exc=exc)
+        self.status.set_status("Could not open loot", Tone.DANGER, str(exc))
         self.refresh()
+
+    def _on_open_finished(self, result) -> None:
+        self._report_open(result)
+        self.refresh()
+
+    def _sync_forge_note(self) -> None:
+        counter = getattr(self.loot, "count_key_fragments", None)
+        fragments = 0
+        if callable(counter):
+            try:
+                fragments = int(counter() or 0)
+            except Exception as exc:
+                Logger.debug("LootTab", "Could not count key fragments", exc=exc)
+        if fragments:
+            self.forge_note.setText(
+                "{} key fragment{} will be forged into keys first. "
+                "That cannot be undone either.".format(
+                    fragments, "" if fragments == 1 else "s"
+                )
+            )
+        self.forge_note.setVisible(bool(fragments))
+
+    def _report_open(self, result) -> None:
+        """Say what actually happened.
+
+        The `OpenResult` used to be discarded and the screen reported "Loot
+        opened" with a success tone even when nothing opened and every craft
+        returned HTTP 500 — `open_all` is written never to raise, so the only
+        path to a failure message was unreachable.
+        """
+        opened = int(getattr(result, "opened", 0) or 0)
+        failed = int(getattr(result, "failed", 0) or 0)
+        skipped = int(getattr(result, "skipped", 0) or 0)
+        keys = int(getattr(result, "keys_crafted", 0) or 0)
+
+        parts = []
+        if keys:
+            parts.append("{} key{} forged".format(keys, "" if keys == 1 else "s"))
+        if opened:
+            parts.append("{} opened".format(opened))
+        if failed:
+            parts.append("{} failed".format(failed))
+        if skipped:
+            parts.append("{} skipped".format(skipped))
+        detail = ", ".join(parts) or "Nothing was openable."
+
+        if result is None:
+            self.status.set_status("Nothing was returned", Tone.WARNING, detail)
+        elif opened == 0 and failed:
+            self.status.set_status("Nothing opened", Tone.DANGER, detail)
+        elif failed:
+            self.status.set_status("Partly opened", Tone.WARNING, detail)
+        elif opened or keys:
+            self.status.set_status("Loot opened", Tone.SUCCESS, detail)
+        else:
+            self.status.set_status("Nothing to open", Tone.NEUTRAL, detail)
+
+        Logger.info("LootTab", f"Open finished: {detail}",
+                    opened=opened, failed=failed, skipped=skipped,
+                    keys_crafted=keys)

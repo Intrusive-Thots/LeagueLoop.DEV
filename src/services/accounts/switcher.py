@@ -38,6 +38,7 @@ from services.accounts.results import (
     SwitchResult,
 )
 from services.accounts.session import RiotSession
+from utils.logger import Logger
 
 #: League must be closed before the Riot Client will honour a sign-out.
 GAME_PROCESSES = ("LeagueClient.exe", "LeagueClientUx.exe")
@@ -101,11 +102,27 @@ class AccountSwitcher:
             return
         try:
             self._bus.emit(channel, payload)
-        except Exception:
-            pass
+        except Exception as exc:
+            # A dropped event means the UI never hears the switch finished and
+            # sits disabled forever. That is worth a line.
+            Logger.error(
+                "AccountSwitch",
+                f"Could not publish '{channel}' — the interface will not be "
+                f"told about this step.",
+                exc=exc, channel=channel,
+            )
 
     def _progress(self, phase: SwitchPhase, message: str, index: int = -1) -> None:
         self._phase = phase
+        # The switch sequence is the flow that has never been observed against
+        # a real Riot Client. A per-phase trail is the only way to see where
+        # it stopped.
+        Logger.info(
+            "AccountSwitch",
+            f"{getattr(phase, 'name', phase)}: {message}",
+            phase=getattr(phase, "name", str(phase)),
+            account_index=index,
+        )
         self._emit(
             EVENT_SWITCH_PROGRESS,
             SwitchProgress(
@@ -117,6 +134,25 @@ class AccountSwitcher:
         )
 
     def _finish(self, result: SwitchResult) -> SwitchResult:
+        outcome = getattr(result.outcome, "name", str(result.outcome))
+        operation = getattr(result, "operation", "switch")
+        label = self._current_label or "account"
+        if result.ok:
+            Logger.action(
+                "AccountSwitch",
+                f"{operation} succeeded for {label}",
+                outcome=outcome, operation=operation,
+                account_index=getattr(result, "account_index", -1),
+            )
+        else:
+            Logger.error(
+                "AccountSwitch",
+                f"{operation} failed for {label}: {outcome}"
+                + (f" — {result.detail}" if getattr(result, "detail", "") else ""),
+                outcome=outcome, operation=operation,
+                phase=getattr(self._phase, "name", str(self._phase)),
+                account_index=getattr(result, "account_index", -1),
+            )
         self._phase = SwitchPhase.DONE if result.ok else SwitchPhase.FAILED
         self._emit(EVENT_SWITCH_FINISHED, result)
         self._phase = SwitchPhase.IDLE
@@ -217,8 +253,8 @@ class AccountSwitcher:
                 self._progress(SwitchPhase.WAITING_FOR_CLIENT, "Starting the Riot Client", index)
                 try:
                     self._launch_client()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    Logger.debug("Switcher", "_switch_locked suppressed an error", exc=exc)
             if not self.session.wait_until_client_ready(self._client_timeout_s):
                 return self._finish(
                     SwitchResult(SwitchOutcome.CLIENT_NOT_RUNNING,
@@ -236,8 +272,8 @@ class AccountSwitcher:
                 if self._on_success:
                     try:
                         self._on_success(index)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        Logger.debug("Switcher", "_switch_locked suppressed an error", exc=exc)
                 return self._finish(
                     SwitchResult(SwitchOutcome.ALREADY_ACTIVE, SwitchPhase.DONE, index, label)
                 )
@@ -273,15 +309,15 @@ class AccountSwitcher:
         if self._on_success:
             try:
                 self._on_success(index)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("Switcher", "_switch_locked suppressed an error", exc=exc)
 
         if launch_league and self._launch_client:
             self._progress(SwitchPhase.LAUNCHING, "Starting League", index)
             try:
                 self._launch_client()
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("Switcher", "_switch_locked suppressed an error", exc=exc)
 
         return self._finish(
             SwitchResult(SwitchOutcome.SUCCESS, SwitchPhase.DONE, index, label)
@@ -304,8 +340,8 @@ class AccountSwitcher:
         if self._kill_games:
             try:
                 self._kill_games()
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("Switcher", "_ensure_signed_out suppressed an error", exc=exc)
 
         self._progress(SwitchPhase.SIGNING_OUT, "Signing out", index)
         self.session.sign_out()
@@ -317,6 +353,6 @@ class AccountSwitcher:
         if self._on_signed_out:
             try:
                 self._on_signed_out()
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("Switcher", "_ensure_signed_out suppressed an error", exc=exc)
         return None

@@ -261,6 +261,6 @@ class DatabaseService:
             if self._conn is not None:
                 try:
                     self._conn.close()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    Logger.debug("Database", "close suppressed an error", exc=exc)
                 self._conn = None

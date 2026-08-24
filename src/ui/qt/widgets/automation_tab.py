@@ -14,11 +14,16 @@ from __future__ import annotations
 from core.config_keys import (
     AUTO_ACCEPT,
     AUTO_BAN_ENABLED,
+    AUTO_HONOR_ENABLED,
     AUTO_HOVER,
+    AUTO_JOIN_ENABLED,
     AUTO_LOCK_IN,
     AUTO_RANDOM_SKIN,
     AUTO_REQUEUE,
     AUTOMATION_MASTER,
+    CHAT_WARDEN_ENABLED,
+    DODGE_BLACKLIST_ENABLED,
+    SKIP_STATS_ENABLED,
 )
 from typing import Dict, List, Optional, Tuple
 
@@ -26,6 +31,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from ui.qt.components.button import ButtonVariant, LLButton
+from utils.logger import Logger
 from ui.qt.components.card import LLCard, LLSeparator
 from ui.qt.components.setting_row import LLSettingRow
 from ui.qt.components.status import LLStatus, Tone
@@ -53,12 +59,21 @@ AUTOMATION_CONTROLS: List[Tuple[str, str, str, str, bool, str]] = [
      "Picks a random owned skin after locking in.", True, ""),
     (AUTO_REQUEUE, "After the game", "Auto Requeue",
      "Starts a new queue after a dodge or a finished match.", False, ""),
-    ("auto_honor_enabled", "After the game", "Auto Honor",
-     "Honors a teammate, preferring friends then top performers.", False, ""),
-    ("skip_stats_enabled", "After the game", "Skip Stats Screen",
+    (AUTO_HONOR_ENABLED, "After the game", "Auto Honor",
+     "Honors a teammate, preferring friends then top performers.", True, ""),
+    (SKIP_STATS_ENABLED, "After the game", "Skip Stats Screen",
      "Closes the post-game stats screen automatically.", True, ""),
-    ("auto_join_enabled", "Lobby", "Auto Join",
+    (AUTO_JOIN_ENABLED, "Lobby", "Auto Join",
      "Accepts lobby invites from trusted friends.", False, ""),
+    # Three behaviours the engine has always had and no screen ever admitted
+    # to. Two of them read your data or close your client, so they are off by
+    # default and now say plainly what they do.
+    (CHAT_WARDEN_ENABLED, "Lobby", "Chat Warden",
+     "Reads lobby chat and warns you if a teammate is being abusive.",
+     False, ""),
+    (DODGE_BLACKLIST_ENABLED, "Champion Select", "Dodge Blacklist",
+     "Force-closes the League Client if someone on your blacklist is on "
+     "your team. This costs you the queue timer.", False, "Blacklist"),
 ]
 
 
@@ -81,6 +96,9 @@ class QtAutomationTab(QWidget):
         self.view_model = view_model
 
         self.rows: Dict[str, LLSettingRow] = {}
+        #: True while `_load_state` is putting switches where config says.
+        #: Guards the handlers so loading cannot write back.
+        self._loading = False
         self._setup_ui()
         self._load_state()
 
@@ -113,6 +131,11 @@ class QtAutomationTab(QWidget):
         self.btn_stop = LLButton(
             "Stop automation", variant=ButtonVariant.DANGER, parent=master_card
         )
+        # Starts disabled. It was constructed enabled and only ever gated in
+        # `_render_state`, which returns early without a view model — so the
+        # emergency stop was permanently live and reached a controller that
+        # might not exist.
+        self.btn_stop.setEnabled(False)
         self.btn_stop.setToolTip("Emergency stop - halt all automated actions")
         self.btn_stop.clicked.connect(self.stop_requested.emit)
         master_row.addWidget(self.btn_stop)
@@ -170,21 +193,64 @@ class QtAutomationTab(QWidget):
 
     # --------------------------------------------------------------- state
     def _load_state(self) -> None:
+        """Put every switch where config says it is, without side effects.
+
+        `set_checked` re-emits `toggled`, which reached `_on_row_toggled` and
+        wrote the value straight back — so merely *opening* this screen
+        persisted every default as though the user had chosen it. The signals
+        are blocked for the duration.
+        """
         if not self.config:
             return
-        for key, _grp, _name, _blurb, default, _action in AUTOMATION_CONTROLS:
-            row = self.rows.get(key)
-            if row is not None:
-                row.set_checked(bool(self.config.get(key, default)))
+        self._loading = True
+        try:
+            for key, _grp, _name, _blurb, default, _action in AUTOMATION_CONTROLS:
+                row = self.rows.get(key)
+                if row is not None:
+                    row.set_checked(bool(self.config.get(key, default)))
 
-        self.master_toggle.set_checked(bool(self.config.get(AUTOMATION_MASTER, True)))
+            master = bool(self.config.get(AUTOMATION_MASTER, True))
+            self.master_toggle.set_checked(master)
+        finally:
+            self._loading = False
+
+        # Called directly rather than left to the toggle's change signal.
+        # `set_checked(False)` on a switch already at False emits nothing, so
+        # with the master off at startup every row below stayed enabled and
+        # interactive, contradicting the master state.
+        self._apply_master(master)
         self._refresh_details()
+
+    def _apply_master(self, checked: bool) -> None:
+        for row in self.rows.values():
+            row.set_enabled_state(
+                checked, "" if checked else "Master switch is off"
+            )
 
     def _refresh_details(self) -> None:
         """Show why a control matters, e.g. how many priorities are set (§7)."""
         if not self.config:
             return
-        count = len(self.config.get("priority_list", []) or [])
+        # Every list the engine might actually consult, not just the global
+        # one. A user with only role-specific priorities was told "0
+        # priorities configured" and had Auto Lock In greyed out, when it
+        # would have worked perfectly.
+        from core.config_keys import (
+            ARAM_PRIORITY_LIST, PRIORITY_LIST, read_champion_ids,
+            role_priority_key,
+        )
+
+        keys = [PRIORITY_LIST, ARAM_PRIORITY_LIST] + [
+            role_priority_key(role)
+            for role in ("TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY")
+        ]
+        count = 0
+        for key in keys:
+            try:
+                count += len(read_champion_ids(self.config, key))
+            except Exception as exc:
+                Logger.debug("AutomationTab", f"Could not read {key}", exc=exc)
+
         row = self.rows.get(AUTO_LOCK_IN)
         if row is not None:
             row.set_detail(
@@ -198,25 +264,60 @@ class QtAutomationTab(QWidget):
                 row.set_enabled_state(True)
 
     def _render_state(self, *_args) -> None:
+        # The switches are re-read here too. The hotkey, the tray menu and
+        # the local HTTP API all change automation behind this screen's back,
+        # and it used to update only the status line — so the master switch
+        # could sit showing the opposite of reality.
+        self._load_state()
         if self.view_model is None:
+            self.btn_stop.setEnabled(False)
             return
         text, tone, detail = self.view_model.automation_status()
         self.master_status.set_status(text, tone, detail)
         self.btn_stop.setEnabled(self.view_model.state.automation.running)
 
+    def showEvent(self, event):  # noqa: N802 (Qt override)
+        """Re-read on every visit.
+
+        Priorities are edited on another screen, and this one used to keep
+        whatever counts it had at construction until the app restarted.
+        """
+        super().showEvent(event)
+        self._load_state()
+        self._render_state()
+
     # -------------------------------------------------------------- actions
     def _on_master_toggled(self, checked: bool) -> None:
-        if self.config:
+        if getattr(self, "_loading", False):
+            return
+
+        # Turning it *on* used to write config and nothing else. The engine is
+        # only started by `AutomationController.apply_config()` at launch, so
+        # it stayed stopped until the next restart while this row read "on".
+        controller = getattr(self.container, "automation_controller", None) \
+            if self.container else None
+        applied = False
+        if controller is not None:
+            try:
+                controller.set_master(checked)
+                applied = True
+            except Exception as exc:
+                Logger.error(
+                    "AutomationTab", "Could not change the master switch.", exc=exc
+                )
+        if not applied and self.config:
             self.config.set(AUTOMATION_MASTER, checked)
-        for row in self.rows.values():
-            row.set_enabled_state(checked,
-                                  "" if checked else "Master switch is off")
+
+        self._apply_master(checked)
         if not checked:
             self.stop_requested.emit()
         self._refresh_details()
 
     def _on_row_toggled(self, key: str, value: bool) -> None:
+        if getattr(self, "_loading", False):
+            return
         if self.config:
             self.config.set(key, value)
+        Logger.info("AutomationTab", f"{key} set to {value}", key=key, value=value)
         if key == AUTO_LOCK_IN:
             self._refresh_details()

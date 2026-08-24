@@ -31,7 +31,7 @@ from ui.qt.theme.colors import (
     TEXT_MUTED,
     TEXT_PRIMARY,
 )
-from ui.qt.theme.spacing import SPACE_SM, SPACE_XS
+from ui.qt.theme.spacing import SPACE_SM, SPACE_XS, GLYPH_WIDTH
 from ui.qt.theme.typography import TEXT_BODY, TEXT_CAPTION
 
 
@@ -97,25 +97,36 @@ class LLStatus(QWidget):
 
         # A status must never be squeezed narrower than its own text — a
         # clipped "In queue" reading as "In que" is worse than a tight row.
-        self.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        # The *detail* sentence is a different matter: "Launch the League
+        # Client or switch to a stored account" is a paragraph, and refusing
+        # to wrap it set a 480px floor on the card, the tab and the window.
+        # So the short label keeps its minimum and the detail wraps, which
+        # means the row's height is no longer fixed.
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(SPACE_XS if compact else SPACE_SM)
-        layout.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        # No AlignLeft here. With it, the row is given only its size hint and
+        # the wrapping detail label collapses to zero width — present in the
+        # tree, invisible on screen, which is worse than being clipped.
+        layout.setAlignment(Qt.AlignTop)
 
         self._glyph = QLabel(self)
         self._glyph.setAlignment(Qt.AlignCenter)
         # Fixed-width glyph container so switching states never shifts layout (§36).
-        self._glyph.setFixedWidth(12)
+        self._glyph.setFixedWidth(GLYPH_WIDTH)
         layout.addWidget(self._glyph)
 
         self._label = QLabel(self)
+        self._label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Preferred)
         layout.addWidget(self._label)
 
         self._detail = QLabel(self)
         self._detail.setVisible(False)
-        layout.addWidget(self._detail)
+        self._detail.setWordWrap(True)
+        self._detail.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        layout.addWidget(self._detail, 1)
 
         self.set_status(text, tone, detail)
 

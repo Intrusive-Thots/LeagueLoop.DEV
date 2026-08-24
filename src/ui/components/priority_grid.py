@@ -14,6 +14,7 @@ from ui.ui_shared import CTkTooltip
 from ui.components.toast import ToastManager
 from core.constants import SPACING_SM, SPACING_MD
 from utils.smooth_scroll import apply_smooth_scroll
+from utils.logger import Logger
 
 ICON_SIZE = 40
 ICONS_PER_ROW = 4
@@ -175,8 +176,8 @@ class PriorityIconGrid(ctk.CTkFrame):
                 if migrated:
                     try:
                         self.config.set("auto_ban_list", self._dedup(migrated))
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        Logger.debug("PriorityGrid", "_get_priority_list suppressed an error", exc=exc)
             return self._dedup(raw or [])
 
         raw = self.config.get("priority_picker", {}).get("list", [])
@@ -356,8 +357,8 @@ class PriorityIconGrid(ctk.CTkFrame):
         # Slim the scrollbar track so it doesn't eat into champion icons
         try:
             self.scroll._scrollbar.configure(width=6)
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("PriorityGrid", "_build_body suppressed an error", exc=exc)
         self.scroll.pack(fill="both", expand=True, pady=(0, SPACING_SM))
         apply_smooth_scroll(self.scroll)
 
@@ -522,8 +523,9 @@ class PriorityIconGrid(ctk.CTkFrame):
             # Show it above the scroll area (only if body is visible)
             try:
                 self.hover_frame.pack(fill="x", pady=(0, 8), before=self.scroll)
-            except Exception:
-                pass  # body may be collapsed / not packed
+            except Exception as exc:
+                # The body may be collapsed or not packed yet.
+                Logger.debug("PriorityGrid", "Hover frame not packable", exc=exc)
 
     def _add_hovered_champion(self):
         if self._hovered_champ_name:
@@ -543,8 +545,8 @@ class PriorityIconGrid(ctk.CTkFrame):
                 # Show toast
                 try:
                     ToastManager.get_instance().show(f"Added {self._hovered_champ_name}", icon="✅", theme="success")
-                except Exception:
-                    pass
+                except Exception as exc:
+                    Logger.debug("PriorityGrid", "_add_hovered_champion suppressed an error", exc=exc)
 
     # ───────────── grid rendering ─────────────
     def _render_grid(self):
@@ -555,15 +557,15 @@ class PriorityIconGrid(ctk.CTkFrame):
         if self._render_job is not None:
             try:
                 self.after_cancel(self._render_job)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("PriorityGrid", "_render_grid suppressed an error", exc=exc)
             self._render_job = None
 
         for w in self.grid_parent.winfo_children():
             try:
                 w.destroy()
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("PriorityGrid", "_render_grid suppressed an error", exc=exc)
         self._icon_widgets.clear()
 
         names = self._get_priority_list()
@@ -629,8 +631,8 @@ class PriorityIconGrid(ctk.CTkFrame):
                 if hasattr(self, "scroll") and hasattr(self.scroll, "_parent_canvas"):
                     try:
                         self.scroll._parent_canvas.yview_moveto(0.0)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        Logger.debug("PriorityGrid", "_batch suppressed an error", exc=exc)
 
         _batch(0)
 
@@ -674,8 +676,8 @@ class PriorityIconGrid(ctk.CTkFrame):
             try:
                 if label.winfo_exists():
                     label.configure(image=img, text="", fg_color="transparent")
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("PriorityGrid", "_update_icon suppressed an error", exc=exc)
 
         if self.assets:
             self.assets.get_icon_async(
@@ -763,21 +765,29 @@ class PriorityIconGrid(ctk.CTkFrame):
             
             if scraper:
                 winrate = scraper.get_winrate(name)
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("PriorityGrid", "_show_tooltip suppressed an error", exc=exc)
 
-        # Color-code the winrate
-        if winrate >= 53.0:
-            wr_color = get_color("colors.state.success", "#00C853")  # green — strong
-        elif winrate >= 50.0:
-            wr_color = get_color("colors.text.primary", "#F0E6D2")  # gold-white — neutral
+        # `get_winrate` returns None when nothing was measured — it used to
+        # return a fabricated 50.0 for every champion. Comparing that None
+        # raised TypeError out of the hover handler, 155 times in one
+        # session, every one of them swallowed into a Tk callback.
+        if winrate is None:
+            wr_color = get_color("colors.text.muted", "#8899aa")
+            wr_text = "Winrate: not measured"
         else:
-            wr_color = get_color("colors.state.danger", "#ff4444")  # red — weak
+            if winrate >= 53.0:
+                wr_color = get_color("colors.state.success", "#00C853")  # strong
+            elif winrate >= 50.0:
+                wr_color = get_color("colors.text.primary", "#F0E6D2")  # neutral
+            else:
+                wr_color = get_color("colors.state.danger", "#ff4444")  # weak
+            wr_text = f"Winrate: {winrate:.1f}%"
 
         priority_label = "High" if idx is not None and idx < 3 else ("Medium" if idx is not None and idx < 7 else "Low")
         
         ctk.CTkLabel(
-            tip_frame, text=f"Winrate: {winrate:.1f}%", fg_color="transparent", text_color=wr_color, justify="left",
+            tip_frame, text=wr_text, fg_color="transparent", text_color=wr_color, justify="left",
             font=get_font("caption", "bold")
         ).pack(anchor="w", padx=8, pady=0)
         
@@ -808,8 +818,8 @@ class PriorityIconGrid(ctk.CTkFrame):
                 self.after(16, self._animate_tip_in)
             else:
                 self._tip.wm_geometry(f"+{self._tip._x}+{self._tip._target_y}")
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("PriorityGrid", "_animate_tip_in suppressed an error", exc=exc)
 
     def _hide_tooltip(self):
         if self._tip:
@@ -818,8 +828,8 @@ class PriorityIconGrid(ctk.CTkFrame):
                 self._tip = None
                 tw.withdraw()
                 tw.after(50, tw.destroy)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("PriorityGrid", "_hide_tooltip suppressed an error", exc=exc)
             self._tip = None
 
     # ───────────── collapse ─────────────
@@ -892,8 +902,8 @@ class PriorityIconGrid(ctk.CTkFrame):
                 try:
                     if lbl.winfo_exists():
                         lbl.place_configure(relx=0.5, rely=0.5, x=0, y=0)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    Logger.debug("PriorityGrid", "_shake_tick suppressed an error", exc=exc)
             return
 
 
@@ -906,8 +916,8 @@ class PriorityIconGrid(ctk.CTkFrame):
                     dx = math.sin(offset) * 1.2
                     dy = math.cos(offset * 0.8) * 0.8
                     lbl.place_configure(relx=0.5, rely=0.5, x=int(dx), y=int(dy))
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("PriorityGrid", "_shake_tick suppressed an error", exc=exc)
         self._shake_phase = phase + 0.4
         self.after(60, self._shake_tick)
 
@@ -984,8 +994,8 @@ class PriorityIconGrid(ctk.CTkFrame):
                 # Dim the source cell visually while dragging
                 label.configure(image="")
                 cell.configure(fg_color="#141E28", border_width=1, border_color=SEL_BORDER)
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("PriorityGrid", "_create_ghost_icon suppressed an error", exc=exc)
 
     def _find_nearest_cell_idx(self, x_root, y_root):
         """Find index of nearest champion cell using exact screen coordinates."""
@@ -1003,8 +1013,8 @@ class PriorityIconGrid(ctk.CTkFrame):
                     if dist_sq < min_dist_sq:
                         min_dist_sq = dist_sq
                         best_idx = item_idx
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("PriorityGrid", "_find_nearest_cell_idx suppressed an error", exc=exc)
 
         if best_idx is None:
             names = self._get_priority_list()
@@ -1024,8 +1034,8 @@ class PriorityIconGrid(ctk.CTkFrame):
                     cell.configure(border_width=2, border_color=gold, fg_color=SEL_BG)
                 elif idx not in self._selected_indices and idx != self._drag_data.get("idx"):
                     cell.configure(border_width=1, border_color=normal, fg_color="transparent")
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("PriorityGrid", "_highlight_drop_target suppressed an error", exc=exc)
 
     def _on_drag_release(self, event):
         """Drop the icon and insert at target position."""
@@ -1039,8 +1049,8 @@ class PriorityIconGrid(ctk.CTkFrame):
         if self._drag_data.get("ghost") and getattr(self._drag_data["ghost"], "winfo_exists", lambda: False)():
             try:
                 self._drag_data["ghost"].destroy()
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("PriorityGrid", "_on_drag_release suppressed an error", exc=exc)
             self._drag_data["ghost"] = None
 
         self._drag_data["widget"] = None
@@ -1245,8 +1255,8 @@ class PriorityIconGrid(ctk.CTkFrame):
         if hasattr(self, "add_container") and not self.add_container.winfo_viewable():
             try:
                 self.add_container.pack(fill="x", pady=(0, SPACING_SM))
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("PriorityGrid", "_close_import suppressed an error", exc=exc)
 
     def _commit_import(self):
         if not self._parsed_import:
@@ -1362,8 +1372,8 @@ class PriorityIconGrid(ctk.CTkFrame):
                 try:
                     if lbl.winfo_exists():
                         lbl.configure(image=img, text="")
-                except Exception:
-                    pass
+                except Exception as exc:
+                    Logger.debug("PriorityGrid", "_update_card_icon suppressed an error", exc=exc)
 
             self.assets.get_icon_async("champion", champ, _update_card_icon, size=(28, 28), widget=icon_lbl)
 
@@ -1414,18 +1424,18 @@ class PriorityIconGrid(ctk.CTkFrame):
             self._render_grid()
             try:
                 ToastManager.get_instance().show(f"Added {champ_real} to ARAM List!", icon="✅", theme="success")
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("PriorityGrid", "_select_suggestion suppressed an error", exc=exc)
 
         self.add_entry.delete(0, "end")
         try:
             self.suggestions_frame.pack_forget()
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("PriorityGrid", "_select_suggestion suppressed an error", exc=exc)
         try:
             self.add_entry.focus_set()
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("PriorityGrid", "_select_suggestion suppressed an error", exc=exc)
 
     def _show_add_input(self):
         """Expand the ARAM list if collapsed and focus the always-visible add entry."""
@@ -1435,13 +1445,13 @@ class PriorityIconGrid(ctk.CTkFrame):
         if not self.add_container.winfo_viewable():
             try:
                 self.add_container.pack(fill="x", pady=(0, SPACING_SM))
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("PriorityGrid", "_show_add_input suppressed an error", exc=exc)
         try:
             self.add_entry.focus_set()
             self.add_entry.select_range(0, "end")
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("PriorityGrid", "_show_add_input suppressed an error", exc=exc)
 
     def _commit_add(self):
         raw = self.add_entry.get().strip()
@@ -1467,8 +1477,8 @@ class PriorityIconGrid(ctk.CTkFrame):
             try:
                 orig = self.add_entry.pack_info().get("padx", (0, 4))
                 self._shake_widget(self.add_entry, orig)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("PriorityGrid", "_commit_add suppressed an error", exc=exc)
             self.after(1200, lambda: self.add_entry.configure(
                 border_color=get_color("colors.border.subtle")))
             return
@@ -1480,14 +1490,14 @@ class PriorityIconGrid(ctk.CTkFrame):
         self.add_entry.delete(0, "end")
         try:
             self.suggestions_frame.pack_forget()
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("PriorityGrid", "_commit_add suppressed an error", exc=exc)
         # Keep add_container visible — don't hide it after adding
         self._render_grid()
         try:
             self.add_entry.focus_set()
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("PriorityGrid", "_commit_add suppressed an error", exc=exc)
 
     # ───────────── animation helpers ─────────────
     def _shake_widget(self, widget, orig_padx, amplitude=6, steps=6):
@@ -1510,8 +1520,8 @@ class PriorityIconGrid(ctk.CTkFrame):
                 else:
                     # Restore original padding
                     widget.pack_configure(padx=orig_padx if isinstance(orig_padx, tuple) else (orig_padx, 4))
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("PriorityGrid", "_step suppressed an error", exc=exc)
 
         _step(0)
 
@@ -1547,15 +1557,15 @@ class PriorityIconGrid(ctk.CTkFrame):
                     for child in children:
                         try:
                             child.configure(text_color=get_color("colors.text.disabled"))
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            Logger.debug("PriorityGrid", "_apply suppressed an error", exc=exc)
                 elif step == len(alphas) - 1:
                     for child in children:
                         try:
                             if fade_in:
                                 child.configure(text_color=child._text_color if hasattr(child, '_text_color') else get_color("colors.text.primary"))
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            Logger.debug("PriorityGrid", "_apply suppressed an error", exc=exc)
                 self.after(30, lambda: _apply(step + 1))
 
             _apply(0)

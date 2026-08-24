@@ -39,7 +39,7 @@ from ui.qt.theme.colors import (
     TEXT_SECONDARY,
 )
 from ui.qt.theme.radii import RADIUS_SM
-from ui.qt.theme.spacing import CONTROL_HEIGHT_SM, SPACE_MD, SPACE_SM, SPACE_XS
+from ui.qt.theme.spacing import CONTROL_HEIGHT_SM, SPACE_MD, SPACE_SM, SPACE_XS, GLYPH_WIDTH
 from ui.qt.theme.typography import FONT_FAMILY, TEXT_BODY, TEXT_CAPTION, WEIGHT_MEDIUM
 
 MAX_ENTRIES = 200
@@ -92,7 +92,7 @@ class LLActivityRow(QWidget):
 
         tone = entry.kind.value
         glyph = QLabel(tone_glyph(tone), self)
-        glyph.setFixedWidth(12)
+        glyph.setFixedWidth(GLYPH_WIDTH)
         glyph.setAlignment(Qt.AlignCenter)
         glyph.setStyleSheet(
             TEXT_BODY.qss(color=tone_color(tone)) + " background: transparent;"

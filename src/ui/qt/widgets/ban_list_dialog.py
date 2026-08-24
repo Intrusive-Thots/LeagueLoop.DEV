@@ -10,6 +10,7 @@ Provides:
 from __future__ import annotations
 
 from core.config_keys import AUTO_BAN_RESPECT_HOVERS, BAN_LIST
+from ui.qt.services.popup_size import size_to_content
 from typing import List, Optional
 
 from PySide6.QtCore import Qt
@@ -42,6 +43,7 @@ from ui.qt.theme.radii import RADIUS_MD
 from ui.qt.theme.spacing import CONTENT_MARGIN, SPACE_LG, SPACE_MD, SPACE_SM
 from ui.qt.theme.typography import TEXT_BODY, TEXT_CAPTION, TEXT_PAGE_TITLE
 from ui.qt.widgets.champion_grid import QtChampionGrid
+from utils.logger import Logger
 
 
 class QtBanListDialog(QDialog):
@@ -58,7 +60,6 @@ class QtBanListDialog(QDialog):
         self.assets = assets
 
         self.setWindowTitle("Ban List Preferences")
-        self.resize(780, 520)
         self.setStyleSheet(f"""
             QDialog {{
                 background-color: #010A13;
@@ -67,6 +68,9 @@ class QtBanListDialog(QDialog):
         """)
 
         self._setup_ui()
+        # Was a flat resize(780, 520): an empty ban list opened as a large
+        # window of nothing, and a full one still had to scroll.
+        size_to_content(self, min_size=(520, 380), max_size=(880, 640))
         self._load_config_state()
 
     def _setup_ui(self) -> None:
@@ -183,8 +187,8 @@ class QtBanListDialog(QDialog):
                 name = getter(cid)
                 if name and str(name) != str(cid):
                     return str(name)
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("BanListDialog", "_champ_name suppressed an error", exc=exc)
         tile = self.grid.tiles.get(int(cid)) if self.grid.tiles else None
         return tile.model.name if tile is not None else str(cid)
 

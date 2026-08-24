@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ui.qt.components.flow_layout import LLFlowLayout
 from ui.qt.components.champion_tile import (
     ChampionTileModel,
     LLChampionTile,
@@ -61,6 +62,7 @@ from ui.qt.theme.spacing import (
 from ui.qt.theme.typography import FONT_FAMILY, TEXT_BODY, WEIGHT_MEDIUM
 
 from ui.qt.theme.spacing import CHAMPION_TILE_LG, CHAMPION_TILE_SM
+from utils.logger import Logger
 
 _TILE_WIDTHS = {
     TileSize.SM: CHAMPION_TILE_SM[0],
@@ -68,7 +70,12 @@ _TILE_WIDTHS = {
     TileSize.LG: CHAMPION_TILE_LG[0],
 }
 
-MIN_COLUMNS = 3
+#: One column is a legitimate answer. It used to be three, which meant a
+#: panel narrower than 3 tiles + spacing + margins (about 280px) grew a
+#: horizontal scrollbar and pushed the right-hand column off the edge — the
+#: grid insisting on a density the panel could not hold. Tiles are never
+#: shrunk to fit; the column count gives way instead.
+MIN_COLUMNS = 1
 MAX_COLUMNS = 8
 
 #: Popular-champion fallback used when no AssetManager data is available.
@@ -191,14 +198,15 @@ class QtChampionGrid(QWidget):
         # --- filter rows -------------------------------------------------
         self.quick_group = QButtonGroup(self)
         self.quick_group.setExclusive(True)
-        quick_row = QHBoxLayout()
-        quick_row.setSpacing(SPACE_SM)
+        # Flow, not QHBox: ten chips in a fixed row made the grid demand
+        # ~500px before a single champion was drawn, and in a narrower panel
+        # Qt answered by shrinking each chip until its label was three dots.
+        quick_row = LLFlowLayout(spacing=SPACE_SM)
         for key, label in self.QUICK_FILTERS:
             btn = self._make_filter_button(label, key == "ALL")
             btn.clicked.connect(lambda _c, k=key: self._on_quick_filter(k))
             self.quick_group.addButton(btn)
             quick_row.addWidget(btn)
-        quick_row.addStretch(1)
 
         self.count_label = QLabel("", self)
         self.count_label.setStyleSheet(
@@ -209,20 +217,24 @@ class QtChampionGrid(QWidget):
 
         self.role_group = QButtonGroup(self)
         self.role_group.setExclusive(True)
-        role_row = QHBoxLayout()
-        role_row.setSpacing(SPACE_SM)
+        role_row = LLFlowLayout(spacing=SPACE_SM)
         for key, label in self.ROLES:
             btn = self._make_filter_button(label, key == "ALL")
             btn.clicked.connect(lambda _c, r=key: self._on_role_selected(r))
             self.role_group.addButton(btn)
             role_row.addWidget(btn)
-        role_row.addStretch(1)
         root.addLayout(role_row)
 
         # --- scrollable grid ---------------------------------------------
         self.scroll_area = QScrollArea(self)
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setFrameShape(QScrollArea.NoFrame)
+        # The column count already adapts to the width, so a horizontal
+        # scrollbar here can only mean the grid got the count wrong. Turning
+        # it off makes that a visible layout bug rather than a silent one the
+        # user has to scroll sideways around.
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.scroll_area.setStyleSheet(f"""
             QScrollArea {{
                 background-color: transparent;
@@ -248,11 +260,21 @@ class QtChampionGrid(QWidget):
         self._retrying = False
         self.empty_label = QLabel("No champions match your search.", self)
         self.empty_label.setAlignment(Qt.AlignCenter)
+        # Without wrapping, the longest empty-state sentence ("Champion data
+        # has not loaded...") becomes the grid's minimum width — 672px — and
+        # every parent inherits it. That is how a panel the user wanted at
+        # 480px ended up demanding 1162px and squeezing every layout inside
+        # it below its own minimum.
+        self.empty_label.setWordWrap(True)
+        self.empty_label.setMinimumWidth(0)
         self.empty_label.setStyleSheet(
             TEXT_BODY.qss(color=TEXT_MUTED) + " background: transparent;"
         )
         self.empty_label.setVisible(False)
-        root.addWidget(self.empty_label)
+        # Stretch 1, because it stands in for the scroll area: when the grid
+        # is empty the scroll area is hidden, and whatever is left holding the
+        # stretch is where the spare vertical space goes.
+        root.addWidget(self.empty_label, 1)
 
         # A failed download used to be terminal for the whole session: the
         # only way to get champions back was to restart the app.
@@ -386,8 +408,8 @@ class QtChampionGrid(QWidget):
             def run(self):
                 try:
                     grid.assets.retry_champion_data()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    Logger.debug("ChampionGrid", "run suppressed an error", exc=exc)
                 finally:
                     try:
                         self._signals.done.emit()
@@ -730,8 +752,8 @@ class QtChampionGrid(QWidget):
             from core.config_keys import FAVORITE_CHAMPIONS
 
             self.config.set(FAVORITE_CHAMPIONS, self._favorite_ids())
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("ChampionGrid", "_save_favorites suppressed an error", exc=exc)
 
     def load_favorites(self) -> None:
         """

@@ -13,6 +13,8 @@ three near-identical files that drift apart.
 from __future__ import annotations
 
 from core.config_keys import (
+    ARAM_AUTO_REROLL,
+    ARAM_BENCH_SWAP,
     ARAM_PRIORITY_LIST,
     BAN_LIST,
     PRIORITY_LIST,
@@ -33,7 +35,9 @@ from PySide6.QtWidgets import (
 
 from ui.qt.components.button import ButtonSize, ButtonVariant, LLButton
 from ui.qt.components.modal import LLConfirmModal
-from ui.qt.components.card import LLSection
+from ui.qt.components.card import LLCard, LLSection, LLSeparator
+from ui.qt.components.flow_layout import LLFlowLayout
+from ui.qt.components.setting_row import LLSettingRow
 from ui.qt.theme.colors import (
     BORDER_ACCENT,
     BORDER_DEFAULT,
@@ -48,6 +52,7 @@ from ui.qt.theme.radii import RADIUS_MD
 from ui.qt.theme.spacing import CONTENT_MARGIN, SPACE_LG, SPACE_MD, SPACE_SM, SPACE_XS
 from ui.qt.theme.typography import TEXT_BODY, TEXT_CAPTION, TEXT_PAGE_TITLE
 from ui.qt.widgets.champion_grid import QtChampionGrid
+from utils.logger import Logger
 
 
 #: Portrait size in the priority list, and the row it sits in.
@@ -90,6 +95,7 @@ class QtChampionListTab(QWidget):
         self._setup_ui()
         self._sync_mode_buttons()
         self._sync_scraper_mode()
+        self._sync_aram_rules()
         self._load_list()
 
     # ------------------------------------------------------------------ UI
@@ -143,6 +149,38 @@ class QtChampionListTab(QWidget):
             mode_row.addStretch(1)
             right.add_layout(mode_row)
 
+        # The ARAM automation rules used to live on a separate screen that is
+        # no longer reachable. `aram_bench_swap` and `aram_auto_reroll` were
+        # therefore keys the engine read and nothing could write — and the
+        # Automation screen's "configure" action for both sent you here, to a
+        # screen that had no control for either.
+        self.aram_rules = LLCard(title="ARAM automation", parent=right)
+        self.row_bench_swap = LLSettingRow(
+            "Auto Bench Sniper",
+            "Takes a champion from the bench as soon as it is one you wanted.",
+            checked=False,
+            parent=self.aram_rules,
+        )
+        self.row_bench_swap.toggled.connect(
+            lambda v: self._set_cfg(ARAM_BENCH_SWAP, v)
+        )
+        self.aram_rules.add_widget(self.row_bench_swap)
+        self.aram_rules.add_widget(LLSeparator(parent=self.aram_rules))
+
+        self.row_auto_reroll = LLSettingRow(
+            "Reroll below your top 3",
+            "Spends a reroll when the champion you were given is not in your "
+            "first three choices.",
+            checked=False,
+            parent=self.aram_rules,
+        )
+        self.row_auto_reroll.toggled.connect(
+            lambda v: self._set_cfg(ARAM_AUTO_REROLL, v)
+        )
+        self.aram_rules.add_widget(self.row_auto_reroll)
+        self.aram_rules.setVisible(False)
+        right.add_widget(self.aram_rules)
+
         self.list_widget = QListWidget(right)
         self.list_widget.setDragDropMode(QAbstractItemView.InternalMove)
         self.list_widget.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -184,13 +222,15 @@ class QtChampionListTab(QWidget):
         right.add_widget(self.list_stack, 1)
 
         self.hint = QLabel(self.HINT, right)
+        self.hint.setWordWrap(True)
         self.hint.setStyleSheet(
             TEXT_BODY.qss(color=TEXT_MUTED) + " background: transparent;"
         )
         right.add_widget(self.hint)
 
-        buttons = QHBoxLayout()
-        buttons.setSpacing(SPACE_SM)
+        # Four buttons that must never be squeezed into slivers: they wrap
+        # onto a second line in a narrow panel instead.
+        buttons = LLFlowLayout(spacing=SPACE_SM)
         self.btn_sort = LLButton("Sort by winrate", parent=right)
         self.btn_sort.setToolTip("Sort champions by Lolalytics win rate (highest first)")
         self.btn_sort.clicked.connect(self._on_sort_by_winrate)
@@ -222,7 +262,6 @@ class QtChampionListTab(QWidget):
         self.btn_clear = LLButton("Clear all", variant=ButtonVariant.DANGER, parent=right)
         self.btn_clear.clicked.connect(self._on_clear_all)
         buttons.addWidget(self.btn_clear)
-        buttons.addStretch(1)
         right.add_layout(buttons)
 
         columns.addWidget(right, 2)
@@ -236,8 +275,8 @@ class QtChampionListTab(QWidget):
                 val = getter(champ_id)
                 if val and val != str(champ_id):
                     name = val
-            except Exception:
-                pass
+            except Exception as exc:
+                Logger.debug("ChampionListTab", "_champ_name suppressed an error", exc=exc)
         if not name:
             tile = self.grid.tiles.get(int(champ_id)) if self.grid.tiles else None
             name = tile.model.name if tile is not None else str(champ_id)
@@ -379,6 +418,28 @@ class QtChampionListTab(QWidget):
         self._save()
 
     def _on_rows_moved(self, *_args) -> None:
+        """Rebuild the list after an internal move.
+
+        Rows are custom widgets installed with `setItemWidget`, and
+        `QAbstractItemView.InternalMove` re-serialises the item on the way
+        through — the index widget does not survive it. The moved champion
+        became a permanently blank row (no rank, no portrait, no name) and
+        `_renumber_items` then skipped it forever, because the widget it
+        looks for is None. The saved order was always right; only the screen
+        was wrong.
+
+        Rebuilding from the ids is cheap — a priority list is tens of entries,
+        not thousands — and leaves every row whole.
+        """
+        ids = self.current_ids()
+        self._pending_icons = {}
+        self.list_widget.blockSignals(True)
+        try:
+            self.list_widget.clear()
+            for champ_id in ids:
+                self._append_item(champ_id)
+        finally:
+            self.list_widget.blockSignals(False)
         self._renumber_items()
         self._save()
 
@@ -439,8 +500,32 @@ class QtChampionListTab(QWidget):
         for key, btn in getattr(self, "_mode_buttons", {}).items():
             btn.setChecked(key == config_key)
         self._sync_scraper_mode()
+        self._sync_aram_rules()
         self._load_list()
         self._sync_mode_buttons()
+
+    def _set_cfg(self, key: str, value) -> None:
+        if self.config:
+            self.config.set(key, value)
+
+    def _sync_aram_rules(self) -> None:
+        """Show the ARAM rules only while the ARAM list is being edited."""
+        rules = getattr(self, "aram_rules", None)
+        if rules is None:
+            return
+        aram = self.CONFIG_KEY == ARAM_PRIORITY_LIST
+        rules.setVisible(aram)
+        if not (aram and self.config):
+            return
+        for row, key in (
+            (self.row_bench_swap, ARAM_BENCH_SWAP),
+            (self.row_auto_reroll, ARAM_AUTO_REROLL),
+        ):
+            row.blockSignals(True)
+            try:
+                row.set_checked(bool(self.config.get(key, False)))
+            finally:
+                row.blockSignals(False)
 
     def _sync_scraper_mode(self) -> None:
         """Win rates must come from the queue the list is for.
@@ -455,8 +540,8 @@ class QtChampionListTab(QWidget):
             self.scraper.set_mode(
                 "ARAM" if self.CONFIG_KEY == ARAM_PRIORITY_LIST else "Ranked"
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("ChampionListTab", "_sync_scraper_mode suppressed an error", exc=exc)
 
     def _sync_mode_buttons(self) -> None:
         for key, btn in getattr(self, "_mode_buttons", {}).items():
