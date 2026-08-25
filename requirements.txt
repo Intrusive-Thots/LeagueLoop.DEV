@@ -1,0 +1,9 @@
+mock
+pytest
+pytest-asyncio
+pytest-mock
+websockets
+pillow
+psutil
+pywinctl
+customtkinter
