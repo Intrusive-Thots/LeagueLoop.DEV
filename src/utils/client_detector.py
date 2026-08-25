@@ -6,6 +6,7 @@ for both the Riot Client and the League of Legends Client.
 """
 import json
 import os
+import re
 import time
 import psutil
 from typing import Dict, Optional, Tuple
@@ -202,14 +203,15 @@ def scan_clients(force: bool = False) -> Dict[str, Dict]:
                     league_data["pid"] = pid
                     # Try to extract credentials from command line
                     try:
-                        cmdline = proc.cmdline()
-                        for arg in cmdline:
-                            if arg.startswith("--app-port="):
-                                league_data["port"] = arg.split("=", 1)[1]
-                            elif arg.startswith("--remoting-auth-token="):
-                                league_data["token"] = arg.split("=", 1)[1]
-                            if league_data["port"] and league_data["token"]:
-                                break
+                        cmdline = " ".join(proc.cmdline())
+
+                        # Use regex for more robust parsing
+                        port_match = re.search(r'--app-port=([0-9]+)', cmdline)
+                        token_match = re.search(r'--remoting-auth-token=([\w-]+)', cmdline)
+
+                        if port_match and token_match:
+                            league_data["port"] = port_match.group(1)
+                            league_data["token"] = token_match.group(1)
                     except psutil.AccessDenied:
                         pass  # Handled below by lockfile fallback
                     
@@ -220,14 +222,14 @@ def scan_clients(force: bool = False) -> Dict[str, Dict]:
                     riot_data["pid"] = pid
                     # Try to extract credentials from command line
                     try:
-                        cmdline = proc.cmdline()
-                        for arg in cmdline:
-                            if arg.startswith("--app-port="):
-                                riot_data["port"] = arg.split("=", 1)[1]
-                            elif arg.startswith("--remoting-auth-token="):
-                                riot_data["token"] = arg.split("=", 1)[1]
-                            if riot_data["port"] and riot_data["token"]:
-                                break
+                        cmdline = " ".join(proc.cmdline())
+
+                        port_match = re.search(r'--app-port=([0-9]+)', cmdline)
+                        token_match = re.search(r'--remoting-auth-token=([\w-]+)', cmdline)
+
+                        if port_match and token_match:
+                            riot_data["port"] = port_match.group(1)
+                            riot_data["token"] = token_match.group(1)
                     except psutil.AccessDenied:
                         pass
                     
