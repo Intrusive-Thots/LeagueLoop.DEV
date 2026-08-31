@@ -418,15 +418,61 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
             time.sleep(CONNECTION_POLL_INTERVAL)
 
     def docking_loop(self):
-        """Basic docking poll (geometry follow placeholder)."""
+        """Companion docking loop that keeps the window anchored to the League Client."""
+        from services.client_window_tracker import ClientWindowTracker
+        tracker = ClientWindowTracker()
+        last_pos = None
+        last_minimized = False
+
         while self.running:
             try:
                 if not self.config.get("docked", True):
                     time.sleep(DOCKING_IDLE_INTERVAL)
                     continue
-                # Full Win32 docking lives in future polish; keep loop alive
+
+                window = tracker.tick()
+                if not window.found or not window.visible:
+                    time.sleep(DOCKING_IDLE_INTERVAL)
+                    continue
+
+                if window.minimized:
+                    if not last_minimized:
+                        last_minimized = True
+                        self.after(0, self.withdraw)
+                    time.sleep(DOCKING_POLL_INTERVAL)
+                    continue
+                elif last_minimized:
+                    last_minimized = False
+                    if not self._manually_hidden:
+                        self.after(0, lambda: (self.deiconify(), self.lift()))
+
+                # Determine docked position
+                client_x, client_y, client_w, client_h = window.rect
+                if client_w <= 0 or client_h <= 0:
+                    time.sleep(DOCKING_IDLE_INTERVAL)
+                    continue
+
+                app_w = self.winfo_width() or SIDEBAR_WIDTH
+                app_h = self.winfo_height() or SIDEBAR_HEIGHT
+                gap = 4
+
+                # Screen width probe
+                screen_w = self.winfo_screenwidth() or 1920
+                target_x = client_x + client_w + gap
+                if target_x + app_w > screen_w:
+                    target_x = max(0, client_x - app_w - gap)
+
+                target_y = max(0, client_y)
+
+                if (last_pos is None
+                        or abs(target_x - last_pos[0]) >= GEOMETRY_THRESHOLD
+                        or abs(target_y - last_pos[1]) >= GEOMETRY_THRESHOLD):
+                    last_pos = (target_x, target_y)
+                    self.after(0, lambda tx=target_x, ty=target_y: self.geometry(f"+{tx}+{ty}"))
+
                 time.sleep(DOCKING_POLL_INTERVAL)
-            except Exception:
+            except Exception as e:
+                Logger.debug("Main", f"docking_loop exception: {e}")
                 time.sleep(DOCKING_IDLE_INTERVAL)
 
     def _handle_window_state(self, state):

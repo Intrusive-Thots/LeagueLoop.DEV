@@ -17,7 +17,7 @@ DOCKING_IDLE_INTERVAL = 0.5        # seconds when no client window found
 CONNECTION_POLL_INTERVAL = 2.0     # seconds between LCU connection attempts
 CONNECTION_ERROR_INTERVAL = 5.0    # seconds to wait after connection error
 TICK_SLEEP_DEFAULT = 3.0
-TICK_SLEEP_CHAMPSELECT = 1.0
+TICK_SLEEP_CHAMPSELECT = 0.5
 TICK_SLEEP_READYCHECK = 1.0
 TICK_SLEEP_LOBBY = 2.0
 # In-game: rare LCU polls only (phase exit detection). Heavy polling hurts the CEF client.

@@ -88,11 +88,18 @@ class OpenPlan:
 
 
 @dataclass
+class ClaimResult:
+    claimed: int = 0
+    sources: List[str] = field(default_factory=list)
+
+
+@dataclass
 class OpenResult:
     opened: int = 0
     failed: int = 0
     skipped: int = 0
     keys_crafted: int = 0
+    rewards_claimed: int = 0
     details: List[str] = field(default_factory=list)
 
 
@@ -437,12 +444,92 @@ class LootService:
             )
         return succeeded > 0, succeeded
 
+    def claim_mission_rewards(self) -> ClaimResult:
+        """Claim all completed, unclaimed mission rewards."""
+        res = ClaimResult()
+        missions = self._get_json("/lol-missions/v1/missions") or []
+        if isinstance(missions, list):
+            for m in missions:
+                if isinstance(m, dict) and m.get("status") == "COMPLETED" and m.get("rewardStatus") == "UNCLAIMED":
+                    mid = m.get("id")
+                    title = m.get("title", str(mid))
+                    ok, _, _ = self._post(f"/lol-missions/v1/missions/{mid}/claim")
+                    if ok:
+                        res.claimed += 1
+                        res.sources.append(f"Mission: {title}")
+        return res
+
+    def claim_loot_milestones(self) -> ClaimResult:
+        """Claim eligible loot milestones."""
+        res = ClaimResult()
+        groups = self._get_json("/lol-loot/v1/milestones") or []
+        if isinstance(groups, list):
+            for g in groups:
+                if isinstance(g, dict):
+                    milestones = g.get("milestones", [])
+                    for ms in milestones:
+                        if isinstance(ms, dict) and ms.get("status") == "COMPLETED":
+                            ms_id = ms.get("id")
+                            ok, _, _ = self._post(f"/lol-loot/v1/milestones/{ms_id}/claim")
+                            if ok:
+                                res.claimed += 1
+                                res.sources.append(f"Milestone {ms_id}")
+        return res
+
+    def claim_mastery_and_grants(self) -> ClaimResult:
+        """Claim champion mastery milestones and reward grants."""
+        res = ClaimResult()
+        ok1, _, _ = self._post("/lol-champion-mastery/v1/milestones/claim")
+        if ok1:
+            res.claimed += 1
+            res.sources.append("Mastery Milestones")
+        ok2, _, _ = self._post("/lol-rewards/v1/grants/claim")
+        if ok2:
+            res.claimed += 1
+            res.sources.append("Reward Grants")
+        return res
+
+    def claim_battle_pass_rewards(self) -> ClaimResult:
+        """Claim battle pass rewards."""
+        res = ClaimResult()
+        ok, payload, _ = self._post("/lol-battle-pass/v1/rewards/claim")
+        if ok:
+            rewards = payload.get("rewards", []) if isinstance(payload, dict) else []
+            count = len(rewards) if rewards else 1
+            res.claimed += count
+            res.sources.append("Pass (/lol-battle-pass/v1/rewards/claim)")
+            self.log(f"Successfully claimed {count} reward(s) from /lol-battle-pass/v1/rewards/claim")
+        return res
+
+    def claim_all_rewards(self) -> ClaimResult:
+        """Run all reward claim endpoints."""
+        total = ClaimResult()
+        pass_res = self.claim_battle_pass_rewards()
+        total.claimed += pass_res.claimed
+        total.sources.extend(pass_res.sources)
+
+        miss_res = self.claim_mission_rewards()
+        total.claimed += miss_res.claimed
+        total.sources.extend(miss_res.sources)
+
+        ms_res = self.claim_loot_milestones()
+        total.claimed += ms_res.claimed
+        total.sources.extend(ms_res.sources)
+
+        grant_res = self.claim_mastery_and_grants()
+        total.claimed += grant_res.claimed
+        total.sources.extend(grant_res.sources)
+
+        self.log(f"Claim step completed: {total.claimed} reward(s)")
+        return total
+
     def open_all(
         self,
         craft_keys_first: bool = True,
         max_passes: int = 4,
         only_ids: Optional[Set[str]] = None,
         stop_flag: Optional[Callable[[], bool]] = None,
+        claim_rewards_first: bool = False,
     ) -> OpenResult:
         result = OpenResult()
         stop = stop_flag or (lambda: False)
@@ -453,6 +540,10 @@ class LootService:
             ),
             craft_keys_first=craft_keys_first, max_passes=max_passes,
         )
+
+        if claim_rewards_first:
+            claim_res = self.claim_all_rewards()
+            result.rewards_claimed = claim_res.claimed
 
         if craft_keys_first:
             self.log("Forging key fragments → keys…")

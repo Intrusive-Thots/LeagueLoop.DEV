@@ -469,13 +469,13 @@ class AutomationEngine:
         # These sleep times act as long-polling safety fallbacks.
         sleep_time = TICK_SLEEP_DEFAULT
         if phase == "ChampSelect":
-            sleep_time = max(2.0, TICK_SLEEP_CHAMPSELECT)
+            sleep_time = TICK_SLEEP_CHAMPSELECT
             self._spectate_start_time = None
         elif phase == "ReadyCheck":
-            sleep_time = max(2.0, TICK_SLEEP_READYCHECK)
+            sleep_time = TICK_SLEEP_READYCHECK
             self._spectate_start_time = None
         elif phase in ["Lobby", "Matchmaking"]:
-            sleep_time = max(5.0, TICK_SLEEP_LOBBY)
+            sleep_time = TICK_SLEEP_LOBBY
             self._spectate_start_time = None
         elif phase == "InProgress":
             # Prefer WS phase events; HTTP is a slow safety net only
@@ -713,8 +713,10 @@ class AutomationEngine:
             # ARAM logic.
             priority_cfg = self.config.get("priority_picker", {})
             bench_enabled = bool(
-                self.config.get("aram_bench_swap", False)
+                self.config.get("aram_bench_swap", True)
                 or priority_cfg.get("enabled", False)
+                or self.config.get("auto_pick", False)
+                or self.config.get("auto_lock_in", False)
             )
             if bench_enabled:
                 self._perform_priority_sniper(session, self._aram_priority_names())
@@ -1394,21 +1396,13 @@ class AutomationEngine:
 
     def _aram_priority_names(self):
         """
-        The ARAM bench order, as champion names, from the ARAM screen.
-
-        The bench sniper used to read `priority_picker["list"]` — a list of
-        champion *names* written only by the legacy CustomTkinter sidebar and
-        by this engine's own auto-add. The ARAM screen in the Qt UI writes
-        `aram_priority_list` as champion *ids*, and nothing read it during a
-        bench swap. So the list the user curated had no effect on the one
-        thing ARAM automation actually does.
-
-        The ARAM list wins when it has anything in it; the legacy key remains
-        the fallback so existing setups keep working.
+        The ARAM bench order, as champion names, from the ARAM screen or priority list.
         """
-        from core.config_keys import ARAM_PRIORITY_LIST, read_champion_ids
+        from core.config_keys import ARAM_PRIORITY_LIST, PRIORITY_LIST, read_champion_ids
 
-        ids = read_champion_ids(self.config, ARAM_PRIORITY_LIST)
+        ids = read_champion_ids(self.config, ARAM_PRIORITY_LIST, asset_manager=self.assets)
+        if not ids:
+            ids = read_champion_ids(self.config, PRIORITY_LIST, asset_manager=self.assets)
         if ids:
             names = []
             for cid in ids:

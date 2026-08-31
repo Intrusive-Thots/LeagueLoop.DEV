@@ -123,7 +123,8 @@ def read_champion_ids(config, key: str, asset_manager=None) -> List[int]:
                     if resolved_id and int(resolved_id) > 0:
                         out.append(int(resolved_id))
                         continue
-                except Exception:
-                    pass
+                except Exception as exc:
+                    from utils.logger import Logger
+                    Logger.debug("ConfigKeys", "Failed to resolve champion name", exc=exc)
     return out
 

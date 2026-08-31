@@ -60,7 +60,7 @@ TAG = "ClientWindow"
 
 #: Executables that own a League *client* window. The game itself is not one
 #: of them: this is a client companion and must never attach to the game.
-CLIENT_EXECUTABLES = ("LeagueClientUx.exe", "LeagueClient.exe")
+CLIENT_EXECUTABLES = ("leagueclientux.exe", "leagueclient.exe", "riotclientux.exe")
 
 #: A window smaller than this in either axis is a helper, not the client.
 MIN_CLIENT_WIDTH = 400
@@ -244,7 +244,7 @@ def _process_name(pid: int) -> str:
     try:
         import psutil
 
-        return psutil.Process(pid).name()
+        return psutil.Process(pid).name().lower()
     except Exception:
         return ""
 
@@ -381,28 +381,23 @@ class ClientWindowTracker:
         return best
 
     def _score_candidate(self, info: WindowInfo, pid: Optional[int]) -> int:
-        """How likely this window is to be the client's. 0 means "not it".
-
-        Deliberately strict: attaching to a hidden helper or a Chromium child
-        looks like the tracker working while the panel sits somewhere absurd.
-        """
+        """How likely this window is to be the client's. 0 means "not it"."""
         if not info.is_toplevel or not info.visible:
             return 0
         width, height = info.rect[2], info.rect[3]
         if width < MIN_CLIENT_WIDTH or height < MIN_CLIENT_HEIGHT:
             return 0
 
+        info_proc = _process_name(info.pid)
         if pid:
             if info.pid != pid:
-                info_name = _process_name(info.pid)
-                pid_name = _process_name(pid)
-                if not (info_name in CLIENT_EXECUTABLES and pid_name in CLIENT_EXECUTABLES):
+                pid_proc = _process_name(pid)
+                if not (info_proc in CLIENT_EXECUTABLES and pid_proc in CLIENT_EXECUTABLES):
                     return 0
         else:
-            # No pid from the detector — fall back to identifying the process
-            # ourselves rather than accepting any large window on the desktop.
-            if _process_name(info.pid) not in CLIENT_EXECUTABLES:
-                return 0
+            if info_proc not in CLIENT_EXECUTABLES:
+                if "league of legends" not in (info.title or "").lower():
+                    return 0
 
         # Among the survivors, biggest wins.
         return width * height

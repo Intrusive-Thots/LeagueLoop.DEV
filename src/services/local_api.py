@@ -405,8 +405,8 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                     try:
                         app.after(0, fn)
                         return
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        Logger.debug("LocalAPI", "_dispatch fallback to thread", exc=exc)
                 threading.Thread(target=fn, daemon=True).start()
 
             if app:
