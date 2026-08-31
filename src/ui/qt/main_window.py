@@ -732,9 +732,23 @@ class LeagueLoopMainWindow(QMainWindow):
              "Find Match"),
         )
 
+        def _normalize(h):
+            if not h:
+                return ""
+            parts = [p.strip().lower() for p in str(h).split("+") if p.strip()]
+            norm = []
+            for p in parts:
+                if p == "menu":
+                    norm.append("alt")
+                elif p == "control":
+                    norm.append("ctrl")
+                else:
+                    norm.append(p)
+            return "+".join(norm)
+
         bound, failed = [], []
         for key, default, handler, label in bindings:
-            sequence = self.config.get(key, default)
+            sequence = _normalize(self.config.get(key, default))
             if not sequence:
                 continue
             try:

@@ -296,10 +296,25 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
 
     def _bind_hotkeys(self):
         """Register global hotkeys from config."""
+        def _normalize(h):
+            if not h:
+                return ""
+            parts = [p.strip().lower() for p in str(h).split("+") if p.strip()]
+            norm = []
+            for p in parts:
+                if p == "menu":
+                    norm.append("alt")
+                elif p == "control":
+                    norm.append("ctrl")
+                else:
+                    norm.append(p)
+            return "+".join(norm)
+
         try:
-            launch_key = self.config.get("hotkey_launch_client", "ctrl+alt+c")
-            toggle_key = self.config.get("hotkey_toggle_automation", "ctrl+shift+alt+a")
-            compact_key = self.config.get("hotkey_compact_mode", "ctrl+shift+m")
+            launch_key = _normalize(self.config.get("hotkey_launch_client", "ctrl+shift+l"))
+            toggle_key = _normalize(self.config.get("hotkey_toggle_automation", "shift+alt"))
+            find_key = _normalize(self.config.get("hotkey_find_match", "alt"))
+            compact_key = _normalize(self.config.get("hotkey_compact_mode", "ctrl+shift+alt"))
 
             if launch_key:
                 keyboard.add_hotkey(launch_key, self._hotkey_launch_client, suppress=False)
@@ -307,10 +322,13 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
             if toggle_key:
                 keyboard.add_hotkey(toggle_key, self._hotkey_toggle_automation, suppress=False)
                 self._automation_hotkey = toggle_key
+            if find_key:
+                keyboard.add_hotkey(find_key, self._hotkey_find_match, suppress=False)
+                self._find_hotkey = find_key
             if compact_key:
                 keyboard.add_hotkey(compact_key, self._hotkey_compact, suppress=False)
                 self._queue_hotkey = compact_key
-            Logger.info("SYS", f"Hotkeys bound: launch={launch_key}, toggle={toggle_key}, compact={compact_key}")
+            Logger.info("SYS", f"Hotkeys bound: launch={launch_key}, toggle={toggle_key}, find={find_key}, compact={compact_key}")
         except Exception as e:
             Logger.warning("SYS", f"Hotkey bind failed: {e}")
 
@@ -452,8 +470,8 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                     time.sleep(DOCKING_IDLE_INTERVAL)
                     continue
 
-                app_w = self.winfo_width() or SIDEBAR_WIDTH
-                app_h = self.winfo_height() or SIDEBAR_HEIGHT
+                app_w = SIDEBAR_WIDTH
+                target_h = max(client_h, 520)
                 gap = 4
 
                 # Screen width probe
@@ -466,9 +484,11 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
 
                 if (last_pos is None
                         or abs(target_x - last_pos[0]) >= GEOMETRY_THRESHOLD
-                        or abs(target_y - last_pos[1]) >= GEOMETRY_THRESHOLD):
+                        or abs(target_y - last_pos[1]) >= GEOMETRY_THRESHOLD
+                        or getattr(self, "_last_docked_h", None) != target_h):
                     last_pos = (target_x, target_y)
-                    self.after(0, lambda tx=target_x, ty=target_y: self.geometry(f"+{tx}+{ty}"))
+                    self._last_docked_h = target_h
+                    self.after(0, lambda w=app_w, h=target_h, tx=target_x, ty=target_y: self.geometry(f"{w}x{h}+{tx}+{ty}"))
 
                 time.sleep(DOCKING_POLL_INTERVAL)
             except Exception as e:
