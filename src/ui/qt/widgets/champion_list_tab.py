@@ -124,6 +124,7 @@ class QtChampionListTab(QWidget):
         self.grid = QtChampionGrid(asset_manager=self.assets, scraper=self.scraper, config=self.config, parent=left)
         self.grid.champion_selected.connect(self._on_champion_clicked)
         self.grid.champion_activated.connect(self._on_champion_clicked)
+        self.grid.search_changed.connect(self._on_search_changed)
         left.add_widget(self.grid, 1)
         columns.addWidget(left, 3)
 
@@ -411,8 +412,38 @@ class QtChampionListTab(QWidget):
         self._sync_grid_badges()
 
     # -------------------------------------------------------------- actions
+    def _flash_item_by_id(self, champ_id: int) -> None:
+        """Scroll to and visually flash an existing item in the priority list."""
+        for row in range(self.list_widget.count()):
+            item = self.list_widget.item(row)
+            if item and item.data(Qt.UserRole) == champ_id:
+                self.list_widget.setCurrentItem(item)
+                self.list_widget.scrollToItem(item, QAbstractItemView.PositionAtCenter)
+                widget = self.list_widget.itemWidget(item)
+                if widget:
+                    orig_style = widget.styleSheet()
+                    widget.setStyleSheet("background-color: #1e3a5f; border: 2px solid #C8AA6E; border-radius: 4px;")
+                    from PySide6.QtCore import QTimer
+                    QTimer.singleShot(600, lambda w=widget, s=orig_style: w.setStyleSheet(s) if w else None)
+                break
+
+    def _on_search_changed(self, text: str) -> None:
+        if not text:
+            return
+        text_clean = text.strip().lower()
+        for row in range(self.list_widget.count()):
+            item = self.list_widget.item(row)
+            if not item:
+                continue
+            champ_id = item.data(Qt.UserRole)
+            name = self._champ_name(champ_id).lower()
+            if text_clean in name or name.startswith(text_clean):
+                self._flash_item_by_id(champ_id)
+                break
+
     def _on_champion_clicked(self, champ_id: int, name: str) -> None:
         if champ_id in self.current_ids():
+            self._flash_item_by_id(champ_id)
             return
         self._append_item(champ_id)
         self._renumber_items()

@@ -1361,27 +1361,29 @@ class AutomationEngine:
 
                 if pick_id > 0 and not blocked:
                     self._warned_empty_picks = False
-                    may_hover = bool(
-                        self.config.get("auto_hover", False)
-                        or self.config.get("auto_lock_in", False)
-                        or self.config.get("auto_pick", False)
-                    )
                     may_lock = bool(
                         self.config.get("auto_lock_in", False)
                         or self.config.get("auto_pick", False)
+                        or (self.config.get("priority_picker", {}) or {}).get("enabled", False)
                     )
-                    if may_hover and my_action.get("championId") != pick_id and (now - self._last_draft_action_time > 0.5):
-                        self._log(f"Draft: Hovering Pick {pick_name}")
-                        ok = self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
-                                  {"championId": pick_id},
-                                  what=f"Draft: hovered {pick_name}",
-                                  champion_id=pick_id, role=assigned or "unassigned")
-                        self._last_draft_action_time = now
-                        if not ok:
-                            self._rejected_draft_picks.add(pick_id)
-                            self._log(f"Draft: Pick {pick_name} rejected by client, falling back.")
+                    may_hover = bool(
+                        self.config.get("auto_hover", False)
+                        or may_lock
+                    )
+
+                    if my_action.get("championId") != pick_id and may_hover:
+                        if now - self._last_draft_action_time > 0.3:
+                            self._log(f"Draft: Hovering Pick {pick_name}")
+                            ok = self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
+                                      {"championId": pick_id},
+                                      what=f"Draft: hovered {pick_name}",
+                                      champion_id=pick_id, role=assigned or "unassigned")
+                            self._last_draft_action_time = now
+                            if not ok:
+                                self._rejected_draft_picks.add(pick_id)
+                                self._log(f"Draft: Pick {pick_name} rejected by client, falling back.")
                     elif my_action.get("championId") == pick_id and may_lock:
-                        if now - self._last_draft_action_time > 0.5:
+                        if now - self._last_draft_action_time > 0.3:
                             self._log(f"Draft: Locking Pick {pick_name}")
                             ok = self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
                                       {"championId": pick_id, "completed": True},
@@ -1396,24 +1398,39 @@ class AutomationEngine:
 
     def _aram_priority_names(self):
         """
-        The ARAM bench order, as champion names, from the ARAM screen or priority list.
+        The ARAM bench order, as champion names, from all configured lists in priority order.
         """
         from core.config_keys import ARAM_PRIORITY_LIST, PRIORITY_LIST, read_champion_ids
 
-        ids = read_champion_ids(self.config, ARAM_PRIORITY_LIST, asset_manager=self.assets)
-        if not ids:
-            ids = read_champion_ids(self.config, PRIORITY_LIST, asset_manager=self.assets)
-        if ids:
-            names = []
-            for cid in ids:
-                name = self.assets.get_champ_name(cid)
-                if name and name != str(cid):
-                    names.append(name)
-            if names:
-                return names
+        names = []
+        seen = set()
 
+        # 1. ARAM specific IDs
+        for cid in read_champion_ids(self.config, ARAM_PRIORITY_LIST, asset_manager=self.assets):
+            cname = self.assets.get_champ_name(cid) if self.assets else str(cid)
+            if cname and cname != str(cid) and cname.lower() not in seen:
+                seen.add(cname.lower())
+                names.append(cname)
+
+        # 2. General priority list IDs
+        for cid in read_champion_ids(self.config, PRIORITY_LIST, asset_manager=self.assets):
+            cname = self.assets.get_champ_name(cid) if self.assets else str(cid)
+            if cname and cname != str(cid) and cname.lower() not in seen:
+                seen.add(cname.lower())
+                names.append(cname)
+
+        # 3. Legacy priority_picker list (names)
         legacy = (self.config.get("priority_picker", {}) or {}).get("list", [])
-        return [str(n) for n in legacy if str(n).strip()]
+        for item in legacy:
+            name_str = str(item).strip()
+            if name_str:
+                cid = self.assets.name_to_id(name_str) if (self.assets and hasattr(self.assets, "name_to_id")) else 0
+                resolved_name = self.assets.get_champ_name(cid) if (cid and self.assets) else name_str
+                if resolved_name and resolved_name.lower() not in seen:
+                    seen.add(resolved_name.lower())
+                    names.append(resolved_name)
+
+        return names
 
     #: How far down your ARAM list still counts as an acceptable champion.
     REROLL_ACCEPTABLE_RANK = 3

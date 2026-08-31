@@ -1285,6 +1285,46 @@ class PriorityIconGrid(ctk.CTkFrame):
 
         self._debounce_timer = self.after(150, self._perform_add_search)
 
+    def _flash_champion_in_grid(self, champ_name: str):
+        """Scroll to and visually flash/highlight a champion cell in the priority grid."""
+        if not champ_name:
+            return
+        target_lower = champ_name.strip().lower()
+        plist = self._get_priority_list()
+        target_idx = -1
+        for idx, p in enumerate(plist):
+            if p.lower() == target_lower:
+                target_idx = idx
+                break
+
+        if target_idx < 0:
+            return
+
+        for cell, icon_lbl, idx in self._icon_widgets:
+            if idx == target_idx:
+                try:
+                    cols = getattr(self, "_icons_per_row", ICONS_PER_ROW)
+                    row = target_idx // cols
+                    total_rows = max(1, math.ceil(len(plist) / cols))
+                    fraction = max(0.0, min(1.0, row / total_rows))
+                    if hasattr(self, "scroll") and hasattr(self.scroll, "_parent_canvas"):
+                        self.scroll._parent_canvas.yview_moveto(fraction)
+                except Exception as exc:
+                    Logger.debug("PriorityGrid", "yview_moveto error", exc=exc)
+
+                def _pulse(count, orig_border=cell.cget("border_color"), orig_width=cell.cget("border_width")):
+                    if not cell.winfo_exists():
+                        return
+                    if count <= 0:
+                        cell.configure(border_color=orig_border, border_width=orig_width)
+                        return
+                    new_color = "#00D4FF" if count % 2 == 1 else get_color("colors.accent.gold", "#C8AA6E")
+                    cell.configure(border_color=new_color, border_width=3)
+                    self.after(160, lambda: _pulse(count - 1, orig_border, orig_width))
+
+                _pulse(6)
+                break
+
     def _perform_add_search(self):
         query = self.add_entry.get().strip().lower()
 
@@ -1352,12 +1392,16 @@ class PriorityIconGrid(ctk.CTkFrame):
         plist = self._get_priority_list()
         plist_lower = [p.lower() for p in plist]
 
+        first_flashed = False
+
         for champ in unique_matches[:4]:
+            is_already_added = champ.lower() in plist_lower
+
             card = ctk.CTkFrame(
                 self.suggestions_frame,
                 fg_color=get_color("colors.background.card", "#192230"),
-                border_width=1,
-                border_color="#253245",
+                border_width=2 if is_already_added else 1,
+                border_color=get_color("colors.accent.gold", "#C8AA6E") if is_already_added else "#253245",
                 corner_radius=6,
                 height=36
             )
@@ -1381,20 +1425,32 @@ class PriorityIconGrid(ctk.CTkFrame):
             name_lbl = ctk.CTkLabel(
                 card, text=champ,
                 font=get_font("body", "bold"),
-                text_color=get_color("colors.text.primary", "#F0E6D2"),
+                text_color=get_color("colors.accent.gold", "#C8AA6E") if is_already_added else get_color("colors.text.primary", "#F0E6D2"),
                 anchor="w"
             )
             name_lbl.pack(side="left", fill="x", expand=True)
 
-            is_already_added = champ.lower() in plist_lower
-
             if is_already_added:
+                rank_idx = plist_lower.index(champ.lower()) + 1
                 status_lbl = ctk.CTkLabel(
-                    card, text="✓ Added",
-                    font=get_font("caption"),
-                    text_color=get_color("colors.text.muted", "#5B5A56")
+                    card, text=f"★ #{rank_idx} in List",
+                    font=get_font("caption", "bold"),
+                    text_color=get_color("colors.accent.gold", "#C8AA6E")
                 )
                 status_lbl.pack(side="right", padx=8)
+
+                card.bind("<Button-1>", lambda e, c=champ: self._flash_champion_in_grid(c))
+                name_lbl.bind("<Button-1>", lambda e, c=champ: self._flash_champion_in_grid(c))
+                icon_lbl.bind("<Button-1>", lambda e, c=champ: self._flash_champion_in_grid(c))
+                status_lbl.bind("<Button-1>", lambda e, c=champ: self._flash_champion_in_grid(c))
+                card.configure(cursor="hand2")
+                name_lbl.configure(cursor="hand2")
+                icon_lbl.configure(cursor="hand2")
+                status_lbl.configure(cursor="hand2")
+
+                if not first_flashed:
+                    first_flashed = True
+                    self._flash_champion_in_grid(champ)
             else:
                 add_btn = ctk.CTkButton(
                     card, text="+ Add", width=50, height=24,
@@ -1406,8 +1462,6 @@ class PriorityIconGrid(ctk.CTkFrame):
                 )
                 add_btn.pack(side="right", padx=6)
 
-            # Click anywhere on card to select
-            if not is_already_added:
                 card.bind("<Button-1>", lambda e, c=champ: self._select_suggestion(c))
                 name_lbl.bind("<Button-1>", lambda e, c=champ: self._select_suggestion(c))
                 icon_lbl.bind("<Button-1>", lambda e, c=champ: self._select_suggestion(c))

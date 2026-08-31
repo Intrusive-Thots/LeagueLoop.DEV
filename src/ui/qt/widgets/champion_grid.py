@@ -119,6 +119,7 @@ class QtChampionGrid(QWidget):
     champion_selected = Signal(int, str)
     champion_activated = Signal(int, str)          # double-click / Enter
     champion_context_menu = Signal(int, object)
+    search_changed = Signal(str)
     #: Emitted with the favourite champion keys after any change.
     favorites_changed = Signal(list)
 
@@ -626,6 +627,7 @@ class QtChampionGrid(QWidget):
     def _on_search_changed(self, text: str) -> None:
         self.search_query = text.strip().lower()
         self._apply_filters()
+        self.search_changed.emit(self.search_query)
 
     def _on_role_selected(self, role: str) -> None:
         self.current_role = role
