@@ -314,19 +314,67 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         except Exception as e:
             Logger.warning("SYS", f"Hotkey bind failed: {e}")
 
-    def _hotkey_launch_client(self):
-        """Launch Riot Client / League Client if not running."""
+    #: What the Riot Client needs to be told to actually open League.
+    #: Started bare it initialises, finds no product to show, and exits again
+    #: — which looks exactly like "the button does nothing", and was.
+    LEAGUE_LAUNCH_ARGS = (
+        "--launch-product=league_of_legends",
+        "--launch-patchline=live",
+    )
+
+    def _hotkey_launch_client(self, launch_league: bool = True):
+        """Start the Riot Client, and ask it to open League.
+
+        `RiotClientServices.exe` with no arguments does not open anything.
+        The product and patchline flags are how every other launcher does
+        this, and without them the client came up headless or not at all.
+
+        Falls back to `LeagueClient.exe` only when the Riot Client cannot be
+        found: launching League directly makes the Riot Client start it
+        anyway, but it is the longer road and skips the account layer.
+        """
         try:
-            exe = get_riot_executable_path() or get_league_executable_path()
-            if exe and os.path.exists(exe):
-                subprocess.Popen([exe], shell=False)
-                Logger.info("SYS", f"Launched client: {exe}")
+            riot = get_riot_executable_path()
+            if riot and os.path.exists(riot):
+                command = [riot]
+                if launch_league:
+                    command.extend(self.LEAGUE_LAUNCH_ARGS)
+                subprocess.Popen(command, shell=False)
+                Logger.action(
+                    "SYS", "Launching the Riot Client.",
+                    exe=riot, league=launch_league,
+                )
                 if hasattr(self, "sidebar") and self.sidebar.winfo_exists():
                     self.sidebar.update_action_log("Launching Riot Client...")
-            else:
-                Logger.warning("SYS", "No Riot/League executable found")
-        except Exception as e:
-            Logger.error("SYS", f"Launch client failed: {e}")
+                return
+
+            league = get_league_executable_path()
+            if league and os.path.exists(league):
+                subprocess.Popen([league], shell=False)
+                Logger.action(
+                    "SYS",
+                    "Riot Client not found; launched League directly.",
+                    exe=league,
+                )
+                if hasattr(self, "sidebar") and self.sidebar.winfo_exists():
+                    self.sidebar.update_action_log("Launching League...")
+                return
+
+            # Say which paths were tried. "No executable found" on its own
+            # gives the user nothing to check.
+            Logger.error(
+                "SYS",
+                "Could not find RiotClientServices.exe or LeagueClient.exe. "
+                "Checked the standard install path and the registry.",
+            )
+            if hasattr(self, "sidebar") and self.sidebar.winfo_exists():
+                self.sidebar.update_action_log(
+                    "Could not find the Riot Client on this PC."
+                )
+        except Exception as exc:
+            Logger.error("SYS", "Could not launch the client.", exc=exc)
+            if hasattr(self, "sidebar") and self.sidebar.winfo_exists():
+                self.sidebar.update_action_log("Launching the client failed.")
 
     def _hotkey_toggle_automation(self):
         """Toggle automation power via hotkey."""
@@ -335,6 +383,15 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                 self.after(0, self.sidebar._on_power_click)
         except Exception as e:
             Logger.debug("SYS", f"Toggle automation hotkey: {e}")
+
+    def _hotkey_find_match(self):
+        """Find match via hotkey or remote API."""
+        try:
+            if hasattr(self, "sidebar") and self.sidebar.winfo_exists():
+                self.after(0, self.sidebar._find_match)
+        except Exception as e:
+            Logger.debug("SYS", f"Find match hotkey: {e}")
+
 
     def _hotkey_compact(self):
         """Toggle compact/orb mode."""

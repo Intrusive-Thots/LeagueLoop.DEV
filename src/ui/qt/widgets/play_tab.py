@@ -229,12 +229,8 @@ class QtPlayTab(QWidget):
     # ------------------------------------------------------------- actions
     def _on_find_match(self) -> None:
         """
-        Start matchmaking.
-
-        NOTE: this still calls the LCU directly because there is no
-        start-matchmaking method on any service yet (QueueManager only
-        resolves queue ids/names). A `QueueService.start_search()` seam
-        should own this so the view stops knowing LCU endpoints.
+        Start matchmaking or cancel if already searching.
+        Ensures a lobby exists for the selected queue mode, creating it if needed.
         """
         if not (self.lcu and getattr(self.lcu, "is_connected", False)):
             self._report(
@@ -244,6 +240,30 @@ class QtPlayTab(QWidget):
 
         Logger.info("PlayTab", "Find Match pressed.")
         try:
+            # 1. Check if already searching
+            state_req = self.lcu.request("GET", "/lol-lobby/v2/lobby/matchmaking/search-state", silent=True)
+            if state_req and state_req.status_code == 200:
+                state_data = state_req.json() if hasattr(state_req, "json") else {}
+                if isinstance(state_data, dict) and state_data.get("searchState") == "Searching":
+                    self.lcu.request("DELETE", "/lol-lobby/v2/lobby/matchmaking/search")
+                    Logger.action("PlayTab", "Cancelled matchmaking")
+                    self._report("Matchmaking search cancelled.", "Search cancelled", Tone.NEUTRAL)
+                    return
+
+            # 2. Check if currently in a lobby
+            lobby_req = self.lcu.request("GET", "/lol-lobby/v2/lobby", silent=True)
+            in_lobby = lobby_req is not None and lobby_req.status_code == 200
+
+            if not in_lobby:
+                # Resolve target queue ID
+                from services.queue_manager import resolve_queue_id
+                target_mode = self.config.get("aram_mode", "ARAM") if self.config else "ARAM"
+                target_q_id = resolve_queue_id(target_mode, self.lcu)
+                create_res = self.lcu.request("POST", "/lol-lobby/v2/lobby", data={"queueId": target_q_id})
+                if create_res is None or not (200 <= getattr(create_res, "status_code", 0) < 300):
+                    Logger.warning("PlayTab", f"Could not create lobby for queue {target_q_id}")
+
+            # 3. Start matchmaking
             resp = self.lcu.request("POST", "/lol-lobby/v2/lobby/matchmaking/search")
         except Exception as exc:
             Logger.error("PlayTab", "Starting matchmaking failed.", exc=exc)
@@ -253,9 +273,6 @@ class QtPlayTab(QWidget):
 
         code = getattr(resp, "status_code", None)
         if resp is None or (code is not None and not 200 <= code < 300):
-            # A non-2xx here is the normal way the client says "no lobby",
-            # "queue is locked" or "you are on a dodge timer". Swallowing it
-            # made the screen's only primary action a visible no-op.
             detail = ""
             try:
                 detail = (resp.text or "")[:160] if resp is not None else ""
@@ -269,7 +286,7 @@ class QtPlayTab(QWidget):
             self._report(
                 "The League Client would not start the search."
                 + (f" (HTTP {code})" if code else "")
-                + "\n\nMake sure a lobby is open and you are not on a dodge timer.",
+                + "\n\nMake sure you are not on a dodge timer or penalty.",
                 "Search not started", Tone.WARNING,
             )
             return

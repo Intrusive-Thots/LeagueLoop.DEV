@@ -651,6 +651,8 @@ class AutomationEngine:
             self._chat_warden_warned = False  # Item #166: Reset so toxicity is re-checked next game
             self._bravery_pick_id = 0
             self._last_champ_id = 0
+            self._rejected_draft_picks = set()
+            self._rejected_draft_bans = set()
             sf = self.stats_func
             if sf is not None:
                 sf([], [])
@@ -698,9 +700,6 @@ class AutomationEngine:
             sf2(my_team, bench, me)
 
         has_bench = len(bench) > 0
-        # The draft session carries its own queue id. Reading it only from the
-        # lobby meant that starting the app mid-draft left `current_queue_id`
-        # unset and neither the Arena nor the draft path ever ran.
         queue_id = (
             session.get("queueId")
             or (session.get("gameConfig") or {}).get("queueId")
@@ -709,16 +708,9 @@ class AutomationEngine:
         if queue_id:
             self.current_queue_id = queue_id
         is_arena = queue_id in {QUEUE_ARENA, QUEUE_ARENA_3V6}
-        is_draft = queue_id in {QUEUE_DRAFT, QUEUE_RANKED_SOLO, QUEUE_RANKED_FLEX}
 
         if has_bench and not is_arena:
             # ARAM logic.
-            #
-            # The Auto Bench Sniper switch on the ARAM screen wrote
-            # `aram_bench_swap`, which nothing read: sniping was gated on the
-            # legacy `priority_picker.enabled` flag that only the old
-            # CustomTkinter sidebar could set. Either switch enables it now, so
-            # the visible control works and existing setups keep working.
             priority_cfg = self.config.get("priority_picker", {})
             bench_enabled = bool(
                 self.config.get("aram_bench_swap", False)
@@ -748,7 +740,7 @@ class AutomationEngine:
         elif is_arena:
             if self.config.get("arena_synergy_enabled", True):
                 self._perform_arena_synergy(session)
-        elif is_draft:
+        else:
             self._perform_draft_assistant(session)
 
         # Auto-equip a non-default skin
@@ -1281,9 +1273,12 @@ class AutomationEngine:
                     self._warned_empty_bans = True
                     self._log("Draft: Auto Ban is on but your ban list is empty.")
 
+            if not hasattr(self, "_rejected_draft_bans"):
+                self._rejected_draft_bans = set()
+
             for ban_id in ban_candidates:
                 ban_id = int(ban_id or 0)
-                if ban_id <= 0:
+                if ban_id <= 0 or ban_id in self._rejected_draft_bans:
                     continue
                 ban_name = self.assets.get_champ_name(ban_id) or str(ban_id)
 
@@ -1295,31 +1290,28 @@ class AutomationEngine:
 
                 if my_action.get("championId") != ban_id and (now - self._last_draft_action_time > 0.5):
                     self._log(f"Draft: Hovering Ban {ban_name}")
-                    self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
+                    ok = self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
                               {"championId": ban_id},
                               what=f"Draft: hovered ban {ban_name}",
                               champion_id=ban_id, role=assigned or "unassigned")
                     self._last_draft_action_time = now
+                    if not ok:
+                        self._rejected_draft_bans.add(ban_id)
                 elif my_action.get("championId") == ban_id:
-                    # Committing a ban is gated on Auto Ban, not on Auto Lock
-                    # In. They are separate decisions: someone who wanted bans
-                    # handled but picks made by hand got a ban that hovered
-                    # forever and was never spent.
                     if now - self._last_draft_action_time > 0.5:
                         self._log(f"Draft: Locking Ban {ban_name}")
-                        self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
+                        ok = self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
                                   {"championId": ban_id, "completed": True},
                                   what=f"Draft: banned {ban_name}",
                                   champion_id=ban_id, role=assigned or "unassigned")
                         self._last_draft_action_time = now
+                        if not ok:
+                            self._rejected_draft_bans.add(ban_id)
                 break
 
         elif action_type == "pick":
             from itertools import chain
             enemy_team = session.get("theirTeam", [])
-            # Exclude my own cell: the champion I am currently hovering is not
-            # "taken by someone else". Counting it meant that once the engine
-            # hovered a pick, its own hover blocked it from ever locking in.
             my_cell = me.get("cellId")
             picked_ids = {
                 cid
@@ -1335,20 +1327,12 @@ class AutomationEngine:
                 for champ_id in (p.get("championPickIntent", 0), p.get("championId", 0))
                 if champ_id > 0
             }
+
+            if not hasattr(self, "_rejected_draft_picks"):
+                self._rejected_draft_picks = set()
                     
-            # Pick selection is delegated to PriorityEngine - the same code
-            # the Champ Select screen previews with, and the only one with
-            # tests. It reads `priority_list` / `aram_priority_list` (and the
-            # per-role override) as champion ids, applies availability, bans,
-            # teammate hovers and role validity, and falls back down the list.
-            #
-            # This block used to iterate `pick_{role}_1..3`, keys no screen has
-            # ever written, resolving them through `assets.name_to_id` as
-            # champion *names* while the UI stores ids. Auto Pick could not
-            # pick anything, and the recommendation shown on screen was
-            # produced by completely different code from the one acting.
             try:
-                decision = self.draft_engine.evaluate_pick(session)
+                decision = self.draft_engine.evaluate_pick(session, rejected_ids=self._rejected_draft_picks)
             except Exception as exc:
                 self._log(f"Draft: could not choose a champion ({exc})")
                 decision = None
@@ -1366,7 +1350,7 @@ class AutomationEngine:
                 blocked = (
                     pick_id in banned_champ_ids
                     or pick_id in picked_ids
-                    or pick_id in teammate_hovers
+                    or (pick_id in teammate_hovers and self.config.get("auto_ban_respect_hovers", True))
                 )
                 if blocked and pick_id in teammate_hovers:
                     self._log(
@@ -1375,31 +1359,38 @@ class AutomationEngine:
 
                 if pick_id > 0 and not blocked:
                     self._warned_empty_picks = False
-                    # Auto Hover gates the hover; Auto Lock In gates the
-                    # commit. The switch previously reached only the mobile
-                    # status endpoint, so turning it off changed nothing.
-                    # Locking still implies hovering: you cannot lock a
-                    # champion the client has not been told about.
                     may_hover = bool(
                         self.config.get("auto_hover", False)
                         or self.config.get("auto_lock_in", False)
+                        or self.config.get("auto_pick", False)
+                    )
+                    may_lock = bool(
+                        self.config.get("auto_lock_in", False)
+                        or self.config.get("auto_pick", False)
                     )
                     if may_hover and my_action.get("championId") != pick_id and (now - self._last_draft_action_time > 0.5):
                         self._log(f"Draft: Hovering Pick {pick_name}")
-                        self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
+                        ok = self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
                                   {"championId": pick_id},
                                   what=f"Draft: hovered {pick_name}",
                                   champion_id=pick_id, role=assigned or "unassigned")
                         self._last_draft_action_time = now
-                    elif my_action.get("championId") == pick_id and self.config.get("auto_lock_in", False):
+                        if not ok:
+                            self._rejected_draft_picks.add(pick_id)
+                            self._log(f"Draft: Pick {pick_name} rejected by client, falling back.")
+                    elif my_action.get("championId") == pick_id and may_lock:
                         if now - self._last_draft_action_time > 0.5:
                             self._log(f"Draft: Locking Pick {pick_name}")
-                            self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
+                            ok = self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
                                       {"championId": pick_id, "completed": True},
                                       what=f"Draft: locked in {pick_name}",
                                       champion_id=pick_id,
                                       role=assigned or "unassigned")
                             self._last_draft_action_time = now
+                            if not ok:
+                                self._rejected_draft_picks.add(pick_id)
+                                self._log(f"Draft: Lock {pick_name} rejected by client, falling back.")
+
 
     def _aram_priority_names(self):
         """

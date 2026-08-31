@@ -233,3 +233,27 @@ class HoverGateTests(unittest.TestCase):
         calls = run_draft(eng, session("pick"))
         self.assertTrue(calls)
         self.assertEqual(calls[-1][2], {"championId": AHRI})
+
+    def test_fallback_when_client_rejects_pick(self):
+        eng = engine(**{PRIORITY_LIST: [AHRI, GAREN], AUTO_HOVER: True})
+        # Simulate Ahri rejected by client
+        def mock_request(method, endpoint, data=None, silent=False):
+            eng.lcu.calls.append((method, endpoint, data))
+            res = mock.MagicMock()
+            if data and data.get("championId") == AHRI:
+                res.status_code = 400
+                res.text = "Champion not owned"
+            else:
+                res.status_code = 204
+                res.text = ""
+            return res
+
+        eng.lcu.request = mock_request
+        # First call attempts Ahri, client rejects with 400
+        run_draft(eng, session("pick"))
+        # Second call should immediately attempt Garen
+        eng._last_draft_action_time = 0.0
+        run_draft(eng, session("pick"))
+        self.assertTrue(len(eng.lcu.calls) >= 2)
+        self.assertEqual(eng.lcu.calls[-1][2], {"championId": GAREN})
+

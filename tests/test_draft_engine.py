@@ -72,5 +72,62 @@ class TestDraftSubsystem(unittest.TestCase):
         self.assertEqual(decision.role, "MIDDLE")
 
 
+    def test_priority_engine_with_champion_names_and_rejected_ids(self):
+        config = MagicMock()
+        config.get.side_effect = lambda key, default=None: {
+            "priority_list": ["TwistedFate", "Karthus", "Sion"],
+        }.get(key, default)
+
+        assets = MagicMock()
+        assets.name_to_id.side_effect = lambda name: {"TwistedFate": 4, "Karthus": 30, "Sion": 14}.get(name, 0)
+        assets.get_champ_roles.return_value = []
+
+        engine = PriorityEngine(config_manager=config, asset_manager=assets)
+
+        session = {
+            "localPlayerCellId": 0,
+            "myTeam": [{"cellId": 0, "assignedPosition": ""}],
+            "bans": {"myTeamBans": [], "theirTeamBans": []},
+            "theirTeam": [],
+            "actions": [],
+        }
+
+        # Normal pick -> TF (4)
+        decision = engine.evaluate_pick(session)
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.champion_id, 4)
+
+        # If TF was rejected by client (e.g. not owned), engine picks Karthus (30)
+        decision2 = engine.evaluate_pick(session, rejected_ids={4})
+        self.assertIsNotNone(decision2)
+        self.assertEqual(decision2.champion_id, 30)
+
+    def test_priority_engine_falls_back_to_legacy_priority_picker(self):
+        config = MagicMock()
+        config.get.side_effect = lambda key, default=None: {
+            "priority_list": [],
+            "priority_picker": {"enabled": True, "list": ["Amumu", "Ashe"]},
+        }.get(key, default)
+
+        assets = MagicMock()
+        assets.name_to_id.side_effect = lambda name: {"Amumu": 32, "Ashe": 22}.get(name, 0)
+        assets.get_champ_roles.return_value = []
+
+        engine = PriorityEngine(config_manager=config, asset_manager=assets)
+
+        session = {
+            "localPlayerCellId": 0,
+            "myTeam": [{"cellId": 0, "assignedPosition": ""}],
+            "bans": {"myTeamBans": [], "theirTeamBans": []},
+            "theirTeam": [],
+            "actions": [],
+        }
+
+        decision = engine.evaluate_pick(session)
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.champion_id, 32)
+
+
 if __name__ == "__main__":
     unittest.main()
+

@@ -399,36 +399,76 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                 return
 
             app = self.app_instance
+
+            def _dispatch(fn):
+                if app and hasattr(app, 'after'):
+                    try:
+                        app.after(0, fn)
+                        return
+                    except Exception:
+                        pass
+                threading.Thread(target=fn, daemon=True).start()
+
             if app:
                 if action == "find_match":
-                    app.after(0, app._hotkey_find_match)
+                    def _do_find_match():
+                        if hasattr(app, "_hotkey_find_match"):
+                            app._hotkey_find_match()
+                        elif hasattr(app, "automation") and app.automation and app.automation.lcu:
+                            lcu = app.automation.lcu
+                            state_req = lcu.request("GET", "/lol-lobby/v2/lobby/matchmaking/search-state", silent=True)
+                            if state_req and state_req.status_code == 200:
+                                sdata = state_req.json() if hasattr(state_req, "json") else {}
+                                if isinstance(sdata, dict) and sdata.get("searchState") == "Searching":
+                                    lcu.request("DELETE", "/lol-lobby/v2/lobby/matchmaking/search")
+                                    return
+                            lobby_req = lcu.request("GET", "/lol-lobby/v2/lobby", silent=True)
+                            if not (lobby_req and lobby_req.status_code == 200):
+                                from services.queue_manager import resolve_queue_id
+                                target_mode = app.config.get("aram_mode", "ARAM") if hasattr(app, "config") else "ARAM"
+                                target_q_id = resolve_queue_id(target_mode, lcu)
+                                lcu.request("POST", "/lol-lobby/v2/lobby", data={"queueId": target_q_id})
+                            lcu.request("POST", "/lol-lobby/v2/lobby/matchmaking/search")
+                    _dispatch(_do_find_match)
                 elif action == "launch_client":
-                    app.after(0, app._hotkey_launch_client)
+                    if hasattr(app, "_hotkey_launch_client"):
+                        _dispatch(app._hotkey_launch_client)
                 elif action == "toggle_automation":
-                    app.after(0, app._hotkey_toggle_automation)
+                    if hasattr(app, "_hotkey_toggle_automation"):
+                        _dispatch(app._hotkey_toggle_automation)
+                    elif hasattr(app, "automation") and app.automation:
+                        if app.automation.running:
+                            app.automation.pause() if not app.automation.paused else app.automation.resume()
+                        else:
+                            app.automation.start()
                 elif action == "dodge_queue":
-                    # Cancel matchmaking / leave queue
-                    if hasattr(app, 'automation') and app.automation:
-                        app.after(0, lambda: app.automation.lcu.request('DELETE', '/lol-lobby/v2/matchmaking/search'))
+                    if hasattr(app, 'automation') and app.automation and app.automation.lcu:
+                        _dispatch(lambda: app.automation.lcu.request('DELETE', '/lol-lobby/v2/matchmaking/search'))
                 elif action == "toggle_honor":
-                    # Toggle the auto_honor_enabled config flag
                     if hasattr(app, 'config'):
-                        current = app.config.cfg.get('auto_honor_enabled', False)
-                        app.config.cfg['auto_honor_enabled'] = not current
-                        app.config.save()
+                        cfg_dict = getattr(app.config, 'cfg', app.config)
+                        if isinstance(cfg_dict, dict):
+                            current = cfg_dict.get('auto_honor_enabled', False)
+                            cfg_dict['auto_honor_enabled'] = not current
+                            if hasattr(app.config, 'save'):
+                                app.config.save()
                 elif action == 'requeue':
                     if hasattr(app, 'sidebar') and app.sidebar:
-                        app.after(0, app.sidebar._force_requeue)
+                        _dispatch(app.sidebar._force_requeue)
                 elif action == 'play_again':
                     if hasattr(app, 'sidebar') and app.sidebar:
-                        app.after(0, app.sidebar._play_again)
+                        _dispatch(app.sidebar._play_again)
+                    elif hasattr(app, 'automation') and app.automation and app.automation.lcu:
+                        _dispatch(lambda: app.automation.lcu.request('POST', '/lol-lobby/v2/play-again'))
                 elif action == 'cancel_matchmaking':
-                    if hasattr(app, 'automation') and app.automation:
-                        app.after(0, lambda: app.automation.lcu.request('DELETE', '/lol-lobby/v2/lobby/matchmaking/search'))
+                    if hasattr(app, 'automation') and app.automation and app.automation.lcu:
+                        _dispatch(lambda: app.automation.lcu.request('DELETE', '/lol-lobby/v2/lobby/matchmaking/search'))
                 elif action == 'change_queue_mode':
                     queue_mode = body.get('queue_mode', '')
                     if hasattr(app, 'sidebar') and app.sidebar and queue_mode:
-                        app.after(0, lambda: app.sidebar._on_mode_change(queue_mode))
+                        _dispatch(lambda: app.sidebar._on_mode_change(queue_mode))
+                    elif hasattr(app, 'config') and queue_mode:
+                        app.config.set('aram_mode', queue_mode)
                 elif action == 'set_status':
                     message = body.get('message', '')
                     if hasattr(app, 'automation') and app.automation and message:
@@ -437,14 +477,15 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                     if hasattr(app, 'automation') and app.automation:
                         threading.Thread(target=lambda: app.automation.mass_invite_friends(), daemon=True).start()
                 elif action == 'leave_lobby':
-                    if hasattr(app, 'automation') and app.automation:
-                        app.after(0, lambda: app.automation.lcu.request('DELETE', '/lol-lobby/v2/lobby'))
+                    if hasattr(app, 'automation') and app.automation and app.automation.lcu:
+                        _dispatch(lambda: app.automation.lcu.request('DELETE', '/lol-lobby/v2/lobby'))
                 elif action == 'create_lobby':
                     queue_mode = body.get('queue_mode', '')
-                    if queue_mode and hasattr(app, 'sidebar') and app.sidebar:
-                        target_q_id = app.sidebar._get_queue_id_for_mode(queue_mode)
+                    if queue_mode and hasattr(app, 'automation') and app.automation and app.automation.lcu:
+                        from services.queue_manager import resolve_queue_id
+                        target_q_id = resolve_queue_id(queue_mode, app.automation.lcu)
                         if target_q_id:
-                            app.after(0, lambda: app.automation.lcu.request("POST", "/lol-lobby/v2/lobby", {"queueId": target_q_id}))
+                            _dispatch(lambda: app.automation.lcu.request("POST", "/lol-lobby/v2/lobby", data={"queueId": target_q_id}))
             
             self._send_json({"status": "success", "action": action})
         elif self.path == '/config':
@@ -521,12 +562,13 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                         local_cell = session.get('localPlayerCellId')
                         action_type = 'pick' if '/pick' in self.path else 'ban'
 
-                        # Find the active action for this type
+                        # Find the active, in-progress action for this type
                         target_action = None
                         for row in session.get('actions', []):
                             for action in row:
                                 if (action.get('actorCellId') == local_cell and
                                     not action.get('completed') and
+                                    action.get('isInProgress') and
                                     action.get('type') == action_type):
                                     target_action = action
                                     break
@@ -544,7 +586,7 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                             else:
                                 result = {'status': 'error', 'message': f'LCU returned {res.status_code if res else "no response"}'}
                         else:
-                            result = {'status': 'error', 'message': f'No active {action_type} action found'}
+                            result = {'status': 'error', 'message': f'No active in-progress {action_type} action found'}
                 except Exception as e:
                     result = {'status': 'error', 'message': str(e)}
 
@@ -568,7 +610,8 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                         for row in session.get('actions', []):
                             for action in row:
                                 if (action.get('actorCellId') == local_cell and
-                                    not action.get('completed')):
+                                    not action.get('completed') and
+                                    action.get('isInProgress')):
                                     target_action = action
                                     break
                             if target_action:

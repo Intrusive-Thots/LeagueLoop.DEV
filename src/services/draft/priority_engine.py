@@ -56,6 +56,7 @@ class PriorityEngine:
         session: Dict[str, Any],
         custom_priorities: Optional[List[int]] = None,
         aram: Optional[bool] = None,
+        rejected_ids: Optional[Any] = None,
     ) -> Optional[DraftEvaluationResult]:
         """
         Determines the best available champion to pick.
@@ -76,7 +77,11 @@ class PriorityEngine:
         if not priority_list:
             return None
 
+        rejected_set = set(rejected_ids) if rejected_ids else set()
+
         for rank_idx, champ_id in enumerate(priority_list):
+            if champ_id in rejected_set:
+                continue
             if ActionValidator.is_champion_available(champ_id, session, is_pick=True):
                 # Calculate deterministic score
                 priority_weight = max(100.0 - (rank_idx * 10.0), 10.0)
@@ -156,18 +161,33 @@ class PriorityEngine:
             return []
 
         if aram:
-            aram_list = read_champion_ids(self.config, ARAM_PRIORITY_LIST)
+            aram_list = read_champion_ids(self.config, ARAM_PRIORITY_LIST, asset_manager=self.assets)
             if aram_list:
                 return aram_list
-            # No ARAM list configured is a real answer: fall back to the
-            # general list rather than picking nothing.
+            # Fallback to legacy priority_picker list if configured
+            legacy = self.config.get("priority_picker", {})
+            if isinstance(legacy, dict) and legacy.get("list"):
+                legacy_list = read_champion_ids({"_legacy": legacy.get("list", [])}, "_legacy", asset_manager=self.assets)
+                if legacy_list:
+                    return legacy_list
 
         if role:
-            role_list = read_champion_ids(self.config, role_priority_key(role))
+            role_list = read_champion_ids(self.config, role_priority_key(role), asset_manager=self.assets)
             if role_list:
                 return role_list
 
-        return read_champion_ids(self.config, PRIORITY_LIST)
+        main_list = read_champion_ids(self.config, PRIORITY_LIST, asset_manager=self.assets)
+        if main_list:
+            return main_list
+
+        # Fallback to legacy priority_picker list
+        legacy = self.config.get("priority_picker", {})
+        if isinstance(legacy, dict) and legacy.get("list"):
+            legacy_list = read_champion_ids({"_legacy": legacy.get("list", [])}, "_legacy", asset_manager=self.assets)
+            if legacy_list:
+                return legacy_list
+
+        return []
 
     def _get_ban_priorities_for_role(self, role: str) -> List[int]:
         """
@@ -180,11 +200,12 @@ class PriorityEngine:
             return []
 
         if role:
-            role_list = read_champion_ids(self.config, role_ban_key(role))
+            role_list = read_champion_ids(self.config, role_ban_key(role), asset_manager=self.assets)
             if role_list:
                 return role_list
 
-        return read_champion_ids(self.config, BAN_LIST)
+        return read_champion_ids(self.config, BAN_LIST, asset_manager=self.assets)
+
 
     def _is_champion_valid_for_role(self, champ_id: int, role: str) -> bool:
         """Checks if champion is canonically played in this role via AssetManager metadata."""

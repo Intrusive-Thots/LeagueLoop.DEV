@@ -85,9 +85,9 @@ def role_ban_key(role: str) -> str:
     return "{}{}".format(BAN_ROLE_PREFIX, role) if role else BAN_LIST
 
 
-def read_champion_ids(config, key: str) -> List[int]:
+def read_champion_ids(config, key: str, asset_manager=None) -> List[int]:
     """
-    Read a champion-id list, tolerating the string ids older configs stored.
+    Read a champion-id list, tolerating string ids and champion names in configs.
 
     Returns [] rather than raising: a malformed entry should cost you that
     entry, not the whole list.
@@ -99,12 +99,31 @@ def read_champion_ids(config, key: str) -> List[int]:
     except Exception:
         return []
 
+    if isinstance(raw, (int, str)):
+        raw = [raw]
+    elif not isinstance(raw, (list, tuple)):
+        return []
+
     out: List[int] = []
     for item in raw:
         try:
             value = int(item)
+            if value > 0:
+                out.append(value)
+                continue
         except (TypeError, ValueError):
-            continue
-        if value > 0:
-            out.append(value)
+            pass
+
+        # If it's a string champion name, try resolving to ID via asset manager
+        if isinstance(item, str) and item.strip():
+            name_str = item.strip()
+            if asset_manager is not None and hasattr(asset_manager, "name_to_id"):
+                try:
+                    resolved_id = asset_manager.name_to_id(name_str)
+                    if resolved_id and int(resolved_id) > 0:
+                        out.append(int(resolved_id))
+                        continue
+                except Exception:
+                    pass
     return out
+

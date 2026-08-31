@@ -226,3 +226,37 @@ class FirstPaintTests(unittest.TestCase):
         from ui.qt.app import application
 
         self.assertIn("view_model.refresh()", inspect.getsource(application.build))
+
+    def test_find_match_creates_lobby_and_starts_search(self):
+        from unittest.mock import MagicMock
+        from ui.qt.widgets.play_tab import QtPlayTab
+
+        lcu = MagicMock()
+        lcu.is_connected = True
+        calls = []
+
+        def mock_req(method, endpoint, data=None, silent=False):
+            calls.append((method, endpoint, data))
+            res = MagicMock()
+            if endpoint == "/lol-lobby/v2/lobby/matchmaking/search-state":
+                res.status_code = 404
+            elif endpoint == "/lol-lobby/v2/lobby":
+                res.status_code = 404 if method == "GET" else 200
+            else:
+                res.status_code = 200
+            return res
+
+        lcu.request.side_effect = mock_req
+
+        container = MagicMock()
+        container.lcu = lcu
+        container.config = MagicMock()
+        container.config.get.return_value = "ARAM"
+
+        tab = QtPlayTab(container=container)
+        tab._on_find_match()
+
+        endpoints = [c[1] for c in calls]
+        self.assertIn("/lol-lobby/v2/lobby", endpoints)
+        self.assertIn("/lol-lobby/v2/lobby/matchmaking/search", endpoints)
+
