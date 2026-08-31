@@ -275,6 +275,9 @@ class ClientWindowTracker:
         self._last_discovery_at: float = 0.0
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
+        #: How many consecutive ticks the hwnd lookup returned nothing before we declare the window gone.
+        self._miss_count: int = 0
+        self._MISS_THRESHOLD: int = 3  # require 3 consecutive misses (~600ms) before rediscovery
         #: Extra listeners, for callers not going through StateManager.
         self._listeners: List[Callable[[ClientWindowState], None]] = []
 
@@ -319,11 +322,20 @@ class ClientWindowTracker:
         info = self._backend.get_window(self._hwnd) if self._hwnd else None
 
         if info is None or not self._still_ours(info):
-            # The handle we had is gone or no longer belongs to the client.
             if self._hwnd:
+                # Require multiple consecutive misses before declaring the window gone.
+                # Transient Windows API glitches (window animations, focus changes)
+                # can cause get_window to return None for a single tick even for valid HWNDs.
+                self._miss_count += 1
+                if self._miss_count < self._MISS_THRESHOLD:
+                    # Not sure yet — return the last published state unchanged.
+                    return self._last_publish_state()
                 Logger.info(TAG, "Lost the client window; re-discovering.")
                 self._hwnd = 0
+                self._miss_count = 0
             info = self._discover()
+        else:
+            self._miss_count = 0  # Clear miss counter on successful read
 
         if info is None:
             return self._publish(ClientWindowState())
@@ -346,6 +358,20 @@ class ClientWindowTracker:
         if pid and info.pid and info.pid != pid:
             return False
         return True
+
+    def _last_publish_state(self) -> "ClientWindowState":
+        """Return the most recently broadcast state without emitting a change.
+
+        Used during debounce: if we missed the window for fewer ticks than the
+        threshold we pretend it is still there so listeners don't flicker.
+        """
+        if self._last_published is None:
+            return ClientWindowState()
+        (found, hwnd, x, y, w, h, visible, minimized, monitor, dpi) = self._last_published
+        return ClientWindowState(
+            found=found, hwnd=hwnd, x=x, y=y, width=w, height=h,
+            visible=visible, minimized=minimized, monitor=monitor, dpi=dpi,
+        )
 
     def _discover(self) -> Optional[WindowInfo]:
         """Enumerate and pick the client's real window.

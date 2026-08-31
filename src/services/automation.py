@@ -102,8 +102,9 @@ class AutomationEngine:
 
         self._last_disconnect_log: float = 0.0
         self._requeue_handled: bool = False
-        self._skin_equipped: bool = False
+        self._skin_equipped_for_champ_id: int = 0  # champ ID for which we've already picked a skin
         self._last_priority_swap: float = 0.0
+        self._last_priority_swap_target_id: int = 0  # prevent re-swapping same champ before LCU updates
         self._last_search_state_time: float = 0.0
         self._honor_handled: bool = False
         self._runes_equipped: bool = False
@@ -646,7 +647,7 @@ class AutomationEngine:
                 self._tracked_champ_select_data = None
 
             self.setup_done = False
-            self._skin_equipped = False
+            self._skin_equipped_for_champ_id = 0
             self._runes_equipped = False  # Item #167: Reset so runes re-equip next game
             self._chat_warden_warned = False  # Item #166: Reset so toxicity is re-checked next game
             self._bravery_pick_id = 0
@@ -669,7 +670,6 @@ class AutomationEngine:
         my_champ_id = me.get("championId", 0) if me else 0
         if my_champ_id != 0 and my_champ_id != getattr(self, "_last_champ_id", 0):
             self._last_champ_id = my_champ_id
-            self._skin_equipped = False
             self._runes_equipped = False
 
         # 2.2 Blacklist Dodging
@@ -745,8 +745,15 @@ class AutomationEngine:
         else:
             self._perform_draft_assistant(session)
 
-        # Auto-equip a non-default skin
-        if self.config.get("auto_random_skin", True) and not self._skin_equipped:
+        # Auto-equip a non-default skin — only if we haven't equipped one for this specific champion yet.
+        # Using champion ID rather than a simple bool prevents re-equipping stale skins
+        # from the old carousel immediately after a bench swap (before LCU reflects the new champion).
+        _skin_champ_id = me.get("championId", 0) if me else 0
+        if (
+            self.config.get("auto_random_skin", True)
+            and _skin_champ_id != 0
+            and _skin_champ_id != self._skin_equipped_for_champ_id
+        ):
             self._equip_random_skin(session)
 
         # 2.1 Auto-Equip Runes
@@ -854,7 +861,7 @@ class AutomationEngine:
 
             if success:
                 self._log(f"Equipped: {skin_name}")
-                self._skin_equipped = True
+                self._skin_equipped_for_champ_id = champ_id
                 Logger.info("Auto", f"Equipped skin '{skin_name}' ({skin_id}) for champ {champ_id}")
             else:
                 Logger.debug("Auto", f"Skin PATCH failed for '{skin_name}' ({skin_id}) via all LCU endpoints")
@@ -1493,7 +1500,12 @@ class AutomationEngine:
         me = self._get_local_player(session)
         my_champ_id = me.get("championId", 0) if me else 0
         my_champ_name = self.assets.get_champ_name(my_champ_id) if my_champ_id else ""
-        
+
+        # If the session has caught up and we now hold the champion we swapped to,
+        # clear the pending-swap guard so future swaps can fire normally.
+        if my_champ_id and my_champ_id == self._last_priority_swap_target_id:
+            self._last_priority_swap_target_id = 0
+
         # ⚡ Bolt: Fast-path priority sniper early-return optimization.
         # Instead of traversing the entire bench and evaluating every champion against a priority map,
         # we index the bench for O(1) lookups, then walk down the sorted priority list.
@@ -1532,15 +1544,24 @@ class AutomationEngine:
         if best_bench_id != 0:
             now = time.time()
 
-            if now - self._last_priority_swap < PRIORITY_SWAP_COOLDOWN: return
-            
+            if now - self._last_priority_swap < PRIORITY_SWAP_COOLDOWN:
+                return
+
+            # Guard: don't re-fire for the same target when the LCU session hasn't
+            # reflected the swap yet. This is the root cause of repeated swap log spam —
+            # the polling loop sees stale session data for 1-2 ticks after the swap.
+            if best_bench_id == self._last_priority_swap_target_id:
+                return
+
             self._log(f"Sniper: Found {best_bench_champ}! Swapping...")
             self._act("POST", f"/lol-champ-select/v1/session/bench/swap/{best_bench_id}",
                       what=f"ARAM: swapped to {best_bench_champ} from the bench",
                       champion_id=best_bench_id)
             self._last_priority_swap = now
-            # Reset skin flag so we re-equip for the new champion
-            self._skin_equipped = False
+            self._last_priority_swap_target_id = best_bench_id
+            # Clear skin guard so we re-equip once the session confirms the new champion.
+            # Using 0 (not the target ID) ensures we wait for real confirmation before equipping.
+            self._skin_equipped_for_champ_id = 0
 
     def leave_friend_lobby_and_cooldown(self, friend_name: Optional[str] = None) -> bool:
         """

@@ -200,7 +200,8 @@ class TestAutomationEnginePrioritySniper(unittest.TestCase):
         engine.log = MagicMock()
         engine._log = MagicMock()
         engine._last_priority_swap = 0.0
-        engine._skin_equipped = True
+        engine._last_priority_swap_target_id = 0
+        engine._skin_equipped_for_champ_id = 10  # Pretend champ 10 already has a skin
         return engine
 
     @patch("time.time", return_value=100)
@@ -235,7 +236,8 @@ class TestAutomationEnginePrioritySniper(unittest.TestCase):
         # Should swap to Yasuo (30)
         engine.lcu.request.assert_called_once_with("POST", "/lol-champ-select/v1/session/bench/swap/30")
         self.assertEqual(engine._last_priority_swap, 100)
-        self.assertFalse(engine._skin_equipped)
+        # Skin guard should be cleared (0) so it re-equips for the new champion
+        self.assertEqual(engine._skin_equipped_for_champ_id, 0)
 
     @patch("time.time", return_value=100)
     def test_priority_sniper_no_better_champ(self, mock_time):
@@ -783,12 +785,12 @@ class TestAutomationEngineChampSelect(unittest.TestCase):
         engine.log = MagicMock()
         engine._log = MagicMock()
         engine.paused = False
-        engine._skin_equipped = True
+        engine._skin_equipped_for_champ_id = 10  # starts as if champ 10 skin was equipped
         engine._runes_equipped = True
         engine._last_champ_id = 0
         engine.stats_func = None
         engine.current_queue_id = 0
-        
+
         # Mock sub-handlers to avoid running unrelated logic
         engine._handle_auto_dodge = MagicMock()
         engine._handle_chat_warden = MagicMock()
@@ -801,33 +803,33 @@ class TestAutomationEngineChampSelect(unittest.TestCase):
 
     def test_champ_select_champion_change_resets_flags(self):
         engine = self._make_engine()
-        
+
         # Mock _get_local_player to return cellId and championId
         session = {
             "localPlayerCellId": 1,
-            "myTeam": [{"cellId": 1, "assignedPosition": "middle", "championId": 10}] # Garen
+            "myTeam": [{"cellId": 1, "assignedPosition": "middle", "championId": 10}]  # Garen
         }
-        
-        # First call, should set _last_champ_id and reset flags
+
+        # First call — champ 10 is "new" to _last_champ_id (was 0); runes should reset.
+        # Skin guard already says 10 is equipped, so _equip_random_skin should NOT fire.
         engine._handle_champ_select("ChampSelect", session)
         self.assertEqual(engine._last_champ_id, 10)
-        self.assertFalse(engine._skin_equipped)
         self.assertFalse(engine._runes_equipped)
 
-        # Set flags to True again
-        engine._skin_equipped = True
+        # Set runes back to True; skin guard still says champ 10 was equipped.
+        engine._skin_equipped_for_champ_id = 10
         engine._runes_equipped = True
 
-        # Second call with same champion ID, flags should remain True
+        # Second call with same champion ID — no change expected.
         engine._handle_champ_select("ChampSelect", session)
-        self.assertTrue(engine._skin_equipped)
+        self.assertEqual(engine._skin_equipped_for_champ_id, 10)
         self.assertTrue(engine._runes_equipped)
 
-        # Third call with new champion ID (e.g. swap or picker), flags should reset
-        session["myTeam"][0]["championId"] = 20 # Teemo
+        # Third call with new champion ID (e.g. swap or picker), runes should reset.
+        # Skin guard clears because _equip_random_skin will be called for champ 20.
+        session["myTeam"][0]["championId"] = 20  # Teemo
         engine._handle_champ_select("ChampSelect", session)
         self.assertEqual(engine._last_champ_id, 20)
-        self.assertFalse(engine._skin_equipped)
         self.assertFalse(engine._runes_equipped)
 
 
@@ -876,7 +878,7 @@ class TestAutomationEngineAutoJoinAndSkin(unittest.TestCase):
         self.engine._auto_joined_friends_cooldown = {}
         self.engine._current_auto_joined_friend = None
         self.engine._current_auto_joined_party_id = None
-        self.engine._skin_equipped = False
+        self.engine._skin_equipped_for_champ_id = 0
         self.engine._honor_handled = False
         self.engine.assets = MagicMock()
 
@@ -938,7 +940,7 @@ class TestAutomationEngineAutoJoinAndSkin(unittest.TestCase):
         self.engine.lcu.request.side_effect = mock_request
         self.engine._equip_random_skin(session)
 
-        self.assertTrue(self.engine._skin_equipped)
+        self.assertEqual(self.engine._skin_equipped_for_champ_id, 10)
 
     def test_handle_end_of_game_records_match_to_database(self):
         """Verify _handle_end_of_game records completed match details into DatabaseService."""
