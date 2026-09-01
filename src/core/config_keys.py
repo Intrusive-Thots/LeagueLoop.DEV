@@ -119,7 +119,13 @@ def read_champion_ids(config, key: str, asset_manager=None) -> List[int]:
             name_str = item.strip()
             if asset_manager is not None and hasattr(asset_manager, "name_to_id"):
                 try:
-                    resolved_id = asset_manager.name_to_id.get(name_str.lower())
+                    mapper = asset_manager.name_to_id
+                    if callable(mapper):
+                        resolved_id = mapper(name_str) or mapper(name_str.lower())
+                    elif isinstance(mapper, dict) or hasattr(mapper, "get"):
+                        resolved_id = mapper.get(name_str.lower()) or mapper.get(name_str)
+                    else:
+                        resolved_id = 0
                     if resolved_id and int(resolved_id) > 0:
                         out.append(int(resolved_id))
                         continue

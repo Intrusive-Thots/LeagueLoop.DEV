@@ -1432,7 +1432,13 @@ class AutomationEngine:
         for item in legacy:
             name_str = str(item).strip()
             if name_str:
-                cid = self.assets.name_to_id.get(name_str.lower(), 0) if (self.assets and hasattr(self.assets, "name_to_id")) else 0
+                cid = 0
+                if self.assets and hasattr(self.assets, "name_to_id"):
+                    mapper = self.assets.name_to_id
+                    if callable(mapper):
+                        cid = mapper(name_str) or mapper(name_str.lower()) or 0
+                    elif isinstance(mapper, dict) or hasattr(mapper, "get"):
+                        cid = mapper.get(name_str.lower()) or mapper.get(name_str) or 0
                 resolved_name = self.assets.get_champ_name(cid) if (cid and self.assets) else name_str
                 if resolved_name and resolved_name.lower() not in seen:
                     seen.add(resolved_name.lower())
