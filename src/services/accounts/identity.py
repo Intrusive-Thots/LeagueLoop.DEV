@@ -29,15 +29,16 @@ class MatchKind(Enum):
     LOGIN_USERNAME = "login_username"
     #: Stored Riot ID == the client's Riot ID. Exact.
     RIOT_ID = "riot_id"
+    #: Stored username or tagline matches in-game name. Exact identity match.
+    GAME_NAME = "game_name"
     #: Stored label happens to equal the in-game name. A guess.
     LABEL_GUESS = "label_guess"
     #: Nobody matched.
     NONE = "none"
 
 
-#: Kinds we are willing to treat as fact. A label collision must not silently
-#: repoint the active account.
-CONFIDENT = (MatchKind.LOGIN_USERNAME, MatchKind.RIOT_ID)
+#: Kinds we are willing to treat as fact.
+CONFIDENT = (MatchKind.LOGIN_USERNAME, MatchKind.RIOT_ID, MatchKind.GAME_NAME)
 
 
 @dataclass(frozen=True)
@@ -90,7 +91,7 @@ def from_lcu_summoner(payload: Optional[Dict[str, Any]]) -> ClientIdentity:
     Parse `GET /lol-summoner/v1/current-summoner`.
 
     The LCU knows the in-game name but never the Riot login username, so an
-    identity from here can only ever match on Riot ID.
+    identity from here can match on Riot ID, Game Name, or stored username/tagline.
     """
     if not payload:
         return ClientIdentity()
@@ -123,27 +124,42 @@ def match_account(
     Find the stored account for a signed-in identity.
 
     Rules run strongest-first and the whole list is checked at each strength
-    before dropping to a weaker one. The original did the opposite - it fell
-    through to a label guess on the *first* account before trying an exact
-    Riot ID match on the second.
+    before dropping to a weaker one.
     """
     if identity.is_empty or not accounts:
         return AccountMatch()
 
+    # Rule 1: Exact match on login username (from Riot Client userinfo)
     if identity.login_name:
         for i, acct in enumerate(accounts):
             if _lower(acct.get("username")) == identity.login_name:
                 return AccountMatch(i, MatchKind.LOGIN_USERNAME)
 
     riot_id = identity.riot_id
-    if riot_id:
+    game_name = identity.game_name
+    tag_line = identity.tag_line
+
+    # Rule 2: Exact Riot ID match (when tag_line is present, e.g. "name#tag") against stored tagline, username, or label
+    if riot_id and tag_line:
         for i, acct in enumerate(accounts):
-            if _lower(acct.get("tagline")) == riot_id:
+            acct_tag = _lower(acct.get("tagline"))
+            acct_user = _lower(acct.get("username"))
+            acct_label = _lower(acct.get("label"))
+            if acct_tag == riot_id or acct_user == riot_id or acct_label == riot_id:
                 return AccountMatch(i, MatchKind.RIOT_ID)
 
-    if identity.game_name:
+    # Rule 3: Game Name match against stored username or tagline
+    if game_name:
         for i, acct in enumerate(accounts):
-            if _lower(acct.get("label")) == identity.game_name:
+            acct_user = _lower(acct.get("username"))
+            acct_tag = _lower(acct.get("tagline"))
+            if (acct_user and acct_user == game_name) or (acct_tag and acct_tag == game_name):
+                return AccountMatch(i, MatchKind.GAME_NAME)
+
+    # Rule 4: Label guess match against stored label
+    if game_name:
+        for i, acct in enumerate(accounts):
+            if _lower(acct.get("label")) == game_name:
                 return AccountMatch(i, MatchKind.LABEL_GUESS)
 
     return AccountMatch()

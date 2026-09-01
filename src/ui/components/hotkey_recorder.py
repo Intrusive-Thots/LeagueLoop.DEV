@@ -15,13 +15,14 @@ class HotkeyRecorder(ctk.CTkButton):
     _active_recorder = None
 
     _MODIFIERS_MAP = {
-        "left ctrl": "ctrl", "right ctrl": "ctrl",
-        "left shift": "shift", "right shift": "shift",
-        "left alt": "alt", "right alt": "alt",
-        "left windows": "win", "right windows": "win",
+        "left ctrl": "ctrl", "right ctrl": "ctrl", "ctrl": "ctrl", "control": "ctrl",
+        "left shift": "shift", "right shift": "shift", "shift": "shift",
+        "left alt": "alt", "right alt": "alt", "alt": "alt", "menu": "alt",
+        "left windows": "win", "right windows": "win", "win": "win", "windows": "win",
         "control_l": "ctrl", "control_r": "ctrl",
         "shift_l": "shift", "shift_r": "shift",
         "alt_l": "alt", "alt_r": "alt",
+        "menu_l": "alt", "menu_r": "alt",
     }
     _MODIFIER_NAMES = {"ctrl", "shift", "alt", "win"}
     _MODIFIER_ORDER = ["ctrl", "shift", "alt", "win"]

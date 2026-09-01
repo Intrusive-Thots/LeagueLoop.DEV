@@ -300,25 +300,43 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
 
     def _bind_hotkeys(self):
         """Register global hotkeys from config."""
-        def _normalize(h):
+        try:
+            keyboard.unhook_all_hotkeys()
+        except Exception:
+            pass
+
+        MODIFIERS = {"ctrl", "control", "alt", "menu", "shift", "win", "windows"}
+
+        def _normalize(h, default=""):
             if not h:
-                return ""
+                return default
             parts = [p.strip().lower() for p in str(h).split("+") if p.strip()]
             norm = []
+            non_modifiers = []
             for p in parts:
                 if p == "menu":
                     norm.append("alt")
                 elif p == "control":
                     norm.append("ctrl")
+                elif p == "windows":
+                    norm.append("win")
                 else:
                     norm.append(p)
+                if p not in MODIFIERS:
+                    non_modifiers.append(p)
+
+            # If there are no non-modifier trigger keys (e.g. only "alt" or "shift+alt"),
+            # fall back to the safe default
+            if not non_modifiers and default:
+                return default
+
             return "+".join(norm)
 
         try:
-            launch_key = _normalize(self.config.get("hotkey_launch_client", "ctrl+shift+l"))
-            toggle_key = _normalize(self.config.get("hotkey_toggle_automation", "shift+alt"))
-            find_key = _normalize(self.config.get("hotkey_find_match", "alt"))
-            compact_key = _normalize(self.config.get("hotkey_compact_mode", "ctrl+shift+alt"))
+            launch_key = _normalize(self.config.get("hotkey_launch_client"), "ctrl+shift+l")
+            toggle_key = _normalize(self.config.get("hotkey_toggle_automation"), "ctrl+shift+a")
+            find_key = _normalize(self.config.get("hotkey_find_match"), "ctrl+shift+f")
+            compact_key = _normalize(self.config.get("hotkey_compact_mode"), "ctrl+shift+m")
 
             if launch_key:
                 keyboard.add_hotkey(launch_key, self._hotkey_launch_client, suppress=False)
@@ -364,7 +382,7 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                     exe=riot, league=launch_league,
                 )
                 if hasattr(self, "sidebar") and self.sidebar.winfo_exists():
-                    self.sidebar.update_action_log("Launching Riot Client...")
+                    self.after(0, lambda: self.sidebar.update_action_log("Launching Riot Client..."))
                 return
 
             league = get_league_executable_path()
@@ -376,7 +394,7 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                     exe=league,
                 )
                 if hasattr(self, "sidebar") and self.sidebar.winfo_exists():
-                    self.sidebar.update_action_log("Launching League...")
+                    self.after(0, lambda: self.sidebar.update_action_log("Launching League..."))
                 return
 
             # Say which paths were tried. "No executable found" on its own
@@ -387,13 +405,13 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                 "Checked the standard install path and the registry.",
             )
             if hasattr(self, "sidebar") and self.sidebar.winfo_exists():
-                self.sidebar.update_action_log(
+                self.after(0, lambda: self.sidebar.update_action_log(
                     "Could not find the Riot Client on this PC."
-                )
+                ))
         except Exception as exc:
             Logger.error("SYS", "Could not launch the client.", exc=exc)
             if hasattr(self, "sidebar") and self.sidebar.winfo_exists():
-                self.sidebar.update_action_log("Launching the client failed.")
+                self.after(0, lambda: self.sidebar.update_action_log("Launching the client failed."))
 
     def _hotkey_toggle_automation(self):
         """Toggle automation power via hotkey."""

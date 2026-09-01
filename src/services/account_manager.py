@@ -711,6 +711,18 @@ class AccountManager:
                     self._accounts[match.index]["tagline"] = fill
                     dirty = True
 
+                # Auto-capture live session if vault has no usable session for this active account
+                if self._switcher and not self.can_switch_to(match.index):
+                    try:
+                        captured = self._switcher.capture_current(match.index)
+                        if captured:
+                            Logger.info(
+                                "AccountManager",
+                                f"Auto-captured live session for active account #{match.index} ({identity.display_name()})"
+                            )
+                    except Exception as exc:
+                        Logger.debug("AccountManager", "Auto-capture session failed", exc=exc)
+
             elif match.found:
                 # A label that happens to equal an in-game name is a
                 # coincidence, not an identification. Report it, do not act

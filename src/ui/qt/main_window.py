@@ -732,18 +732,29 @@ class LeagueLoopMainWindow(QMainWindow):
              "Find Match"),
         )
 
-        def _normalize(h):
+        MODIFIERS = {"ctrl", "control", "alt", "menu", "shift", "win", "windows"}
+
+        def _normalize(h: str, default: str = "") -> str:
             if not h:
-                return ""
+                return default
             parts = [p.strip().lower() for p in str(h).split("+") if p.strip()]
             norm = []
+            non_modifiers = []
             for p in parts:
                 if p == "menu":
                     norm.append("alt")
                 elif p == "control":
                     norm.append("ctrl")
+                elif p == "windows":
+                    norm.append("win")
                 else:
                     norm.append(p)
+                if p not in MODIFIERS:
+                    non_modifiers.append(p)
+
+            if not non_modifiers and default:
+                return default
+
             return "+".join(norm)
 
         bound, failed = [], []

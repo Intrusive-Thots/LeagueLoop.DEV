@@ -105,6 +105,25 @@ class MatchingTests(unittest.TestCase):
         match = match_account(ClientIdentity(login_name="THEMALCOLM3"), ACCOUNTS)
         self.assertEqual(match.index, 0)
 
+    def test_game_name_matches_stored_username_or_tagline(self):
+        accounts = [
+            {"label": "DPM#Null", "username": "", "tagline": "dpm"},
+            {"label": "smurf5", "username": "themalcolm5", "tagline": "themalcolm5"},
+        ]
+        match1 = match_account(ClientIdentity(game_name="themalcolm5", tag_line="na1"), accounts)
+        self.assertEqual(match1.index, 1)
+        self.assertTrue(match1.confident)
+
+        match2 = match_account(ClientIdentity(game_name="dpm", tag_line="null"), accounts)
+        self.assertEqual(match2.index, 0)
+        self.assertTrue(match2.confident)
+
+    def test_label_matching_riot_id(self):
+        accounts = [{"label": "DPM#Null", "username": "", "tagline": ""}]
+        match = match_account(ClientIdentity(game_name="dpm", tag_line="null"), accounts)
+        self.assertEqual(match.index, 0)
+        self.assertTrue(match.confident)
+
 
 class TaglineBackfillTests(unittest.TestCase):
     def test_fills_a_blank_tagline(self):
