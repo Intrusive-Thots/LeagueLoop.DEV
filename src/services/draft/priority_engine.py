@@ -135,16 +135,16 @@ class PriorityEngine:
         """
         ARAM by queue id, from the session the client gave us.
 
-        450 is ARAM; 720 is ARAM Clash. Unknown queues are treated as not
-        ARAM, so an unrecognised mode falls back to the general list rather
-        than picking nothing.
+        450 is ARAM; 720 is ARAM Clash; 2400 is ARAM Mayhem. Unknown queues
+        are treated as not ARAM, so an unrecognised mode falls back to the
+        general list rather than picking nothing.
         """
         for candidate in (
             (session or {}).get("queueId"),
             ((session or {}).get("gameConfig") or {}).get("queueId"),
         ):
             try:
-                if int(candidate) in (450, 720):
+                if int(candidate) in (450, 720, 2400):
                     return True
             except (TypeError, ValueError):
                 continue

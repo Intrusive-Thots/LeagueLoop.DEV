@@ -1432,7 +1432,7 @@ class AutomationEngine:
         for item in legacy:
             name_str = str(item).strip()
             if name_str:
-                cid = self.assets.name_to_id(name_str) if (self.assets and hasattr(self.assets, "name_to_id")) else 0
+                cid = self.assets.name_to_id.get(name_str.lower(), 0) if (self.assets and hasattr(self.assets, "name_to_id")) else 0
                 resolved_name = self.assets.get_champ_name(cid) if (cid and self.assets) else name_str
                 if resolved_name and resolved_name.lower() not in seen:
                     seen.add(resolved_name.lower())
@@ -1923,8 +1923,8 @@ class AutomationEngine:
                             c_res = getter(champ_id)
                             if isinstance(c_res, str) and c_res and c_res != str(champ_id):
                                 champ_name = c_res
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            Logger.debug("Auto", "Failed to resolve champ name", exc=exc)
                 if not champ_name:
                     raw_champ = target.get("championName") or target.get("skinName")
                     if raw_champ and isinstance(raw_champ, str):

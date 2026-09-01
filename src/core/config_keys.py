@@ -119,7 +119,7 @@ def read_champion_ids(config, key: str, asset_manager=None) -> List[int]:
             name_str = item.strip()
             if asset_manager is not None and hasattr(asset_manager, "name_to_id"):
                 try:
-                    resolved_id = asset_manager.name_to_id(name_str)
+                    resolved_id = asset_manager.name_to_id.get(name_str.lower())
                     if resolved_id and int(resolved_id) > 0:
                         out.append(int(resolved_id))
                         continue
