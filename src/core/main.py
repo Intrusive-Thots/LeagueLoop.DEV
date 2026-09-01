@@ -40,6 +40,8 @@ from ui.components.factory import get_color, get_font  # type: ignore
 from ui.components.toast import ToastManager  # type: ignore
 from ui.components.mini_player import MiniPlayer
 from ui.components.tray_icon import SystemTrayApp
+from utils.focus_states import apply_focus_states_recursive
+from tkinterdnd2 import TkinterDnD  # type: ignore
 from utils.client_detector import (
     get_riot_executable_path,
     get_league_executable_path,
