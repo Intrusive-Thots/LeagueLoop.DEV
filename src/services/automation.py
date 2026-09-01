@@ -18,6 +18,7 @@ from .api_handler import LCUClient  # type: ignore
 from .asset_manager import AssetManager, ConfigManager  # type: ignore
 from services.draft.priority_engine import PriorityEngine
 from utils.logger import Logger  # type: ignore
+from utils.riot_id import resolve_riot_id  # type: ignore
 from core.config_keys import (
     ARAM_BENCH_SWAP,
     ARAM_AUTO_REROLL,
@@ -1912,17 +1913,35 @@ class AutomationEngine:
                     "puuid": puuid
                 }
                 res = self.lcu.request("POST", "/lol-honor-v2/v1/honor-player", honor_body)
-                name = target.get("summonerName", "teammate")
+                name = resolve_riot_id(target, fallback=target.get("summonerName") or "teammate")
+                champ_id = target.get("championId", 0)
+                champ_name = ""
+                if champ_id:
+                    getter = getattr(getattr(self, "assets", None), "get_champ_name", None)
+                    if callable(getter):
+                        try:
+                            c_res = getter(champ_id)
+                            if isinstance(c_res, str) and c_res and c_res != str(champ_id):
+                                champ_name = c_res
+                        except Exception:
+                            pass
+                if not champ_name:
+                    raw_champ = target.get("championName") or target.get("skinName")
+                    if raw_champ and isinstance(raw_champ, str):
+                        champ_name = raw_champ.strip()
+
+                target_str = f"{name} ({champ_name})" if champ_name else name
+
                 if res and res.status_code in [200, 204]:
-                    self._log(f"Honored {name} ({strategy})")
+                    self._log(f"Honored {target_str} ({strategy})")
                     self._honor_handled = True
                 elif res and res.status_code == 409:
-                    self._log(f"Honor already submitted or invalid: {name}")
+                    self._log(f"Honor already submitted or invalid: {target_str}")
                     self._honor_handled = True
                 elif res and res.status_code == 429:
                     self._log(f"Honor rate limited (429). Retrying next tick...")
                 else:
-                    Logger.debug("Auto", f"Honor request returned {res.status_code if res else 'None'}. Full target: {name}")
+                    Logger.debug("Auto", f"Honor request returned {res.status_code if res else 'None'}. Full target: {target_str}")
                     self._honor_attempts = getattr(self, "_honor_attempts", 0) + 1
                     if self._honor_attempts >= 3:
                         self._log(f"Honor failed after 3 attempts. Giving up.")

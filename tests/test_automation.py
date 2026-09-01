@@ -500,6 +500,7 @@ class TestAutomationEngineAutoHonor(unittest.TestCase):
         engine = AutomationEngine.__new__(AutomationEngine)
         engine.lcu = MagicMock()
         engine.config = MagicMock()
+        engine.assets = MagicMock()
         engine.log = MagicMock()
         engine._log = MagicMock()
         engine._honor_handled = False
@@ -702,6 +703,68 @@ class TestAutomationEngineAutoHonor(unittest.TestCase):
         engine._handle_end_of_game("EndOfGame")
         self.assertTrue(engine._honor_handled)
         self.assertEqual(engine._honor_attempts, 0)
+
+    def test_auto_honor_logs_champion_name(self):
+        engine = self._make_engine()
+        engine.config.get.side_effect = lambda key, default=False: {"auto_honor_enabled": True, "honor_strategy": "mvp"}.get(key, default)
+        engine.assets.get_champ_name.side_effect = lambda cid: {86: "Garen", 103: "Ahri"}.get(cid, str(cid))
+
+        def mock_request(method, endpoint, *args, **kwargs):
+            mock = MagicMock()
+            mock.status_code = 200
+            if endpoint == "/lol-end-of-game/v1/eog-stats-block":
+                mock.json.return_value = {
+                    "gameId": 5555,
+                    "localPlayer": {"puuid": "player-me"},
+                    "teams": [
+                        {"isPlayerTeam": True, "players": [
+                            {"puuid": "player-me"},
+                            {"puuid": "player-garen", "summonerName": "GarenKing", "championId": 86, "summonerId": 111, "stats": {"CHAMPIONS_KILLED": 10, "ASSISTS": 5}},
+                        ]}
+                    ]
+                }
+            elif endpoint == "/lol-chat/v1/friends":
+                mock.json.return_value = []
+            elif endpoint == "/lol-honor-v2/v1/honor-player":
+                mock.status_code = 204
+            return mock
+
+        engine.lcu.request.side_effect = mock_request
+        engine._handle_end_of_game("EndOfGame")
+
+        self.assertTrue(engine._honor_handled)
+        engine._log.assert_any_call("Honored GarenKing (Garen) (mvp)")
+
+    def test_auto_honor_logs_riot_id_and_champion_name_fallback(self):
+        engine = self._make_engine()
+        engine.config.get.side_effect = lambda key, default=False: {"auto_honor_enabled": True, "honor_strategy": "random"}.get(key, default)
+        engine.assets = None  # No assets manager available, rely on payload championName
+
+        def mock_request(method, endpoint, *args, **kwargs):
+            mock = MagicMock()
+            mock.status_code = 200
+            if endpoint == "/lol-end-of-game/v1/eog-stats-block":
+                mock.json.return_value = {
+                    "gameId": 7777,
+                    "localPlayer": {"puuid": "player-me"},
+                    "teams": [
+                        {"isPlayerTeam": True, "players": [
+                            {"puuid": "player-me"},
+                            {"puuid": "player-ahri", "gameName": "Faker", "tagLine": "T1", "championName": "Ahri", "summonerId": 222, "stats": {}},
+                        ]}
+                    ]
+                }
+            elif endpoint == "/lol-chat/v1/friends":
+                mock.json.return_value = []
+            elif endpoint == "/lol-honor-v2/v1/honor-player":
+                mock.status_code = 200
+            return mock
+
+        engine.lcu.request.side_effect = mock_request
+        engine._handle_end_of_game("EndOfGame")
+
+        self.assertTrue(engine._honor_handled)
+        engine._log.assert_any_call("Honored Faker#T1 (Ahri) (random)")
 
 
 
