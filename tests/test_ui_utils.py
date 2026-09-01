@@ -19,14 +19,42 @@ mods_to_mock = {
     'tkinterdnd2.TkinterDnD': MagicMock(),
     'PIL': MagicMock(),
     'PIL.Image': MagicMock(),
-    'PIL.ImageTk': MagicMock()
 }
-patch.dict(sys.modules, mods_to_mock).start()
+_patcher = None
+hex_to_rgb = None
+interpolate_color = None
+lighten_color = None
+darken_color = None
+apply_focus_ring = None
+scroll_to_widget = None
+apply_smooth_scroll = None
 
-from ui.components.color_utils import hex_to_rgb, interpolate_color, lighten_color, darken_color
-from utils.focus_states import apply_focus_ring, scroll_to_widget
-from utils.smooth_scroll import apply_smooth_scroll
+def setUpModule():
+    global _patcher
+    global hex_to_rgb, interpolate_color, lighten_color, darken_color
+    global apply_focus_ring, scroll_to_widget, apply_smooth_scroll
+    _patcher = patch.dict(sys.modules, mods_to_mock)
+    _patcher.start()
 
+    from ui.components.color_utils import hex_to_rgb as h2r, interpolate_color as ic, lighten_color as lc, darken_color as dc
+    from utils.focus_states import apply_focus_ring as afr, scroll_to_widget as stw
+    from utils.smooth_scroll import apply_smooth_scroll as ass
+    
+    hex_to_rgb = h2r
+    interpolate_color = ic
+    lighten_color = lc
+    darken_color = dc
+    apply_focus_ring = afr
+    scroll_to_widget = stw
+    apply_smooth_scroll = ass
+
+def tearDownModule():
+    global _patcher
+    if _patcher:
+        _patcher.stop()
+    for mod in list(sys.modules.keys()):
+        if mod.startswith('ui.') or mod.startswith('utils.'):
+            sys.modules.pop(mod, None)
 
 class TestColorUtils(unittest.TestCase):
     def test_hex_to_rgb_6_char(self):

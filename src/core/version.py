@@ -1,7 +1,7 @@
 """
 LeagueLoop Version
 ==================
-Version format:  {major}-{month}-{days_left_in_year}-{HHMM}
+Version format:  {major}-{month}-{365-{days_left_in_year}}-{HHMM}
 
 This file is updated every time source code changes.
 The version reflects the date/time of the last code modification.
@@ -13,11 +13,11 @@ Formula:
                 the state pipeline were all rebuilt, and the CustomTkinter
                 shell is no longer the only one that works.
   {month}     = 2-digit month (01-12)
-  {days_left} = days remaining in the year (0-365)
+  {days_left} = days remaining in the year: {365-{days_left_in_year}}
   {HHMM}      = hour and minute of the change (24hr)
 
 Bump this with every change. `tools/bump_version.py` writes it for you rather
 than leaving it to be remembered.
 """
 
-__version__ = "2-08-129-1706"
+__version__ = "2-08-128-1805"

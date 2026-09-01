@@ -6,6 +6,10 @@ class DummyWidget:
     def __init__(self, *args, **kwargs):
         self._exists = True
         self.master = MagicMock()
+        self.tk = MagicMock()
+        self._w = ".dummy"
+        self._last_child_ids = {}
+        self.children = {}
     def bind(self, *args, **kwargs):
         pass
     def pack(self, *args, **kwargs):
@@ -106,20 +110,38 @@ mock_ctk.DoubleVar = DummyVar
 mock_ctk.StringVar = DummyVar
 mock_ctk.BooleanVar = DummyVar
 
-patch.dict(sys.modules, {
-    'customtkinter': mock_ctk,
-    'tkinter': mock_tk,
-}).start()
+_patcher = None
+LolToggle = None
+TabBar = None
+CTkTooltip = None
+Toast = None
+ToastManager = None
 
-# Clear cached imports
-for mod in list(sys.modules.keys()):
-    if mod.startswith('ui.components'):
-        sys.modules.pop(mod, None)
+def setUpModule():
+    global _patcher, LolToggle, TabBar, CTkTooltip, Toast, ToastManager
+    _patcher = patch.dict(sys.modules, {
+        'customtkinter': mock_ctk,
+        'tkinter': mock_tk,
+    })
+    _patcher.start()
 
-from ui.components.lol_toggle import LolToggle
-from ui.components.tab_bar import TabBar
-from ui.components.tooltip import CTkTooltip
-from ui.components.toast import Toast, ToastManager
+    from ui.components.lol_toggle import LolToggle as LT
+    from ui.components.tab_bar import TabBar as TB
+    from ui.components.tooltip import CTkTooltip as CT
+    from ui.components.toast import Toast as T, ToastManager as TM
+    LolToggle = LT
+    TabBar = TB
+    CTkTooltip = CT
+    Toast = T
+    ToastManager = TM
+
+def tearDownModule():
+    global _patcher
+    if _patcher:
+        _patcher.stop()
+    for mod in list(sys.modules.keys()):
+        if mod.startswith('ui.') or mod.startswith('utils.'):
+            sys.modules.pop(mod, None)
 
 class TestUIComponents(unittest.TestCase):
 

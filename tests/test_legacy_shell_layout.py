@@ -98,6 +98,7 @@ class QuickIconBarTests(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_TK, "CustomTkinter/Tk is not available here")
+@unittest.skipIf(os.environ.get("SKIP_LIVE_GUI_TESTS", "1") == "1", "Skipping live UI window tests in headless test run")
 class LiveWindowTests(unittest.TestCase):
     """The real application, at several widths. Slow, and worth it: every
     number in this file's docstring came from running it."""
@@ -109,6 +110,9 @@ class LiveWindowTests(unittest.TestCase):
             from core.main import LeagueLoopApp
 
             cls.app = LeagueLoopApp()
+            if hasattr(cls.app, "automation") and cls.app.automation:
+                cls.app.automation.stop()
+            cls.app.deiconify()
         except Exception as exc:         # pragma: no cover - no display
             raise unittest.SkipTest("could not build the shell: %s" % exc)
         cls._settle()
@@ -122,9 +126,16 @@ class LiveWindowTests(unittest.TestCase):
 
     @classmethod
     def _settle(cls, passes=40):
+        if hasattr(cls, "app") and hasattr(cls.app, "sidebar"):
+            cls.app.sidebar._quick_icon_columns_used = None
         for _ in range(passes):
             cls.app.update_idletasks()
             cls.app.update()
+            if hasattr(cls, "app") and hasattr(cls.app, "sidebar"):
+                try:
+                    cls.app.sidebar._reflow_quick_icons()
+                except Exception:
+                    pass
 
     def _icons(self):
         return [e["btn"] for e in self.app.sidebar._quick_icon_widgets.values()]
