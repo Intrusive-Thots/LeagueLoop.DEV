@@ -112,3 +112,49 @@ def test_scan_clients_access_denied(mock_process_iter):
         assert results["league"]["port"] == "7777"
         assert results["league"]["token"] == "fallback-token"
         assert results["league"]["connected"] is True
+
+
+@patch('utils.client_detector.time.sleep', return_value=None)
+@patch('utils.client_detector.psutil.wait_procs')
+@patch('utils.client_detector.psutil.process_iter')
+def test_terminate_all_client_instances(mock_process_iter, mock_wait_procs, mock_sleep):
+    """Test clean termination of all running League and Riot client processes."""
+    from utils.client_detector import terminate_all_client_instances
+
+    proc1 = MagicMock()
+    proc1.info = {"name": "LeagueClientUx.exe", "pid": 1111}
+    proc2 = MagicMock()
+    proc2.info = {"name": "RiotClientServices.exe", "pid": 2222}
+    proc3 = MagicMock()
+    proc3.info = {"name": "chrome.exe", "pid": 3333}
+
+    mock_process_iter.return_value = [proc1, proc2, proc3]
+    mock_wait_procs.return_value = ([proc1, proc2], [])
+
+    count = terminate_all_client_instances(timeout=1.0)
+
+    assert count == 2
+    proc1.terminate.assert_called_once()
+    proc2.terminate.assert_called_once()
+    proc3.terminate.assert_not_called()
+
+
+@patch('utils.client_detector.time.sleep', return_value=None)
+@patch('utils.client_detector.psutil.wait_procs')
+@patch('utils.client_detector.psutil.process_iter')
+def test_terminate_all_client_instances_force_kill(mock_process_iter, mock_wait_procs, mock_sleep):
+    """Test forceful kill when processes do not terminate gracefully."""
+    from utils.client_detector import terminate_all_client_instances
+
+    proc1 = MagicMock()
+    proc1.info = {"name": "LeagueClient.exe", "pid": 4444}
+
+    mock_process_iter.return_value = [proc1]
+    # Simulate proc1 remaining alive after timeout
+    mock_wait_procs.return_value = ([], [proc1])
+
+    count = terminate_all_client_instances(timeout=1.0)
+
+    assert count == 1
+    proc1.terminate.assert_called_once()
+    proc1.kill.assert_called_once()

@@ -40,9 +40,11 @@ from ui.components.factory import get_color, get_font  # type: ignore
 from ui.components.toast import ToastManager  # type: ignore
 from ui.components.mini_player import MiniPlayer
 from ui.components.tray_icon import SystemTrayApp
-from utils.focus_states import apply_focus_states_recursive
-from utils.client_detector import get_riot_executable_path, get_league_executable_path
-from tkinterdnd2 import TkinterDnD  # type: ignore
+from utils.client_detector import (
+    get_riot_executable_path,
+    get_league_executable_path,
+    terminate_all_client_instances,
+)
 
 _SET_WINDOW_LONG = None
 if hasattr(ctypes, "windll"):
@@ -340,18 +342,15 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         "--launch-patchline=live",
     )
 
-    def _hotkey_launch_client(self, launch_league: bool = True):
+    def _hotkey_launch_client(self, launch_league: bool = True, clean_restart: bool = True):
         """Start the Riot Client, and ask it to open League.
 
-        `RiotClientServices.exe` with no arguments does not open anything.
-        The product and patchline flags are how every other launcher does
-        this, and without them the client came up headless or not at all.
-
-        Falls back to `LeagueClient.exe` only when the Riot Client cannot be
-        found: launching League directly makes the Riot Client start it
-        anyway, but it is the longer road and skips the account layer.
+        Terminates any stale or zombie client instances beforehand to prevent
+        session collisions, lockfile deadlocks, and 'unexpected error while logging in' popups.
         """
         try:
+            if clean_restart:
+                terminate_all_client_instances()
             riot = get_riot_executable_path()
             if riot and os.path.exists(riot):
                 command = [riot]

@@ -269,3 +269,79 @@ def scan_clients(force: bool = False) -> Dict[str, Dict]:
         "riot": riot_data
     }
     return _cached_results
+
+
+ALL_CLIENT_PROCESS_NAMES = {
+    "leagueclient.exe",
+    "leagueclientux.exe",
+    "leagueclientuxrender.exe",
+    "leaguecrashhandler.exe",
+    "league of legends.exe",
+    "riotclientservices.exe",
+    "riotclientux.exe",
+    "riotclientuxrender.exe",
+    "riotclientcrashhandler.exe",
+    "riot client.exe",
+}
+
+
+def terminate_all_client_instances(timeout: float = 3.0) -> int:
+    """
+    Terminates all running League of Legends and Riot Client processes
+    to prevent stale sessions, lockfile collisions, and login errors.
+    Returns the number of terminated processes.
+    """
+    global _last_scan_time, _cached_results
+    killed_count = 0
+    matched_procs = []
+
+    try:
+        for proc in psutil.process_iter(attrs=["pid", "name"]):
+            try:
+                name = (proc.info.get("name") or "").lower()
+                if name in ALL_CLIENT_PROCESS_NAMES:
+                    matched_procs.append(proc)
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                continue
+
+        if not matched_procs:
+            return 0
+
+        # Pass 1: Graceful termination
+        for proc in matched_procs:
+            try:
+                proc.terminate()
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+
+        # Wait for processes to exit
+        _, alive = psutil.wait_procs(matched_procs, timeout=timeout)
+
+        # Pass 2: Forceful kill for any remaining processes
+        for proc in alive:
+            try:
+                proc.kill()
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+
+        killed_count = len(matched_procs)
+
+        # Reset detector cache
+        _last_scan_time = 0.0
+        _cached_results = {
+            "league": {"port": None, "token": None, "connected": False, "pid": None},
+            "riot": {"port": None, "token": None, "connected": False, "pid": None}
+        }
+
+        # Brief settle delay for Windows file handles & sockets to release
+        time.sleep(0.3)
+
+        Logger.action(
+            "Detector",
+            f"Terminated {killed_count} running client process(es) before launch.",
+            count=killed_count
+        )
+    except Exception as e:
+        Logger.error("Detector", f"Failed to terminate client processes: {e}")
+
+    return killed_count

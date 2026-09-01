@@ -146,182 +146,22 @@ class RiotClientAPI:
     RSO_START = "/rso-authenticator/v1/authentication/riot-identity/start"
     RSO_COMPLETE = "/rso-authenticator/v1/authentication/riot-identity/complete"
 
-    def _log_authenticator_endpoints(self) -> None:
-        """Ask the client which authenticator endpoints it actually has.
-
-        Called only after a sign-in has already failed. The verb and path for
-        this flow have now been wrong twice — POST on the bare resource
-        answered `405 WRONG_METHOD`, and DELETE reset the prompt (204) without
-        creating one, so the follow-up PUT still said `invalid_prompt`.
-
-        The Riot Client publishes its own API description. Reading it turns
-        the next failure into a fact instead of a third guess.
-        """
-        for endpoint in ("/swagger/v3/openapi.json", "/help"):
-            res = self.request("GET", endpoint, silent=True)
-            if res is None or getattr(res, "status_code", 0) != 200:
-                continue
-            try:
-                doc = res.json()
-            except Exception as exc:
-                Logger.debug("RiotClientAPI", f"{endpoint} was not JSON", exc=exc)
-                continue
-
-            paths = doc.get("paths") if isinstance(doc, dict) else None
-            found = []
-            if isinstance(paths, dict):
-                for path, spec in paths.items():
-                    if "rso-authenticator" not in str(path):
-                        continue
-                    methods = sorted(
-                        m.upper() for m in (spec or {})
-                        if m.lower() in ("get", "put", "post", "delete", "patch")
-                    )
-                    found.append(f"{path} [{', '.join(methods) or '?'}]")
-            elif isinstance(doc, dict):
-                # `/help` answers as {"functions": {...}, "events": {...}}.
-                found = [k for k in doc.get("functions", {})
-                         if "rso-authenticator" in str(k)]
-
-            if found:
-                Logger.error(
-                    "RiotClientAPI",
-                    "The client's authenticator endpoints are: "
-                    + "; ".join(sorted(found)),
-                    source=endpoint, count=len(found),
-                )
-                return
-        Logger.warning(
-            "RiotClientAPI",
-            "Could not read the client's API description, so the correct "
-            "authenticator endpoint is still unknown.",
-        )
-
-    def _reset_authentication(self) -> bool:
-        """Clear any half-finished authentication before starting a new one.
-
-        204 on a real client. 404 is equally fine — it means there was
-        nothing to clear, which is the state we want to be in.
-        """
-        res = self.request("DELETE", self.RSO_RESET)
-        code = getattr(res, "status_code", None)
-        if res is not None and code in (200, 201, 204, 404):
-            Logger.debug("RiotClientAPI", "Authentication reset.", status=code)
-            return True
-        Logger.warning(
-            "RiotClientAPI",
-            f"Could not reset authentication (HTTP {code}); continuing anyway.",
-            status=code,
-        )
-        # Not fatal: a failed reset only matters if a prompt was already open.
-        return True
-
-    def _start_riot_identity(self) -> bool:
-        """Open an authentication prompt for username/password sign-in.
-
-        This is the step that was missing. `PUT` on the bare resource
-        *answers* a prompt; nothing was ever creating one, so it returned
-        `invalid_prompt` after the account had already been signed out.
-        """
-        payload = {
-            "clientId": "riot-client",
-            "language": "",
-            "platform": "windows",
-            "remember": False,
-        }
-        res = self.request("POST", self.RSO_START, data=payload)
-        code = getattr(res, "status_code", None)
-        if res is not None and code in (200, 201, 204):
-            Logger.info("RiotClientAPI", "Authentication prompt opened.", status=code)
-            return True
-
-        detail = ""
-        allowed = ""
-        try:
-            if res is not None:
-                detail = (res.text or "")[:200]
-                allowed = res.headers.get("Allow", "") or res.headers.get("allow", "")
-        except Exception as exc:
-            Logger.debug("RiotClientAPI", "Response unreadable", exc=exc)
-
-        Logger.error(
-            "RiotClientAPI",
-            "Could not open an authentication prompt (HTTP {}){}. {}".format(
-                code,
-                f" — this URI allows: {allowed}" if allowed else "",
-                detail,
-            ).strip(),
-            status=code, allow=allowed or None, endpoint=self.RSO_START,
-        )
-        return False
-
-    def sign_in(self, username: str, password: str, persist: bool = False) -> dict:
-        """
-        Sign in with username/password via the Riot Client authenticator.
-
-        Three steps, because the authenticator is a state machine:
-
-          DELETE .../authentication                     clear anything open
-          POST   .../authentication/riot-identity/start open a prompt
-          PUT    .../riot-identity/complete             answer it
-
-        Only the last step was ever being made, which is why a real sign-in
-        returned 201 `{"error": "invalid_prompt"}` — *after* the account had
-        been signed out. Nothing had opened a prompt for it to answer.
-
-        Returns the response body dict (caller should check 'type' and
-        'error'). Credentials are never sent unless a prompt was opened.
-        """
-        self._reset_authentication()
-        if not self._start_riot_identity():
-            self._log_authenticator_endpoints()
-            return {"type": "error", "error": "could_not_start_authentication"}
-
-        payload = {
-            "username": username,
-            "password": password,
-            "remember": bool(persist),
-            "language": "en_US",
-        }
-        res = self.request("PUT", self.RSO_COMPLETE, data=payload)
-        if res is not None and getattr(res, "status_code", 0) == 404:
-            # Older clients keep the credential submission on the bare
-            # resource. Try it rather than failing on a path difference.
-            Logger.info(
-                "RiotClientAPI",
-                "riot-identity/complete is not present; using the legacy path.",
-            )
-            payload["persistLogin"] = bool(persist)
-            res = self.request("PUT", self.RSO_RESET, data=payload)
-        if res and res.status_code in [200, 201]:
-            try:
-                body = res.json()
-                auth_type = body.get("type", "")
-                error = body.get("error", "")
-
-                if auth_type == "success" or (auth_type == "authenticated" and not error):
-                    Logger.info("RiotClientAPI", "Signed in successfully")
-                    return body
-                elif auth_type == "multifactor":
-                    Logger.info("RiotClientAPI", "Sign-in requires 2FA")
-                    return body
-                elif error:
-                    Logger.warning("RiotClientAPI", f"Sign-in error: {error}")
-                    if error == "invalid_prompt":
-                        # Still no prompt. Report the real endpoint list so
-                        # this stops being guesswork.
-                        self._log_authenticator_endpoints()
-                    return body
-                else:
-                    Logger.info("RiotClientAPI", f"Sign-in response type: {auth_type}")
-                    return body
-            except Exception as e:
-                Logger.debug("RiotClientAPI", f"Failed to parse sign-in response: {e}")
-                return {"type": "error", "error": "unparseable_response"}
-
-        status = res.status_code if res else "no response"
-        Logger.warning("RiotClientAPI", f"Sign-in request failed: {status}")
-        return {"type": "error", "error": f"http_{status}"}
+    # ─────────── Removed: credential sign-in ───────────
+    #
+    # `sign_in()` and its helpers (`_reset_authentication`,
+    # `_start_riot_identity`, `_log_authenticator_endpoints`) POSTed the
+    # username and password to the Riot Client's local `rso-authenticator`
+    # endpoints. That cannot work: Riot's credential flow now carries an
+    # hCaptcha challenge, and a request without a solved token is refused
+    # with `invalid_prompt` — the error this project chased through three
+    # separate implementations before finding out why.
+    #
+    # It is deleted rather than left dormant for the same reason the keyboard
+    # login above it was: a credential path that still exists in the binary
+    # can be re-enabled by a future "fallback" change, and this one handles
+    # the password. Switching goes through `services/accounts/vault.py`,
+    # which moves the session the client already has and never sees a
+    # password at all.
 
     def get_session(self) -> Optional[dict]:
         """Get the current RSO session state."""
@@ -384,6 +224,13 @@ class AccountManager:
     def __init__(self, lcu=None, launch_client_func=None, state_manager=None):
         self.lcu = lcu
         self._launch_client_func = launch_client_func
+        #: Shared application state. `ApplicationContainer` has passed this
+        #: since it started owning composition; this class did not accept it,
+        #: so every launch raised
+        #: `TypeError: __init__() got an unexpected keyword argument
+        #: 'state_manager'` and the whole accounts service failed to start —
+        #: taking the account list, switching and the Riot Client launcher
+        #: with it. Optional so the class still builds standalone in tests.
         self.state_manager = state_manager
         self.riot_client = RiotClientAPI()
         self._accounts: List[Dict[str, Any]] = []
@@ -396,28 +243,11 @@ class AccountManager:
         # Migration: Ensure existing accounts have new fields
         self._load()
         self._migrate_accounts()
-        self._sync_state()
 
         # Switching/sign-out sequencing lives in services.accounts so the two
         # operations cannot drift apart. This class keeps ownership of
         # storage, encryption and the account list.
         self._switcher = self._build_switcher()
-
-    def _sync_state(self) -> None:
-        """Publish account state to central StateManager."""
-        if self.state_manager is not None:
-            try:
-                active_name = None
-                if 0 <= self._active_idx < len(self._accounts):
-                    active_name = self._accounts[self._active_idx].get("username")
-                all_names = tuple(a.get("username", "") for a in self._accounts)
-                self.state_manager.update_account(
-                    active_account=active_name,
-                    all_accounts=all_names,
-                    is_switching=bool(getattr(self, "is_switching", False)),
-                )
-            except Exception as exc:
-                Logger.debug("AccountManager", "_sync_state suppressed an error", exc=exc)
 
     def _build_switcher(self):
         """Construct the AccountSwitcher, or None if the subsystem is absent."""
@@ -432,16 +262,67 @@ class AccountManager:
             Logger.error("AccountManager", f"Account switcher unavailable: {exc}")
             return None
 
+        from services.accounts.vault import SessionVault  # type: ignore
+
+        self.vault = SessionVault(_DATA_DIR)
+
         return AccountSwitcher(
             session=RiotSession(self.riot_client),
             accounts_provider=lambda: list(self._accounts),
-            password_provider=self.get_password,
+            vault=self.vault,
             on_success=self._mark_active,
             on_signed_out=self._mark_signed_out,
             kill_games=lambda: self._kill_game_processes(None),
+            stop_client=self._stop_riot_client,
+            client_running=self.riot_client.is_riot_client_running,
             launch_client=self._launch_riot_client,
             bus=EventBus,
         )
+
+    @staticmethod
+    def _stop_riot_client(log_func=None) -> bool:
+        """Close the Riot Client so its session files can be swapped.
+
+        It holds `RiotClientPrivateSettings.yaml` and the cookie jar open and
+        rewrites them on exit, so a swap underneath a live client is either
+        refused by Windows or silently undone a moment later. Terminate first
+        and only escalate to a kill if it will not go — a clean exit is what
+        lets it flush the session we are about to save.
+        """
+        stopped = False
+        try:
+            import psutil  # type: ignore
+        except Exception as exc:
+            Logger.warning(
+                "AccountManager",
+                "psutil is unavailable, so the Riot Client cannot be closed "
+                "for a session swap.",
+                exc=exc,
+            )
+            return False
+
+        for proc in psutil.process_iter(["pid", "name"]):
+            if (proc.info.get("name") or "").lower() != "riotclientservices.exe":
+                continue
+            try:
+                proc.terminate()
+                stopped = True
+            except (psutil.NoSuchProcess, psutil.AccessDenied) as exc:
+                Logger.debug("AccountManager", "Could not terminate the client", exc=exc)
+
+        if stopped:
+            try:
+                gone, alive = psutil.wait_procs(
+                    [p for p in psutil.process_iter(["name"])
+                     if (p.info.get("name") or "").lower() == "riotclientservices.exe"],
+                    timeout=8,
+                )
+                for proc in alive:
+                    proc.kill()
+            except Exception as exc:
+                Logger.debug("AccountManager", "Could not wait for the client", exc=exc)
+            Logger.action("AccountManager", "Closed the Riot Client.")
+        return stopped
 
     # ─────────── State transitions used by the switcher ───────────
     def _mark_active(self, idx: int) -> None:
@@ -451,13 +332,11 @@ class AccountManager:
                 self._accounts[idx]["last_used"] = datetime.now().isoformat()
             self._active_idx = idx
             self._save()
-        self._sync_state()
 
     def _mark_signed_out(self) -> None:
         with self._lock:
             self._active_idx = -1
             self._save()
-        self._sync_state()
 
     def _migrate_accounts(self):
         """
@@ -679,18 +558,36 @@ class AccountManager:
                     acct["is_default"] = False
             self._save()
 
+    def _forget_session(self, account) -> None:
+        """Drop a deleted account's saved session.
+
+        Leaving it behind means a re-added account silently inherits an old
+        identity — and it is credential-adjacent data the user asked to remove.
+        """
+        vault = getattr(self, "vault", None)
+        switcher = getattr(self, "_switcher", None)
+        if vault is None or switcher is None:
+            return
+        try:
+            vault.forget(switcher.account_key(account))
+        except Exception as exc:
+            Logger.debug("AccountManager", "Could not forget the session", exc=exc)
+
     def delete_account(self, idx: int):
-        """Remove an account by index."""
+        """Remove an account by index, and its saved session with it."""
         with self._lock:
             if not (0 <= idx < len(self._accounts)):
                 return
-            self._accounts.pop(idx)
+            removed = self._accounts.pop(idx)
             # Adjust active index
             if self._active_idx == idx:
                 self._active_idx = -1
             elif self._active_idx > idx:
                 self._active_idx -= 1
             self._save()
+        # Outside the lock: forgetting touches the filesystem, and holding the
+        # account lock across it would block every reader for no reason.
+        self._forget_session(removed)
 
     def move_account(self, idx: int, direction: int):
         """Move an account up (-1) or down (+1)."""
@@ -929,6 +826,46 @@ class AccountManager:
     def is_switching(self) -> bool:
         return bool(self._switcher and self._switcher.busy)
 
+    # ─────────── Saved sessions ───────────
+    #
+    # A session is the only thing that can actually sign an account in now:
+    # Riot's credential flow carries a captcha, so a stored password cannot be
+    # replayed. See `services/accounts/vault.py`.
+
+    def session_info(self, idx: int):
+        """What is saved for this account, and how old it is. None if absent."""
+        if self._switcher is None:
+            return None
+        return self._switcher.session_info(idx)
+
+    def session_summary(self, idx: int) -> str:
+        """One sentence for the account row."""
+        info = self.session_info(idx)
+        return info.describe() if info is not None else ""
+
+    def can_switch_to(self, idx: int) -> bool:
+        """True when this account has a session worth restoring.
+
+        This replaces `has_valid_credentials()` as the question the UI should
+        ask before offering a one-click switch — a stored password no longer
+        makes a switch possible.
+        """
+        info = self.session_info(idx)
+        return bool(info is not None and info.usable)
+
+    def capture_session(self, idx: int) -> bool:
+        """Remember the sign-in that is live right now as this account's.
+
+        The only moment a session can be created. Called after the user signs
+        in by hand, and automatically after a successful switch.
+        """
+        if self._switcher is None:
+            return False
+        captured = self._switcher.capture_current(idx)
+        if captured:
+            self._mark_active(idx)
+        return captured
+
     def login_account(self, idx: int, log_func=None, completion_func=None,
                       launch_league: bool = True):
         """
@@ -1043,8 +980,13 @@ class AccountManager:
     # deprecated. Git history has it if it is ever genuinely needed.
 
     # ─────────── Helpers ───────────
-    def _launch_riot_client(self, launch_league: bool = True):
+    def _launch_riot_client(self, launch_league: bool = True, clean_restart: bool = True):
         """Launch the Riot Client or League of Legends Client."""
+        from utils.client_detector import terminate_all_client_instances
+
+        if clean_restart:
+            terminate_all_client_instances()
+
         if self._launch_client_func and launch_league:
             self._launch_client_func()
             return

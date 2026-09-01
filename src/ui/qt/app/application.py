@@ -78,26 +78,38 @@ def create_app(argv: Optional[list] = None) -> QApplication:
     return app
 
 
-def launch_riot_client() -> None:
+def launch_riot_client(clean_restart: bool = True, launch_league: bool = True) -> None:
     """
-    Start the Riot Client (or the League Client) if it is installed.
+    Start the Riot Client (or League of Legends Client).
 
-    Switching accounts needs the Riot Client running, so the switcher asks for
-    this when the client is absent. Shared with the legacy shell's launch
-    hotkey rather than duplicated, so there is one place that knows how to
-    find the executable.
+    Terminates any stale/zombie instances beforehand to prevent session collisions,
+    lockfile deadlocks, and 'unexpected error while logging in' popups.
     """
     import subprocess
 
     from utils.client_detector import (  # type: ignore
         get_league_executable_path,
         get_riot_executable_path,
+        terminate_all_client_instances,
     )
 
-    exe = get_riot_executable_path() or get_league_executable_path()
-    if not exe or not os.path.exists(exe):
-        raise FileNotFoundError("No Riot or League executable found")
-    subprocess.Popen([exe], shell=False)
+    if clean_restart:
+        terminate_all_client_instances()
+
+    riot_exe = get_riot_executable_path()
+    if riot_exe and os.path.exists(riot_exe):
+        args = [riot_exe]
+        if launch_league:
+            args.extend(["--launch-product=league_of_legends", "--launch-patchline=live"])
+        subprocess.Popen(args, shell=False)
+        return
+
+    league_exe = get_league_executable_path()
+    if league_exe and os.path.exists(league_exe):
+        subprocess.Popen([league_exe], shell=False)
+        return
+
+    raise FileNotFoundError("No Riot or League executable found on this PC")
 
 
 def create_container() -> Any:
