@@ -43,7 +43,8 @@ try:
 except OSError:
     pass
 
-DDRAGON_VER = "14.1.1"
+from core.constants import DDRAGON_DEFAULT_VERSION
+DDRAGON_VER = DDRAGON_DEFAULT_VERSION
 
 #: Queue sentinel telling a download worker to exit.
 _WORKER_STOP = object()
