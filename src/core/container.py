@@ -36,7 +36,36 @@ class ApplicationContainer:
 
         self.bus: EventBus = EventBus
         self.state_manager: StateManager = StateManager(bus=self.bus)
+        # Move any data an older dev run left in the repository into AppData
+        # BEFORE ConfigManager reads it, or the app starts from the wrong copy
+        # and the migration looks like it lost the user's settings.
+        try:
+            from utils.path_utils import migrate_data_from_project_root
+
+            moved = migrate_data_from_project_root()
+            if moved:
+                Logger.info(
+                    "Container",
+                    "Moved user data out of the project folder and into "
+                    "AppData: {}".format(", ".join(moved)),
+                )
+        except Exception as exc:
+            Logger.warning(
+                "Container",
+                "Could not move user data out of the project folder.", exc=exc,
+            )
+
         self.config: ConfigManager = ConfigManager()
+        # Fold retired keys into the live ones before any service reads them.
+        try:
+            self.config.migrate_legacy_keys()
+        except Exception as exc:
+            Logger.warning(
+                "Container",
+                "Could not migrate retired settings; an old option may still "
+                "be in effect.",
+                exc=exc,
+            )
         self.assets: AssetManager = AssetManager()
         self.lcu: LCUClient = LCUClient()
         self.db: DatabaseService = DatabaseService(db_path=db_path) if db_path else DatabaseService()
@@ -46,7 +75,6 @@ class ApplicationContainer:
         self.automation: Optional[AutomationEngine] = None
         self.account_manager: Optional[AccountManager] = None
         self.client_state = None
-        self.client_window_tracker = None
         self.automation_controller = None
         self.bootstrap_errors: list = []
 
@@ -100,19 +128,11 @@ class ApplicationContainer:
         )
         return self.automation_controller
 
-    def create_client_window_tracker(self):
-        """
-        Track the League Client's window position on screen.
-
-        Without this the companion panel has no idea where the client is,
-        so it sits wherever it was last dragged instead of docking beside it.
-        """
-        from services.client_window_tracker import ClientWindowTracker
-
-        self.client_window_tracker = ClientWindowTracker(
-            state_manager=self.state_manager,
-        )
-        return self.client_window_tracker
+    # `create_client_window_tracker()` is gone with the Qt shell. The tracker
+    # existed to tell the PySide6 companion panel where the League Client's
+    # window was; nothing in the CustomTkinter shell reads `ClientWindowState`,
+    # so keeping it meant a thread enumerating windows five times a second for
+    # nobody.
 
     def create_client_state_service(self, autostart: bool = False, **kwargs):
         """
@@ -205,12 +225,6 @@ class ApplicationContainer:
         except Exception as exc:
             errors.append(("client state", exc))
 
-        try:
-            self.create_client_window_tracker()
-            started.append("window tracker")
-        except Exception as exc:
-            errors.append(("window tracker", exc))
-
         if start_api:
             try:
                 from services import local_api
@@ -272,14 +286,6 @@ class ApplicationContainer:
                 Logger.warning(
                     "Container", "Could not shut down the asset manager cleanly.", exc=exc
                 )
-        if getattr(self, "client_window_tracker", None) is not None:
-            try:
-                self.client_window_tracker.stop()
-            except Exception as exc:
-                Logger.warning(
-                    "Container", "Could not shut down the window tracker cleanly.", exc=exc
-                )
-            self.client_window_tracker = None
         if getattr(self, "client_state", None) is not None:
             try:
                 self.client_state.stop()

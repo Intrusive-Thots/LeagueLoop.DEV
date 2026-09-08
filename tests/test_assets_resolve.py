@@ -23,8 +23,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
 
-#: `get_asset_path("...")` with a literal string argument.
+#: `get_asset_path("...")` with a literal string argument. Calls that build
+#: the path with os.path.join are matched separately below.
 ASSET_CALL = re.compile(r"""get_asset_path\(\s*["']([^"']+)["']\s*\)""")
+ASSET_JOIN = re.compile(
+    r"""get_asset_path\(\s*os\.path\.join\(\s*((?:["'][^"']+["']\s*,?\s*)+)\)"""
+)
 
 #: Sizes Windows picks between for the taskbar, Alt-Tab, the title bar and
 #: the desktop. A single-size .ico is upscaled for the rest, and an upscaled
@@ -54,8 +58,19 @@ class AssetPathTests(unittest.TestCase):
 
         missing = []
         for path in sorted(SRC.rglob("*.py")):
-            body = path.read_text(encoding="utf-8-sig", errors="replace")
-            for asked in ASSET_CALL.findall(body):
+            raw = path.read_text(encoding="utf-8-sig", errors="replace")
+            # Comments mention paths in prose — including, in config_manager,
+            # the very call this check replaced. Only real calls count.
+            body = "\n".join(
+                line for line in raw.splitlines()
+                if not line.lstrip().startswith(("#", "#:"))
+            )
+            asked_for = list(ASSET_CALL.findall(body))
+            for joined in ASSET_JOIN.findall(body):
+                parts = re.findall(r"""["']([^"']+)["']""", joined)
+                if parts:
+                    asked_for.append(os.path.join(*parts))
+            for asked in asked_for:
                 if not os.path.exists(get_asset_path(asked)):
                     missing.append("%s asks for %r" % (path.name, asked))
         self.assertEqual(missing, [], "\n  ".join([""] + missing))

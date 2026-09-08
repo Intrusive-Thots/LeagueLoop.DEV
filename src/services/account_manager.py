@@ -30,8 +30,19 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 import urllib3
-import win32crypt
 
+try:
+    import win32crypt  # type: ignore
+except ImportError:  # pragma: no cover - Windows-only dependency
+    #: A hard top-level import made this whole module unimportable wherever
+    #: pywin32 is missing, and the container catches that as "the accounts
+    #: service did not start" with a bare ModuleNotFoundError -- the same
+    #: shape of failure the user has already been shown once. DPAPI is only
+    #: needed to read or write a stored password, so defer the complaint to
+    #: the two functions that actually need it, where it can name pywin32.
+    win32crypt = None
+
+from core.constants import NO_WINDOW
 from utils.logger import Logger
 from utils.path_utils import get_data_dir
 from utils.client_detector import scan_clients
@@ -370,6 +381,11 @@ class AccountManager:
         """Encrypt a string using Windows DPAPI, return base64-encoded result."""
         if not plaintext:
             return ""
+        if win32crypt is None:
+            raise CredentialEncryptionError(
+                "Windows password encryption is unavailable because pywin32 "
+                "is not installed. The account was not saved."
+            )
         try:
             encrypted = win32crypt.CryptProtectData(
                 plaintext.encode("utf-8"),
@@ -393,6 +409,12 @@ class AccountManager:
     def _decrypt(encrypted_b64: str) -> str:
         """Decrypt a DPAPI-encrypted base64 string, return plaintext."""
         if not encrypted_b64:
+            return ""
+        if win32crypt is None:
+            Logger.error(
+                "AccountManager",
+                "Cannot read the stored password: pywin32 is not installed.",
+            )
             return ""
         try:
             encrypted = base64.b64decode(encrypted_b64)
@@ -808,7 +830,7 @@ class AccountManager:
                 result = subprocess.run(
                     ["taskkill", "/IM", proc_name, "/F"],
                     capture_output=True, text=True,
-                    creationflags=subprocess.CREATE_NO_WINDOW,
+                    creationflags=NO_WINDOW,
                 )
                 if result.returncode == 0:
                     killed_any = True
@@ -1052,6 +1074,6 @@ class AccountManager:
                     cmd = [c] + args.split() if args else [c]
                     subprocess.Popen(
                         cmd,
-                        creationflags=subprocess.CREATE_NO_WINDOW,
+                        creationflags=NO_WINDOW,
                     )
                 return

@@ -51,23 +51,7 @@ class TestPerformanceBenchmarks(unittest.TestCase):
         self.assertLess(peak_kb, 500.0, f"Session pool allocation exceeded 500KB ({peak_kb:.2f}KB)")
         session.close()
 
-    def test_qt_shell_instantiation_latency(self):
-        """Verify that PySide6 main window builds in under 500ms in offscreen mode."""
-        os.environ["QT_QPA_PLATFORM"] = "offscreen"
-        from PySide6.QtWidgets import QApplication
-        app = QApplication.instance() or QApplication([])
 
-        start = time.perf_counter()
-        from ui.qt.main_window import LeagueLoopMainWindow
-        window = LeagueLoopMainWindow(container=None)
-        elapsed_ms = (time.perf_counter() - start) * 1000
-
-        self.assertIsNotNone(window)
-        self.assertIn("priority", window.tab_pages)
-        self.assertIn("loot", window.tab_pages)
-        self.assertIn("accounts", window.tab_pages)
-        self.assertLess(elapsed_ms, 800.0, f"MainWindow initialization took {elapsed_ms:.2f}ms")
-        window.close()
 
 
 if __name__ == "__main__":

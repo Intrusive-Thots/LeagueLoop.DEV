@@ -1,25 +1,39 @@
 """
-AccountSwitcher — one consistent way to change account.
+AccountSwitcher — change account by moving the session, not by typing a password.
 
-The previous code had two operations that disagreed with each other:
+What changed, and why
+---------------------
+The previous sequence signed out through the Riot Client's local API and then
+signed in with a stored password. That cannot work any more: Riot's credential
+sign-in carries an hCaptcha challenge, so the request is refused with
+`invalid_prompt` — the error this project chased through three separate
+implementations. `vault.py` has the full account of it.
 
-    sign_out()      killed League, called the Riot Client API, updated state
-    login_account() typed the username and password as keystrokes into
-                    whatever window had focus, and did *not* sign out first
+So the switch is now a file operation, which is what account switchers that
+work in practice actually do::
 
-Because it never signed out, switching only worked if you happened to already
-be signed out; otherwise the keystrokes went into the Riot Client UI as
-random input. Meanwhile `RiotClientAPI.sign_in()` — a proper API sign-in that
-already handled 2FA and error codes — was never called by anything.
+    PREPARING          the account exists, and has a session worth restoring
+    CAPTURING          save whoever is signed in right now, before replacing them
+    CLOSING_CLIENT     stop League and the Riot Client
+    RESTORING_SESSION  swap in the target account's session files
+    LAUNCHING          start the Riot Client again (and League, if asked)
+    WAITING_FOR_CLIENT wait for it to come up
+    VERIFYING          confirm the client agrees about who is signed in
+    DONE | FAILED
 
-This module makes switching a single sequence with one lock, one set of
-typed outcomes, and progress events at every step:
+Three properties this sequence has that the old one did not:
 
-    PREPARING -> SIGNING_OUT -> WAITING_FOR_CLIENT -> AUTHENTICATING
-              -> VERIFYING -> LAUNCHING -> DONE | FAILED
+**Nothing is destroyed before it is proven possible.** The target's session is
+checked for existence and age *first*. A switch that cannot succeed does not
+close your client to find that out.
 
-Sign-out is just the first half of that sequence, so the two operations can
-no longer drift apart.
+**Switching away does not lose the account you left.** `CAPTURING` snapshots
+the live session before it is overwritten, so switching A → B → A does not ask
+you to sign in to A again.
+
+**The client is stopped, not just asked politely.** It holds the session files
+open and rewrites them on exit, so a swap underneath a live client is either
+refused by Windows or silently undone a moment later.
 """
 from __future__ import annotations
 
@@ -38,51 +52,68 @@ from services.accounts.results import (
     SwitchResult,
 )
 from services.accounts.session import RiotSession
+from services.accounts.vault import SessionVault
 from utils.logger import Logger
 
-#: League must be closed before the Riot Client will honour a sign-out.
+TAG = "AccountSwitch"
+
+#: Everything that must be gone before the session files can be swapped. The
+#: Riot Client is last because closing League first is what lets it exit
+#: cleanly rather than being killed mid-write.
 GAME_PROCESSES = ("LeagueClient.exe", "LeagueClientUx.exe")
+CLIENT_PROCESS = "RiotClientServices.exe"
 
 DEFAULT_SIGN_OUT_TIMEOUT_S = 12.0
-DEFAULT_SIGN_IN_TIMEOUT_S = 25.0
 DEFAULT_CLIENT_TIMEOUT_S = 30.0
+#: How long to wait for the Riot Client to actually disappear after being
+#: asked to close. Beyond this the files are still open and the swap is unsafe.
+DEFAULT_SHUTDOWN_TIMEOUT_S = 15.0
+#: Windows releases file handles a moment after the process exits.
+POST_SHUTDOWN_SETTLE_S = 0.6
 
 
 class AccountSwitcher:
-    """
-    Runs account switches as one ordered, observable sequence.
+    """Runs account switches as one ordered, observable sequence.
 
-    Deliberately owns no storage: the account list, credential decryption and
-    persistence stay in AccountManager. This object only sequences the steps.
+    Owns no storage: the account list stays in AccountManager and the saved
+    sessions stay in SessionVault. This object only sequences the steps.
     """
 
     def __init__(
         self,
         session: RiotSession,
         accounts_provider: Callable[[], List[Dict[str, Any]]],
-        password_provider: Callable[[int], str],
+        vault: SessionVault,
         on_success: Optional[Callable[[int], None]] = None,
         on_signed_out: Optional[Callable[[], None]] = None,
         kill_games: Optional[Callable[[], bool]] = None,
-        launch_client: Optional[Callable[[], None]] = None,
+        stop_client: Optional[Callable[[], bool]] = None,
+        client_running: Optional[Callable[[], bool]] = None,
+        launch_client: Optional[Callable[[bool], None]] = None,
         bus: Any = None,
         sign_out_timeout_s: float = DEFAULT_SIGN_OUT_TIMEOUT_S,
         client_timeout_s: float = DEFAULT_CLIENT_TIMEOUT_S,
+        shutdown_timeout_s: float = DEFAULT_SHUTDOWN_TIMEOUT_S,
+        settle_s: float = POST_SHUTDOWN_SETTLE_S,
     ):
         self.session = session
+        self.vault = vault
         self._accounts = accounts_provider
-        self._password = password_provider
         self._on_success = on_success
         self._on_signed_out = on_signed_out
         self._kill_games = kill_games
+        self._stop_client = stop_client
+        self._client_running = client_running
         self._launch_client = launch_client
         self._bus = bus
         self._sign_out_timeout_s = sign_out_timeout_s
         self._client_timeout_s = client_timeout_s
+        self._shutdown_timeout_s = shutdown_timeout_s
+        self._settle_s = settle_s
 
-        # ONE lock for every account operation. The old code had a
-        # login-only flag that sign_out ignored, so you could sign out
-        # halfway through a login.
+        # ONE lock for every account operation. The old code had a login-only
+        # flag that sign_out ignored, so you could sign out halfway through a
+        # login.
         self._lock = threading.Lock()
         self._phase = SwitchPhase.IDLE
         self._current_label = ""
@@ -94,7 +125,9 @@ class AccountSwitcher:
 
     @property
     def busy(self) -> bool:
-        return self._phase not in (SwitchPhase.IDLE, SwitchPhase.DONE, SwitchPhase.FAILED)
+        return self._phase not in (
+            SwitchPhase.IDLE, SwitchPhase.DONE, SwitchPhase.FAILED,
+        )
 
     # ------------------------------------------------------------ events
     def _emit(self, channel: str, payload: Any) -> None:
@@ -106,7 +139,7 @@ class AccountSwitcher:
             # A dropped event means the UI never hears the switch finished and
             # sits disabled forever. That is worth a line.
             Logger.error(
-                "AccountSwitch",
+                TAG,
                 f"Could not publish '{channel}' — the interface will not be "
                 f"told about this step.",
                 exc=exc, channel=channel,
@@ -114,11 +147,8 @@ class AccountSwitcher:
 
     def _progress(self, phase: SwitchPhase, message: str, index: int = -1) -> None:
         self._phase = phase
-        # The switch sequence is the flow that has never been observed against
-        # a real Riot Client. A per-phase trail is the only way to see where
-        # it stopped.
         Logger.info(
-            "AccountSwitch",
+            TAG,
             f"{getattr(phase, 'name', phase)}: {message}",
             phase=getattr(phase, "name", str(phase)),
             account_index=index,
@@ -126,9 +156,7 @@ class AccountSwitcher:
         self._emit(
             EVENT_SWITCH_PROGRESS,
             SwitchProgress(
-                phase=phase,
-                message=message,
-                account_index=index,
+                phase=phase, message=message, account_index=index,
                 account_label=self._current_label,
             ),
         )
@@ -139,14 +167,13 @@ class AccountSwitcher:
         label = self._current_label or "account"
         if result.ok:
             Logger.action(
-                "AccountSwitch",
-                f"{operation} succeeded for {label}",
+                TAG, f"{operation} succeeded for {label}",
                 outcome=outcome, operation=operation,
                 account_index=getattr(result, "account_index", -1),
             )
         else:
             Logger.error(
-                "AccountSwitch",
+                TAG,
                 f"{operation} failed for {label}: {outcome}"
                 + (f" — {result.detail}" if getattr(result, "detail", "") else ""),
                 outcome=outcome, operation=operation,
@@ -159,22 +186,44 @@ class AccountSwitcher:
         self._current_label = ""
         return result
 
-    # ----------------------------------------------------------- public API
-    def switch_to(
-        self,
-        index: int,
-        launch_league: bool = True,
-        sign_in_timeout_s: float = DEFAULT_SIGN_IN_TIMEOUT_S,
-    ) -> SwitchResult:
-        """
-        Switch to the account at `index`. Blocking; run it on a worker thread.
+    # ------------------------------------------------------- identity keys
+    @staticmethod
+    def account_key(account: Dict[str, Any]) -> str:
+        """The name a session is filed under.
 
-        Returns a typed SwitchResult in every case - it does not raise.
+        The username, not the display label: the label is a nickname the user
+        can rename at will, and renaming it must not orphan the saved session.
+        """
+        return str(account.get("username") or account.get("label") or "").strip().lower()
+
+    # ----------------------------------------------------------- public API
+    def session_info(self, index: int):
+        """What is saved for the account at `index`, for the account row."""
+        accounts = self._accounts() or []
+        if not (0 <= index < len(accounts)):
+            return None
+        return self.vault.info(self.account_key(accounts[index]))
+
+    def capture_current(self, index: int) -> bool:
+        """Remember the session that is signed in right now as this account's.
+
+        Called after the user signs in by hand — the only moment a session
+        can be created, now that passwords cannot be replayed.
+        """
+        accounts = self._accounts() or []
+        if not (0 <= index < len(accounts)):
+            return False
+        return self.vault.capture(self.account_key(accounts[index]))
+
+    def switch_to(self, index: int, launch_league: bool = True) -> SwitchResult:
+        """Switch to the account at `index`. Blocking; run on a worker thread.
+
+        Returns a typed SwitchResult in every case — it does not raise.
         """
         if not self._lock.acquire(blocking=False):
             return SwitchResult(SwitchOutcome.BUSY, SwitchPhase.IDLE, index)
         try:
-            return self._switch_locked(index, launch_league, sign_in_timeout_s)
+            return self._switch_locked(index, launch_league)
         except Exception as exc:  # never let a switch escape as an exception
             return self._finish(
                 SwitchResult(
@@ -192,11 +241,16 @@ class AccountSwitcher:
                 SwitchOutcome.BUSY, SwitchPhase.IDLE, operation=OP_SIGN_OUT
             )
         try:
-            self._emit(EVENT_SWITCH_STARTED, SwitchProgress(SwitchPhase.PREPARING, "Signing out"))
+            self._emit(
+                EVENT_SWITCH_STARTED,
+                SwitchProgress(SwitchPhase.PREPARING, "Signing out"),
+            )
             outcome = self._ensure_signed_out()
             if outcome is not None:
                 return self._finish(
-                    SwitchResult(outcome, SwitchPhase.SIGNING_OUT, operation=OP_SIGN_OUT)
+                    SwitchResult(
+                        outcome, SwitchPhase.SIGNING_OUT, operation=OP_SIGN_OUT
+                    )
                 )
             # NB: _ensure_signed_out already fired on_signed_out; calling it
             # again here would double-write the active-account state.
@@ -216,118 +270,197 @@ class AccountSwitcher:
             self._lock.release()
 
     # ------------------------------------------------------------ sequence
-    def _switch_locked(
-        self, index: int, launch_league: bool, sign_in_timeout_s: float
-    ) -> SwitchResult:
+    def _switch_locked(self, index: int, launch_league: bool) -> SwitchResult:
         accounts = self._accounts() or []
         if not (0 <= index < len(accounts)):
             return self._finish(
-                SwitchResult(SwitchOutcome.INVALID_ACCOUNT, SwitchPhase.PREPARING, index)
+                SwitchResult(
+                    SwitchOutcome.INVALID_ACCOUNT, SwitchPhase.PREPARING, index
+                )
             )
 
         account = accounts[index]
         label = str(account.get("label") or account.get("username") or "Account")
-        username = str(account.get("username") or "")
+        key = self.account_key(account)
         self._current_label = label
 
         self._emit(
             EVENT_SWITCH_STARTED,
-            SwitchProgress(SwitchPhase.PREPARING, "Switching to {}".format(label), index, label),
+            SwitchProgress(
+                SwitchPhase.PREPARING, "Switching to {}".format(label), index, label
+            ),
         )
 
-        password = ""
-        try:
-            password = self._password(index) or ""
-        except Exception:
-            password = ""
-
-        if not username or not password:
+        # --- 1. is this switch even possible? -----------------------------
+        # Checked before anything is closed. A switch that cannot succeed must
+        # not take your running client down to discover that.
+        info = self.vault.info(key)
+        if not info.exists:
             return self._finish(
-                SwitchResult(SwitchOutcome.NO_CREDENTIALS, SwitchPhase.PREPARING, index, label)
-            )
-
-        # --- 1. client reachable ------------------------------------------
-        self._progress(SwitchPhase.WAITING_FOR_CLIENT, "Looking for the Riot Client", index)
-        if not self.session.client_running():
-            if self._launch_client:
-                self._progress(SwitchPhase.WAITING_FOR_CLIENT, "Starting the Riot Client", index)
-                try:
-                    self._launch_client()
-                except Exception as exc:
-                    Logger.debug("Switcher", "_switch_locked suppressed an error", exc=exc)
-            if not self.session.wait_until_client_ready(self._client_timeout_s):
-                return self._finish(
-                    SwitchResult(SwitchOutcome.CLIENT_NOT_RUNNING,
-                                 SwitchPhase.WAITING_FOR_CLIENT, index, label)
+                SwitchResult(
+                    SwitchOutcome.NO_SAVED_SESSION, SwitchPhase.PREPARING,
+                    index, label, info.describe(),
                 )
-        elif not self.session.connect():
-            return self._finish(
-                SwitchResult(SwitchOutcome.CLIENT_UNREACHABLE,
-                             SwitchPhase.WAITING_FOR_CLIENT, index, label)
             )
-
-        # --- 2. already the right account? --------------------------------
-        if self.session.is_signed_in():
-            if username.lower() and self.session.current_login_name() == username.lower():
-                if self._on_success:
-                    try:
-                        self._on_success(index)
-                    except Exception as exc:
-                        Logger.debug("Switcher", "_switch_locked suppressed an error", exc=exc)
-                return self._finish(
-                    SwitchResult(SwitchOutcome.ALREADY_ACTIVE, SwitchPhase.DONE, index, label)
+        if not info.usable:
+            return self._finish(
+                SwitchResult(
+                    SwitchOutcome.SESSION_EXPIRED, SwitchPhase.PREPARING,
+                    index, label, info.describe(),
                 )
-
-            # --- 3. sign the current account out --------------------------
-            outcome = self._ensure_signed_out(index)
-            if outcome is not None:
-                return self._finish(SwitchResult(outcome, SwitchPhase.SIGNING_OUT, index, label))
-
-        # --- 4. authenticate ----------------------------------------------
-        self._progress(SwitchPhase.AUTHENTICATING, "Signing in as {}".format(label), index)
-        attempt = self.session.sign_in(username, password)
-
-        if attempt.needs_2fa:
-            return self._finish(
-                SwitchResult(SwitchOutcome.NEEDS_2FA, SwitchPhase.AUTHENTICATING,
-                             index, label, attempt.error)
-            )
-        if not attempt.ok:
-            return self._finish(
-                SwitchResult(attempt.outcome, SwitchPhase.AUTHENTICATING,
-                             index, label, attempt.error)
             )
 
-        # --- 5. verify the client agrees -----------------------------------
-        self._progress(SwitchPhase.VERIFYING, "Confirming sign-in", index)
-        if not self.session.wait_until_signed_in(sign_in_timeout_s):
+        # --- 2. already there? --------------------------------------------
+        if self._already_active(key):
+            if self._on_success:
+                self._safely(self._on_success, index)
             return self._finish(
-                SwitchResult(SwitchOutcome.TIMED_OUT, SwitchPhase.VERIFYING, index, label)
+                SwitchResult(
+                    SwitchOutcome.ALREADY_ACTIVE, SwitchPhase.DONE, index, label
+                )
             )
 
-        # --- 6. record + optionally launch ---------------------------------
+        # --- 3. keep the account we are leaving -----------------------------
+        self._capture_outgoing(index)
+
+        # --- 4. stop everything holding the files ---------------------------
+        self._progress(SwitchPhase.CLOSING_CLIENT, "Closing the Riot Client", index)
+        if not self._shut_down_client():
+            return self._finish(
+                SwitchResult(
+                    SwitchOutcome.CLIENT_STILL_RUNNING, SwitchPhase.CLOSING_CLIENT,
+                    index, label,
+                )
+            )
+
+        # --- 5. swap the session -------------------------------------------
+        self._progress(
+            SwitchPhase.RESTORING_SESSION, "Restoring {}'s session".format(label), index
+        )
+        if not self.vault.restore(key):
+            return self._finish(
+                SwitchResult(
+                    SwitchOutcome.ERROR, SwitchPhase.RESTORING_SESSION,
+                    index, label, "The saved session could not be restored.",
+                )
+            )
+
+        if self._on_signed_out:
+            self._safely(self._on_signed_out)
+
+        # --- 6. bring it back up --------------------------------------------
+        self._progress(SwitchPhase.LAUNCHING, "Starting the Riot Client", index)
+        if self._launch_client:
+            self._safely(self._launch_client, launch_league)
+
+        self._progress(SwitchPhase.WAITING_FOR_CLIENT, "Waiting for the client", index)
+        if not self.session.wait_until_client_ready(self._client_timeout_s):
+            return self._finish(
+                SwitchResult(
+                    SwitchOutcome.CLIENT_NOT_RUNNING, SwitchPhase.WAITING_FOR_CLIENT,
+                    index, label,
+                )
+            )
+
+        # --- 7. did the client accept the session? --------------------------
+        # The honest check. A restored-but-rejected session leaves the client
+        # on a login screen, and reporting success there is the single most
+        # misleading thing this sequence could do.
+        self._progress(SwitchPhase.VERIFYING, "Confirming the account", index)
+        if not self.session.wait_until_signed_in(self._client_timeout_s):
+            return self._finish(
+                SwitchResult(
+                    SwitchOutcome.SESSION_EXPIRED, SwitchPhase.VERIFYING, index, label,
+                    "The Riot Client did not accept the saved session. Sign in "
+                    "once by hand to refresh it.",
+                )
+            )
+
         if self._on_success:
-            try:
-                self._on_success(index)
-            except Exception as exc:
-                Logger.debug("Switcher", "_switch_locked suppressed an error", exc=exc)
+            self._safely(self._on_success, index)
 
-        if launch_league and self._launch_client:
-            self._progress(SwitchPhase.LAUNCHING, "Starting League", index)
-            try:
-                self._launch_client()
-            except Exception as exc:
-                Logger.debug("Switcher", "_switch_locked suppressed an error", exc=exc)
+        # The client rewrites the session on a successful sign-in, so what is
+        # on disk now is fresher than what we restored. Re-capturing resets
+        # the clock and is the reason regular use keeps a session alive.
+        self.vault.capture(key)
 
         return self._finish(
             SwitchResult(SwitchOutcome.SUCCESS, SwitchPhase.DONE, index, label)
         )
 
-    def _ensure_signed_out(self, index: int = -1) -> Optional[SwitchOutcome]:
-        """
-        Sign out whoever is signed in. Returns None on success, else why not.
+    # ------------------------------------------------------------- helpers
+    def _already_active(self, key: str) -> bool:
+        """Is `key` the account the client is signed in as right now?"""
+        if not key:
+            return False
+        try:
+            if not self.session.connect() or not self.session.is_signed_in():
+                return False
+            return self.session.current_login_name() == key
+        except Exception as exc:
+            Logger.debug(TAG, "Could not read the current account", exc=exc)
+            return False
 
-        League must be closed first - the Riot Client refuses sign-out with
+    def _capture_outgoing(self, index: int) -> None:
+        """Save the live session under whichever account it belongs to.
+
+        Best effort by design: failing to keep the outgoing account is a
+        smaller harm than refusing the switch the user asked for. It is logged
+        so a pattern of failures is visible.
+        """
+        if not self.vault.live_session_present():
+            return
+        try:
+            current = self.session.current_login_name()
+        except Exception:
+            current = ""
+        if not current:
+            Logger.debug(
+                TAG,
+                "A session is present but the client did not say whose; not "
+                "capturing it.",
+            )
+            return
+        self._progress(
+            SwitchPhase.CAPTURING, "Saving the current session", index
+        )
+        self.vault.capture(current)
+
+    def _shut_down_client(self) -> bool:
+        """Stop League and the Riot Client, and confirm they are gone."""
+        if self._kill_games:
+            self._safely(self._kill_games)
+        if self._stop_client:
+            self._safely(self._stop_client)
+
+        if self._client_running is None:
+            # No way to observe it. Assume the caller's stop worked rather
+            # than blocking the switch, but say so — a swap under a live
+            # client is silently undone and that is very hard to diagnose.
+            Logger.warning(
+                TAG,
+                "No way to check whether the Riot Client actually closed; "
+                "continuing, but the session swap may not stick.",
+            )
+            return True
+
+        deadline = time.monotonic() + self._shutdown_timeout_s
+        while time.monotonic() < deadline:
+            try:
+                if not self._client_running():
+                    # Windows releases the file handles a moment after exit.
+                    time.sleep(self._settle_s)
+                    return True
+            except Exception as exc:
+                Logger.debug(TAG, "Could not check the client process", exc=exc)
+                return True
+            time.sleep(0.3)
+        return False
+
+    def _ensure_signed_out(self, index: int = -1) -> Optional[SwitchOutcome]:
+        """Sign out whoever is signed in. Returns None on success, else why not.
+
+        League must be closed first — the Riot Client refuses sign-out with
         `sign_out_failed_other_games_running` while it is up.
         """
         if not self.session.connect():
@@ -336,12 +469,13 @@ class AccountSwitcher:
         if not self.session.is_signed_in():
             return None
 
+        # Keep the session before signing out of it, or signing out silently
+        # costs the user their ability to switch back without a password.
+        self._capture_outgoing(index)
+
         self._progress(SwitchPhase.SIGNING_OUT, "Closing League", index)
         if self._kill_games:
-            try:
-                self._kill_games()
-            except Exception as exc:
-                Logger.debug("Switcher", "_ensure_signed_out suppressed an error", exc=exc)
+            self._safely(self._kill_games)
 
         self._progress(SwitchPhase.SIGNING_OUT, "Signing out", index)
         self.session.sign_out()
@@ -351,8 +485,14 @@ class AccountSwitcher:
             return SwitchOutcome.SIGN_OUT_FAILED
 
         if self._on_signed_out:
-            try:
-                self._on_signed_out()
-            except Exception as exc:
-                Logger.debug("Switcher", "_ensure_signed_out suppressed an error", exc=exc)
+            self._safely(self._on_signed_out)
         return None
+
+    @staticmethod
+    def _safely(fn: Callable, *args) -> Any:
+        """Call an injected callback without letting it break the sequence."""
+        try:
+            return fn(*args)
+        except Exception as exc:
+            Logger.debug(TAG, "A switch callback failed", exc=exc)
+            return None

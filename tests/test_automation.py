@@ -1,20 +1,44 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 # AutomationLogic seems to be an old class name. The actual class is AutomationEngine.
 from services.automation import AutomationEngine
 
+
+def _engine(**attrs):
+    """A real AutomationEngine with mocked collaborators.
+
+    These tests used to build the engine with `__new__` and then hand-set the
+    handful of attributes each one happened to touch. Any field added to
+    `__init__` -- `_sniper_overridden`, say -- then broke twenty tests with an
+    AttributeError that pointed at the guard rather than at the fixture, and a
+    guard reading a field `__init__` never set would have passed here anyway.
+
+    `AutomationEngine.__init__` starts no thread and opens no socket, so the
+    real constructor is both safe and free to run.
+    """
+    engine = AutomationEngine(
+        lcu=MagicMock(),
+        assets=MagicMock(),
+        config=MagicMock(),
+        log_func=MagicMock(),
+    )
+    # `_act` now checks the client's answer instead of discarding it, so a bare
+    # MagicMock response fails the `200 <= code < 300` comparison with a
+    # TypeError. Hand back something shaped like the real thing; a test that
+    # cares about rejection can set its own.
+    engine.lcu.request.return_value = SimpleNamespace(status_code=200, text="")
+    engine._log = MagicMock()
+    for key, value in attrs.items():
+        setattr(engine, key, value)
+    return engine
+
+
 class TestAutomationEngineReadyCheck(unittest.TestCase):
     def setUp(self):
         # Instantiate without calling __init__ in case the signature is unknown
-        self.logic = AutomationEngine.__new__(AutomationEngine)
-
-        # Mock the api dependency and its request method
-        self.logic.lcu = MagicMock()
-        self.logic.config = MagicMock()
-
-        # Mock the internal _log method to verify logging
-        self.logic._log = MagicMock()
+        self.logic = _engine()
         self.logic.ready_check_accepted = False
         self.logic.toast_func = MagicMock()
         self.logic.ready_check_start = None
@@ -49,7 +73,7 @@ class TestAutomationEngineReadyCheck(unittest.TestCase):
         callback()
 
         # Verify the api request was made with correct arguments
-        self.logic.lcu.request.assert_called_once_with("POST", "/lol-matchmaking/v1/ready-check/accept")
+        self.logic.lcu.request.assert_called_once_with("POST", "/lol-matchmaking/v1/ready-check/accept", None)
 
         # Verify logging was triggered
         self.logic._log.assert_called_once_with("Ready Check Accepted!")
@@ -71,7 +95,7 @@ class TestAutomationEngineReadyCheck(unittest.TestCase):
         callback()
 
         # Verify the api request was made
-        self.logic.lcu.request.assert_called_once_with("POST", "/lol-matchmaking/v1/ready-check/accept")
+        self.logic.lcu.request.assert_called_once_with("POST", "/lol-matchmaking/v1/ready-check/accept", None)
 
         # Verify logging was triggered
         self.logic._log.assert_called_once_with("Ready Check Accepted!")
@@ -94,9 +118,7 @@ class TestAutomationEngineWindowState(unittest.TestCase):
     """Tests for window state transitions including stealth mode."""
 
     def _make_engine(self, stealth=False):
-        engine = AutomationEngine.__new__(AutomationEngine)
-        engine.lcu = MagicMock()
-        engine.config = MagicMock()
+        engine = _engine()
         engine.config.get = MagicMock(side_effect=lambda key, default=None: {
             "stealth_mode": stealth,
             "auto_accept": False,
@@ -193,15 +215,9 @@ class TestAutomationEngineWindowState(unittest.TestCase):
 
 class TestAutomationEnginePrioritySniper(unittest.TestCase):
     def _make_engine(self):
-        engine = AutomationEngine.__new__(AutomationEngine)
-        engine.lcu = MagicMock()
-        engine.config = MagicMock()
-        engine.assets = MagicMock()
-        engine.log = MagicMock()
-        engine._log = MagicMock()
+        engine = _engine()
         engine._last_priority_swap = 0.0
         engine._last_priority_swap_target_id = 0
-        engine._skin_equipped_for_champ_id = 10  # Pretend champ 10 already has a skin
         return engine
 
     @patch("time.time", return_value=100)
@@ -234,10 +250,13 @@ class TestAutomationEnginePrioritySniper(unittest.TestCase):
         engine._perform_priority_sniper(session, priority_list)
 
         # Should swap to Yasuo (30)
-        engine.lcu.request.assert_called_once_with("POST", "/lol-champ-select/v1/session/bench/swap/30")
+        engine.lcu.request.assert_called_once_with("POST", "/lol-champ-select/v1/session/bench/swap/30", None)
         self.assertEqual(engine._last_priority_swap, 100)
-        # Skin guard should be cleared (0) so it re-equips for the new champion
-        self.assertEqual(engine._skin_equipped_for_champ_id, 0)
+        # The skin guard must clear so a skin is re-equipped for the new
+        # champion. It used to be a per-champion id (`_skin_equipped_for_champ_id`);
+        # it is now a flag reset whenever the champion changes, which the
+        # bench swap is one case of.
+        self.assertFalse(engine._skin_equipped)
 
     @patch("time.time", return_value=100)
     def test_priority_sniper_no_better_champ(self, mock_time):
@@ -275,10 +294,7 @@ class TestAutomationEnginePrioritySniper(unittest.TestCase):
 class TestAutomationEngineDraftAssistant(unittest.TestCase):
     def _make_engine(self):
         from services.draft.priority_engine import PriorityEngine
-        engine = AutomationEngine.__new__(AutomationEngine)
-        engine.lcu = MagicMock()
-        engine.config = MagicMock()
-        engine.assets = MagicMock()
+        engine = _engine()
         engine.assets.name_to_id = {"yasuo": 30, "teemo": 20, "garen": 10}
         engine.assets.get_champ_name = lambda cid: {30: "Yasuo", 20: "Teemo", 10: "Garen"}.get(cid, "")
         engine.draft_engine = PriorityEngine(config_manager=engine.config, asset_manager=engine.assets)
@@ -308,7 +324,7 @@ class TestAutomationEngineDraftAssistant(unittest.TestCase):
         engine._perform_draft_assistant(session)
 
         # Yasuo is hovered, so it should skip Yasuo and hover Teemo
-        engine.lcu.request.assert_called_once_with("PATCH", "/lol-champ-select/v1/session/actions/5", data={"championId": 20})
+        engine.lcu.request.assert_called_once_with("PATCH", "/lol-champ-select/v1/session/actions/5", {"championId": 20})
         self.assertEqual(engine._last_draft_action_time, 100)
 
     @patch("time.time", return_value=100)
@@ -332,7 +348,7 @@ class TestAutomationEngineDraftAssistant(unittest.TestCase):
         engine._perform_draft_assistant(session)
 
         # Yasuo is hovered, so it should skip Yasuo and hover Teemo
-        engine.lcu.request.assert_called_once_with("PATCH", "/lol-champ-select/v1/session/actions/5", data={"championId": 20})
+        engine.lcu.request.assert_called_once_with("PATCH", "/lol-champ-select/v1/session/actions/5", {"championId": 20})
         self.assertEqual(engine._last_draft_action_time, 100)
 
     @patch("time.time", return_value=100)
@@ -356,7 +372,7 @@ class TestAutomationEngineDraftAssistant(unittest.TestCase):
         engine._perform_draft_assistant(session)
 
         # Garen is banned, should pick Yasuo
-        engine.lcu.request.assert_called_once_with("PATCH", "/lol-champ-select/v1/session/actions/5", data={"championId": 30})
+        engine.lcu.request.assert_called_once_with("PATCH", "/lol-champ-select/v1/session/actions/5", {"championId": 30})
         self.assertEqual(engine._last_draft_action_time, 100)
 
     @patch("time.time", return_value=100)
@@ -382,7 +398,7 @@ class TestAutomationEngineDraftAssistant(unittest.TestCase):
         engine._perform_draft_assistant(session)
 
         # Should lock in Yasuo
-        engine.lcu.request.assert_called_once_with("PATCH", "/lol-champ-select/v1/session/actions/5", data={"championId": 30, "completed": True})
+        engine.lcu.request.assert_called_once_with("PATCH", "/lol-champ-select/v1/session/actions/5", {"championId": 30, "completed": True})
         self.assertEqual(engine._last_draft_action_time, 100)
 
     @patch("time.time", return_value=100)
@@ -406,16 +422,13 @@ class TestAutomationEngineDraftAssistant(unittest.TestCase):
         engine._perform_draft_assistant(session)
 
         # Yasuo is hovered by teammate, so it should skip Yasuo and hover Teemo (20)
-        engine.lcu.request.assert_called_once_with("PATCH", "/lol-champ-select/v1/session/actions/5", data={"championId": 20})
+        engine.lcu.request.assert_called_once_with("PATCH", "/lol-champ-select/v1/session/actions/5", {"championId": 20})
         self.assertEqual(engine._last_draft_action_time, 100)
 
 
 class TestAutomationEngineArenaSynergy(unittest.TestCase):
     def _make_engine(self):
-        engine = AutomationEngine.__new__(AutomationEngine)
-        engine.lcu = MagicMock()
-        engine.config = MagicMock()
-        engine.assets = MagicMock()
+        engine = _engine()
         engine.assets.name_to_id = {"yasuo": 30, "teemo": 20, "garen": 10, "yone": 40}
         engine.assets.get_champ_name = lambda cid: {30: "Yasuo", 20: "Teemo", 10: "Garen", 40: "Yone"}.get(cid, "")
         engine.log = MagicMock()
@@ -437,7 +450,7 @@ class TestAutomationEngineArenaSynergy(unittest.TestCase):
 
         engine._perform_arena_synergy(session)
 
-        engine.lcu.request.assert_called_once_with("PATCH", "/lol-champ-select/v1/session/actions/5", data={"championId": 20})
+        engine.lcu.request.assert_called_once_with("PATCH", "/lol-champ-select/v1/session/actions/5", {"championId": 20})
         self.assertEqual(engine._last_synergy_patch, 100)
 
     @patch("time.time", return_value=100)
@@ -471,7 +484,7 @@ class TestAutomationEngineArenaSynergy(unittest.TestCase):
         engine._perform_arena_synergy(session)
 
         # Garen is banned, so should hover Teemo
-        engine.lcu.request.assert_called_once_with("PATCH", "/lol-champ-select/v1/session/actions/5", data={"championId": 20})
+        engine.lcu.request.assert_called_once_with("PATCH", "/lol-champ-select/v1/session/actions/5", {"championId": 20})
         self.assertEqual(engine._last_synergy_patch, 100)
 
     @patch("time.time", return_value=100)
@@ -491,18 +504,13 @@ class TestAutomationEngineArenaSynergy(unittest.TestCase):
         engine._perform_arena_synergy(session)
 
         # Should auto lock Yone
-        engine.lcu.request.assert_called_once_with("PATCH", "/lol-champ-select/v1/session/actions/5", data={"championId": 40, "completed": True})
+        engine.lcu.request.assert_called_once_with("PATCH", "/lol-champ-select/v1/session/actions/5", {"championId": 40, "completed": True})
         self.assertEqual(engine._last_synergy_patch, 100)
 
 
 class TestAutomationEngineAutoHonor(unittest.TestCase):
     def _make_engine(self):
-        engine = AutomationEngine.__new__(AutomationEngine)
-        engine.lcu = MagicMock()
-        engine.config = MagicMock()
-        engine.assets = MagicMock()
-        engine.log = MagicMock()
-        engine._log = MagicMock()
+        engine = _engine()
         engine._honor_handled = False
         return engine
 
@@ -770,12 +778,7 @@ class TestAutomationEngineAutoHonor(unittest.TestCase):
 
 class TestAutomationEngineDraftAssistantCoverage(unittest.TestCase):
     def _make_engine(self):
-        engine = AutomationEngine.__new__(AutomationEngine)
-        engine.lcu = MagicMock()
-        engine.config = MagicMock()
-        engine.assets = MagicMock()
-        engine.log = MagicMock()
-        engine._log = MagicMock()
+        engine = _engine()
         engine._last_draft_action_time = 0
         return engine
 
@@ -804,12 +807,7 @@ class TestAutomationEngineDraftAssistantCoverage(unittest.TestCase):
 
 class TestAutomationEngineArenaPickCoverage(unittest.TestCase):
     def _make_engine(self):
-        engine = AutomationEngine.__new__(AutomationEngine)
-        engine.lcu = MagicMock()
-        engine.config = MagicMock()
-        engine.assets = MagicMock()
-        engine.log = MagicMock()
-        engine._log = MagicMock()
+        engine = _engine()
         engine._last_synergy_patch = 0
         return engine
 
@@ -837,18 +835,13 @@ class TestAutomationEngineArenaPickCoverage(unittest.TestCase):
 
         engine._handle_arena_pick(session, me, action, banned_ids)
 
-        engine.lcu.request.assert_called_with("PATCH", "/lol-champ-select/v1/session/actions/1", data={"championId": 777})
+        engine.lcu.request.assert_called_with("PATCH", "/lol-champ-select/v1/session/actions/1", {"championId": 777})
 
 class TestAutomationEngineChampSelect(unittest.TestCase):
     def _make_engine(self):
-        engine = AutomationEngine.__new__(AutomationEngine)
-        engine.lcu = MagicMock()
-        engine.config = MagicMock()
-        engine.assets = MagicMock()
-        engine.log = MagicMock()
-        engine._log = MagicMock()
+        engine = _engine()
         engine.paused = False
-        engine._skin_equipped_for_champ_id = 10  # starts as if champ 10 skin was equipped
+        engine._skin_equipped = True  # starts as if a skin was already equipped
         engine._runes_equipped = True
         engine._last_champ_id = 0
         engine.stats_func = None
@@ -879,13 +872,13 @@ class TestAutomationEngineChampSelect(unittest.TestCase):
         self.assertEqual(engine._last_champ_id, 10)
         self.assertFalse(engine._runes_equipped)
 
-        # Set runes back to True; skin guard still says champ 10 was equipped.
-        engine._skin_equipped_for_champ_id = 10
+        # Set runes back to True; skin guard still says a skin was equipped.
+        engine._skin_equipped = True
         engine._runes_equipped = True
 
         # Second call with same champion ID — no change expected.
         engine._handle_champ_select("ChampSelect", session)
-        self.assertEqual(engine._skin_equipped_for_champ_id, 10)
+        self.assertTrue(engine._skin_equipped)
         self.assertTrue(engine._runes_equipped)
 
         # Third call with new champion ID (e.g. swap or picker), runes should reset.
@@ -899,7 +892,7 @@ class TestAutomationEngineChampSelect(unittest.TestCase):
 class TestAutomationEngineSpectatorThrottle(unittest.TestCase):
     def test_spectator_polling_throttle_and_reset(self):
         """Spectator phase initializes spectate_start_time and calculates adaptive sleep throttle."""
-        engine = AutomationEngine.__new__(AutomationEngine)
+        engine = _engine()
         engine.executor = MagicMock()
         mock_future = MagicMock()
         mock_req = MagicMock()
@@ -934,16 +927,12 @@ class TestAutomationEngineSpectatorThrottle(unittest.TestCase):
 
 class TestAutomationEngineAutoJoinAndSkin(unittest.TestCase):
     def setUp(self):
-        self.engine = AutomationEngine.__new__(AutomationEngine)
-        self.engine.lcu = MagicMock()
-        self.engine.config = MagicMock()
-        self.engine._log = MagicMock()
+        self.engine = _engine()
         self.engine._auto_joined_friends_cooldown = {}
         self.engine._current_auto_joined_friend = None
         self.engine._current_auto_joined_party_id = None
-        self.engine._skin_equipped_for_champ_id = 0
+        self.engine._skin_equipped = False
         self.engine._honor_handled = False
-        self.engine.assets = MagicMock()
 
     def test_leave_friend_lobby_applies_5min_cooldown(self):
         self.engine._current_auto_joined_friend = "Alice"
@@ -1003,7 +992,8 @@ class TestAutomationEngineAutoJoinAndSkin(unittest.TestCase):
         self.engine.lcu.request.side_effect = mock_request
         self.engine._equip_random_skin(session)
 
-        self.assertEqual(self.engine._skin_equipped_for_champ_id, 10)
+        # See the note in the sniper test: the guard is a flag now, not an id.
+        self.assertTrue(self.engine._skin_equipped)
 
     def test_handle_end_of_game_records_match_to_database(self):
         """Verify _handle_end_of_game records completed match details into DatabaseService."""

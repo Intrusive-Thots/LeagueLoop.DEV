@@ -493,13 +493,29 @@ class AccountsTool(ctk.CTkFrame):
             # Login / Sign-Out button
             # Check LCU connection — if disconnected, always show Login even for active account
             lcu_connected = self.lcu.is_connected if self.lcu else False
-            has_credentials = self.acct_mgr.has_valid_credentials(i) if self.acct_mgr else bool(acct.get("password_enc"))
+            # What makes a one-click switch possible is a saved *session*, not
+            # a stored password: Riot's credential sign-in carries a captcha,
+            # so a password cannot be replayed. Asking the old question here
+            # offered a Login button that could only ever fail.
+            can_switch = bool(
+                self.acct_mgr and self.acct_mgr.can_switch_to(i)
+            )
 
             if not is_active or not lcu_connected:
-                btn_text = "▶ Login" if has_credentials else "⚠️ Update"
-                btn_color = get_color("colors.accent.primary") if has_credentials else get_color("colors.state.warning", "#FFA726")
-                btn_cmd = (lambda idx=i: self._login_account(idx)) if has_credentials else (lambda idx=i: self._show_edit_form(idx))
-                btn_tooltip = f"Log in as {label_text}" if has_credentials else "Incomplete login details. Click to edit/update credentials."
+                btn_text = "▶ Switch" if can_switch else "⚠ Sign in"
+                btn_color = (
+                    get_color("colors.accent.primary") if can_switch
+                    else get_color("colors.state.warning", "#FFA726")
+                )
+                btn_cmd = (
+                    (lambda idx=i: self._login_account(idx)) if can_switch
+                    else (lambda idx=i: self._offer_manual_sign_in(idx))
+                )
+                btn_tooltip = (
+                    f"Switch to {label_text}" if can_switch
+                    else "No usable saved session. Sign in to this account "
+                         "once in the Riot Client, then press Remember."
+                )
 
                 login_btn = ctk.CTkButton(
                     top, text=btn_text, width=56, height=20,
@@ -547,6 +563,25 @@ class AccountsTool(ctk.CTkFrame):
                 text_color=get_color("colors.text.muted"),
                 anchor="w"
             ).pack(side="left", fill="x", expand=True)
+
+            # Session state — the thing that decides whether a switch can work
+            # at all, so it belongs on the row rather than in a tooltip.
+            summary = ""
+            if self.acct_mgr:
+                try:
+                    summary = self.acct_mgr.session_summary(i) or ""
+                except Exception as exc:
+                    Logger.debug("AccountsTool", "No session summary", exc=exc)
+            if summary:
+                ctk.CTkLabel(
+                    card, text=summary,
+                    font=("Inter", 9),
+                    text_color=(
+                        get_color("colors.text.muted") if can_switch
+                        else get_color("colors.state.warning", "#FFA726")
+                    ),
+                    anchor="w", justify="left", wraplength=230,
+                ).pack(fill="x", padx=8, pady=(0, 2))
 
             # Last used
             last_used = acct.get("last_used")
@@ -686,6 +721,34 @@ class AccountsTool(ctk.CTkFrame):
             command=self._show_add_form,
             cursor="hand2"
         ).pack(fill="x", pady=(8, 0))
+
+    def _offer_manual_sign_in(self, idx: int) -> None:
+        """Explain the one thing that creates a session, and offer to keep it.
+
+        There is no way for the app to sign in on the user's behalf any more,
+        so the honest interaction is: you sign in, then press this and the
+        sign-in is remembered.
+        """
+        if not self.available:
+            return
+        captured = False
+        try:
+            captured = bool(self.acct_mgr.capture_session(idx))
+        except Exception as exc:
+            Logger.error(
+                "AccountsTool", "Could not remember the current sign-in.", exc=exc,
+            )
+        if captured:
+            self._log_message(
+                "Remembered this sign-in. Switching to it will not need a "
+                "password."
+            )
+        else:
+            self._log_message(
+                "Nothing to remember yet — sign in to this account in the "
+                "Riot Client first, then press Sign in again."
+            )
+        self._render_accounts()
 
     # ─────────── Actions ───────────
     def _get_sidebar(self):

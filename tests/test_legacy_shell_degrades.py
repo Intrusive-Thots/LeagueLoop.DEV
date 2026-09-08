@@ -98,6 +98,12 @@ class AccountsPanelWithoutAService(unittest.TestCase):
             def has_valid_credentials(self, _i):
                 return True
 
+            def can_switch_to(self, _i):
+                return True
+
+            def session_summary(self, _i):
+                return "Session saved today."
+
             def detect_active_account(self):
                 return None
 
@@ -154,17 +160,23 @@ class ContainerFailureReasonTests(unittest.TestCase):
         self.assertIn("RuntimeError", container.failure_reason("accounts"))
 
 
-@unittest.skipUnless(HAVE_TK, "core.main imports Tk at module scope")
 class AutoLoginTests(unittest.TestCase):
     """`_auto_load_default_account` is scheduled with `after()` at startup, so
-    it fires whatever happened during bootstrap."""
+    it fires whatever happened during bootstrap.
+
+    Read from the file rather than imported: `core.main` pulls in Tk,
+    CustomTkinter, tkinterdnd2, pystray and `keyboard` at module scope, and
+    none of that is needed to check the order of two lines.
+    """
 
     def test_it_is_skipped_when_there_is_no_account_service(self):
-        import inspect
+        from pathlib import Path
 
-        from core.main import LeagueLoopApp
+        body = (Path(__file__).resolve().parent.parent / "src" / "core" /
+                "main.py").read_text(encoding="utf-8-sig")
+        start = body.index("def _auto_load_default_account")
+        source = body[start:start + 1200]
 
-        source = inspect.getsource(LeagueLoopApp._auto_load_default_account)
         self.assertIn("self.account_manager is None", source)
         guard = source.index("self.account_manager is None")
         use = source.index("get_default_account_index")

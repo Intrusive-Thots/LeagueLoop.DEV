@@ -1,11 +1,15 @@
 @echo off
 REM ============================================================
-REM  Delete the PySide6 shell and push the result.
+REM  Bring the repository in line with the source.
 REM
-REM  Everything else in this change is already on disk. This
-REM  script only removes the files that Claude cannot delete
-REM  itself -- the desktop bridge can write files but not
-REM  delete them -- and then commits and pushes.
+REM  Claude can write files to this machine but cannot delete
+REM  them, and the git remote is SSH, so these two steps have to
+REM  happen here. Everything else is already on disk.
+REM
+REM  1. delete the Qt shell's leftover files
+REM  2. drop user data from git tracking if it ever got added
+REM  3. run the test suite
+REM  4. commit and push, only if the suite is green
 REM
 REM  Read it before running it. Every path is listed explicitly;
 REM  there are no wildcards that could match something else.
@@ -14,17 +18,20 @@ setlocal
 cd /d "%~dp0.."
 
 echo.
-echo Removing the Qt shell from %CD%
+echo Tidying %CD%
 echo.
 
-REM --- the shell itself ---------------------------------------
+REM --- the Qt shell ---------------------------------------------
 if exist "src\ui\qt"                     rd /s /q "src\ui\qt"
 if exist "run_qt.py"                     del /q "run_qt.py"
 if exist "launch_qt_dev.bat"             del /q "launch_qt_dev.bat"
 if exist "requirements-qt.txt"           del /q "requirements-qt.txt"
+if exist "config\requirements-qt.txt"    del /q "config\requirements-qt.txt"
 
 REM --- a service with no consumer once Qt is gone --------------
-if exist "src\services\client_window_tracker.py" del /q "src\services\client_window_tracker.py"
+REM  client_window_tracker.py is NOT deleted. It was, and that broke
+REM  docking: LeagueLoopApp.docking_loop imports it, so the thread died
+REM  at startup and the window never moved or resized. It stays.
 
 REM --- Qt-only tooling ----------------------------------------
 if exist "tools\check_scaling.py"        del /q "tools\check_scaling.py"
@@ -46,29 +53,46 @@ for %%F in (
     test_app_identity_and_popups.py
     test_client_window_tracking.py
     test_window_layer.py
+    test_qt_new_tabs.py
+    test_qt_stats_scraper.py
+    test_qt_toast_and_tray.py
 ) do if exist "tests\%%F" del /q "tests\%%F"
 
 REM --- docs about a migration that is over ---------------------
 if exist "MIGRATION.md"                  del /q "MIGRATION.md"
 if exist "CLEANUP.md"                    del /q "CLEANUP.md"
-
-REM --- stale logs from the Qt runs ----------------------------
 if exist "qt_startup.log"                del /q "qt_startup.log"
 
+REM --- user data must never be tracked ------------------------
+REM  These hold account credentials, settings and match history.
+REM  They are ignored now, but `git rm --cached` is what removes
+REM  one that was already added before the ignore rule existed.
+REM  Errors here are expected and harmless when nothing is tracked.
+for %%F in (accounts.json config.json leagueloop.db src\config.json) do (
+    git ls-files --error-unmatch "%%F" >nul 2>&1 && git rm --cached -q "%%F"
+)
+if exist "sessions" git rm -r --cached -q "sessions" 2>nul
+
 echo.
-echo Deleted. Running the test suite before committing...
+echo Running the test suite before committing...
 echo.
-call ".venv\Scripts\python.exe" -m pytest -q
-if errorlevel 1 (
+REM  Output goes to a file as well as the screen. A failure here used to
+REM  leave nothing behind to read: the window closed, the commit did not
+REM  happen, and the reason was gone. tools\last_test_run.txt keeps it.
+call ".venv\Scripts\python.exe" -m pytest -q > "tools\last_test_run.txt" 2>&1
+set PYTEST_RC=%errorlevel%
+type "tools\last_test_run.txt"
+if not "%PYTEST_RC%"=="0" (
     echo.
-    echo TESTS FAILED - nothing has been committed. Fix, then re-run.
+    echo TESTS FAILED - nothing has been committed.
+    echo Full output saved to tools\last_test_run.txt
     exit /b 1
 )
 
 echo.
 echo Committing and pushing...
 git add -A
-git commit -m "Remove the PySide6 shell; CustomTkinter is the only shell" -m "The Qt shell had no friend list, which is why the video review was describing the old UI all along. Removes src/ui/qt, run_qt.py, the Qt-only tools and tests, and client_window_tracker (no consumer once the companion anchor is gone). New application icon: a gold cycle ring with a play glyph, legible at 16px."
+git commit -F tools\commit_message.txt
 git push
 
 echo.

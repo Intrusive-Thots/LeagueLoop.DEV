@@ -26,7 +26,7 @@ from services.accounts.identity import (
     match_account,
     missing_tagline_update,
 )
-from services.accounts.session import AuthAttempt, RiotSession
+from services.accounts.session import RiotSession
 from services.accounts.switcher import AccountSwitcher
 
 __all__ = [
@@ -39,7 +39,6 @@ __all__ = [
     "match_account",
     "missing_tagline_update",
     "RiotSession",
-    "AuthAttempt",
     "SwitchResult",
     "SwitchProgress",
     "SwitchOutcome",

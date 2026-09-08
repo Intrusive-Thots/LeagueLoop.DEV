@@ -1,28 +1,43 @@
-```
-# Dependencies
+# ── Dependencies ────────────────────────────────────────────────────────
 node_modules/
 .venv/
 venv/
 __pycache__/
 
-# Logs and temp files
+# ── User data ───────────────────────────────────────────────────────────
+# These hold account credentials, settings and match history. They belong in
+# %LOCALAPPDATA%\LeagueLoop, and `get_data_dir()` puts them there — but they
+# are listed anyway so that an older build, a stray copy, or a `git add -A`
+# can never put the account store in the repository.
+accounts.json
+config.json
+leagueloop.db
+leagueloop.db-shm
+leagueloop.db-wal
+sessions/
+*.moved-to-appdata
+*.superseded
+
+# ── Logs and temp files ─────────────────────────────────────────────────
 *.log
 *.tmp
 *.swp
 
-# Environment
+# ── Environment ─────────────────────────────────────────────────────────
 .env
 .env.local
 *.env.*
 
-# Editors
+# ── Editors ─────────────────────────────────────────────────────────────
 .vscode/
 .idea/
 
-# Build artifacts
+# ── Build artifacts ─────────────────────────────────────────────────────
 dist/
 build/
 *.pyc
+*.pyo
+*.pyd
 *.class
 *.o
 *.obj
@@ -31,22 +46,17 @@ build/
 *.so
 *.a
 *.out
+.PyInstaller/
 
-# Coverage
+# ── Coverage / test ─────────────────────────────────────────────────────
 coverage/
 htmlcov/
 .coverage
+.pytest_cache/
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Python specific
-*.pyc
-__pycache__/
-*.pyo
-*.pyd
-.Python
-*.so
-.PyInstaller/
-```
+# ── Local caches & scratch ──────────────────────────────────────────────
+cache/
+scratch/
+Claude outputs/
+tools/last_test_run.txt
+tools/commit_message.txt

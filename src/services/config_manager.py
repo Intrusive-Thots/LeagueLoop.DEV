@@ -14,7 +14,16 @@ from utils.path_utils import get_asset_path, get_data_dir
 
 USER_DATA_DIR = get_data_dir()
 USER_CONFIG_FILE = os.path.join(USER_DATA_DIR, "config.json")
-BUNDLED_CONFIG_FILE = get_asset_path("config.json")
+#: Shipped defaults, layered under the user's own settings.
+#:
+#: This was `get_asset_path("config.json")` — the project root — which is the
+#: *same path* the user's live config used when running from source. So the
+#: "bundled defaults" and the user's settings were one file, read twice. Now
+#: that user data lives in AppData, that path resolves to nothing at all.
+#:
+#: `config/config.json.example` is the template that was always meant for
+#: this: tracked in git, never written to at runtime.
+BUNDLED_CONFIG_FILE = get_asset_path(os.path.join("config", "config.json.example"))
 
 DEFAULT_CONFIG = {
     "auto_accept": False,
@@ -88,7 +97,6 @@ DEFAULT_CONFIG = {
     "auto_join_list": [],
     "auto_honor_enabled": True,
     "honor_strategy": "random",
-    "aram_bench_swap": False,
     "aram_auto_reroll": False,
     "chat_warden_enabled": False,
     "dodge_blacklist_enabled": False,
@@ -128,6 +136,38 @@ class ConfigManager:
                     self.cfg.update(json.load(f))
             except Exception as e:
                 Logger.error("config_manager.py", f"Handled exception: {type(e).__name__}: {e}")
+
+    def migrate_legacy_keys(self) -> list:
+        """Fold retired settings into the ones still in use. Returns what moved.
+
+        `aram_bench_swap` was the Qt ARAM screen's name for the bench sniper;
+        `priority_picker.enabled` is the CustomTkinter one. The engine used to
+        read `A or B`, which meant neither switch could turn the feature off.
+        Now only `priority_picker.enabled` is read — so a user who had enabled
+        it under the old name must not silently lose it, and must not be left
+        with a dead key that nothing can clear.
+        """
+        moved = []
+        # Popping a key that DEFAULT_CONFIG puts back on every construction is
+        # a migration that never finishes: the log showed "Migrated retired
+        # settings: aram_bench_swap" on every single ConfigManager(), each one
+        # rewriting config.json. The key is out of the defaults now, so this
+        # fires once -- for a user whose own config.json still carries it.
+        legacy = self.cfg.pop("aram_bench_swap", None)
+        if legacy is not None:
+            if legacy:
+                picker = dict(self.cfg.get("priority_picker") or {})
+                picker["enabled"] = True
+                self.cfg["priority_picker"] = picker
+            moved.append("aram_bench_swap")
+
+        if moved:
+            self.save()
+            Logger.info(
+                "config_manager.py",
+                "Migrated retired settings: {}".format(", ".join(moved)),
+            )
+        return moved
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get a configuration value."""

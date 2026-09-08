@@ -97,24 +97,65 @@ class QuickIconBarTests(unittest.TestCase):
         )
 
 
+class _Config:
+    """Enough of ConfigManager for the sidebar to build."""
+
+    def __init__(self):
+        self.values = {}
+
+    def get(self, key, default=None):
+        return self.values.get(key, default)
+
+    def set(self, key, value, save=True):
+        self.values[key] = value
+
+
 @unittest.skipUnless(HAVE_TK, "CustomTkinter/Tk is not available here")
-@unittest.skipIf(os.environ.get("SKIP_LIVE_GUI_TESTS", "1") == "1", "Skipping live UI window tests in headless test run")
 class LiveWindowTests(unittest.TestCase):
-    """The real application, at several widths. Slow, and worth it: every
-    number in this file's docstring came from running it."""
+    """The real sidebar, at several widths. Every number in this file's
+    docstring came from running it.
+
+    Deliberately builds `SidebarWidget`, **not** `LeagueLoopApp`.
+
+    Constructing the whole application here started the system tray, an HTTP
+    server on port 8337, the connection and docking loops, and
+    `keyboard.add_hotkey`. On Linux those all fail quietly, so the suite
+    passed. On Windows they succeed — and `keyboard`'s listener runs on a
+    non-daemon thread, so the interpreter could not exit and **pytest hung
+    after the last test**, with no failure to point at.
+
+    A layout test needs a widget. Anything that opens a port or installs a
+    global hook is not layout.
+    """
 
     @classmethod
     def setUpClass(cls):
-        os.environ.setdefault("LEAGUELOOP_LOG_DIR", "/tmp/leagueloop-tests")
-        try:
-            from core.main import LeagueLoopApp
+        import customtkinter as ctk
 
-            cls.app = LeagueLoopApp()
-            if hasattr(cls.app, "automation") and cls.app.automation:
-                cls.app.automation.stop()
-            cls.app.deiconify()
+        from ui.app_sidebar import SidebarWidget
+
+        try:
+            cls.app = ctk.CTk()
         except Exception as exc:         # pragma: no cover - no display
-            raise unittest.SkipTest("could not build the shell: %s" % exc)
+            raise unittest.SkipTest("no display available: %s" % exc)
+        cls.app.geometry("300x520")
+        # The sidebar reaches back into its master for a handful of app
+        # callbacks. Stubbing them is the whole cost of not building the
+        # application — and none of them are layout.
+        for name in (
+            "_hotkey_launch_client", "_on_close", "_show_mobile_qr",
+            "on_dock_toggled", "on_settings_saved",
+        ):
+            setattr(cls.app, name, lambda *a, **k: None)
+        cls.app.lcu = None
+        try:
+            cls.sidebar = SidebarWidget(
+                cls.app, toggle_callback=lambda *a: None, config=_Config(),
+            )
+            cls.sidebar.pack(fill="both", expand=True)
+        except Exception as exc:         # pragma: no cover
+            cls.app.destroy()
+            raise unittest.SkipTest("could not build the sidebar: %s" % exc)
         cls._settle()
 
     @classmethod
@@ -126,19 +167,12 @@ class LiveWindowTests(unittest.TestCase):
 
     @classmethod
     def _settle(cls, passes=40):
-        if hasattr(cls, "app") and hasattr(cls.app, "sidebar"):
-            cls.app.sidebar._quick_icon_columns_used = None
         for _ in range(passes):
             cls.app.update_idletasks()
             cls.app.update()
-            if hasattr(cls, "app") and hasattr(cls.app, "sidebar"):
-                try:
-                    cls.app.sidebar._reflow_quick_icons()
-                except Exception:
-                    pass
 
     def _icons(self):
-        return [e["btn"] for e in self.app.sidebar._quick_icon_widgets.values()]
+        return [e["btn"] for e in self.sidebar._quick_icon_widgets.values()]
 
     def test_every_toggle_is_drawn_at_every_width(self):
         """Auto-Ban was 1px wide at x=0 — present in the tree, absent on
@@ -154,7 +188,7 @@ class LiveWindowTests(unittest.TestCase):
                 )
 
     def test_no_toggle_is_pushed_past_the_edge(self):
-        bar = self.app.sidebar.quick_icon_bar
+        bar = self.sidebar.quick_icon_bar
         for width in WIDTHS:
             self.app.geometry("%dx520" % width)
             self._settle()

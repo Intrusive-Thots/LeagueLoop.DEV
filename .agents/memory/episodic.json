@@ -582,5 +582,55 @@
       "Committed and pushed LeagueLoop_Installer.exe and README.md to https://github.com/Intrusive-Thots/LeagueLoop-Installer (main branch)."
     ],
     "outcome": "Success. Standalone one-click installer packaged and published publicly."
+  },
+  {
+    "timestamp": "2026-09-01T10:05:00-04:00",
+    "task": "Expand and Export Complete Master LeagueLoop.DEV Developer Reference Notes to Desktop",
+    "duration_seconds": 120,
+    "actions": [
+      "Cataloged all 28 configuration keys and default values from src/core/config_keys.py.",
+      "Extracted core timing intervals, polling constants, and rate limiter parameters from src/core/constants.py.",
+      "Documented full 10-state Gameflow lifecycle state machine with automated actions and tick intervals.",
+      "Cataloged 18 REST endpoints and telemetry schemas for the local mobile companion API from src/services/local_api.py.",
+      "Documented LCU WebSocket JSON-RPC event topics, developer CLI toolchain commands, and 7 core troubleshooting gotchas.",
+      "Updated both LeagueLoop_DEV_Reference_Notes.md (16.6 KB) and LeagueLoop_DEV_Reference_Notes.csv (7.9 KB) directly on Desktop."
+    ],
+    "outcome": "Success. Comprehensive master reference notes and spreadsheet updated on Desktop."
+  },
+  {
+    "timestamp": "2026-09-01T10:28:00-04:00",
+    "task": "Auto-terminate stale client instances prior to launch to prevent login error modal",
+    "duration_seconds": 120,
+    "actions": [
+      "Implemented terminate_all_client_instances in src/utils/client_detector.py targeting LeagueClient, LeagueClientUx, RiotClientServices, RiotClientUx, and render/crash processes.",
+      "Integrated clean termination into launch_riot_client (Qt application), _hotkey_launch_client (main.py), and _launch_riot_client (AccountManager).",
+      "Added unit test suite in tests/test_client_detector.py verifying graceful termination and force-kill fallbacks (7/7 passed).",
+      "Updated version formula to {major}-{month}-{365-{days_left_in_year}}-{HHMM} across source and desktop notes, bumping version to 2-09-121-1027."
+    ],
+    "outcome": "Success. Stale client instances are automatically terminated before launch to ensure clean Riot authentication."
+  },
+  {
+    "timestamp": "2026-09-01T10:58:00-04:00",
+    "task": "Resolve startup NameError in main.py",
+    "duration_seconds": 60,
+    "actions": [
+      "Diagnosed startup_diagnostic.log identifying NameError on TkinterDnD during LeagueLoopApp class declaration.",
+      "Restored missing TkinterDnD and focus_states imports in src/core/main.py.",
+      "Validated clean startup for both Tk and Qt entry points (exit code 0)."
+    ],
+    "outcome": "Success. Application launches without startup errors."
+  },
+  {
+    "timestamp": "2026-09-01T12:39:00-04:00",
+    "task": "Fix account identity matching and auto-capture live sessions when logged in",
+    "duration_seconds": 180,
+    "actions": [
+      "Diagnosed why active accounts showed 'No saved session' while connected: LCU only returns gameName/tagLine, failing stored username/tagline matches.",
+      "Enhanced match_account in src/services/accounts/identity.py with GAME_NAME matching and multi-field Riot ID resolution.",
+      "Added auto-capture of live sessions in detect_active_account (src/services/account_manager.py) whenever an active account has no saved session.",
+      "Verified unit tests in tests/test_account_identity.py (127/127 passed, 100% test suite pass rate).",
+      "Bumped version to 2-09-121-1238 and updated Desktop reference files."
+    ],
+    "outcome": "Success. Logged-in accounts are immediately detected as active with green status dots, and live sessions are automatically captured."
   }
 ]

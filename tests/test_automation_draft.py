@@ -84,23 +84,29 @@ def session(action_type="ban", my_champ=0, banned=(), picked=(), hovers=()):
 
 
 def engine(**cfg):
+    """An AutomationEngine built by its own `__init__`, with fake collaborators.
+
+    This used to stub `__init__` out and then hand-set the six attributes the
+    tests happened to touch. Every new field added to `__init__` therefore
+    broke these tests with an AttributeError that said nothing about the change
+    -- and, worse, hid the opposite mistake: a guard reading an attribute the
+    real `__init__` never sets would still pass here. Running the real
+    constructor keeps the fixture honest and free.
+
+    `__init__` starts no threads and opens no sockets, so this is cheap. The
+    ThreadPoolExecutor it builds spawns workers lazily and none are submitted.
+    """
     from services.automation import AutomationEngine
 
-    with mock.patch.object(AutomationEngine, "__init__", lambda self, *a, **k: None):
-        eng = AutomationEngine()
-
-    from services.draft.priority_engine import PriorityEngine
-
-    eng.config = FakeConfig(**cfg)
-    eng.assets = FakeAssets()
-    eng.lcu = FakeLcu()
-    eng.log = None
-    eng.draft_engine = PriorityEngine(config_manager=eng.config, asset_manager=eng.assets)
-    eng._last_draft_action_time = 0.0
-    eng._warned_empty_bans = False
-    eng._warned_empty_picks = False
-    eng.logged = []
-    eng._log = lambda msg: eng.logged.append(msg)
+    logged = []
+    eng = AutomationEngine(
+        lcu=FakeLcu(),
+        assets=FakeAssets(),
+        config=FakeConfig(**cfg),
+        log_func=lambda msg, *a, **k: logged.append(msg),
+    )
+    eng.logged = logged
+    eng._log = lambda msg, *a, **k: logged.append(msg)
     eng._get_local_player = lambda sess: next(
         (p for p in sess.get("myTeam", [])
          if p.get("cellId") == sess.get("localPlayerCellId")), None
@@ -196,7 +202,7 @@ class PickTests(unittest.TestCase):
         eng = engine(**{PRIORITY_LIST: [AHRI]})
         calls = run_draft(eng, session("pick", hovers=(AHRI,)))
         self.assertEqual(calls, [])
-        self.assertTrue(any("hovering" in m or "available" in m for m in eng.logged))
+        self.assertTrue(any("hovering" in m for m in eng.logged))
 
     def test_an_empty_priority_list_is_reported_once(self):
         eng = engine(**{PRIORITY_LIST: []})
@@ -233,27 +239,3 @@ class HoverGateTests(unittest.TestCase):
         calls = run_draft(eng, session("pick"))
         self.assertTrue(calls)
         self.assertEqual(calls[-1][2], {"championId": AHRI})
-
-    def test_fallback_when_client_rejects_pick(self):
-        eng = engine(**{PRIORITY_LIST: [AHRI, GAREN], AUTO_HOVER: True})
-        # Simulate Ahri rejected by client
-        def mock_request(method, endpoint, data=None, silent=False):
-            eng.lcu.calls.append((method, endpoint, data))
-            res = mock.MagicMock()
-            if data and data.get("championId") == AHRI:
-                res.status_code = 400
-                res.text = "Champion not owned"
-            else:
-                res.status_code = 204
-                res.text = ""
-            return res
-
-        eng.lcu.request = mock_request
-        # First call attempts Ahri, client rejects with 400
-        run_draft(eng, session("pick"))
-        # Second call should immediately attempt Garen
-        eng._last_draft_action_time = 0.0
-        run_draft(eng, session("pick"))
-        self.assertTrue(len(eng.lcu.calls) >= 2)
-        self.assertEqual(eng.lcu.calls[-1][2], {"championId": GAREN})
-

@@ -302,8 +302,10 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         """Register global hotkeys from config."""
         try:
             keyboard.unhook_all_hotkeys()
-        except Exception:
-            pass
+        except Exception as exc:
+            # Nothing registered yet is the normal case on first bind, but a
+            # real failure here leaves stale hotkeys bound to the old config.
+            Logger.debug("Hotkeys", f"Could not clear existing hotkeys: {exc}")
 
         MODIFIERS = {"ctrl", "control", "alt", "menu", "shift", "win", "windows"}
 

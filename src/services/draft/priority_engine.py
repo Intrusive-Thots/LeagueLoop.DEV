@@ -101,6 +101,22 @@ class PriorityEngine:
 
         return None
 
+    def pick_priorities_for(self, session: Dict[str, Any]) -> List[int]:
+        """The pick list `evaluate_pick` would consult for this session.
+
+        `evaluate_pick` returns None both when the list is empty and when
+        everything on it is taken. Callers that want to tell the user which of
+        those happened need to see the list, and should not have to reach for
+        the private role/ARAM plumbing to get it.
+        """
+        try:
+            role = RoleDetector.detect_role_from_session(session)
+            return list(
+                self._get_pick_priorities_for_role(role, aram=self._is_aram(session))
+            )
+        except Exception:
+            return []
+
     def evaluate_ban(
         self,
         session: Dict[str, Any],

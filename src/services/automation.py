@@ -8,7 +8,6 @@ import sys
 import threading
 import time
 import traceback
-import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Callable, List
 
@@ -18,7 +17,6 @@ from .api_handler import LCUClient  # type: ignore
 from .asset_manager import AssetManager, ConfigManager  # type: ignore
 from services.draft.priority_engine import PriorityEngine
 from utils.logger import Logger  # type: ignore
-from utils.riot_id import resolve_riot_id  # type: ignore
 from core.config_keys import (
     ARAM_BENCH_SWAP,
     ARAM_AUTO_REROLL,
@@ -33,24 +31,11 @@ from core.constants import (
     TICK_SLEEP_DEFAULT, TICK_SLEEP_CHAMPSELECT,
     TICK_SLEEP_READYCHECK, TICK_SLEEP_LOBBY, TICK_SLEEP_INGAME,
     TICK_SLEEP_SPECTATING, TICK_SLEEP_SPECTATING_MAX,
-    PRIORITY_SWAP_COOLDOWN,
+    PRIORITY_SWAP_COOLDOWN, NO_WINDOW,
 )
 
 class AutomationEngine:
     """Core engine for executing automation tasks like auto-accept, priority sniper, draft assistant, and arena synergy."""
-    running: bool = False
-    paused: bool = False
-    last_phase: str = "None"
-    current_queue_id: Optional[int] = None
-    _blacklist: list = []
-    _toxic_keywords: list = ["kys", "int", "troll", "run it down", "nword", "f slur"]
-    _chat_warden_warned: bool = False
-    ready_check_start: Optional[float] = None
-    ready_check_delay: Optional[float] = None
-    ready_check_accepted: bool = False
-    _accept_timer = None
-    _warned_empty_bans: bool = False
-    _warned_empty_picks: bool = False
     def __init__(
         self,
         lcu: LCUClient,
@@ -103,9 +88,14 @@ class AutomationEngine:
 
         self._last_disconnect_log: float = 0.0
         self._requeue_handled: bool = False
-        self._skin_equipped_for_champ_id: int = 0  # champ ID for which we've already picked a skin
+        self._skin_equipped: bool = False
         self._last_priority_swap: float = 0.0
-        self._last_priority_swap_target_id: int = 0  # prevent re-swapping same champ before LCU updates
+        #: The champion the bench sniper last swapped us to, this champ select.
+        #: 0 when it has not acted yet.
+        self._sniper_picked_id: int = 0
+        #: True once the user has changed champion after the sniper acted. The
+        #: sniper then leaves them alone for the rest of the draft.
+        self._sniper_overridden: bool = False
         self._last_search_state_time: float = 0.0
         self._honor_handled: bool = False
         self._runes_equipped: bool = False
@@ -471,13 +461,13 @@ class AutomationEngine:
         # These sleep times act as long-polling safety fallbacks.
         sleep_time = TICK_SLEEP_DEFAULT
         if phase == "ChampSelect":
-            sleep_time = TICK_SLEEP_CHAMPSELECT
+            sleep_time = max(2.0, TICK_SLEEP_CHAMPSELECT)
             self._spectate_start_time = None
         elif phase == "ReadyCheck":
-            sleep_time = TICK_SLEEP_READYCHECK
+            sleep_time = max(2.0, TICK_SLEEP_READYCHECK)
             self._spectate_start_time = None
         elif phase in ["Lobby", "Matchmaking"]:
-            sleep_time = TICK_SLEEP_LOBBY
+            sleep_time = max(5.0, TICK_SLEEP_LOBBY)
             self._spectate_start_time = None
         elif phase == "InProgress":
             # Prefer WS phase events; HTTP is a slow safety net only
@@ -557,10 +547,7 @@ class AutomationEngine:
         """
         label = what or f"{method} {endpoint}"
         try:
-            kwargs = {}
-            if data is not None:
-                kwargs["data"] = data
-            resp = self.lcu.request(method, endpoint, **kwargs)
+            resp = self.lcu.request(method, endpoint, data)
         except Exception as exc:
             Logger.error("Automation", f"{label} — request failed", exc=exc,
                          endpoint=endpoint, **detail)
@@ -578,9 +565,6 @@ class AutomationEngine:
             return False
 
         code = getattr(resp, "status_code", None)
-        if code is not None:
-            if type(code).__name__ in ("MagicMock", "Mock"):
-                code = 200
         if code is not None and not 200 <= code < 300:
             body = ""
             try:
@@ -648,13 +632,14 @@ class AutomationEngine:
                 self._tracked_champ_select_data = None
 
             self.setup_done = False
-            self._skin_equipped_for_champ_id = 0
+            self._skin_equipped = False
             self._runes_equipped = False  # Item #167: Reset so runes re-equip next game
             self._chat_warden_warned = False  # Item #166: Reset so toxicity is re-checked next game
             self._bravery_pick_id = 0
             self._last_champ_id = 0
-            self._rejected_draft_picks = set()
-            self._rejected_draft_bans = set()
+            # A stand-down lasts one champ select, not forever.
+            self._sniper_picked_id = 0
+            self._sniper_overridden = False
             sf = self.stats_func
             if sf is not None:
                 sf([], [])
@@ -671,6 +656,7 @@ class AutomationEngine:
         my_champ_id = me.get("championId", 0) if me else 0
         if my_champ_id != 0 and my_champ_id != getattr(self, "_last_champ_id", 0):
             self._last_champ_id = my_champ_id
+            self._skin_equipped = False
             self._runes_equipped = False
 
         # 2.2 Blacklist Dodging
@@ -701,6 +687,9 @@ class AutomationEngine:
             sf2(my_team, bench, me)
 
         has_bench = len(bench) > 0
+        # The draft session carries its own queue id. Reading it only from the
+        # lobby meant that starting the app mid-draft left `current_queue_id`
+        # unset and neither the Arena nor the draft path ever ran.
         queue_id = (
             session.get("queueId")
             or (session.get("gameConfig") or {}).get("queueId")
@@ -710,56 +699,82 @@ class AutomationEngine:
             self.current_queue_id = queue_id
         is_arena = queue_id in {QUEUE_ARENA, QUEUE_ARENA_3V6}
 
-        if has_bench and not is_arena:
-            # ARAM logic.
-            priority_cfg = self.config.get("priority_picker", {})
-            bench_enabled = bool(
-                self.config.get("aram_bench_swap", True)
-                or priority_cfg.get("enabled", False)
-                or self.config.get("auto_pick", False)
-                or self.config.get("auto_lock_in", False)
-            )
-            if bench_enabled:
-                self._perform_priority_sniper(session, self._aram_priority_names())
-                self._maybe_reroll(session, self._aram_priority_names())
-            else:
-                # Track manually picked champion and bench champions when Auto-Pick is OFF
-                local_cell_id = session.get("localPlayerCellId")
-                me = next((p for p in my_team if p.get("cellId") == local_cell_id), None)
-                my_champ_id = me.get("championId", 0) if me else 0
-                my_champ_name = self.assets.get_champ_name(my_champ_id) if my_champ_id else ""
-                bench_names = []
-                for c in bench:
-                    cid = c.get("championId")
-                    if cid:
-                        name = self.assets.get_champ_name(cid)
-                        if name and name != str(cid):
-                            bench_names.append(name)
-                if my_champ_name and my_champ_name != str(my_champ_id):
-                    self._tracked_champ_select_data = {
-                        "my_champ": my_champ_name,
-                        "bench": bench_names
-                    }
-        elif is_arena:
+        if is_arena:
             if self.config.get("arena_synergy_enabled", True):
                 self._perform_arena_synergy(session)
         else:
+            if has_bench:
+                self._handle_bench(session, my_team, bench)
+            # Anything with an action to take -- pick or ban -- goes to the
+            # draft assistant, whatever the queue is.
+            #
+            # This used to read `elif is_draft:` against a hardcoded
+            # {400, 420, 440}. Every other mode fell off the end of the chain
+            # and reached no handler at all: ARAM Mayhem, Swiftplay,
+            # Quickplay, URF, ARURF, One For All, Nexus Blitz, Ultimate
+            # Spellbook and Brawl. In ARAM Mayhem the bench does not exist yet
+            # while you are picking from the three cards, so `has_bench` was
+            # False too, and the app sat through the entire pick phase doing
+            # nothing but equipping a skin -- while correctly displaying "ARAM
+            # Mayhem / Champ Select / Drafting" the whole time.
+            #
+            # `_perform_draft_assistant` returns immediately when there is no
+            # in-progress action for us, so this is safe in modes that assign
+            # champions rather than asking for them, and it does not race the
+            # bench sniper: a bench only appears once picking is over.
             self._perform_draft_assistant(session)
 
-        # Auto-equip a non-default skin — only if we haven't equipped one for this specific champion yet.
-        # Using champion ID rather than a simple bool prevents re-equipping stale skins
-        # from the old carousel immediately after a bench swap (before LCU reflects the new champion).
-        _skin_champ_id = me.get("championId", 0) if me else 0
-        if (
-            self.config.get("auto_random_skin", True)
-            and _skin_champ_id != 0
-            and _skin_champ_id != self._skin_equipped_for_champ_id
-        ):
+        # Auto-equip a non-default skin
+        if self.config.get("auto_random_skin", True) and not self._skin_equipped:
             self._equip_random_skin(session)
 
         # 2.1 Auto-Equip Runes
         if not self._runes_equipped:
             self._auto_equip_runes(session)
+
+    def _handle_bench(self, session, my_team, bench):
+        """The ARAM bench: swap toward the priority list, or note what you kept.
+
+        One switch, not two. This used to read
+        `aram_bench_swap OR priority_picker.enabled` -- a merge written so that
+        an orphaned Qt control would keep working. But two flags joined by OR
+        make a feature that **cannot be turned off**: either one enables it,
+        neither one disables it. The ARAM Picker icon writes
+        `priority_picker.enabled`, so turning it off left `aram_bench_swap`
+        still true and the sniper still swapping, with the icon reading OFF.
+        That is the worst kind of control -- one that reports a state it does
+        not have. The Qt screen that wrote the old key is gone, so nothing can
+        clear it any more either; it is migrated once and then ignored.
+        """
+        priority_cfg = self.config.get("priority_picker", {}) or {}
+        if bool(priority_cfg.get("enabled", False)):
+            names = self._aram_priority_names()
+            self._perform_priority_sniper(session, names)
+            self._maybe_reroll(session, names)
+            return
+
+        # Picker off: remember what you chose and what was on the bench, so the
+        # list can be re-sorted around it when the draft ends.
+        local_cell_id = session.get("localPlayerCellId")
+        me = next((p for p in my_team if p.get("cellId") == local_cell_id), None)
+        my_champ_id = me.get("championId", 0) if me else 0
+        my_champ_name = self.assets.get_champ_name(my_champ_id) if my_champ_id else ""
+
+        bench_names = []
+        for entry in bench:
+            cid = entry.get("championId")
+            if not cid:
+                continue
+            name = self.assets.get_champ_name(cid)
+            if name and name != str(cid):
+                bench_names.append(name)
+
+        if my_champ_name and my_champ_name != str(my_champ_id):
+            self._tracked_champ_select_data = {
+                "my_champ": my_champ_name,
+                "bench": bench_names,
+            }
+
 
     def _get_local_player(self, session):
         local_cell_id = session.get("localPlayerCellId")
@@ -862,7 +877,7 @@ class AutomationEngine:
 
             if success:
                 self._log(f"Equipped: {skin_name}")
-                self._skin_equipped_for_champ_id = champ_id
+                self._skin_equipped = True
                 Logger.info("Auto", f"Equipped skin '{skin_name}' ({skin_id}) for champ {champ_id}")
             else:
                 Logger.debug("Auto", f"Skin PATCH failed for '{skin_name}' ({skin_id}) via all LCU endpoints")
@@ -930,7 +945,7 @@ class AutomationEngine:
         try:
             subprocess.run(
                 ["taskkill", "/IM", "LeagueClient.exe", "/F"],
-                creationflags=subprocess.CREATE_NO_WINDOW,
+                creationflags=NO_WINDOW,
                 timeout=10,
             )
         except Exception as exc:
@@ -956,41 +971,23 @@ class AutomationEngine:
         my_cell = session.get("localPlayerCellId")
         my_team = session.get("myTeam", [])
         
-        su_ids = []
         for p in my_team:
             if p.get("cellId") == my_cell: continue
             
             su_id = p.get("summonerId", 0)
             if not su_id: continue
             
-            su_ids.append(su_id)
-
-        if su_ids:
-            ids_param = urllib.parse.quote(json.dumps(su_ids))
-
-            req = self.lcu.request("GET", f"/lol-summoner/v2/summoners?ids={ids_param}", silent=True)
+            req = self.lcu.request("GET", f"/lol-summoner/v1/summoners/{su_id}", silent=True)
             if req and req.status_code == 200:
-                summoners_data = req.json()
-                # If the API returns a dict unexpectedly (or empty), guard against it
-                if not isinstance(summoners_data, list):
-                    if isinstance(summoners_data, dict) and "gameName" in summoners_data:
-                        summoners_data = [summoners_data]
-                    else:
-                        summoners_data = []
-
-                # Convert to a lookup dictionary mapping summonerId -> data
-                su_lookup = {s.get("summonerId"): s for s in summoners_data if s.get("summonerId")}
-                # Some versions of API might not return summonerId inside the list elements, fallback:
+                summoner_data = req.json()  # Item #160: Parse JSON once
+                name = summoner_data.get("gameName", "").lower()
+                tag = summoner_data.get("tagLine", "").lower()
+                full_name = f"{name}#{tag}"
                 
-                for summoner_data in summoners_data:
-                    name = summoner_data.get("gameName", "").lower()
-                    tag = summoner_data.get("tagLine", "").lower()
-                    full_name = f"{name}#{tag}"
-
-                    if name in self._blacklist or full_name in self._blacklist:
-                        self._log(f"BLACKLIST MATCH: {full_name}. Dodging immediately.")
-                        self._force_close_client(f"blacklisted player {full_name}")
-                        return
+                if name in self._blacklist or full_name in self._blacklist:
+                    self._log(f"BLACKLIST MATCH: {full_name}. Dodging immediately.")
+                    self._force_close_client(f"blacklisted player {full_name}")
+                    return
 
     def _handle_chat_warden(self, session):
         # Reads every message in the lobby. That is a thing to opt into, not
@@ -1210,6 +1207,25 @@ class AutomationEngine:
                                   champion_id=lock_target)
                         self._last_synergy_patch = now
 
+    def _explain_no_pick(self, session, teammate_hovers) -> str:
+        """Say why Auto Pick did nothing, in terms the user can act on."""
+        priority_list = self.draft_engine.pick_priorities_for(session)
+
+        if not priority_list:
+            return "Draft: your priority list is empty, so Auto Pick has nothing to choose."
+
+        hovered = [cid for cid in priority_list if cid in teammate_hovers]
+        if hovered:
+            names = ", ".join(
+                self.assets.get_champ_name(cid) or str(cid) for cid in hovered
+            )
+            plural = "them" if len(hovered) > 1 else "it"
+            return (
+                f"Draft: Skipping pick {names} because a teammate is hovering {plural}."
+            )
+
+        return "Draft: no champion in your priority list is available."
+
     def _perform_draft_assistant(self, session):
         me = self._get_local_player(session)
         if not me:
@@ -1283,12 +1299,9 @@ class AutomationEngine:
                     self._warned_empty_bans = True
                     self._log("Draft: Auto Ban is on but your ban list is empty.")
 
-            if not hasattr(self, "_rejected_draft_bans"):
-                self._rejected_draft_bans = set()
-
             for ban_id in ban_candidates:
                 ban_id = int(ban_id or 0)
-                if ban_id <= 0 or ban_id in self._rejected_draft_bans:
+                if ban_id <= 0:
                     continue
                 ban_name = self.assets.get_champ_name(ban_id) or str(ban_id)
 
@@ -1300,28 +1313,31 @@ class AutomationEngine:
 
                 if my_action.get("championId") != ban_id and (now - self._last_draft_action_time > 0.5):
                     self._log(f"Draft: Hovering Ban {ban_name}")
-                    ok = self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
+                    self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
                               {"championId": ban_id},
                               what=f"Draft: hovered ban {ban_name}",
                               champion_id=ban_id, role=assigned or "unassigned")
                     self._last_draft_action_time = now
-                    if not ok:
-                        self._rejected_draft_bans.add(ban_id)
                 elif my_action.get("championId") == ban_id:
+                    # Committing a ban is gated on Auto Ban, not on Auto Lock
+                    # In. They are separate decisions: someone who wanted bans
+                    # handled but picks made by hand got a ban that hovered
+                    # forever and was never spent.
                     if now - self._last_draft_action_time > 0.5:
                         self._log(f"Draft: Locking Ban {ban_name}")
-                        ok = self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
+                        self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
                                   {"championId": ban_id, "completed": True},
                                   what=f"Draft: banned {ban_name}",
                                   champion_id=ban_id, role=assigned or "unassigned")
                         self._last_draft_action_time = now
-                        if not ok:
-                            self._rejected_draft_bans.add(ban_id)
                 break
 
         elif action_type == "pick":
             from itertools import chain
             enemy_team = session.get("theirTeam", [])
+            # Exclude my own cell: the champion I am currently hovering is not
+            # "taken by someone else". Counting it meant that once the engine
+            # hovered a pick, its own hover blocked it from ever locking in.
             my_cell = me.get("cellId")
             picked_ids = {
                 cid
@@ -1337,12 +1353,20 @@ class AutomationEngine:
                 for champ_id in (p.get("championPickIntent", 0), p.get("championId", 0))
                 if champ_id > 0
             }
-
-            if not hasattr(self, "_rejected_draft_picks"):
-                self._rejected_draft_picks = set()
                     
+            # Pick selection is delegated to PriorityEngine - the same code
+            # the Champ Select screen previews with, and the only one with
+            # tests. It reads `priority_list` / `aram_priority_list` (and the
+            # per-role override) as champion ids, applies availability, bans,
+            # teammate hovers and role validity, and falls back down the list.
+            #
+            # This block used to iterate `pick_{role}_1..3`, keys no screen has
+            # ever written, resolving them through `assets.name_to_id` as
+            # champion *names* while the UI stores ids. Auto Pick could not
+            # pick anything, and the recommendation shown on screen was
+            # produced by completely different code from the one acting.
             try:
-                decision = self.draft_engine.evaluate_pick(session, rejected_ids=self._rejected_draft_picks)
+                decision = self.draft_engine.evaluate_pick(session)
             except Exception as exc:
                 self._log(f"Draft: could not choose a champion ({exc})")
                 decision = None
@@ -1350,9 +1374,12 @@ class AutomationEngine:
             if decision is None:
                 if not self._warned_empty_picks:
                     self._warned_empty_picks = True
-                    self._log(
-                        "Draft: no champion in your priority list is available."
-                    )
+                    # `evaluate_pick` returns None both for "your list is
+                    # empty" and for "every champion on it is taken", and the
+                    # single message it used to print described neither
+                    # accurately. The most common cause by far is a teammate
+                    # hovering your first choice, so say that, by name.
+                    self._log(self._explain_no_pick(session, teammate_hovers))
             else:
                 pick_id = int(decision.champion_id or 0)
                 pick_name = self.assets.get_champ_name(pick_id) or str(pick_id)
@@ -1360,7 +1387,7 @@ class AutomationEngine:
                 blocked = (
                     pick_id in banned_champ_ids
                     or pick_id in picked_ids
-                    or (pick_id in teammate_hovers and self.config.get("auto_ban_respect_hovers", True))
+                    or pick_id in teammate_hovers
                 )
                 if blocked and pick_id in teammate_hovers:
                     self._log(
@@ -1369,82 +1396,60 @@ class AutomationEngine:
 
                 if pick_id > 0 and not blocked:
                     self._warned_empty_picks = False
-                    may_lock = bool(
-                        self.config.get("auto_lock_in", False)
-                        or self.config.get("auto_pick", False)
-                        or (self.config.get("priority_picker", {}) or {}).get("enabled", False)
-                    )
+                    # Auto Hover gates the hover; Auto Lock In gates the
+                    # commit. The switch previously reached only the mobile
+                    # status endpoint, so turning it off changed nothing.
+                    # Locking still implies hovering: you cannot lock a
+                    # champion the client has not been told about.
                     may_hover = bool(
                         self.config.get("auto_hover", False)
-                        or may_lock
+                        or self.config.get("auto_lock_in", False)
                     )
-
-                    if my_action.get("championId") != pick_id and may_hover:
-                        if now - self._last_draft_action_time > 0.3:
-                            self._log(f"Draft: Hovering Pick {pick_name}")
-                            ok = self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
-                                      {"championId": pick_id},
-                                      what=f"Draft: hovered {pick_name}",
-                                      champion_id=pick_id, role=assigned or "unassigned")
-                            self._last_draft_action_time = now
-                            if not ok:
-                                self._rejected_draft_picks.add(pick_id)
-                                self._log(f"Draft: Pick {pick_name} rejected by client, falling back.")
-                    elif my_action.get("championId") == pick_id and may_lock:
-                        if now - self._last_draft_action_time > 0.3:
+                    if may_hover and my_action.get("championId") != pick_id and (now - self._last_draft_action_time > 0.5):
+                        self._log(f"Draft: Hovering Pick {pick_name}")
+                        self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
+                                  {"championId": pick_id},
+                                  what=f"Draft: hovered {pick_name}",
+                                  champion_id=pick_id, role=assigned or "unassigned")
+                        self._last_draft_action_time = now
+                    elif my_action.get("championId") == pick_id and self.config.get("auto_lock_in", False):
+                        if now - self._last_draft_action_time > 0.5:
                             self._log(f"Draft: Locking Pick {pick_name}")
-                            ok = self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
+                            self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
                                       {"championId": pick_id, "completed": True},
                                       what=f"Draft: locked in {pick_name}",
                                       champion_id=pick_id,
                                       role=assigned or "unassigned")
                             self._last_draft_action_time = now
-                            if not ok:
-                                self._rejected_draft_picks.add(pick_id)
-                                self._log(f"Draft: Lock {pick_name} rejected by client, falling back.")
-
 
     def _aram_priority_names(self):
         """
-        The ARAM bench order, as champion names, from all configured lists in priority order.
+        The ARAM bench order, as champion names, from the ARAM screen.
+
+        The bench sniper used to read `priority_picker["list"]` — a list of
+        champion *names* written only by the legacy CustomTkinter sidebar and
+        by this engine's own auto-add. The ARAM screen in the Qt UI writes
+        `aram_priority_list` as champion *ids*, and nothing read it during a
+        bench swap. So the list the user curated had no effect on the one
+        thing ARAM automation actually does.
+
+        The ARAM list wins when it has anything in it; the legacy key remains
+        the fallback so existing setups keep working.
         """
-        from core.config_keys import ARAM_PRIORITY_LIST, PRIORITY_LIST, read_champion_ids
+        from core.config_keys import ARAM_PRIORITY_LIST, read_champion_ids
 
-        names = []
-        seen = set()
+        ids = read_champion_ids(self.config, ARAM_PRIORITY_LIST)
+        if ids:
+            names = []
+            for cid in ids:
+                name = self.assets.get_champ_name(cid)
+                if name and name != str(cid):
+                    names.append(name)
+            if names:
+                return names
 
-        # 1. ARAM specific IDs
-        for cid in read_champion_ids(self.config, ARAM_PRIORITY_LIST, asset_manager=self.assets):
-            cname = self.assets.get_champ_name(cid) if self.assets else str(cid)
-            if cname and cname != str(cid) and cname.lower() not in seen:
-                seen.add(cname.lower())
-                names.append(cname)
-
-        # 2. General priority list IDs
-        for cid in read_champion_ids(self.config, PRIORITY_LIST, asset_manager=self.assets):
-            cname = self.assets.get_champ_name(cid) if self.assets else str(cid)
-            if cname and cname != str(cid) and cname.lower() not in seen:
-                seen.add(cname.lower())
-                names.append(cname)
-
-        # 3. Legacy priority_picker list (names)
         legacy = (self.config.get("priority_picker", {}) or {}).get("list", [])
-        for item in legacy:
-            name_str = str(item).strip()
-            if name_str:
-                cid = 0
-                if self.assets and hasattr(self.assets, "name_to_id"):
-                    mapper = self.assets.name_to_id
-                    if callable(mapper):
-                        cid = mapper(name_str) or mapper(name_str.lower()) or 0
-                    elif isinstance(mapper, dict) or hasattr(mapper, "get"):
-                        cid = mapper.get(name_str.lower()) or mapper.get(name_str) or 0
-                resolved_name = self.assets.get_champ_name(cid) if (cid and self.assets) else name_str
-                if resolved_name and resolved_name.lower() not in seen:
-                    seen.add(resolved_name.lower())
-                    names.append(resolved_name)
-
-        return names
+        return [str(n) for n in legacy if str(n).strip()]
 
     #: How far down your ARAM list still counts as an acceptable champion.
     REROLL_ACCEPTABLE_RANK = 3
@@ -1500,7 +1505,22 @@ class AutomationEngine:
         self._last_reroll_time = now
 
     def _perform_priority_sniper(self, session, priority_list):
+        """Swap to the best champion on the bench — once, unless asked again.
+
+        The user's own choice outranks the priority list. Without the
+        stand-down below, this fought them: it swapped to their top pick, they
+        swapped away, the pick went back on the bench still ranked above what
+        they now had, the cooldown expired, and it swapped them back. The log
+        shows that happening three times in eight seconds — the champion the
+        user wanted was unreachable for the whole draft.
+
+        A time cooldown cannot fix that, because the situation is identical
+        every time it expires. What ends it is remembering that we already
+        acted and noticing that the champion changed to something we did not
+        choose.
+        """
         if not priority_list: return
+        if self._sniper_overridden: return
         bench = session.get("benchChampions", [])
         if not bench: return
 
@@ -1508,11 +1528,20 @@ class AutomationEngine:
         my_champ_id = me.get("championId", 0) if me else 0
         my_champ_name = self.assets.get_champ_name(my_champ_id) if my_champ_id else ""
 
-        # If the session has caught up and we now hold the champion we swapped to,
-        # clear the pending-swap guard so future swaps can fire normally.
-        if my_champ_id and my_champ_id == self._last_priority_swap_target_id:
-            self._last_priority_swap_target_id = 0
-
+        # Did the user move off what we picked? Then they have overruled us.
+        if self._sniper_picked_id and my_champ_id != self._sniper_picked_id:
+            self._sniper_overridden = True
+            self._log(
+                "Sniper: you picked your own champion, so ARAM Picker is "
+                "standing down for this draft."
+            )
+            Logger.action(
+                "Automation",
+                "Bench sniper stood down: the player overrode its pick.",
+                picked=self._sniper_picked_id, now=my_champ_id,
+            )
+            return
+        
         # ⚡ Bolt: Fast-path priority sniper early-return optimization.
         # Instead of traversing the entire bench and evaluating every champion against a priority map,
         # we index the bench for O(1) lookups, then walk down the sorted priority list.
@@ -1551,24 +1580,16 @@ class AutomationEngine:
         if best_bench_id != 0:
             now = time.time()
 
-            if now - self._last_priority_swap < PRIORITY_SWAP_COOLDOWN:
-                return
-
-            # Guard: don't re-fire for the same target when the LCU session hasn't
-            # reflected the swap yet. This is the root cause of repeated swap log spam —
-            # the polling loop sees stale session data for 1-2 ticks after the swap.
-            if best_bench_id == self._last_priority_swap_target_id:
-                return
-
+            if now - self._last_priority_swap < PRIORITY_SWAP_COOLDOWN: return
+            
             self._log(f"Sniper: Found {best_bench_champ}! Swapping...")
             self._act("POST", f"/lol-champ-select/v1/session/bench/swap/{best_bench_id}",
                       what=f"ARAM: swapped to {best_bench_champ} from the bench",
                       champion_id=best_bench_id)
             self._last_priority_swap = now
-            self._last_priority_swap_target_id = best_bench_id
-            # Clear skin guard so we re-equip once the session confirms the new champion.
-            # Using 0 (not the target ID) ensures we wait for real confirmation before equipping.
-            self._skin_equipped_for_champ_id = 0
+            self._sniper_picked_id = best_bench_id
+            # Reset skin flag so we re-equip for the new champion
+            self._skin_equipped = False
 
     def leave_friend_lobby_and_cooldown(self, friend_name: Optional[str] = None) -> bool:
         """
@@ -1794,6 +1815,42 @@ class AutomationEngine:
                         Logger.debug("Auto", f"Failed parsing friend party: {e}")
 
     # ── End Of Game ──
+    @staticmethod
+    def _riot_id(player: dict) -> str:
+        """`gameName#tagLine`, when the payload carries them."""
+        game_name = (player.get("gameName") or "").strip()
+        tag_line = (player.get("tagLine") or "").strip()
+        if game_name and tag_line:
+            return f"{game_name}#{tag_line}"
+        return game_name
+
+    def _describe_teammate(self, player: dict) -> str:
+        """Name a teammate the way the user would recognise them.
+
+        The honor log used to read `target.get("summonerName", "teammate")`
+        and nothing else. Riot has been retiring summoner names in favour of
+        Riot IDs, so on current payloads that key is often an empty string --
+        which is not the same as missing, so the "teammate" default never
+        applied and the log read "Honored  (random)". It also never said which
+        champion they played, which is usually how you remember who they were.
+        """
+        name = (player.get("summonerName") or "").strip() or self._riot_id(player)
+        if not name:
+            name = "teammate"
+
+        champ = ""
+        champ_id = player.get("championId", 0)
+        assets = getattr(self, "assets", None)
+        if champ_id and assets is not None:
+            try:
+                champ = assets.get_champ_name(champ_id) or ""
+            except Exception as exc:
+                Logger.debug("Auto", f"Could not name champion {champ_id}: {exc}")
+        if not champ:
+            champ = (player.get("championName") or "").strip()
+
+        return f"{name} ({champ})" if champ else name
+
     def _handle_end_of_game(self, phase):
         if phase not in ["PreEndOfGame", "EndOfGame"]:
             self._honor_handled = False
@@ -1919,35 +1976,17 @@ class AutomationEngine:
                     "puuid": puuid
                 }
                 res = self.lcu.request("POST", "/lol-honor-v2/v1/honor-player", honor_body)
-                name = resolve_riot_id(target, fallback=target.get("summonerName") or "teammate")
-                champ_id = target.get("championId", 0)
-                champ_name = ""
-                if champ_id:
-                    getter = getattr(getattr(self, "assets", None), "get_champ_name", None)
-                    if callable(getter):
-                        try:
-                            c_res = getter(champ_id)
-                            if isinstance(c_res, str) and c_res and c_res != str(champ_id):
-                                champ_name = c_res
-                        except Exception as exc:
-                            Logger.debug("Auto", "Failed to resolve champ name", exc=exc)
-                if not champ_name:
-                    raw_champ = target.get("championName") or target.get("skinName")
-                    if raw_champ and isinstance(raw_champ, str):
-                        champ_name = raw_champ.strip()
-
-                target_str = f"{name} ({champ_name})" if champ_name else name
-
+                name = self._describe_teammate(target)
                 if res and res.status_code in [200, 204]:
-                    self._log(f"Honored {target_str} ({strategy})")
+                    self._log(f"Honored {name} ({strategy})")
                     self._honor_handled = True
                 elif res and res.status_code == 409:
-                    self._log(f"Honor already submitted or invalid: {target_str}")
+                    self._log(f"Honor already submitted or invalid: {name}")
                     self._honor_handled = True
                 elif res and res.status_code == 429:
                     self._log(f"Honor rate limited (429). Retrying next tick...")
                 else:
-                    Logger.debug("Auto", f"Honor request returned {res.status_code if res else 'None'}. Full target: {target_str}")
+                    Logger.debug("Auto", f"Honor request returned {res.status_code if res else 'None'}. Full target: {name}")
                     self._honor_attempts = getattr(self, "_honor_attempts", 0) + 1
                     if self._honor_attempts >= 3:
                         self._log(f"Honor failed after 3 attempts. Giving up.")

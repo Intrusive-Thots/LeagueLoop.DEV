@@ -1,0 +1,174 @@
+Category,Identifier / Key,Value / Type / Default,Details / Reference
+Metadata,Current Source Version,2-09-114-1000,src/core/version.py
+Metadata,Version Formula,{major}-{month}-{days_left_in_year}-{HHMM},"tools/bump_version.py — the third field is days REMAINING in the year, not 365 minus that. 114 = 8 Sep to 31 Dec."
+Metadata,Major Version Constant,2,tools/bump_version.py MAJOR — bump_version.py --check fails any version not on major 2
+Metadata,Installer Version,Not verified in this pass,build_scripts/installer.iss was not present in the working copy checked; confirm before trusting any number here
+Metadata,DDragon Asset Version,14.1.1,src/core/constants.py DDRAGON_DEFAULT_VERSION
+Metadata,Dev Root Directory,C:\Users\Malcolm\LeagueLoop.DEV\,Workspace root
+Metadata,Python Runtime,Python 3.12 (64-bit),.venv / CustomTkinter (Tk 8.6). PySide6 is no longer a dependency.
+Metadata,UI Shell,CustomTkinter,"src/ui/app_sidebar.py + src/ui/components/. The PySide6 shell (src/ui/qt, run_qt.py) was removed — it never had a friend list."
+Metadata,State Storage,SQLite 3 DB + JSON config,leagueloop.db / config.json — both in %LOCALAPPDATA%\LeagueLoop
+Paths,Riot Client Executable,C:\Riot Games\Riot Client\RiotClientServices.exe,Resolved from %ProgramData%\Riot Games\RiotClientInstalls.json
+Paths,Riot Client Launch Args,--launch-product=league_of_legends --launch-patchline=live,"src/core/main.py LEAGUE_LAUNCH_ARGS. Launching the exe with no arguments makes it initialise, find no product, and exit."
+Paths,League Client Executable,C:\Riot Games\League of Legends\LeagueClient.exe,%LOCALAPPDATA%\Riot Games\League of Legends
+Paths,League UX Process,LeagueClientUx.exe,CEF UI process that owns the LCU port
+Paths,League Lockfile,C:\Riot Games\League of Legends\lockfile,ProcessName:PID:Port:AuthToken:Protocol
+Paths,Riot Lockfile,%LOCALAPPDATA%\Riot Games\Riot Client\Config\lockfile,Riot Client auth token & port
+Paths,Riot Install Manifest,%ProgramData%\Riot Games\RiotClientInstalls.json,Installation registry JSON
+Paths,Riot Session File,%LOCALAPPDATA%\Riot Games\Riot Client\Data\RiotClientPrivateSettings.yaml,src/services/accounts/vault.py SESSION_FILE — one half of a signed-in identity
+Paths,Riot Cookie Jar,%LOCALAPPDATA%\Riot Games\Riot Client\Data\Cookies\,src/services/accounts/vault.py COOKIE_DIR — the other half; copied as a tree
+Paths,LeagueLoop Session Vault,%LOCALAPPDATA%\LeagueLoop\sessions\,One directory per account; each holds the two items above plus session.json
+Logs,LeagueLoop Debug Log,%LOCALAPPDATA%\LeagueLoop\logs\debug.log,Max 10 MB (5 backups)
+Logs,LeagueLoop Error Log,%LOCALAPPDATA%\LeagueLoop\logs\error.log,Max 4 MB (5 backups)
+Logs,LeagueLoop Session JSONL,%LOCALAPPDATA%\LeagueLoop\logs\session.jsonl,Max 20 MB (3 backups)
+Logs,Dev Log Fallback,C:\Users\Malcolm\LeagueLoop.DEV\*.log,Fallback when AppData is unwritable
+Logs,Riot Client Logs,%LOCALAPPDATA%\Riot Games\Riot Client\Logs\,Riot Client telemetry
+Logs,League Client Logs,C:\Riot Games\League of Legends\Logs\LeagueClient Logs\,LCU and Chromium backend logs
+Logs,League Game Logs,C:\Riot Games\League of Legends\Logs\GameLogs\,In-game match logs (r3dlog)
+Storage,LeagueLoop Config,%LOCALAPPDATA%\LeagueLoop\config.json,"App settings and toggles. get_data_dir() is now ALWAYS AppData; it used to return the working directory when run from source, so a dev run and an installed run kept two separate sets."
+Storage,Account Vault,%LOCALAPPDATA%\LeagueLoop\accounts.json,Account list + DPAPI-encrypted passwords
+Storage,Session Vault,%LOCALAPPDATA%\LeagueLoop\sessions\,Captured Riot sessions used by the account switcher
+Storage,SQLite Database,%LOCALAPPDATA%\LeagueLoop\leagueloop.db,Match cache and stats
+Storage,Data Migration Marker,*.moved-to-appdata,"Left in the repo root by the one-time move out of the working tree; the newer copy wins, the older is renamed"
+Queue,400,Draft Pick,Casual (5v5 Normal Draft)
+Queue,420,Ranked Solo/Duo,Ranked (5v5 Competitive)
+Queue,440,Ranked Flex,Ranked (5v5 Flex)
+Queue,450,ARAM,ARAM (Howling Abyss 5v5)
+Queue,480,Swiftplay,Casual (Accelerated SR)
+Queue,490,Quickplay,Casual (Quickplay SR)
+Queue,900,URF,Rotating Game Mode
+Queue,1010,ARURF,Rotating Game Mode
+Queue,1020,One For All,Rotating Game Mode
+Queue,1090,TFT Normal,Teamfight Tactics
+Queue,1100,TFT Ranked,Teamfight Tactics
+Queue,1160,TFT Double Up,Teamfight Tactics (2v2v2v2)
+Queue,1300,Nexus Blitz,Rotating Game Mode
+Queue,1400,Ultimate Spellbook,Rotating Game Mode
+Queue,1700,Arena,Arena (8-player Cherry)
+Queue,1710,Arena 3v6,Arena (16-player)
+Queue,1750,Arena 3x6,Arena Variant
+Queue,2300,Brawl,Rotating Game Mode
+Queue,2400,ARAM Mayhem,ARAM Augmented Mode
+Queue,(baseline only),BASELINE_QUEUE_MAP,"src/services/queue_manager.py. This is the fallback map; it is refreshed from the LCU at runtime. Co-op vs AI (830/840/850) is NOT in the baseline — it resolves only when the client supplies it."
+Config Key,automation_master,bool (true),Master toggle powering background loops
+Config Key,auto_accept,bool (false),Automatically accepts ready checks
+Config Key,accept_delay,float (2.0),"Seconds before accepting, plus 0.0-1.5s of jitter"
+Config Key,auto_lock_in,bool (false),Locks in champion during pick phase. Gates the commit only; hovering is gated by auto_hover.
+Config Key,auto_hover,bool (false),Hovers champion during declaration phase
+Config Key,auto_ban_enabled,bool (false),Auto bans according to ban_list
+Config Key,auto_ban_respect_hovers,bool (true),Skips banning champions hovered by allies
+Config Key,auto_requeue,bool (false),Re-enters matchmaking after somebody else dodges
+Config Key,auto_random_skin,bool (true),Selects a random owned skin
+Config Key,auto_honor_enabled,bool (true),Auto honors a teammate on the post-game screen
+Config Key,honor_strategy,str (random),"random, best_kda, or mvp"
+Config Key,skip_stats_enabled,bool (true),Clicks past post-game stats/loot
+Config Key,priority_picker.enabled,bool (false),"THE ARAM bench sniper switch. Formerly ORed with aram_bench_swap, which meant neither switch could turn it off."
+Config Key,priority_picker.list,list ([]),Bench sniper priority list
+Config Key,aram_auto_reroll,bool (false),Uses reroll dice in ARAM
+Config Key,aram_auto_add_played,bool (false),Adds the champion you played to the ARAM list
+Config Key,chat_warden_enabled,bool (false),Scans lobby chat for toxicity
+Config Key,dodge_blacklist_enabled,bool (false),Force quits the client if a blacklisted player joins
+Config Key,dodge_blacklist,str (""),Blacklisted summoners to dodge
+Config Key,priority_list,list ([]),Champion pick priority list for SR (ids)
+Config Key,ban_list,list ([]),Champion ban priority list (ids)
+Config Key,aram_priority_list,list ([]),Champion priority list for ARAM (ids)
+Config Key,arena_pairs,list ([]),Arena synergy pairings
+Config Key,arena_auto_lock,bool (false),Locks the Arena pick
+Config Key,arena_synergy_enabled,bool (false),"Now defaults off. It shipped on with no screen to turn it off, so Arena automation ran unannounced."
+Config Key,auto_join_enabled,bool (false),Auto-joins a friend's lobby
+Config Key,auto_join_list,list ([]),Friends whose lobbies may be joined
+Config Key,auto_runes_enabled,bool (false),Auto-equips a rune page
+Config Key,always_on_top,bool (true),Keeps window pinned on top
+Config Key,run_in_tray,bool (true),Keeps the app alive in the system tray
+Config Key,stealth_mode,bool (false),Hides the window while in game
+Config Key,docked,bool (true),"The dock/undock lock button in the sidebar. Read as `config.get(""docked"", True)`; it is not in DEFAULT_CONFIG."
+Config Key,hotkey_launch_client,str (ctrl+shift+l),Global hotkey
+Config Key,hotkey_toggle_automation,str (ctrl+shift+a),Global hotkey
+Config Key,hotkey_find_match,str (ctrl+shift+f),Global hotkey
+Config Key,hotkey_compact_mode,str (ctrl+shift+m),Global hotkey
+Retired Key,aram_bench_swap,REMOVED,"Folded into priority_picker.enabled by ConfigManager.migrate_legacy_keys(). It was the Qt ARAM screen's name for the same switch, and the engine read `A or B` — so neither could turn the feature off."
+Dead Key,attach_to_client,DEFINED BUT UNUSED,"src/core/config_keys.py ATTACH_TO_CLIENT. Nothing reads it; the CTk shell docks off the `docked` key instead."
+Dead Key,companion_side,DEFINED BUT UNUSED,src/core/config_keys.py COMPANION_SIDE. Nothing reads it.
+Constant,DOCKING_POLL_INTERVAL,0.05s,Geometry tracking check frequency
+Constant,DOCKING_IDLE_INTERVAL,0.5s,Sleep when no client window is found
+Constant,GEOMETRY_THRESHOLD,2 px,Movement required before repositioning
+Constant,CONNECTION_POLL_INTERVAL,2.0s,LCU connection discovery polling
+Constant,CONNECTION_ERROR_INTERVAL,5.0s,Wait after a connection error
+Constant,TICK_SLEEP_DEFAULT,3.0s,Base automation loop sleep interval
+Constant,TICK_SLEEP_CHAMPSELECT,1.0s,"Draft phase poll rate. Was documented as 0.5s; the source says 1.0."
+Constant,TICK_SLEEP_READYCHECK,1.0s,Ready check popup poll rate
+Constant,TICK_SLEEP_LOBBY,2.0s,Lobby poll rate
+Constant,TICK_SLEEP_INGAME,45.0s,Live match low-frequency poll throttle
+Constant,TICK_SLEEP_SPECTATING,15.0s,Spectator poll rate
+Constant,TICK_SLEEP_SPECTATING_MAX,30.0s,Spectator poll rate ceiling
+Constant,LCU_WS_STALE_TIMEOUT_S,45.0s,"WebSocket quiet timeout before reconnect. Silence is no longer read as death — a ping is sent first."
+Constant,LCU_WS_STALE_TIMEOUT_INGAME_S,180.0s,Longer quiet allowance while a game is running
+Constant,PRIORITY_SWAP_COOLDOWN,1.0s,Minimum gap between bench sniper swaps
+Constant,RATE_LIMIT_CAPACITY,20.0,Max token burst capacity for REST requests
+Constant,RATE_LIMIT_REFILL,5.0/s,Token refill rate per second
+Constant,NO_WINDOW,subprocess.CREATE_NO_WINDOW or 0,"src/core/constants.py. Referencing the Windows-only flag directly made every taskkill call raise AttributeError off Windows, inside a broad except — so the kill silently never happened and no test could reach the line."
+Gameflow Phase,None,3.0s tick,Client idle outside lobby
+Gameflow Phase,Lobby,2.0s tick,In game lobby / party
+Gameflow Phase,Matchmaking,2.0s tick,Searching in queue
+Gameflow Phase,ReadyCheck,1.0s tick,Match found accept popup
+Gameflow Phase,ChampSelect,1.0s tick,Active draft / ban / pick phase
+Gameflow Phase,InProgress,45.0s tick,In live match on Rift / Abyss
+Gameflow Phase,PreEndOfGame,2.0s tick,Honor screen
+Gameflow Phase,EndOfGame,2.0s tick,Post-game stats & loot screen
+Boot Chain Stage,BOOT,Windows start,src/services/accounts/boot_chain.py — the ordered path from a cold PC to being in a game
+Boot Chain Stage,VANGUARD,vgk.sys loaded,"NEEDS A HUMAN. The anti-cheat driver loads at boot and only at boot; a reboot is required, not a service restart."
+Boot Chain Stage,RIOT_CLIENT,RiotClientServices running,Launched with the product/patchline arguments
+Boot Chain Stage,SESSION,Signed-in identity in place,Session files restored from the vault; no password involved
+Boot Chain Stage,LAUNCH_LEAGUE,League launch requested,
+Boot Chain Stage,LEAGUE_CLIENT,LeagueClientUx running,LCU port and auth token available
+Boot Chain Stage,LOGGED_IN,Summoner resolved,
+Boot Chain Stage,LOBBY_TO_DRAFT,Lobby created / queue entered,
+Boot Chain Stage,IN_GAME,Match in progress,
+Session Vault,SESSION_FILE,RiotClientPrivateSettings.yaml,The signed-in identity written by the Riot Client
+Session Vault,COOKIE_DIR,Cookies/,Cookie jar; copied as a tree
+Session Vault,MANIFEST,session.json,"Capture time, stored beside each session so age does not depend on file mtime"
+Session Vault,FRESH_DAYS,5.0,Under this age a session is reported FRESH
+Session Vault,STALE_DAYS,14.0,Past this it is STALE — likely to fail
+Session Vault,DEAD_DAYS,21.0,Past this it is EXPIRED and restore is refused outright
+Session Vault,Undated session,Treated as infinitely old,An unknown capture time is not the same as a new one
+Local REST API,GET /status,200 OK (JSON),"Returns phase, summoner, lobby, telemetry"
+Local REST API,GET /health,200 OK (JSON),Liveness
+Local REST API,GET /healthz,200 OK (JSON),Detailed server health & uptime
+Local REST API,GET /telemetry,200 OK (JSON),WebSocket latencies and retry jitter stats
+Local REST API,GET /config,200 OK (JSON),Active configuration toggles
+Local REST API,POST /config,200 OK,Update config toggles remotely
+Local REST API,GET /aram-list,200 OK (JSON),ARAM priority list
+Local REST API,POST /aram-list,200 OK,Replace the ARAM priority list
+Local REST API,GET /queue-modes,200 OK (JSON),Queue names and ids as currently resolved
+Local REST API,GET /champions,200 OK (JSON),Champion catalogue
+Local REST API,GET /champ-select,200 OK (JSON),Live draft session data
+Local REST API,GET /accounts,200 OK (JSON),List accounts in the vault
+Local REST API,POST /accounts/login,200 OK,Account login trigger
+Local REST API,POST /accounts/logout,200 OK,Sign out
+Local REST API,POST /champ-select/pick,200 OK,Hover or lock a pick
+Local REST API,POST /champ-select/ban,200 OK,Hover or lock a ban
+Local REST API,POST /champ-select/lock,200 OK,Commit the current action
+Local REST API,POST /champ-select/bench-swap,200 OK,Swap champion from the ARAM bench
+Local REST API,POST /champ-select/spells,200 OK,Update summoner spells
+Local REST API,POST /champ-select/reroll,200 OK,Spend an ARAM reroll
+Local REST API,POST /ready-check/accept,200 OK,Accept the ready check
+Local REST API,POST /ready-check/decline,200 OK,Decline the ready check
+Local REST API,POST /action,200 OK,"Create lobby, start queue, stop queue"
+LCU WebSocket,OnJsonApiEvent_lol_gameflow_v1_gameflow_phase,WAMP,Instant gameflow phase transitions
+LCU WebSocket,OnJsonApiEvent_lol_matchmaking_v1_search,WAMP,Matchmaking search state
+LCU WebSocket,OnJsonApiEvent_lol_champ_select_v1_session,WAMP,"Draft picks, bans, and bench updates"
+LCU WebSocket,OnJsonApiEvent_lol_lobby_v2_lobby,WAMP,Lobby party and queue changes
+LCU WebSocket,OnJsonApiEvent_lol_chat_v1_friends,WAMP,Friend list changes
+Command,python run.py,Dev Run,Starts the CustomTkinter application. This is the only shell.
+Command,pytest tests/,Testing,645 tests across 54 files
+Command,python tools/bump_version.py,Versioning,"Writes src/core/version.py. --check verifies the major is 2."
+Command,python tools/log_silent_excepts.py --write,Hygiene,Replaces silent `except: pass` handlers with logged ones
+Command,tools\remove_qt_shell.bat,One-off,Deletes the Qt shell files and runs the suite before committing
+Troubleshooting,LCU Self-Signed SSL,verify=False,LCU requires disabling SSL verification
+Troubleshooting,Champ Select Lock-in,PATCH /actions/{id},"Must use PATCH with {'completed': true}, not POST"
+Troubleshooting,Process Names,LeagueClientUx.exe,UI and LCU ports run under the UX child process
+Troubleshooting,Docking Glitches,IsIconic check,Verify client window visibility before repositioning
+Troubleshooting,Password sign-in,BLOCKED BY hCAPTCHA,"Riot's credential endpoint now returns an hCaptcha challenge (rqdata + sitekey) and answers invalid_prompt. Session-file swapping is the only path that works; the switcher no longer takes a password_provider."
+Troubleshooting,Vanguard after a switch,Reboot required,vgk.sys loads at boot and only at boot. Restarting the service does not work.
+Troubleshooting,pywin32 missing,Accounts service degrades,"win32crypt is imported defensively. A hard import made the whole module unimportable and the container reported only 'the accounts service did not start'."
+Troubleshooting,Suite hangs mid-run,tests/test_ui_components.py,"It swapped customtkinter for a mock AFTER earlier files had already imported the real one, so a real CTk widget got a MagicMock master and CustomTkinter walked .master forever. It now purges ui.* before patching."

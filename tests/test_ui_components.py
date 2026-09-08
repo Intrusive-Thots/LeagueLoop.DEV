@@ -117,8 +117,26 @@ CTkTooltip = None
 Toast = None
 ToastManager = None
 
+def _purge_ui_modules():
+    """Drop every already-imported UI module so the next import sees the mocks.
+
+    Without this the file passes alone and hangs the whole suite. Any earlier
+    test that imports `ui.components.*` leaves those modules in `sys.modules`
+    bound to the REAL customtkinter. Patching `sys.modules['customtkinter']`
+    afterwards does nothing to them, so `TabBar(DummyWidget())` builds a real
+    CTk widget on a MagicMock master. CustomTkinter then walks `master.master`
+    looking for a Tk root -- and a MagicMock returns a fresh MagicMock for
+    `.master` forever. Infinite loop, one new mock per turn, until the OOM
+    killer takes the run down mid-file.
+    """
+    for mod in list(sys.modules):
+        if mod == 'ui' or mod.startswith('ui.'):
+            sys.modules.pop(mod, None)
+
+
 def setUpModule():
     global _patcher, LolToggle, TabBar, CTkTooltip, Toast, ToastManager
+    _purge_ui_modules()
     _patcher = patch.dict(sys.modules, {
         'customtkinter': mock_ctk,
         'tkinter': mock_tk,
@@ -139,13 +157,18 @@ def tearDownModule():
     global _patcher
     if _patcher:
         _patcher.stop()
+    # Leave nothing bound to the mock behind either -- the next file to import
+    # these must get the real customtkinter back.
+    _purge_ui_modules()
     for mod in list(sys.modules.keys()):
-        if mod.startswith('ui.') or mod.startswith('utils.'):
+        if mod.startswith('utils.'):
             sys.modules.pop(mod, None)
 
 class TestUIComponents(unittest.TestCase):
 
     def setUp(self):
+        # setUpModule's patch.dict is still active; re-asserting it here only
+        # guards against a test that swapped them out mid-file.
         sys.modules['customtkinter'] = mock_ctk
         sys.modules['tkinter'] = mock_tk
         self.mock_parent = DummyWidget()

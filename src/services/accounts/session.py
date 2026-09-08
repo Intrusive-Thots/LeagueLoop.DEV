@@ -4,38 +4,18 @@ RiotSession — a typed, waitable view of the Riot Client's auth state.
 Wraps the existing `RiotClientAPI` rather than replacing it, so the tested
 HTTP/credential-discovery code stays in one place. What this adds is:
 
-  * typed sign-in results instead of a raw response dict
   * `wait_until(...)` polling with a deadline, replacing the fixed
     `time.sleep(0.5)` / `sleep(2)` calls that made the old flow racy
 """
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
 
-from services.accounts.results import RIOT_ERROR_MAP, SwitchOutcome
 from utils.logger import Logger
 
 #: Poll interval when waiting for the client to change state.
 POLL_INTERVAL_S = 0.4
-
-
-@dataclass(frozen=True)
-class AuthAttempt:
-    """The result of one sign-in call."""
-
-    outcome: SwitchOutcome
-    raw_type: str = ""
-    error: str = ""
-
-    @property
-    def ok(self) -> bool:
-        return self.outcome is SwitchOutcome.SUCCESS
-
-    @property
-    def needs_2fa(self) -> bool:
-        return self.outcome is SwitchOutcome.NEEDS_2FA
 
 
 class RiotSession:
@@ -79,36 +59,9 @@ class RiotSession:
         info = self.current_user() or {}
         return str(info.get("preferred_username") or "").lower()
 
-    def sign_in(self, username: str, password: str, persist: bool = False) -> AuthAttempt:
-        """
-        Sign in through the Riot Client API.
-
-        This replaces typing credentials as keystrokes: the password goes
-        straight to the local client over its authenticated API instead of
-        into whatever window happens to hold focus.
-        """
-        try:
-            body = self.api.sign_in(username, password, persist=persist) or {}
-        except Exception as exc:
-            return AuthAttempt(SwitchOutcome.ERROR, error=str(exc))
-
-        auth_type = str(body.get("type") or "").lower()
-        error = str(body.get("error") or "").lower()
-
-        if auth_type == "multifactor":
-            return AuthAttempt(SwitchOutcome.NEEDS_2FA, auth_type, error)
-
-        if error:
-            mapped = RIOT_ERROR_MAP.get(error)
-            if mapped is None:
-                # Don't guess "wrong password" from an unknown code.
-                mapped = SwitchOutcome.ERROR
-            return AuthAttempt(mapped, auth_type, error)
-
-        if auth_type in ("success", "authenticated"):
-            return AuthAttempt(SwitchOutcome.SUCCESS, auth_type)
-
-        return AuthAttempt(SwitchOutcome.ERROR, auth_type, error or auth_type)
+    # `sign_in()` lived here and is gone: Riot's credential flow requires a
+    # solved captcha, so there is no request this object could make that would
+    # sign anybody in. Sessions are restored by `services/accounts/vault.py`.
 
     def sign_out(self) -> bool:
         try:

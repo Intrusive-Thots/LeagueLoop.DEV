@@ -26,6 +26,14 @@ class SwitchPhase(Enum):
 
     IDLE = "idle"
     PREPARING = "preparing"
+    #: Save the session that is signed in right now, before replacing it.
+    #: Without this, switching away from an account loses its session and the
+    #: next switch back needs a manual sign-in.
+    CAPTURING = "capturing"
+    #: The Riot Client holds the session files open and rewrites them on exit,
+    #: so it must be fully stopped before they are swapped.
+    CLOSING_CLIENT = "closing_client"
+    RESTORING_SESSION = "restoring_session"
     SIGNING_OUT = "signing_out"
     WAITING_FOR_CLIENT = "waiting_for_client"
     AUTHENTICATING = "authenticating"
@@ -55,6 +63,13 @@ class SwitchOutcome(Enum):
     BUSY = "busy"
     INVALID_ACCOUNT = "invalid_account"
     NO_CREDENTIALS = "no_credentials"
+    #: Nothing has been captured for this account yet.
+    NO_SAVED_SESSION = "no_saved_session"
+    #: A session exists but is too old to be accepted. Restoring it would
+    #: replace a possibly-good live session with a certainly-dead one.
+    SESSION_EXPIRED = "session_expired"
+    #: The Riot Client would not stop, so the files cannot be swapped safely.
+    CLIENT_STILL_RUNNING = "client_still_running"
     ERROR = "error"
 
 
@@ -63,7 +78,15 @@ RETRYABLE = frozenset({
     SwitchOutcome.CLIENT_UNREACHABLE,
     SwitchOutcome.TIMED_OUT,
     SwitchOutcome.SIGN_OUT_FAILED,
+    SwitchOutcome.CLIENT_STILL_RUNNING,
     SwitchOutcome.ERROR,
+})
+
+#: Outcomes that only a human can clear. Retrying these is a spinner that
+#: never ends, so the UI offers the remedy instead of a Try Again button.
+NEEDS_MANUAL_SIGN_IN = frozenset({
+    SwitchOutcome.NO_SAVED_SESSION,
+    SwitchOutcome.SESSION_EXPIRED,
 })
 
 #: Human sentences, in product vocabulary (UI/UX Master Plan §55, §56).
@@ -81,6 +104,17 @@ OUTCOME_MESSAGES = {
     SwitchOutcome.BUSY: "Another account operation is already running.",
     SwitchOutcome.INVALID_ACCOUNT: "That account no longer exists.",
     SwitchOutcome.NO_CREDENTIALS: "This account has no saved password.",
+    SwitchOutcome.NO_SAVED_SESSION: (
+        "No saved session for this account. Sign in to it once by hand and "
+        "LeagueLoop will remember it."
+    ),
+    SwitchOutcome.SESSION_EXPIRED: (
+        "This account's saved session has expired. Sign in to it once by "
+        "hand to refresh it."
+    ),
+    SwitchOutcome.CLIENT_STILL_RUNNING: (
+        "The Riot Client would not close, so the account was left as it was."
+    ),
     SwitchOutcome.ERROR: "Account switch failed.",
 }
 

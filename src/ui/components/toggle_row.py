@@ -5,6 +5,11 @@ from ui.components.lol_toggle import LolToggle  # type: ignore
 from ui.ui_shared import CTkTooltip  # type: ignore
 from utils.logger import Logger
 
+#: The dim half of the ON pulse. There is no design token for it because it is
+#: not a semantic colour — it is the gold accent at roughly two-thirds
+#: brightness, which is the closest a Tk label gets to fading.
+PULSE_DIM_GOLD = "#8A6E3C"
+
 class ToggleRow(ctk.CTkFrame):
     """A reusable component for a toggle row with icon, label, toggle, and optional edit button."""
     def __init__(self, master, label_text, variable, command, tooltip_text="",
@@ -143,15 +148,27 @@ class ToggleRow(ctk.CTkFrame):
                 return
             if not (self._variable and self._variable.get()):
                 return
-            # Toggle opacity between slightly dim and full
+            # Alternate between full gold and a dimmer gold.
+            #
+            # This passed `""` on every other tick, which Tk rejects with
+            # `unknown color name ""`. The exception was caught and logged, so
+            # nothing looked broken — except that the animation never ran and
+            # the log filled with the same traceback 6,335 times in one
+            # session, drowning everything else in it.
+            #
+            # Tk labels have no opacity, so a dim colour is the honest way to
+            # express the half-lit half of the pulse. `alpha` was computed here
+            # and never used, which is what the original author was reaching
+            # for.
             self._pulse_state = not self._pulse_state
-            alpha = 1.0 if self._pulse_state else 0.7
+            colour = (
+                get_color("colors.accent.gold", "#C8AA6E") if self._pulse_state
+                else PULSE_DIM_GOLD
+            )
             try:
-                self.icon_label.configure(
-                    text_color=get_color("colors.accent.gold") if not self._pulse_state else ""
-                )
+                self.icon_label.configure(text_color=colour)
             except Exception as exc:
-                Logger.debug("ToggleRow", "_tick suppressed an error", exc=exc)
+                Logger.debug("ToggleRow", "Could not repaint the pulse", exc=exc)
             self._pulse_job = self.after(1500, _tick)
         
         self._pulse_job = self.after(1500, _tick)

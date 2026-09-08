@@ -3,6 +3,7 @@ Auto-Ban Priority List Editor — same UX as the ARAM list (icons + search).
 Single custom title bar; stores champions in config auto_ban_list.
 """
 import ctypes
+import ctypes.wintypes  # `import ctypes` alone does not provide this
 import customtkinter as ctk
 
 from ui.components.factory import get_color, get_font

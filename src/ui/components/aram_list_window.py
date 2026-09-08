@@ -3,6 +3,7 @@ ARAM Top Drawer Window — dedicated champion priority list editor.
 Single custom title bar (no OS chrome double-header).
 """
 import ctypes
+import ctypes.wintypes  # `import ctypes` alone does not provide this
 import customtkinter as ctk
 from ui.components.factory import get_color, get_font
 from ui.components.priority_grid import PriorityIconGrid

@@ -2,6 +2,18 @@
 Constants module for LeagueLoop.
 Centralizes magic numbers and configuration defaults.
 """
+import subprocess
+
+#: `creationflags` for the console tools this app shells out to (taskkill and
+#: friends), so no black window flashes over the game.
+#:
+#: `subprocess.CREATE_NO_WINDOW` exists only on Windows. Referencing it
+#: directly means the *whole call* raises AttributeError anywhere else, and
+#: those calls sit inside broad `except Exception` blocks, so the failure was
+#: swallowed and the process was simply never killed -- with no test able to
+#: catch it, because the tests could not run that line either. Zero is the
+#: documented "no special flags" value, which is exactly right off Windows.
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 # --- Queue IDs ---
 QUEUE_DRAFT = 400
@@ -17,7 +29,7 @@ DOCKING_IDLE_INTERVAL = 0.5        # seconds when no client window found
 CONNECTION_POLL_INTERVAL = 2.0     # seconds between LCU connection attempts
 CONNECTION_ERROR_INTERVAL = 5.0    # seconds to wait after connection error
 TICK_SLEEP_DEFAULT = 3.0
-TICK_SLEEP_CHAMPSELECT = 0.5
+TICK_SLEEP_CHAMPSELECT = 1.0
 TICK_SLEEP_READYCHECK = 1.0
 TICK_SLEEP_LOBBY = 2.0
 # In-game: rare LCU polls only (phase exit detection). Heavy polling hurts the CEF client.
