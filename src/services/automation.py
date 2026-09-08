@@ -27,7 +27,7 @@ from core.config_keys import (
     DODGE_BLACKLIST_ENABLED,
 )
 from core.constants import (
-    QUEUE_ARENA, QUEUE_ARENA_3V6, QUEUE_DRAFT, QUEUE_RANKED_SOLO, QUEUE_RANKED_FLEX,
+    QUEUE_ARENA, QUEUE_ARENA_16, QUEUE_ARENA_3V3, QUEUE_DRAFT, QUEUE_RANKED_SOLO, QUEUE_RANKED_FLEX,
     TICK_SLEEP_DEFAULT, TICK_SLEEP_CHAMPSELECT,
     TICK_SLEEP_READYCHECK, TICK_SLEEP_LOBBY, TICK_SLEEP_INGAME,
     TICK_SLEEP_SPECTATING, TICK_SLEEP_SPECTATING_MAX,
@@ -697,7 +697,7 @@ class AutomationEngine:
         )
         if queue_id:
             self.current_queue_id = queue_id
-        is_arena = queue_id in {QUEUE_ARENA, QUEUE_ARENA_3V6}
+        is_arena = queue_id in {QUEUE_ARENA, QUEUE_ARENA_16, QUEUE_ARENA_3V3}
 
         if is_arena:
             if self.config.get("arena_synergy_enabled", True):

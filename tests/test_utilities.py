@@ -34,7 +34,8 @@ class TestConstantsAndVersion(unittest.TestCase):
         assert constants.QUEUE_RANKED_FLEX == 440
         assert constants.QUEUE_ARAM == 450
         assert constants.QUEUE_ARENA == 1700
-        assert constants.QUEUE_ARENA_3V6 == 1710
+        assert constants.QUEUE_ARENA_16 == 1710
+        assert constants.QUEUE_ARENA_3V3 == 1750
 
     def test_ui_and_timing_constants(self):
         assert constants.SIDEBAR_WIDTH > 0
