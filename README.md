@@ -218,7 +218,7 @@ which builds the executable and publishes the installer.
 
 ### Versioning
 
-`src/core/version.py` holds a `{major}-{month}-{days_left_in_year}-{HHMM}`
+`src/core/version.py` holds a `{major}-{month}-{day_of_year}-{HHMM}`
 string that is bumped on every change. Use `python tools/bump_version.py`
 rather than editing it by hand.
 

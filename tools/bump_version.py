@@ -23,9 +23,9 @@ PATTERN = re.compile(r'^__version__ = "(?P<value>[^"]*)"', re.M)
 
 def current_version() -> str:
     now = datetime.datetime.now()
-    days_left = (datetime.date(now.year, 12, 31) - now.date()).days
+    day_of_year = now.timetuple().tm_yday
     return "{}-{:02d}-{:03d}-{:02d}{:02d}".format(
-        MAJOR, now.month, days_left, now.hour, now.minute
+        MAJOR, now.month, day_of_year, now.hour, now.minute
     )
 
 

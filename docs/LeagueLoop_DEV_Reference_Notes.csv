@@ -1,6 +1,6 @@
 Category,Identifier / Key,Value / Type / Default,Details / Reference
-Metadata,Current Source Version,2-09-114-1000,src/core/version.py
-Metadata,Version Formula,{major}-{month}-{days_left_in_year}-{HHMM},"tools/bump_version.py — the third field is days REMAINING in the year, not 365 minus that. 114 = 8 Sep to 31 Dec."
+Metadata,Current Source Version,2-09-251-0706,src/core/version.py
+Metadata,Version Formula,{major}-{month}-{day_of_year}-{HHMM},"tools/bump_version.py — the third field is days that have passed this year (day of the year / Julian day). 251 = Sep 8."
 Metadata,Major Version Constant,2,tools/bump_version.py MAJOR — bump_version.py --check fails any version not on major 2
 Metadata,Installer Version,Not verified in this pass,build_scripts/installer.iss was not present in the working copy checked; confirm before trusting any number here
 Metadata,DDragon Asset Version,14.1.1,src/core/constants.py DDRAGON_DEFAULT_VERSION
