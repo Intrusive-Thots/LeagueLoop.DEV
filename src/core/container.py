@@ -168,7 +168,6 @@ class ApplicationContainer:
         start_client_state: bool = False,
         apply_automation_config: bool = False,
         start_automation: bool = True,
-        start_api: bool = True,
         **kwargs,
     ) -> "ApplicationContainer":
         """
@@ -224,14 +223,6 @@ class ApplicationContainer:
             started.append("client state")
         except Exception as exc:
             errors.append(("client state", exc))
-
-        if start_api:
-            try:
-                from services import local_api
-                local_api.start_api_server(self)
-                started.append("api server")
-            except Exception as exc:
-                errors.append(("api server", exc))
 
         if apply_automation_config and self.automation_controller is not None:
             try:

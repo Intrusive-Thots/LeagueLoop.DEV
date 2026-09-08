@@ -28,7 +28,6 @@ from core.container import ApplicationContainer  # type: ignore
 from services.automation import AutomationEngine  # type: ignore
 from utils.logger import Logger  # type: ignore
 from utils.path_utils import get_asset_path  # type: ignore
-from services.local_api import start_api_server  # type: ignore
 from core.constants import (  # type: ignore
     SIDEBAR_WIDTH, SIDEBAR_HEIGHT, DOCKING_POLL_INTERVAL, DOCKING_IDLE_INTERVAL,
     CONNECTION_POLL_INTERVAL, CONNECTION_ERROR_INTERVAL,
@@ -193,8 +192,6 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
             self.tray.start()
             
         self.protocol("WM_DELETE_WINDOW", self._on_close_request)
-
-        self._local_ip, self._local_port = start_api_server(self, port=8337, bind_local=True)
 
         threading.Thread(target=self.connection_loop, daemon=True).start()
         threading.Thread(target=self.docking_loop, daemon=True).start()
@@ -544,10 +541,6 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
 
     def on_dock_toggled(self, docked):
         self.config.set("docked", bool(docked))
-
-    def _show_mobile_qr(self):
-        """Placeholder for mobile QR display."""
-        Logger.info("SYS", f"Mobile API at http://{self._local_ip}:{self._local_port}")
 
 
 def _kill_other_instances():

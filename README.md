@@ -104,16 +104,6 @@ does happens in the client, between games. Full statement of the constraint:
 - **Window attachment** — the companion follows the client, hides when it
   minimises, and returns when it restores
 
-### Mobile companion
-
-A local HTTP API on port `8337` exposes status, champ select actions, queue
-control, and account switching to the Android companion in
-[`LeagueLoopMobile/`](LeagueLoopMobile/). It binds to the local network and
-adds its own Windows Firewall rule on first run.
-
-Endpoints include `/status`, `/champ-select`, `/champ-select/{pick,ban,lock,reroll,bench-swap}`,
-`/ready-check/{accept,decline}`, `/queue-modes`, `/accounts`, `/config`, `/health`.
-
 ## Requirements
 
 - Windows 10 or 11 — the app uses DPAPI, pywin32 and Win32 window APIs

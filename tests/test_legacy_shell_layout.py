@@ -117,15 +117,15 @@ class LiveWindowTests(unittest.TestCase):
 
     Deliberately builds `SidebarWidget`, **not** `LeagueLoopApp`.
 
-    Constructing the whole application here started the system tray, an HTTP
-    server on port 8337, the connection and docking loops, and
+    Constructing the whole application here started the system tray, the
+    connection and docking loops, and
     `keyboard.add_hotkey`. On Linux those all fail quietly, so the suite
     passed. On Windows they succeed — and `keyboard`'s listener runs on a
     non-daemon thread, so the interpreter could not exit and **pytest hung
     after the last test**, with no failure to point at.
 
-    A layout test needs a widget. Anything that opens a port or installs a
-    global hook is not layout.
+    A layout test needs a widget. Anything that starts a background loop or
+    installs a global hook is not layout.
     """
 
     @classmethod
@@ -143,7 +143,7 @@ class LiveWindowTests(unittest.TestCase):
         # callbacks. Stubbing them is the whole cost of not building the
         # application — and none of them are layout.
         for name in (
-            "_hotkey_launch_client", "_on_close", "_show_mobile_qr",
+            "_hotkey_launch_client", "_on_close",
             "on_dock_toggled", "on_settings_saved",
         ):
             setattr(cls.app, name, lambda *a, **k: None)

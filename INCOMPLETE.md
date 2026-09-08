@@ -673,10 +673,11 @@ Everything else below has still never run against a real client.
 - `src/ui/qt/widgets/transparent_overlay.py` — orphaned; imported by nothing.
   Its `click_through_changed` and `geometry_committed` signals are connected
   nowhere.
-- `src/services/local_api.py` — the mobile-companion HTTP server. Reachable
-  only from `core/main.py` (the CustomTkinter shell). It calls `app.after(...)`
-  and other Tk-only APIs, so it cannot be pointed at the Qt shell as-is. Two
-  `log_message` stubs. → Decide whether the companion feature survives.
+- ~~`src/services/local_api.py`~~ — **RESOLVED: the companion did not
+  survive.** The mobile companion was dropped by decision; `local_api.py`,
+  `LeagueLoopMobile/`, the port-8337 startup, the "Link Mobile Device" button
+  and the firewall-rule creation are all deleted. Guarded by
+  `test_container_contract.SuiteHygieneTests`.
 - `src/services/queue_manager.py` — only `resolve_queue_id`/`resolve_mode_name`
   are used; `update_available_lobby_types` is reached only from the dead
   sidebar. The Play tab's own comment asks for a `QueueService.start_search()`

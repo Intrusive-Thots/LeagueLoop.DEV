@@ -137,8 +137,8 @@ if __name__ == "__main__":
 class SuiteHygieneTests(unittest.TestCase):
     """No test may construct the whole application.
 
-    `LeagueLoopApp()` starts the system tray, an HTTP server on port 8337, the
-    connection and docking loops, and `keyboard.add_hotkey`. On Linux those
+    `LeagueLoopApp()` starts the system tray, the connection and docking
+    loops, and `keyboard.add_hotkey`. On Linux those
     fail quietly, so a test doing it looked harmless. On Windows they succeed,
     and `keyboard`'s listener runs on a non-daemon thread — so the interpreter
     could not exit and **pytest hung after the last test finished**, with no
@@ -171,44 +171,44 @@ class SuiteHygieneTests(unittest.TestCase):
             "running and hangs the suite on Windows: %s" % offenders,
         )
 
-    def test_no_test_binds_the_local_api_port(self):
-        """A test may name `start_api_server`; it may not let one really run.
+    def test_the_mobile_companion_stays_removed(self):
+        """The mobile companion and its HTTP server were dropped deliberately.
 
-        The first version of this check flagged the mere string, which
-        condemned the two files doing the right thing -- patching
-        `start_api_server` out, or mocking `ThreadingHTTPServer` and the
-        thread it runs on. What actually hangs the suite on Windows is a live
-        call, so look for a call that nothing in the file has neutralised.
+        This used to be a narrower guard: a test could *name*
+        `start_api_server` but not let one really run, because a live call
+        bound port 8337 and left a non-daemon thread behind, hanging the
+        suite on Windows. The feature is gone now, so the stronger and
+        simpler guarantee is that none of it comes back — which makes the
+        original hang impossible rather than merely unlikely.
+
+        If the companion is ever revived, delete this test in the same
+        change that revives it, and restore the port-binding guard with it.
         """
-        import ast
+        banned = ("local_api", "start_api_server", "LeagueLoopMobile")
 
         offenders = []
-        for path in self._others():
-            body = path.read_text(encoding="utf-8-sig")
-            if "start_api_server" not in body:
-                continue
-            neutralised = any(
-                name in body
-                for name in (
-                    "services.local_api.start_api_server",
-                    "services.local_api.ThreadingHTTPServer",
-                )
-            )
-            if neutralised:
-                continue
-            try:
-                tree = ast.parse(body)
-            except SyntaxError:
-                continue
-            for node in ast.walk(tree):
-                if not isinstance(node, ast.Call):
+        for directory in (ROOT / "src", self.TESTS):
+            for path in sorted(directory.rglob("*.py")):
+                if path.name == Path(__file__).name:
                     continue
-                func = node.func
-                name = getattr(func, "id", None) or getattr(func, "attr", None)
-                if name == "start_api_server":
-                    offenders.append("%s:%d" % (path.name, node.lineno))
+                for number, line in enumerate(
+                    path.read_text(encoding="utf-8-sig").splitlines(), 1
+                ):
+                    if line.lstrip().startswith("#"):
+                        continue
+                    for name in banned:
+                        if name in line:
+                            offenders.append(
+                                "%s:%d (%s)" % (path.name, number, name)
+                            )
         self.assertEqual(
             offenders, [],
-            "these really start the HTTP server, which binds a port and "
-            "leaves a thread running: %s" % offenders,
+            "the mobile companion was removed; these bring it back: %s"
+            % offenders,
+        )
+
+    def test_the_mobile_app_directory_stays_removed(self):
+        self.assertFalse(
+            (ROOT / "LeagueLoopMobile").exists(),
+            "LeagueLoopMobile/ was removed deliberately; it is back",
         )
