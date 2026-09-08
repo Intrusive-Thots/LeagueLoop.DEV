@@ -6,11 +6,11 @@ sys.path.insert(0, os.path.join(os.path.abspath(os.path.dirname(__file__)), "src
 
 USAGE = """LeagueLoop
 
-  python run.py              start LeagueLoop (PySide6 Qt Shell - Default)
-  python run.py --tk         start LeagueLoop (Legacy CustomTkinter)
+  python run.py              start LeagueLoop (CustomTkinter)
   python run.py --replace    shut down a running instance and start fresh
   python run.py --help       show this message
 """
+
 
 
 def _describe(proc):
@@ -67,12 +67,7 @@ if __name__ == "__main__":
             print("    python run.py --replace")
             raise SystemExit(0)
 
-    use_legacy_tk = "--tk" in args or "--legacy" in args or "--customtkinter" in args
+    from core.main import LeagueLoopApp
+    app = LeagueLoopApp()
+    app.mainloop()
 
-    if use_legacy_tk:
-        from core.main import LeagueLoopApp
-        app = LeagueLoopApp()
-        app.mainloop()
-    else:
-        from ui.qt.app.application import run as run_qt_app
-        raise SystemExit(run_qt_app(with_services="--no-services" not in args))

@@ -198,9 +198,7 @@ pytest
 ```
 
 `pytest.ini` sets `pythonpath = src` and `testpaths = tests`, so plain `pytest`
-from the repo root is enough. Some UI tests additionally need
-`config/requirements-qt.txt` installed; without it those modules fail to
-import while the rest of the suite runs normally.
+from the repo root is enough to run the full test suite.
 
 CI runs an import smoke test across Python 3.10–3.13 on `windows-latest`,
 then the full suite on 3.11.

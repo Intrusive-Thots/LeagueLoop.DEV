@@ -114,7 +114,8 @@ class MigrationTests(unittest.TestCase):
 
         self.assertIn("accounts.json", moved)
         target = os.path.join(self.pu.get_data_dir(), "accounts.json")
-        self.assertEqual(json.load(open(target))["accounts"], [1, 2])
+        with open(target, encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["accounts"], [1, 2])
 
     def test_the_repo_copy_is_left_behind_renamed_not_deleted(self):
         """Moving somebody's only account store had better be reversible."""
@@ -133,7 +134,8 @@ class MigrationTests(unittest.TestCase):
         self._write(os.path.join(self.fake_repo, "accounts.json"), {"accounts": [1, 2]}, mtime=9000)
 
         self.pu.migrate_data_from_project_root()
-        result = json.load(open(os.path.join(target_dir, "accounts.json")))
+        with open(os.path.join(target_dir, "accounts.json"), encoding="utf-8") as f:
+            result = json.load(f)
         self.assertEqual(result["accounts"], [1, 2])
 
     def test_a_newer_appdata_copy_is_not_overwritten(self):
@@ -142,8 +144,10 @@ class MigrationTests(unittest.TestCase):
         self._write(os.path.join(self.fake_repo, "accounts.json"), {"accounts": [1]}, mtime=1000)
 
         self.pu.migrate_data_from_project_root()
-        result = json.load(open(os.path.join(target_dir, "accounts.json")))
+        with open(os.path.join(target_dir, "accounts.json"), encoding="utf-8") as f:
+            result = json.load(f)
         self.assertEqual(result["accounts"], [9])
+
 
     def test_an_overwritten_copy_is_kept_as_superseded(self):
         target_dir = self.pu.get_data_dir()

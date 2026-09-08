@@ -74,9 +74,17 @@ def validate_test_suite(project_root: Path) -> bool:
 
 
 def validate_files(project_root: Path) -> bool:
+    spec_path = project_root / "LeagueLoop.spec"
+    if not spec_path.exists():
+        spec_path = project_root / "build_scripts" / "LeagueLoop.spec"
+
+    iss_path = project_root / "installer.iss"
+    if not iss_path.exists():
+        iss_path = project_root / "build_scripts" / "installer.iss"
+
     required_paths = [
-        project_root / "LeagueLoop.spec",
-        project_root / "installer.iss",
+        spec_path,
+        iss_path,
         project_root / "src" / "ui" / "theme" / "design_tokens.json",
         project_root / "assets" / "app.ico",
     ]
@@ -86,6 +94,7 @@ def validate_files(project_root: Path) -> bool:
         return False
     print("[OK] All required spec files and assets present.")
     return True
+
 
 
 def verify_system_wide_health(project_root: Optional[Path] = None) -> Dict[str, Any]:

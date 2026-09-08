@@ -1,9 +1,7 @@
 """
-Entry point for the CustomTkinter shell.
+Entry point for the LeagueLoop application (CustomTkinter).
 
-The Qt shell (`run_qt.py`) is the one under active development; this one is
-kept until the migration finishes. Both install the same crash handlers and
-write to the same log directory, so a run of either leaves a complete record.
+Installs crash handlers, logs session startup/summary, and launches LeagueLoopApp.
 """
 import os
 import sys
