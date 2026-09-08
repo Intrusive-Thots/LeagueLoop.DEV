@@ -350,9 +350,9 @@ class SidebarWidget(ctk.CTkFrame):
             height=BTN_HEIGHT,
             command=lambda: self.master._hotkey_launch_client() if hasattr(self.master, "_hotkey_launch_client") else None
         )
-        self.btn_launch_client.pack(fill="x", pady=(INNER_GAP, 0))
         hk_launch = self.config.get("hotkey_launch_client", "ctrl+shift+l").upper()
         CTkTooltip(self.btn_launch_client, f"Open the Riot Client and start League ({hk_launch})")
+        self.update_launch_client_visibility()
 
         # (Divider removed — card containers provide visual separation)
 
@@ -729,10 +729,13 @@ class SidebarWidget(ctk.CTkFrame):
         )
         self._accounts_tool_visible = True
 
-    def update_accounts_tool_visibility(self, lcu_connected: bool = False):
-        """Account Manager is always accessible and visible."""
-        if self.accounts_tool is None or not self.winfo_exists():
+    def update_launch_client_visibility(self, lcu_connected: bool | None = None):
+        """Toggle Launch Client Button based on whether League or Riot Client is running."""
+        if not hasattr(self, "btn_launch_client") or not self.winfo_exists():
             return
+
+        if lcu_connected is None:
+            lcu_connected = bool(getattr(self, "lcu", None) and getattr(self.lcu, "is_connected", False))
 
         riot_running = False
         manager = getattr(self, "_account_manager", None)
@@ -744,18 +747,22 @@ class SidebarWidget(ctk.CTkFrame):
                     "Sidebar", "Could not check for the Riot Client", exc=exc,
                 )
 
+        if not lcu_connected and not riot_running:
+            if not bool(self.btn_launch_client.winfo_manager()):
+                from .theme.token_loader import TOKENS
+                self.btn_launch_client.pack(fill="x", pady=(TOKENS.get("spacing", "sm", 4), 0))
+        else:
+            if bool(self.btn_launch_client.winfo_manager()):
+                self.btn_launch_client.pack_forget()
+
+    def update_accounts_tool_visibility(self, lcu_connected: bool = False):
+        """Account Manager is always accessible and visible."""
+        self.update_launch_client_visibility(lcu_connected=lcu_connected)
+
+        if self.accounts_tool is None or not self.winfo_exists():
+            return
+
         self._accounts_tool_visible = True
-        
-        # Toggle Launch Client Button
-        if hasattr(self, "btn_launch_client"):
-            if not lcu_connected and not riot_running:
-                if not bool(self.btn_launch_client.winfo_manager()):
-                    # SPACING_SM from tokens or INNER_GAP
-                    from .theme.token_loader import TOKENS
-                    self.btn_launch_client.pack(fill="x", pady=(TOKENS.get("spacing", "sm", 4), 0))
-            else:
-                if bool(self.btn_launch_client.winfo_manager()):
-                    self.btn_launch_client.pack_forget()
 
         if hasattr(self, "switch_tab"):
             self.switch_tab(self._current_tab)
@@ -1559,6 +1566,8 @@ class SidebarWidget(ctk.CTkFrame):
     def _show_play_again(self):
         if hasattr(self, "btn_find_match"):
             self.btn_find_match.pack_forget()
+        if hasattr(self, "btn_launch_client") and bool(self.btn_launch_client.winfo_manager()):
+            self.btn_launch_client.pack_forget()
         if hasattr(self, "quick_actions_frame"):
             self.quick_actions_frame.pack_forget()
         if hasattr(self, "play_again_button"):
@@ -1566,6 +1575,8 @@ class SidebarWidget(ctk.CTkFrame):
 
     def _show_quick_actions(self):
         """Reveal the Requeue & Dodge buttons during active matchmaking phases."""
+        if hasattr(self, "btn_launch_client") and bool(self.btn_launch_client.winfo_manager()):
+            self.btn_launch_client.pack_forget()
         if hasattr(self, "quick_actions_frame"):
             if hasattr(self, "btn_find_match"):
                 self.btn_find_match.pack_forget()
@@ -1660,6 +1671,9 @@ class SidebarWidget(ctk.CTkFrame):
 
         # Persist the current phase for game-tool visibility decisions
         self._current_game_phase = phase
+
+        if phase and phase not in ("None", "Disconnected"):
+            self.update_launch_client_visibility(lcu_connected=True)
 
         # Track the last phase we processed to avoid redundant resets
         prev_ui_phase = self._last_ui_phase

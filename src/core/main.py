@@ -442,14 +442,17 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
 
     def connection_loop(self):
         """Poll LCU connection and keep state in sync."""
+        last_connected = None
         while self.running:
             try:
-                was = self.lcu.is_connected
                 self.lcu.connect(silent=True)
-                now = self.lcu.is_connected
-                if was != now and hasattr(self, "sidebar") and self.sidebar.winfo_exists():
-                    status = "Connected" if now else "Disconnected"
-                    self.after(0, lambda s=status: self.sidebar.update_action_log(f"LCU {s}") if hasattr(self.sidebar, "update_action_log") else None)
+                now = bool(self.lcu.is_connected)
+                if last_connected != now:
+                    last_connected = now
+                    if hasattr(self, "sidebar") and self.sidebar.winfo_exists():
+                        status = "Connected" if now else "Disconnected"
+                        self.after(0, lambda s=status: self.sidebar.update_action_log(f"LCU {s}") if hasattr(self.sidebar, "update_action_log") else None)
+                        self.after(0, lambda c=now: self.sidebar.on_lcu_connection_changed(c) if hasattr(self.sidebar, "on_lcu_connection_changed") else None)
             except Exception as e:
                 Logger.debug("LCU", f"connection_loop: {e}")
                 time.sleep(CONNECTION_ERROR_INTERVAL)

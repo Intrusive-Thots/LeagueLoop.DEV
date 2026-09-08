@@ -217,6 +217,22 @@ class LiveWindowTests(unittest.TestCase):
         self._settle()
         self.assertEqual(len({b.winfo_y() for b in self._icons()}), 1)
 
+    def test_launch_client_button_hidden_when_connected(self):
+        # When connected to LCU, Launch Client must be hidden
+        self.sidebar.update_launch_client_visibility(lcu_connected=True)
+        self._settle(passes=5)
+        self.assertFalse(bool(self.sidebar.btn_launch_client.winfo_manager()))
+
+        # When disconnected, it must be visible
+        self.sidebar.update_launch_client_visibility(lcu_connected=False)
+        self._settle(passes=5)
+        self.assertTrue(bool(self.sidebar.btn_launch_client.winfo_manager()))
+
+        # Entering ChampSelect must hide it even if previous state was disconnected
+        self.sidebar.update_queue_state("ChampSelect", {})
+        self._settle(passes=5)
+        self.assertFalse(bool(self.sidebar.btn_launch_client.winfo_manager()))
+
 
 if __name__ == "__main__":
     unittest.main()
