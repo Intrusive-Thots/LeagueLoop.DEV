@@ -543,8 +543,60 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self.config.set("docked", bool(docked))
 
 
+def _leagueloop_project_root() -> str:
+    """The directory this installation lives in.
+
+    `core/main.py` sits at `<root>/src/core/main.py`, so the root is three
+    levels up. When frozen, PyInstaller unpacks sources to a temp dir that
+    tells us nothing about the install, so the executable's own directory is
+    the honest answer instead.
+    """
+    if getattr(sys, "frozen", False):
+        return os.path.normcase(os.path.abspath(os.path.dirname(sys.executable)))
+    return os.path.normcase(
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    )
+
+
+def _is_our_entry_point(arg: str, root: str) -> bool:
+    """Is `arg` this project's own entry script?
+
+    The previous check was `arg.endswith("run.py") or arg.endswith("main.py")`
+    — which matches *any* script by those very common names, anywhere on the
+    machine. On a development box that is most of them: it would terminate an
+    unrelated Django `main.py` or a one-off `run.py` in another checkout,
+    silently, before the app had even started.
+
+    Identity is the path, not the basename. The script has to be one of ours
+    *and* live under this install.
+    """
+    try:
+        resolved = os.path.normcase(os.path.abspath(arg))
+    except (OSError, ValueError):
+        return False
+
+    if not (resolved == os.path.join(root, "run.py")
+            or resolved == os.path.join(root, "src", "core", "main.py")):
+        return False
+
+    # A path can be built to look like ours without being ours; require it to
+    # actually sit inside this install.
+    try:
+        return os.path.commonpath([resolved, root]) == root
+    except ValueError:          # different drives on Windows
+        return False
+
+
 def _kill_other_instances():
-    """Terminate any other running instances of LeagueLoop."""
+    """Terminate other instances of *this* LeagueLoop install.
+
+    Four instances sharing one `cache/`, `config.json` and `accounts.json`
+    is a real failure mode here — settings written by one window get
+    overwritten by another, and four automation engines all race to accept
+    the same ready check. That is what this exists to prevent.
+    """
+    root = _leagueloop_project_root()
+    killed = []
     try:
         import psutil  # type: ignore
         current_proc = psutil.Process(os.getpid())
@@ -555,25 +607,55 @@ def _kill_other_instances():
         except Exception as exc:
             Logger.debug("Main", "_kill_other_instances suppressed an error", exc=exc)
 
-        for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+        for proc in psutil.process_iter(["pid", "name", "cmdline", "exe"]):
             try:
                 if proc.info["pid"] in ignored_pids:
                     continue
                 name = (proc.info.get("name") or "").lower()
                 cmdline = proc.info.get("cmdline") or []
                 is_match = False
+
                 if "leagueloop.exe" in name:
-                    is_match = True
+                    # A frozen build of a *different* install is still not
+                    # ours; prefer the executable path when we can read it.
+                    exe = proc.info.get("exe")
+                    if exe:
+                        try:
+                            is_match = os.path.commonpath(
+                                [os.path.normcase(os.path.abspath(exe)), root]
+                            ) == root
+                        except ValueError:
+                            is_match = False
+                    else:
+                        is_match = True
                 elif "python" in name:
-                    # Check script arguments (excluding python binary path in cmdline[0])
+                    # cmdline[0] is the interpreter; the script follows.
                     for arg in cmdline[1:]:
-                        arg_str = str(arg).lower()
-                        if arg_str.endswith("run.py") or arg_str.endswith("main.py") or "src.core.main" in arg_str or "core.main" in arg_str:
+                        if _is_our_entry_point(str(arg), root):
                             is_match = True
                             break
+
                 if is_match:
                     proc.terminate()
+                    killed.append(proc)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
+
+        if killed:
+            # Do not race the process we just asked to die. It still holds
+            # config.json and accounts.json open, and starting on top of it
+            # is the corruption this function exists to prevent.
+            _, alive = psutil.wait_procs(killed, timeout=5)
+            for proc in alive:
+                try:
+                    proc.kill()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+            Logger.info(
+                "Main",
+                "Closed %d other instance(s) of this install before starting."
+                % len(killed),
+                count=len(killed), root=root,
+            )
     except Exception as exc:
         Logger.debug("Main", "_kill_other_instances suppressed an error", exc=exc)
