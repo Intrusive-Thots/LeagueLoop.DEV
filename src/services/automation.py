@@ -111,7 +111,7 @@ class AutomationEngine:
         self._last_friend_check: float = 0.0
 
         # Game process & spectator tracking
-        self._game_pid: Optional[int] = None
+        self._game_process: Optional[psutil.Process] = None
         self._last_game_scan: float = 0.0
         self._spectate_start_time: Optional[float] = None
 
@@ -191,20 +191,19 @@ class AutomationEngine:
         """Check if League of Legends.exe (the game) is running.
 
         This is the actual game process — a different PID from LeagueClient.exe.
-        We cache the PID to avoid full process scans every tick.
+        We cache the process to avoid full process scans every tick.
         """
         now = time.time()
 
-        # Fast-path: reuse cached PID if still alive
-        game_pid = getattr(self, "_game_pid", None)
-        if game_pid is not None:
+        # Fast-path: reuse cached process if still alive
+        game_process = getattr(self, "_game_process", None)
+        if game_process is not None:
             try:
-                p = psutil.Process(game_pid)
-                if p.is_running() and p.name().lower() == "league of legends.exe":
+                if game_process.is_running() and game_process.name().lower() == "league of legends.exe":
                     return True
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
-            self._game_pid = None
+            self._game_process = None
 
         # Throttle full scans to every 3 seconds
         last_scan = getattr(self, "_last_game_scan", 0.0)
@@ -215,7 +214,7 @@ class AutomationEngine:
         for p in psutil.process_iter(attrs=["name"]):
             try:
                 if (p.info["name"] or "").lower() == "league of legends.exe":
-                    self._game_pid = p.pid
+                    self._game_process = p
                     return True
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, KeyError):
                 continue
@@ -380,7 +379,7 @@ class AutomationEngine:
                         wf("restore_quiet")
                     else:
                         wf("restore")
-                self._game_pid = None
+                self._game_process = None
 
         # Keep in-game flag consistent even if we entered via process inference
         try:
