@@ -826,7 +826,7 @@ def ensure_firewall_rule(port):
         # Check if rule already exists
         check = subprocess.run(
             ['netsh', 'advfirewall', 'firewall', 'show', 'rule', f'name={rule_name}'],
-            capture_output=True, text=True, timeout=5
+            capture_output=True, text=True, timeout=5, shell=False
         )
         if check.returncode == 0 and rule_name in check.stdout:
             Logger.info("API", "Firewall rule already exists")
@@ -839,7 +839,7 @@ def ensure_firewall_rule(port):
              f'localport={port}',
              'profile=private,public',
              'description=Allows LeagueLoop mobile remote connections over LAN'],
-            capture_output=True, text=True, timeout=10
+            capture_output=True, text=True, timeout=10, shell=False
         )
         if result.returncode == 0:
             Logger.info("API", f"Firewall rule created for port {port}")
