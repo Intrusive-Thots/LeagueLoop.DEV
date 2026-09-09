@@ -831,6 +831,8 @@ class AccountManager:
                     ["taskkill", "/IM", proc_name, "/F"],
                     capture_output=True, text=True,
                     creationflags=NO_WINDOW,
+                    shell=False,
+                    check=False,
                 )
                 if result.returncode == 0:
                     killed_any = True
