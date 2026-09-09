@@ -1036,12 +1036,10 @@ class AutomationEngine:
             return
 
         # Cache banned IDs once for both phases
-        banned_ids = []
-        for b in session.get("bannedChampions", []):
-            if isinstance(b, dict):
-                banned_ids.append(b.get("championId", 0))
-            else:
-                banned_ids.append(b)
+        banned_ids = [
+            b.get("championId", 0) if isinstance(b, dict) else b
+            for b in session.get("bannedChampions", [])
+        ]
 
         action_type = my_action.get("type", "")
         if action_type == "ban":
