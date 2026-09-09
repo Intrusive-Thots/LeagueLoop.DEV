@@ -40,10 +40,7 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
         # Check if origin is in allowed list
         if origin and origin in server:
             self.send_header('Access-Control-Allow-Origin', origin)
-        else:
-            # Default to localhost for security
-            self.send_header('Access-Control-Allow-Origin', 'http://localhost')
-        
+
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.send_header('Access-Control-Max-Age', '86400')  # Cache preflight for 24 hours
