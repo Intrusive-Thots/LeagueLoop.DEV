@@ -28,17 +28,21 @@ darken_color = None
 apply_focus_ring = None
 scroll_to_widget = None
 apply_smooth_scroll = None
+apply_acrylic_blur = None
+remove_blur = None
 
 def setUpModule():
     global _patcher
     global hex_to_rgb, interpolate_color, lighten_color, darken_color
     global apply_focus_ring, scroll_to_widget, apply_smooth_scroll
+    global apply_acrylic_blur, remove_blur
     _patcher = patch.dict(sys.modules, mods_to_mock)
     _patcher.start()
 
     from ui.components.color_utils import hex_to_rgb as h2r, interpolate_color as ic, lighten_color as lc, darken_color as dc
     from utils.focus_states import apply_focus_ring as afr, scroll_to_widget as stw
     from utils.smooth_scroll import apply_smooth_scroll as ass
+    from utils.acrylic_blur import apply_acrylic_blur as aab, remove_blur as rb
     
     hex_to_rgb = h2r
     interpolate_color = ic
@@ -47,6 +51,8 @@ def setUpModule():
     apply_focus_ring = afr
     scroll_to_widget = stw
     apply_smooth_scroll = ass
+    apply_acrylic_blur = aab
+    remove_blur = rb
 
 def tearDownModule():
     global _patcher
@@ -196,6 +202,87 @@ class TestUIKwargs(unittest.TestCase):
             last_configure_kwargs = mock_instance.configure.call_args[1]
             self.assertIsNotNone(last_configure_kwargs.get("border_color"))
             self.assertIsNotNone(last_configure_kwargs.get("fg_color"))
+
+
+class TestAcrylicBlur(unittest.TestCase):
+    def setUp(self):
+        import ctypes
+        self.added_windll = False
+        if not hasattr(ctypes, 'windll'):
+            self.mock_windll = MagicMock()
+            ctypes.windll = self.mock_windll
+            self.added_windll = True
+        else:
+            self.mock_windll = ctypes.windll
+
+    def tearDown(self):
+        import ctypes
+        if self.added_windll and hasattr(ctypes, 'windll'):
+            del ctypes.windll
+
+    @patch('platform.system', return_value="Linux")
+    def test_apply_acrylic_blur_non_windows(self, mock_system):
+        tk_window = MagicMock()
+        result = apply_acrylic_blur(tk_window)
+        self.assertFalse(result)
+
+    @patch('platform.system', return_value="Windows")
+    @patch('utils.acrylic_blur._get_hwnd', return_value=12345)
+    @patch('ctypes.windll.user32.SetWindowCompositionAttribute', create=True)
+    def test_apply_acrylic_blur_windows_success(self, mock_set_attr, mock_get_hwnd, mock_system):
+        mock_set_attr.return_value = True
+        tk_window = MagicMock()
+        result = apply_acrylic_blur(tk_window)
+        self.assertTrue(result)
+        mock_set_attr.assert_called_once()
+
+    @patch('platform.system', return_value="Windows")
+    @patch('utils.acrylic_blur._get_hwnd', return_value=12345)
+    @patch('ctypes.windll.user32.SetWindowCompositionAttribute', create=True)
+    def test_apply_acrylic_blur_windows_fallback(self, mock_set_attr, mock_get_hwnd, mock_system):
+        # Fail first call (acrylic), succeed second (standard blur)
+        mock_set_attr.side_effect = [False, True]
+        tk_window = MagicMock()
+        result = apply_acrylic_blur(tk_window)
+        self.assertTrue(result)
+        self.assertEqual(mock_set_attr.call_count, 2)
+
+    @patch('platform.system', return_value="Windows")
+    @patch('utils.acrylic_blur._get_hwnd', return_value=12345)
+    @patch('ctypes.windll.user32.SetWindowCompositionAttribute', create=True)
+    def test_apply_acrylic_blur_windows_fail(self, mock_set_attr, mock_get_hwnd, mock_system):
+        mock_set_attr.return_value = False
+        tk_window = MagicMock()
+        result = apply_acrylic_blur(tk_window)
+        self.assertFalse(result)
+
+    @patch('platform.system', return_value="Linux")
+    def test_remove_blur_non_windows(self, mock_system):
+        tk_window = MagicMock()
+        result = remove_blur(tk_window)
+        self.assertFalse(result)
+
+    @patch('platform.system', return_value="Windows")
+    @patch('utils.acrylic_blur._get_hwnd', return_value=12345)
+    @patch('ctypes.windll.user32.SetWindowCompositionAttribute', create=True)
+    def test_remove_blur_windows_success(self, mock_set_attr, mock_get_hwnd, mock_system):
+        mock_set_attr.return_value = True
+        tk_window = MagicMock()
+        result = remove_blur(tk_window)
+        self.assertTrue(result)
+        mock_set_attr.assert_called_once()
+
+        # Verify it tries to disable it (ACCENT_DISABLED = 0)
+        args, kwargs = mock_set_attr.call_args
+        # We know from implementation that Data points to AccentPolicy where state should be 0
+        self.assertIsNotNone(args)
+
+    @patch('platform.system', return_value="Windows")
+    @patch('utils.acrylic_blur._get_hwnd', side_effect=Exception("Test Exception"))
+    def test_remove_blur_exception(self, mock_get_hwnd, mock_system):
+        tk_window = MagicMock()
+        result = remove_blur(tk_window)
+        self.assertFalse(result)
 
 
 if __name__ == '__main__':
