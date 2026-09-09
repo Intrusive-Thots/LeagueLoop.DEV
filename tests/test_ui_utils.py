@@ -28,17 +28,19 @@ darken_color = None
 apply_focus_ring = None
 scroll_to_widget = None
 apply_smooth_scroll = None
+apply_press_effect = None
 
 def setUpModule():
     global _patcher
     global hex_to_rgb, interpolate_color, lighten_color, darken_color
-    global apply_focus_ring, scroll_to_widget, apply_smooth_scroll
+    global apply_focus_ring, scroll_to_widget, apply_smooth_scroll, apply_press_effect
     _patcher = patch.dict(sys.modules, mods_to_mock)
     _patcher.start()
 
     from ui.components.color_utils import hex_to_rgb as h2r, interpolate_color as ic, lighten_color as lc, darken_color as dc
     from utils.focus_states import apply_focus_ring as afr, scroll_to_widget as stw
     from utils.smooth_scroll import apply_smooth_scroll as ass
+    from ui.components.hover import apply_press_effect as ape
     
     hex_to_rgb = h2r
     interpolate_color = ic
@@ -47,6 +49,7 @@ def setUpModule():
     apply_focus_ring = afr
     scroll_to_widget = stw
     apply_smooth_scroll = ass
+    apply_press_effect = ape
 
 def tearDownModule():
     global _patcher
@@ -196,6 +199,67 @@ class TestUIKwargs(unittest.TestCase):
             last_configure_kwargs = mock_instance.configure.call_args[1]
             self.assertIsNotNone(last_configure_kwargs.get("border_color"))
             self.assertIsNotNone(last_configure_kwargs.get("fg_color"))
+
+
+class TestHoverEffects(unittest.TestCase):
+    def setUp(self):
+        self.widget = MagicMock()
+
+    @patch("ui.components.hover.darken_color")
+    @patch("ui.components.hover.Logger")
+    def test_apply_press_effect_default(self, mock_logger, mock_darken):
+        mock_darken.return_value = "#111111"
+
+        apply_press_effect(self.widget, "#222222")
+
+        # Should call darken_color since no press_color provided
+        mock_darken.assert_called_with("#222222", 10)
+
+        # Should bind ButtonPress-1 and ButtonRelease-1
+        self.assertEqual(self.widget.bind.call_count, 2)
+        bind_args = [call[0][0] for call in self.widget.bind.call_args_list]
+        self.assertIn("<ButtonPress-1>", bind_args)
+        self.assertIn("<ButtonRelease-1>", bind_args)
+
+        # Test callbacks
+        on_press = self.widget.bind.call_args_list[0][0][1]
+        on_release = self.widget.bind.call_args_list[1][0][1]
+
+        on_press(None)
+        self.widget.configure.assert_called_with(fg_color="#111111")
+
+        on_release(None)
+        self.widget.configure.assert_called_with(fg_color="#222222")
+
+    @patch("ui.components.hover.Logger")
+    def test_apply_press_effect_custom_color(self, mock_logger):
+        apply_press_effect(self.widget, "#222222", press_color="#333333")
+
+        # Test callbacks
+        on_press = self.widget.bind.call_args_list[0][0][1]
+        on_release = self.widget.bind.call_args_list[1][0][1]
+
+        on_press(None)
+        self.widget.configure.assert_called_with(fg_color="#333333")
+
+        on_release(None)
+        self.widget.configure.assert_called_with(fg_color="#222222")
+
+    @patch("ui.components.hover.Logger")
+    def test_apply_press_effect_exception(self, mock_logger):
+        self.widget.configure.side_effect = Exception("Test Exception")
+
+        apply_press_effect(self.widget, "#222222")
+
+        # Test callbacks handling exception
+        on_press = self.widget.bind.call_args_list[0][0][1]
+        on_release = self.widget.bind.call_args_list[1][0][1]
+
+        on_press(None)
+        mock_logger.error.assert_called()
+
+        on_release(None)
+        self.assertEqual(mock_logger.error.call_count, 2)
 
 
 if __name__ == '__main__':
