@@ -9,7 +9,7 @@ it reads as coverage.
 """
 import unittest
 
-from ui.theme.token_loader import TOKENS, DesignTokens
+from ui.theme.token_loader import TOKENS, DesignTokens, _intern_tokens
 
 
 class DesignTokenTests(unittest.TestCase):
@@ -40,6 +40,32 @@ class DesignTokenTests(unittest.TestCase):
 
     def test_loader_is_constructible(self):
         self.assertIsInstance(TOKENS, DesignTokens)
+
+    def test_intern_tokens_edge_cases(self):
+        # Dict with integer keys and float values
+        obj = {1: 1.5, 2: None, "str_key": "str_val"}
+        interned = _intern_tokens(obj)
+        self.assertEqual(interned[1], 1.5)
+        self.assertIsNone(interned[2])
+        self.assertEqual(interned["str_key"], "str_val")
+
+        # Lists with mixed types
+        lst = [1, "test", None, [2, "nested"]]
+        interned_lst = _intern_tokens(lst)
+        self.assertEqual(interned_lst[0], 1)
+        self.assertEqual(interned_lst[1], "test")
+        self.assertIsNone(interned_lst[2])
+        self.assertEqual(interned_lst[3][0], 2)
+        self.assertEqual(interned_lst[3][1], "nested")
+
+        # Raw types
+        self.assertEqual(_intern_tokens(42), 42)
+        self.assertEqual(_intern_tokens(42.5), 42.5)
+        self.assertIsNone(_intern_tokens(None))
+
+        # Test interning behavior (not easily testable with assertIs since same string literal might be interned automatically,
+        # but we can verify it doesn't break strings)
+        self.assertEqual(_intern_tokens("a_long_string_that_is_not_interned_yet_12345"), "a_long_string_that_is_not_interned_yet_12345")
 
 
 if __name__ == "__main__":
