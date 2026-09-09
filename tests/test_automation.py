@@ -170,7 +170,7 @@ class TestAutomationEngineWindowState(unittest.TestCase):
         engine.executor.submit.return_value = mock_future
 
         engine._is_first_tick = False
-        engine._game_pid = None
+        engine._game_process = None
         engine._tick()
 
         engine.window_func.assert_called_with("restore")
@@ -188,7 +188,7 @@ class TestAutomationEngineWindowState(unittest.TestCase):
         engine.executor.submit.return_value = mock_future
 
         engine._is_first_tick = False
-        engine._game_pid = None
+        engine._game_process = None
         engine._tick()
 
         engine.window_func.assert_called_with("restore_quiet")
@@ -905,7 +905,7 @@ class TestAutomationEngineSpectatorThrottle(unittest.TestCase):
         engine.window_func = None
         engine.last_phase = "None"
         engine._spectate_start_time = None
-        engine._game_pid = None
+        engine._game_process = None
         engine._last_game_scan = 0.0
         engine._handle_ready_check = MagicMock()
         engine._handle_champ_select = MagicMock()
