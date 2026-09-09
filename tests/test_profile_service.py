@@ -9,6 +9,7 @@ and never fetched rank at all.
 import unittest
 
 from services.profile_service import (
+    Match,
     Profile,
     ProfileService,
     RankEntry,
@@ -114,6 +115,10 @@ class MatchTests(unittest.TestCase):
         game = {"participants": [{"stats": {"kills": 5, "deaths": 0,
                                             "assists": 5}}]}
         self.assertIsNone(parse_match(game).kda_ratio)
+
+    def test_kda_ratio_is_computed_correctly(self):
+        match = Match(kills=9, deaths=3, assists=6)
+        self.assertEqual(match.kda_ratio, 5.0)
 
     def test_garbage_is_skipped(self):
         self.assertIsNone(parse_match(None))
