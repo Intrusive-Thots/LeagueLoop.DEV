@@ -112,6 +112,7 @@ class AutomationEngine:
 
         # Game process & spectator tracking
         self._game_pid: Optional[int] = None
+        self._game_process: Optional[psutil.Process] = None
         self._last_game_scan: float = 0.0
         self._spectate_start_time: Optional[float] = None
 
@@ -197,14 +198,18 @@ class AutomationEngine:
 
         # Fast-path: reuse cached PID if still alive
         game_pid = getattr(self, "_game_pid", None)
+        game_process = getattr(self, "_game_process", None)
         if game_pid is not None:
             try:
-                p = psutil.Process(game_pid)
-                if p.is_running() and p.name().lower() == "league of legends.exe":
+                if game_process is None:
+                    game_process = psutil.Process(game_pid)
+                    self._game_process = game_process
+                if game_process.is_running() and game_process.name().lower() == "league of legends.exe":
                     return True
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
             self._game_pid = None
+            self._game_process = None
 
         # Throttle full scans to every 3 seconds
         last_scan = getattr(self, "_last_game_scan", 0.0)
@@ -216,6 +221,7 @@ class AutomationEngine:
             try:
                 if (p.info["name"] or "").lower() == "league of legends.exe":
                     self._game_pid = p.pid
+                    self._game_process = p
                     return True
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, KeyError):
                 continue
@@ -381,6 +387,7 @@ class AutomationEngine:
                     else:
                         wf("restore")
                 self._game_pid = None
+                self._game_process = None
 
         # Keep in-game flag consistent even if we entered via process inference
         try:
