@@ -247,13 +247,27 @@ class ProfileService:
         )
         games = ((history or {}).get("games") or {}).get("games") or []
         matches = []
+
+        # Hoist attribute lookup
+        getter = getattr(self._assets, "get_champ_name", None)
+        is_callable = callable(getter)
+
+        def _get_name(cid: int) -> str:
+            if is_callable:
+                try:
+                    name = getter(cid)
+                    if name: return str(name)
+                except Exception as exc:
+                    Logger.debug("ProfileService", "_champ_name suppressed an error", exc=exc)
+            return str(cid) if cid else ""
+
         for game in games:
             match = parse_match(game)
             if match is None:
                 continue
             matches.append(
                 Match(**{**match.__dict__,
-                         "champion_name": self._champ_name(match.champion_id)})
+                         "champion_name": _get_name(match.champion_id)})
             )
 
         if matches:
@@ -282,13 +296,30 @@ class ProfileService:
             return []
 
         out = []
+
+        getter = getattr(self._assets, "get_champ_name", None)
+        is_callable = callable(getter)
+
+        def _get_name(cid: int) -> str:
+            if is_callable:
+                try:
+                    name = getter(cid)
+                    if name: return str(name)
+                except Exception as exc:
+                    Logger.debug("ProfileService", "_champ_name suppressed an error", exc=exc)
+            return str(cid) if cid else ""
+
         for row in rows:
+            champ_name = str(row.get("champion_name") or "")
+            champ_id = _int(row.get("champion_id"))
+            if not champ_name:
+                champ_name = _get_name(champ_id)
+
             out.append(
                 Match(
                     game_id=_int(row.get("game_id")),
-                    champion_id=_int(row.get("champion_id")),
-                    champion_name=str(row.get("champion_name") or "")
-                    or self._champ_name(_int(row.get("champion_id"))),
+                    champion_id=champ_id,
+                    champion_name=champ_name,
                     queue_id=_int(row.get("queue_id")),
                     win=bool(row.get("win")),
                     kills=_int(row.get("kills")),
