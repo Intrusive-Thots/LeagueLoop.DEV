@@ -195,15 +195,12 @@ class AutomationEngine:
         """
         now = time.time()
 
-        # Fast-path: reuse cached PID if still alive
-        game_pid = getattr(self, "_game_pid", None)
-        if game_pid is not None:
-            try:
-                p = psutil.Process(game_pid)
-                if p.is_running() and p.name().lower() == "league of legends.exe":
-                    return True
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                pass
+        # Fast-path: reuse cached process if still alive
+        game_proc = getattr(self, "_game_proc", None)
+        if game_proc is not None:
+            if game_proc.is_running():
+                return True
+            self._game_proc = None
             self._game_pid = None
 
         # Throttle full scans to every 3 seconds
@@ -215,6 +212,7 @@ class AutomationEngine:
         for p in psutil.process_iter(attrs=["name"]):
             try:
                 if (p.info["name"] or "").lower() == "league of legends.exe":
+                    self._game_proc = p
                     self._game_pid = p.pid
                     return True
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, KeyError):
