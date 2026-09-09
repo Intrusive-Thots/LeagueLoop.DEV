@@ -195,12 +195,24 @@ class AutomationEngine:
         """
         now = time.time()
 
-        # Fast-path: reuse cached PID if still alive
+        # Fast-path: reuse cached process object if still alive
+        game_process = getattr(self, "_game_process", None)
+        if game_process is not None:
+            try:
+                if game_process.is_running():
+                    return True
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+            self._game_process = None
+            self._game_pid = None
+
+        # Fallback for older PID cache (in case it was set externally)
         game_pid = getattr(self, "_game_pid", None)
         if game_pid is not None:
             try:
                 p = psutil.Process(game_pid)
                 if p.is_running() and p.name().lower() == "league of legends.exe":
+                    self._game_process = p
                     return True
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
@@ -215,6 +227,7 @@ class AutomationEngine:
         for p in psutil.process_iter(attrs=["name"]):
             try:
                 if (p.info["name"] or "").lower() == "league of legends.exe":
+                    self._game_process = p
                     self._game_pid = p.pid
                     return True
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, KeyError):
