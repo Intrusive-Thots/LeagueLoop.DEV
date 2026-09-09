@@ -31,6 +31,19 @@ class DummyAPIHandler(LeagueLoopAPIHandler):
         pass
 
 class TestLocalAPI:
+    def test_cors_headers_security(self):
+        # Disallowed origin should not receive Access-Control-Allow-Origin
+        handler_disallowed = DummyAPIHandler(path="/health", method="GET", headers={"Origin": "http://evil.com"})
+        handler_disallowed.do_GET()
+        assert handler_disallowed.response_code == 200
+        assert "Access-Control-Allow-Origin" not in handler_disallowed.response_headers
+
+        # Allowed origin should receive Access-Control-Allow-Origin
+        handler_allowed = DummyAPIHandler(path="/health", method="GET", headers={"Origin": "http://localhost"})
+        handler_allowed.do_GET()
+        assert handler_allowed.response_code == 200
+        assert handler_allowed.response_headers.get("Access-Control-Allow-Origin") == "http://localhost"
+
     def test_get_health(self):
         handler = DummyAPIHandler(path="/health", method="GET")
         handler.do_GET()
