@@ -9,7 +9,7 @@ it reads as coverage.
 """
 import unittest
 
-from ui.theme.token_loader import TOKENS, DesignTokens
+from ui.theme.token_loader import TOKENS, DesignTokens, _intern_tokens
 
 
 class DesignTokenTests(unittest.TestCase):
@@ -40,6 +40,42 @@ class DesignTokenTests(unittest.TestCase):
 
     def test_loader_is_constructible(self):
         self.assertIsInstance(TOKENS, DesignTokens)
+
+    def test_intern_tokens(self):
+        # String interning
+        # Using join prevents compile-time constant folding string interning
+        s1 = "".join(["some_random_string_", "constructed"])
+        s2 = "some_random_string_constructed"
+        self.assertIsNot(s1, s2)
+
+        interned_s1 = _intern_tokens(s1)
+        interned_s2 = _intern_tokens(s2)
+        self.assertIs(interned_s1, interned_s2)
+
+        # List interning
+        lst = [s1, s2, 123]
+        interned_lst = _intern_tokens(lst)
+        self.assertEqual(interned_lst, [s1, s2, 123])
+        self.assertIs(interned_lst[0], interned_lst[1])
+
+        # Dictionary interning
+        d = {s1: s2, 1: 2}
+        interned_d = _intern_tokens(d)
+        self.assertEqual(interned_d, {s1: s2, 1: 2})
+        keys = list(interned_d.keys())
+        values = list(interned_d.values())
+
+        # In dictionaries order is preserved (for Python 3.7+),
+        # so s1 is at index 0, 1 is at index 1.
+        self.assertIs(keys[0], values[0])
+        self.assertEqual(keys[1], 1)
+        self.assertEqual(values[1], 2)
+
+        # Fallback/Error path (unsupported types return unmodified)
+        sentinel = object()
+        self.assertIs(_intern_tokens(sentinel), sentinel)
+        self.assertIs(_intern_tokens(None), None)
+        self.assertIs(_intern_tokens(42), 42)
 
 
 if __name__ == "__main__":
