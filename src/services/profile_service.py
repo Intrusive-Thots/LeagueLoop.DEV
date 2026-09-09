@@ -247,13 +247,25 @@ class ProfileService:
         )
         games = ((history or {}).get("games") or {}).get("games") or []
         matches = []
+
+        get_champ_name = getattr(self._assets, "get_champ_name", None)
+        def resolve_champ_name(champion_id: int) -> str:
+            if callable(get_champ_name):
+                try:
+                    name = get_champ_name(champion_id)
+                    if name:
+                        return str(name)
+                except Exception as exc:
+                    Logger.debug("ProfileService", "resolve_champ_name suppressed an error", exc=exc)
+            return str(champion_id) if champion_id else ""
+
         for game in games:
             match = parse_match(game)
             if match is None:
                 continue
             matches.append(
                 Match(**{**match.__dict__,
-                         "champion_name": self._champ_name(match.champion_id)})
+                         "champion_name": resolve_champ_name(match.champion_id)})
             )
 
         if matches:
@@ -282,13 +294,25 @@ class ProfileService:
             return []
 
         out = []
+
+        get_champ_name = getattr(self._assets, "get_champ_name", None)
+        def resolve_champ_name(champion_id: int) -> str:
+            if callable(get_champ_name):
+                try:
+                    name = get_champ_name(champion_id)
+                    if name:
+                        return str(name)
+                except Exception as exc:
+                    Logger.debug("ProfileService", "resolve_champ_name suppressed an error", exc=exc)
+            return str(champion_id) if champion_id else ""
+
         for row in rows:
             out.append(
                 Match(
                     game_id=_int(row.get("game_id")),
                     champion_id=_int(row.get("champion_id")),
                     champion_name=str(row.get("champion_name") or "")
-                    or self._champ_name(_int(row.get("champion_id"))),
+                    or resolve_champ_name(_int(row.get("champion_id"))),
                     queue_id=_int(row.get("queue_id")),
                     win=bool(row.get("win")),
                     kills=_int(row.get("kills")),
