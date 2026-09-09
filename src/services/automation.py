@@ -312,9 +312,17 @@ class AutomationEngine:
             phase_req = self.lcu.request("GET", "/lol-gameflow/v1/gameflow-phase", None, True)
             if phase_req and phase_req.status_code == 200:
                 try:
-                    polled = phase_req.json()
-                    if isinstance(polled, str) and polled:
-                        phase = polled
+                    text = phase_req.text
+                    if text != getattr(self, "_last_phase_text", None):
+                        polled = phase_req.json()
+                        if isinstance(polled, str) and polled:
+                            self._cached_phase = polled
+                        else:
+                            self._cached_phase = None
+                        self._last_phase_text = text
+
+                    if getattr(self, "_cached_phase", None):
+                        phase = self._cached_phase
                 except Exception as exc:
                     Logger.debug("Automation", "_tick suppressed an error", exc=exc)
         else:
