@@ -115,6 +115,11 @@ class MatchTests(unittest.TestCase):
                                             "assists": 5}}]}
         self.assertIsNone(parse_match(game).kda_ratio)
 
+    def test_kda_ratio_is_calculated_correctly(self):
+        game = {"participants": [{"stats": {"kills": 5, "deaths": 2,
+                                            "assists": 3}}]}
+        self.assertEqual(parse_match(game).kda_ratio, 4.0)
+
     def test_garbage_is_skipped(self):
         self.assertIsNone(parse_match(None))
         self.assertIsNotNone(parse_match({}))
