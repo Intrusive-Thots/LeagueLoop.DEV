@@ -9,7 +9,50 @@ it reads as coverage.
 """
 import unittest
 
-from ui.theme.token_loader import TOKENS, DesignTokens
+import sys
+
+from ui.theme.token_loader import TOKENS, DesignTokens, _intern_tokens
+
+
+class InternTokensTests(unittest.TestCase):
+    def test_intern_dict_string_keys(self):
+        input_data = {"key1": "val1", "key2": {"nested_key": "nested_val"}}
+        result = _intern_tokens(input_data)
+
+        self.assertEqual(result, input_data)
+
+        # Check interning
+        # Since we use literal strings in code, they are often interned.
+        # But let's check that the output values are interned strings.
+        self.assertTrue(result["key1"] is sys.intern("val1"))
+        self.assertTrue(list(result.keys())[0] is sys.intern("key1"))
+
+    def test_intern_dict_non_string_keys(self):
+        # We separate tests for 1 and True, because in Python True == 1 and hash(True) == hash(1)
+        # thus they overlap if both are used as keys in the same dict
+        input_data = {1: "val", None: "none_val", False: "bool_val"}
+        result = _intern_tokens(input_data)
+
+        self.assertEqual(result, input_data)
+        self.assertTrue(1 in result)
+        self.assertTrue(result[1] is sys.intern("val"))
+
+    def test_intern_list(self):
+        input_data = ["val1", "val2", {"key": "val3"}]
+        result = _intern_tokens(input_data)
+
+        self.assertEqual(result, input_data)
+        self.assertTrue(result[0] is sys.intern("val1"))
+        self.assertTrue(result[2]["key"] is sys.intern("val3"))
+
+    def test_intern_string(self):
+        input_data = "hello world"
+        result = _intern_tokens(input_data)
+        self.assertTrue(result is sys.intern("hello world"))
+
+    def test_intern_unsupported_types(self):
+        for val in [1, 1.5, True, None, object()]:
+            self.assertIs(_intern_tokens(val), val)
 
 
 class DesignTokenTests(unittest.TestCase):
