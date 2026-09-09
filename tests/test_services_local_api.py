@@ -146,6 +146,12 @@ class TestLocalAPI:
         assert isinstance(ip, str)
         assert len(ip) > 0
 
+    @patch("socket.socket")
+    def test_get_local_ip_fallback(self, mock_socket):
+        mock_socket.return_value.connect.side_effect = Exception("Network error")
+        ip = get_local_ip()
+        assert ip == '127.0.0.1'
+
     @patch("sys.platform", "win32")
     @patch("subprocess.run")
     def test_ensure_firewall_rule(self, mock_run):
