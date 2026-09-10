@@ -3,7 +3,11 @@ from unittest.mock import MagicMock, patch, mock_open
 import os
 import json
 
-from services.asset_manager import AssetManager
+from services.asset_manager import (
+    AssetManager,
+    _coerce_numeric_id,
+    _is_usable_ddragon_ver,
+)
 
 SAMPLE_CHAMP_DATA = {
     "data": {
@@ -111,6 +115,31 @@ class TestAssetManager(unittest.TestCase):
                 "champion_Yuumi_40x40",
                 size=(40, 40)
             )
+
+    def test_coerce_numeric_id_never_calls_isdigit_on_int(self):
+        self.assertEqual(_coerce_numeric_id(350), 350)
+        self.assertEqual(_coerce_numeric_id("266"), 266)
+        self.assertIsNone(_coerce_numeric_id("Yuumi"))
+        self.assertIsNone(_coerce_numeric_id(True))
+        self.assertIsNone(_coerce_numeric_id(None))
+
+    def test_preload_integer_keys_resolves_without_attribute_error(self):
+        """Champ-select preload receives LCU ints; must not hit key.isdigit()."""
+        self.assets.id_to_key = {350: "Yuumi", 266: "Aatrox"}
+        with patch.object(self.assets, "get_icon") as mock_get:
+            self.assets.preload_champion_icons([350, "266", "Yuumi"])
+            self.assets._download_queue.join()
+            called = [c.args[1] for c in mock_get.call_args_list]
+            self.assertEqual(set(called), {"Yuumi", "Aatrox"})
+
+    def test_usable_ddragon_version_rejects_sentinels(self):
+        self.assertTrue(_is_usable_ddragon_ver("15.18.1"))
+        self.assertTrue(_is_usable_ddragon_ver("14.1.1"))
+        self.assertFalse(_is_usable_ddragon_ver("99.9.9"))
+        self.assertFalse(_is_usable_ddragon_ver("0.0.0"))
+        self.assertFalse(_is_usable_ddragon_ver(""))
+        self.assertFalse(_is_usable_ddragon_ver(None))
+        self.assertFalse(_is_usable_ddragon_ver(15181))
 
 
     def test_get_memory_summary_diagnostics(self):

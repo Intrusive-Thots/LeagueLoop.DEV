@@ -116,6 +116,25 @@ class ChampionDataTests(unittest.TestCase):
         self.manager._shutdown_event.set()
         self.assertFalse(self.manager._load_champion_data_with_retry())
 
+    def test_sentinel_version_txt_is_ignored(self):
+        """99.9.9 in version.txt used to 404 every DDragon request."""
+        path = os.path.join(self._tmp.name, "version.txt")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("99.9.9\n")
+        self.manager.shutdown()
+        am._cached_ddragon_ver = None
+        mgr = am.AssetManager()
+        self.addCleanup(mgr.shutdown)
+        self.assertNotEqual(mgr.ddragon_ver, "99.9.9")
+        self.assertTrue(am._is_usable_ddragon_ver(mgr.ddragon_ver))
+
+    def test_fetch_latest_rejects_sentinel_payload(self):
+        self.manager.ddragon_ver = "14.1.1"
+        get = self._serve(FakeResponse(["99.9.9", "14.1.1"]))
+        self.manager._fetch_latest_version()
+        self.assertEqual(self.manager.ddragon_ver, "14.1.1")
+        get.assert_called()
+
     def test_retry_is_callable_from_the_ui(self):
         self._serve(FakeResponse({}, status_code=500), FakeResponse(CHAMPIONS))
         with mock.patch.object(self.manager, "_fetch_latest_version"):

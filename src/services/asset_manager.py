@@ -45,10 +45,42 @@ except OSError:
 
 DDRAGON_VER = "14.1.1"
 
+# Test / placeholder versions that must never be read from version.txt or
+# written back as "latest". 99.9.9 is the suite's fake version; requesting
+# it from Data Dragon 404s and leaves champion data empty for the session.
+_DDRAGON_SENTINELS = frozenset({"99.9.9", "0.0.0"})
+
 #: Queue sentinel telling a download worker to exit.
 _WORKER_STOP = object()
 
 _cached_ddragon_ver = None
+
+
+def _is_usable_ddragon_ver(ver) -> bool:
+    """True if *ver* looks like a real Data Dragon patch (e.g. 15.18.1)."""
+    if not isinstance(ver, str):
+        return False
+    ver = ver.strip()
+    if not ver or ver in _DDRAGON_SENTINELS:
+        return False
+    parts = ver.split(".")
+    return len(parts) >= 2 and all(p.isdigit() for p in parts)
+
+
+def _coerce_numeric_id(key):
+    """Return an int id when *key* is numeric; never call ``.isdigit()`` on an int.
+
+    Download workers used to call ``.isdigit()`` on the raw key. Champion IDs
+    from LCU are ints, which raised ``AttributeError: 'int' object has no
+    attribute 'isdigit'`` on every preload.
+    """
+    if isinstance(key, bool):
+        return None
+    if isinstance(key, int):
+        return key
+    if isinstance(key, str) and key.isdigit():
+        return int(key)
+    return None
 
 
 
@@ -475,7 +507,7 @@ class AssetManager:
 
         # Initialize version from cache if available, otherwise use default
         global _cached_ddragon_ver
-        if _cached_ddragon_ver:
+        if _is_usable_ddragon_ver(_cached_ddragon_ver):
             self.ddragon_ver = _cached_ddragon_ver
         else:
             self.ddragon_ver = DDRAGON_VER
@@ -483,8 +515,12 @@ class AssetManager:
             if os.path.exists(v_path):
                 try:
                     with open(v_path, "r", encoding="utf-8") as f:
-                        self.ddragon_ver = f.read().strip()
-                        _cached_ddragon_ver = self.ddragon_ver
+                        cached = f.read().strip()
+                    if _is_usable_ddragon_ver(cached):
+                        self.ddragon_ver = cached
+                        _cached_ddragon_ver = cached
+                    else:
+                        self.log(f"Ignoring unusable cached Data Dragon version {cached!r}")
                 except Exception as e:
                     Logger.error("asset_manager.py", f"Handled exception: {type(e).__name__}: {e}")
 
@@ -537,11 +573,18 @@ class AssetManager:
         Data Dragon is a CDN and a cold start races the network coming up, so
         a single attempt at launch fails often enough to matter.
         """
+        if not _is_usable_ddragon_ver(getattr(self, "ddragon_ver", None)):
+            self.ddragon_ver = DDRAGON_VER
         delay = self.CHAMPION_RETRY_BACKOFF_S
         for attempt in range(1, self.CHAMPION_LOAD_ATTEMPTS + 1):
             if self._load_champion_data():
                 return True
+            err = self.champion_data_error or ""
             if attempt < self.CHAMPION_LOAD_ATTEMPTS:
+                # A 404 almost always means the cached patch id is stale or a
+                # test sentinel leaked into version.txt — refresh before retrying.
+                if "404" in err:
+                    self._fetch_latest_version()
                 self.log(
                     "Champion data attempt {} of {} failed; retrying in {:.0f}s"
                     .format(attempt, self.CHAMPION_LOAD_ATTEMPTS, delay)
@@ -582,6 +625,9 @@ class AssetManager:
                 versions = response.json()
                 if versions and isinstance(versions, list):
                     latest = versions[0]
+                    if not _is_usable_ddragon_ver(latest):
+                        self.log(f"Ignoring unusable Data Dragon version {latest!r}")
+                        return
                     if latest != self.ddragon_ver:
                         global _cached_ddragon_ver
                         self.log(f"Updated Data Dragon version to {latest}")
@@ -5418,6 +5464,16 @@ class AssetManager:
         self._start_download(url, path)
         return None
 
+    def _resolve_champion_key(self, key):
+        """Map a champion id (int or numeric str) or display name to a DDragon key."""
+        nid = _coerce_numeric_id(key)
+        if nid is not None:
+            return self.id_to_key.get(nid, str(key))
+        cid = self.name_to_id.get(str(key).lower())
+        if cid is not None:
+            return self.id_to_key.get(cid, str(key))
+        return key
+
     def get_icon(self, type_, key, size=(40, 40)) -> Optional[ctk.CTkImage]:
         """Synchronously get an icon if cached on disk, otherwise trigger a download and return None."""
         cache_key = f"{type_}_{key}_{size[0]}x{size[1]}"
@@ -5427,13 +5483,7 @@ class AssetManager:
         if type_ == "champion":
             # DDragon uses champion name keys (e.g. "Yuumi"), not numeric IDs (e.g. "350")
             # or display names with spaces (e.g. "Twisted Fate" -> "TwistedFate")
-            resolved_key = key
-            if (isinstance(key, int) or str(key).isdigit()) and hasattr(self, "id_to_key"):
-                resolved_key = self.id_to_key.get(int(key), str(key))
-            elif hasattr(self, "name_to_id") and hasattr(self, "id_to_key"):
-                cid = self.name_to_id.get(str(key).lower())
-                if cid is not None:
-                    resolved_key = self.id_to_key.get(cid, str(key))
+            resolved_key = self._resolve_champion_key(key)
             fname = f"champion_{resolved_key}.png"
             url = f"https://ddragon.leagueoflegends.com/cdn/{self.ddragon_ver}/img/champion/{resolved_key}.png"
         elif type_ == "item":
@@ -5512,13 +5562,7 @@ class AssetManager:
         for key in unique_keys:
             if not key:
                 continue
-            resolved_key = key
-            if str(key).isdigit() and hasattr(self, "id_to_key"):
-                resolved_key = self.id_to_key.get(int(key), key)
-            elif hasattr(self, "name_to_id") and hasattr(self, "id_to_key"):
-                cid = self.name_to_id.get(str(key).lower())
-                if cid is not None:
-                    resolved_key = self.id_to_key.get(cid, key)
+            resolved_key = self._resolve_champion_key(key)
             cache_key = f"champion_{resolved_key}_{size[0]}x{size[1]}"
             if cache_key in self.icons:
                 continue
