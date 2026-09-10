@@ -67,6 +67,27 @@ Violating these rules WILL cause bugs that have already been fixed to recur.
 - **Files affected**: `client_detector.py`
 - **Regression test**: `test_regression_guards.py::TestLCUProcessScanner`
 
+### ASSET-001: Never Call ``.isdigit()`` on Champion IDs
+- **NEVER** write `key.isdigit()` / `cid.isdigit()` on values that may be LCU ints
+- **ALWAYS** coerce with `_coerce_numeric_id()` (int fast-path, `str.isdigit()` only on strings)
+- LCU `championId` is an int. `int.isdigit()` raises `AttributeError` on every download worker
+- **Files affected**: `asset_manager.py`
+- **Regression test**: `test_regression_guards.py::test_asset_manager_never_calls_isdigit_on_raw_key`
+
+### UI-001: Never Pass ``None`` as a CTk Color
+- **NEVER** call `widget.configure(border_color=None)` or pass a `(None, ...)` pair
+- **ALWAYS** wrap colors with `ctk_safe_color()` before CTkEntry/CTkButton configure
+- CustomTkinter raises `ValueError: color is None, for transparency set color='transparent'`
+- **Files affected**: `factory.py`, `focus_states.py`, `color_utils.py`
+- **Regression test**: `test_regression_guards.py::test_factory_unfocus_uses_safe_colors`
+
+### COLOR-001: Never Slice Unvalidated Color Strings as Hex
+- **NEVER** do `int(color[1:3], 16)` on an arbitrary theme/cget value
+- **ALWAYS** parse with `parse_hex_rgb()` (handles `#RGB`/`#RRGGBB`/`#RRGGBBAA`, CTk pairs, named junk)
+- `"invalid"[1:3]` is `"nv"` and used to flood `error.log`
+- **Files affected**: `color_utils.py`
+- **Regression test**: `test_regression_guards.py::test_color_utils_parses_without_raw_slice`
+
 ### RENDER-001: Batch Widget Insertion Must Suppress Layout Updates
 - **ALWAYS** wrap loops that insert >5 widgets with:
   ```python
