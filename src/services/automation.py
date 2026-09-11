@@ -947,6 +947,7 @@ class AutomationEngine:
                 ["taskkill", "/IM", "LeagueClient.exe", "/F"],
                 creationflags=NO_WINDOW,
                 timeout=10,
+                shell=False,
             )
         except Exception as exc:
             Logger.error(
