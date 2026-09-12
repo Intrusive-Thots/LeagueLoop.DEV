@@ -177,31 +177,31 @@ class PriorityEngine:
             return []
 
         if aram:
+            # Active CustomTkinter UI writes to priority_picker["list"]
+            active_picker = self.config.get("priority_picker", {})
+            if isinstance(active_picker, dict) and active_picker.get("list"):
+                active_list = read_champion_ids({"_active": active_picker.get("list", [])}, "_active", asset_manager=self.assets)
+                if active_list:
+                    return active_list
             aram_list = read_champion_ids(self.config, ARAM_PRIORITY_LIST, asset_manager=self.assets)
             if aram_list:
                 return aram_list
-            # Fallback to legacy priority_picker list if configured
-            legacy = self.config.get("priority_picker", {})
-            if isinstance(legacy, dict) and legacy.get("list"):
-                legacy_list = read_champion_ids({"_legacy": legacy.get("list", [])}, "_legacy", asset_manager=self.assets)
-                if legacy_list:
-                    return legacy_list
 
         if role:
             role_list = read_champion_ids(self.config, role_priority_key(role), asset_manager=self.assets)
             if role_list:
                 return role_list
 
+        # Active CustomTkinter UI writes to priority_picker["list"]
+        active_picker = self.config.get("priority_picker", {})
+        if isinstance(active_picker, dict) and active_picker.get("list"):
+            active_list = read_champion_ids({"_active": active_picker.get("list", [])}, "_active", asset_manager=self.assets)
+            if active_list:
+                return active_list
+
         main_list = read_champion_ids(self.config, PRIORITY_LIST, asset_manager=self.assets)
         if main_list:
             return main_list
-
-        # Fallback to legacy priority_picker list
-        legacy = self.config.get("priority_picker", {})
-        if isinstance(legacy, dict) and legacy.get("list"):
-            legacy_list = read_champion_ids({"_legacy": legacy.get("list", [])}, "_legacy", asset_manager=self.assets)
-            if legacy_list:
-                return legacy_list
 
         return []
 

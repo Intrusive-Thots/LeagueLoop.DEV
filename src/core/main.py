@@ -185,6 +185,8 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
 
         if self.automation is not None:
             self.automation.start(start_paused=False)  # type: ignore
+        if hasattr(self, "sidebar"):
+            self.sidebar.set_power_state(True)
 
         self.assets.start_loading()
         
