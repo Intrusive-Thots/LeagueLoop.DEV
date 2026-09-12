@@ -1039,6 +1039,49 @@ class SidebarWidget(ctk.CTkFrame):
             Logger.debug("AppSidebar", "_get_queue_id_for_mode suppressed an error", exc=exc)
         return 450 # Default to ARAM
 
+    #: Gameflow phases in which the client owns the lobby and will refuse to
+    #: make a new one. "Lobby" and "None" are the two it will accept.
+    PHASES_WITHOUT_A_LOBBY = {
+        "ChampSelect": "Can't queue: you're in champ select.",
+        "ReadyCheck": "Can't queue: there's a ready check open.",
+        "InProgress": "Can't queue: a game is still running.",
+        "Reconnect": "Can't queue: the client wants you to reconnect to a game.",
+        "WaitingForStats": "Can't queue: the previous game is still finishing.",
+        "PreEndOfGame": "Can't queue: the honour screen is still open.",
+        "EndOfGame": "Can't queue: the post-game screen is still open.",
+        "Matchmaking": "Already searching.",
+    }
+
+    def _phase_blocking_a_lobby(self):
+        """The reason a lobby cannot be created now, or None if it can.
+
+        Asked before any lobby call, because the failure this prevents is
+        expensive and silent: HTTP 500, retried three times as though it were
+        transient, then a 400 from the search that follows.
+        """
+        try:
+            res = self.lcu.request("GET", "/lol-gameflow/v1/gameflow-phase", silent=True)
+            if not res or res.status_code != 200:
+                return None          # unknown: let the call through and report honestly
+            phase = res.json()
+        except Exception as exc:
+            Logger.debug("AppSidebar", "Could not read the gameflow phase", exc=exc)
+            return None
+        if isinstance(phase, str):
+            return self.PHASES_WITHOUT_A_LOBBY.get(phase)
+        return None
+
+    @staticmethod
+    def _lobby_refusal_message(mode, code) -> str:
+        """Say what the client actually refused, not just that something failed."""
+        if code is None:
+            return "Can't queue: no answer from the League Client."
+        if code == 500:
+            return "The client refused the {} lobby. Close any game or draft first.".format(mode)
+        if code in (400, 404):
+            return "{} isn't available to queue for right now.".format(mode)
+        return "Couldn't create the {} lobby (HTTP {}).".format(mode, code)
+
     def _find_match(self):
         """Aggressive matchmaking: Stay in the lobby tab, just change the queue."""
         if not self.lcu: return
@@ -1049,7 +1092,19 @@ class SidebarWidget(ctk.CTkFrame):
         def _execute_sync():
             import time
 
-            # 0. If in a friend's lobby or auto-joined lobby, leave it and apply 5-min cooldown
+            # 0. A lobby cannot exist during a draft or a live game, and asking
+            #    for one anyway is not a no-op: the client answers HTTP 500,
+            #    the transport treats 5xx as transient and retries it three
+            #    times, and the search that follows is then a guaranteed 400.
+            #    A live log shows that whole sequence repeating while a match
+            #    was in progress, with nothing on screen but "Matchmaking
+            #    failed - check client".
+            blocked = self._phase_blocking_a_lobby()
+            if blocked:
+                self.after(0, lambda m=blocked: self.update_action_log(m))
+                return
+
+            # 0b. If in a friend's lobby or auto-joined lobby, leave it and apply 5-min cooldown
             left_friend = False
             if hasattr(self, "automation") and self.automation:
                 left_friend = self.automation.leave_friend_lobby_and_cooldown()
@@ -1096,9 +1151,23 @@ class SidebarWidget(ctk.CTkFrame):
                     should_create = True
 
             if should_create:
-                self.lcu.request(
+                created = self.lcu.request(
                     "POST", "/lol-lobby/v2/lobby", {"queueId": target_q_id}
                 )
+                code = getattr(created, "status_code", None)
+                if code not in (200, 201, 204):
+                    # The response used to be discarded entirely, so a refused
+                    # lobby still fell through to the search below and the user
+                    # was told "check client" with nothing saying what to check.
+                    Logger.warning(
+                        "Lobby",
+                        "Could not create the {} lobby (queue {}): HTTP {}".format(
+                            mode, target_q_id, code
+                        ),
+                    )
+                    message = self._lobby_refusal_message(mode, code)
+                    self.after(0, lambda m=message: self.update_action_log(m))
+                    return
                 time.sleep(0.8)
 
             # 4. Start Search
@@ -1573,7 +1642,7 @@ class SidebarWidget(ctk.CTkFrame):
         if hasattr(self, "play_again_button"):
             self.play_again_button.pack(fill="x", pady=0)
 
-    def _show_quick_actions(self):
+    def _show_quick_actions(self, show_requeue: bool = True):
         """Reveal the Requeue & Dodge buttons during active matchmaking phases."""
         if hasattr(self, "btn_launch_client") and bool(self.btn_launch_client.winfo_manager()):
             self.btn_launch_client.pack_forget()
@@ -1583,8 +1652,12 @@ class SidebarWidget(ctk.CTkFrame):
             if hasattr(self, "play_again_button"):
                 self.play_again_button.pack_forget()
             
-            self.requeue_button.grid(row=0, column=0, padx=(0, 4), pady=0, sticky="ew")
-            self.dodge_button.grid(row=0, column=1, padx=(4, 0), pady=0, sticky="ew")
+            if show_requeue:
+                self.requeue_button.grid(row=0, column=0, padx=(0, 4), pady=0, sticky="ew")
+                self.dodge_button.grid(row=0, column=1, padx=(4, 0), pady=0, sticky="ew")
+            else:
+                self.requeue_button.grid_remove()
+                self.dodge_button.grid(row=0, column=0, columnspan=2, padx=0, pady=0, sticky="ew")
             self.quick_actions_frame.pack(fill="x", pady=0)
 
     def _hide_quick_actions(self, show_find_match=True):
@@ -1708,7 +1781,12 @@ class SidebarWidget(ctk.CTkFrame):
                 self.estimate_label.configure(text="● Drafting", text_color=get_color("colors.accent.purple", "#A855F7"))
                 self.progress_bar.set(1.0)
                 self.progress_bar.configure(progress_color=get_color("colors.accent.purple", "#A855F7"))
-                self._show_quick_actions()
+                self._show_quick_actions(show_requeue=False)
+                if getattr(self, "friend_list", None) and hasattr(self.friend_list, "_expanded") and self.friend_list._expanded:
+                    try:
+                        self.friend_list._toggle_collapse()
+                    except Exception as exc:
+                        Logger.debug("AppSidebar", "Failed to collapse friend list in champ select", exc=exc)
             self._last_ui_phase = "ChampSelect"
 
         elif phase == "InProgress":
