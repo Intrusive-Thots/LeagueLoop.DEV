@@ -1462,14 +1462,14 @@ class AutomationEngine:
 
                 if pick_id > 0 and not blocked:
                     self._warned_empty_picks = False
-                    # Auto Hover gates the hover; Auto Lock In gates the
-                    # commit. The switch previously reached only the mobile
-                    # status endpoint, so turning it off changed nothing.
-                    # Locking still implies hovering: you cannot lock a
-                    # champion the client has not been told about.
+                    may_lock = bool(
+                        self.config.get("auto_lock_in", False)
+                        or self.config.get("auto_pick", False)
+                        or (self.config.get("priority_picker", {}) or {}).get("enabled", False)
+                    )
                     may_hover = bool(
                         self.config.get("auto_hover", False)
-                        or self.config.get("auto_lock_in", False)
+                        or may_lock
                     )
                     if (may_hover
                             and my_action.get("championId") != pick_id
@@ -1482,7 +1482,7 @@ class AutomationEngine:
                                      champion_id=pick_id, role=assigned or "unassigned"):
                             self._note_sent(action_id, pick_id)
                         self._last_draft_action_time = now
-                    elif my_action.get("championId") == pick_id and self.config.get("auto_lock_in", False):
+                    elif my_action.get("championId") == pick_id and may_lock:
                         if now - self._last_draft_action_time > 0.5:
                             self._log(f"Draft: Locking Pick {pick_name}")
                             self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
