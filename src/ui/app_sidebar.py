@@ -990,6 +990,7 @@ class SidebarWidget(ctk.CTkFrame):
             "Ranked Flex": 440,
             "ARAM": 450,
             "ARAM Mayhem": 2400,
+            "ARAM: Mayhem": 2400,
             "Arena": 1700,
             "Arena 3v6": 1710,
             "Brawl": 2300,

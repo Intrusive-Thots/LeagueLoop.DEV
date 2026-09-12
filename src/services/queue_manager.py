@@ -30,12 +30,15 @@ BASELINE_QUEUE_MAP: Dict[int, str] = {
     1710: "Arena 3v6",
     1750: "Arena 3x6",
     2300: "Brawl",
+    2400: "ARAM: Mayhem",
 }
 
 # Reverse default mapping (Display Name -> Queue ID)
 BASELINE_NAME_TO_ID: Dict[str, int] = {v: k for k, v in BASELINE_QUEUE_MAP.items()}
 # Add extra alias mappings for convenience
 BASELINE_NAME_TO_ID.update({
+    "ARAM: Mayhem": 2400,
+    "ARAM Mayhem": 2400,
     "Ranked Solo": 420,
     "Ranked Flex": 440,
     "Arena": 1700,
@@ -45,7 +48,7 @@ BASELINE_NAME_TO_ID.update({
 BASELINE_GROUPS: List[Tuple[str, List[str]]] = [
     ("Ranked", ["Ranked Solo/Duo", "Ranked Flex"]),
     ("Casual", ["Quickplay", "Draft Pick", "Swiftplay"]),
-    ("ARAM", ["ARAM"]),
+    ("ARAM", ["ARAM", "ARAM: Mayhem"]),
     ("Arena", ["Arena", "Arena 3v6"]),
     ("Rotating", ["Brawl", "URF", "ARURF", "Nexus Blitz", "One For All", "Ultimate Spellbook"]),
     ("TFT", ["TFT Normal", "TFT Ranked"]),
@@ -97,7 +100,7 @@ class QueueManager:
                 # Include available queues
                 avail = q.get("queueAvailability")
                 gmode = (q.get("gameMode") or "").upper()
-                if avail == "Available" and not q.get("isCustom", False) and gmode not in {"KIWI", "JADE"}:
+                if avail == "Available" and not q.get("isCustom", False) and gmode not in {"JADE"}:
                     available_queues.append(q)
 
             if not available_queues:
