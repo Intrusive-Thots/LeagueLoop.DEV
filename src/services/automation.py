@@ -96,6 +96,18 @@ class AutomationEngine:
         #: True once the user has changed champion after the sniper acted. The
         #: sniper then leaves them alone for the rest of the draft.
         self._sniper_overridden: bool = False
+        #: What we last successfully hovered, per champ-select action id.
+        #:
+        #: The only guard used to be `my_action["championId"] != pick_id`, on
+        #: the assumption that the client echoes an accepted hover straight
+        #: back into the action. In ARAM it does not: the PATCH returns 204 and
+        #: the action's championId stays 0, so the condition never went false
+        #: and the same champion was re-hovered every tick, forever. A live log
+        #: shows "Draft: hovered Sona" six times in a row for one draft.
+        #:
+        #: Remembering what we sent also means a champion the player picks by
+        #: hand is left alone, instead of being overwritten on the next tick.
+        self._hovered_actions: dict = {}
         self._last_search_state_time: float = 0.0
         self._honor_handled: bool = False
         self._runes_equipped: bool = False
@@ -640,6 +652,7 @@ class AutomationEngine:
             # A stand-down lasts one champ select, not forever.
             self._sniper_picked_id = 0
             self._sniper_overridden = False
+            self._hovered_actions.clear()
             sf = self.stats_func
             if sf is not None:
                 sf([], [])
@@ -1226,6 +1239,21 @@ class AutomationEngine:
 
         return "Draft: no champion in your priority list is available."
 
+    # ------------------------------------------------------- hover bookkeeping
+    def _already_sent(self, action_id, champion_id) -> bool:
+        """Have we already had this exact hover accepted for this action?
+
+        The client is the wrong thing to ask. In ARAM it answers a hover PATCH
+        with 204 and then reports the action's championId as 0 anyway, so
+        "did it take?" cannot be read back out of the session. What we can know
+        for certain is what we sent and whether the client accepted it.
+        """
+        return self._hovered_actions.get(action_id) == champion_id
+
+    def _note_sent(self, action_id, champion_id) -> None:
+        """Record an accepted hover. Only ever called after `_act` returns True."""
+        self._hovered_actions[action_id] = champion_id
+
     def _perform_draft_assistant(self, session):
         me = self._get_local_player(session)
         if not me:
@@ -1311,12 +1339,15 @@ class AutomationEngine:
                     self._log(f"Draft: Skipping ban {ban_name} because a teammate is hovering it.")
                     continue
 
-                if my_action.get("championId") != ban_id and (now - self._last_draft_action_time > 0.5):
+                if (my_action.get("championId") != ban_id
+                        and not self._already_sent(action_id, ban_id)
+                        and (now - self._last_draft_action_time > 0.5)):
                     self._log(f"Draft: Hovering Ban {ban_name}")
-                    self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
-                              {"championId": ban_id},
-                              what=f"Draft: hovered ban {ban_name}",
-                              champion_id=ban_id, role=assigned or "unassigned")
+                    if self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
+                                 {"championId": ban_id},
+                                 what=f"Draft: hovered ban {ban_name}",
+                                 champion_id=ban_id, role=assigned or "unassigned"):
+                        self._note_sent(action_id, ban_id)
                     self._last_draft_action_time = now
                 elif my_action.get("championId") == ban_id:
                     # Committing a ban is gated on Auto Ban, not on Auto Lock
@@ -1405,12 +1436,16 @@ class AutomationEngine:
                         self.config.get("auto_hover", False)
                         or self.config.get("auto_lock_in", False)
                     )
-                    if may_hover and my_action.get("championId") != pick_id and (now - self._last_draft_action_time > 0.5):
+                    if (may_hover
+                            and my_action.get("championId") != pick_id
+                            and not self._already_sent(action_id, pick_id)
+                            and (now - self._last_draft_action_time > 0.5)):
                         self._log(f"Draft: Hovering Pick {pick_name}")
-                        self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
-                                  {"championId": pick_id},
-                                  what=f"Draft: hovered {pick_name}",
-                                  champion_id=pick_id, role=assigned or "unassigned")
+                        if self._act("PATCH", f"/lol-champ-select/v1/session/actions/{action_id}",
+                                     {"championId": pick_id},
+                                     what=f"Draft: hovered {pick_name}",
+                                     champion_id=pick_id, role=assigned or "unassigned"):
+                            self._note_sent(action_id, pick_id)
                         self._last_draft_action_time = now
                     elif my_action.get("championId") == pick_id and self.config.get("auto_lock_in", False):
                         if now - self._last_draft_action_time > 0.5:
@@ -1426,16 +1461,16 @@ class AutomationEngine:
         """
         The ARAM bench order, as champion names, from the ARAM screen.
 
-        The bench sniper used to read `priority_picker["list"]` — a list of
-        champion *names* written only by the legacy CustomTkinter sidebar and
-        by this engine's own auto-add. The ARAM screen in the Qt UI writes
-        `aram_priority_list` as champion *ids*, and nothing read it during a
-        bench swap. So the list the user curated had no effect on the one
-        thing ARAM automation actually does.
-
-        The ARAM list wins when it has anything in it; the legacy key remains
-        the fallback so existing setups keep working.
+        The bench sniper reads `priority_picker["list"]` which is a list of
+        champion names written by the CustomTkinter UI.
+        
+        The Qt UI briefly wrote `aram_priority_list` as champion *ids*. We
+        use that as a fallback.
         """
+        ui_list = (self.config.get("priority_picker", {}) or {}).get("list", [])
+        if ui_list:
+            return [str(n) for n in ui_list if str(n).strip()]
+
         from core.config_keys import ARAM_PRIORITY_LIST, read_champion_ids
 
         ids = read_champion_ids(self.config, ARAM_PRIORITY_LIST)
@@ -1447,9 +1482,8 @@ class AutomationEngine:
                     names.append(name)
             if names:
                 return names
-
-        legacy = (self.config.get("priority_picker", {}) or {}).get("list", [])
-        return [str(n) for n in legacy if str(n).strip()]
+        
+        return []
 
     #: How far down your ARAM list still counts as an acceptable champion.
     REROLL_ACCEPTABLE_RANK = 3
@@ -1530,6 +1564,11 @@ class AutomationEngine:
 
         # Did the user move off what we picked? Then they have overruled us.
         if self._sniper_picked_id and my_champ_id != self._sniper_picked_id:
+            now = time.time()
+            # Give the LCU state a moment to reflect our swap before assuming the user overrode it
+            if now - self._last_priority_swap < PRIORITY_SWAP_COOLDOWN:
+                return
+            
             self._sniper_overridden = True
             self._log(
                 "Sniper: you picked your own champion, so ARAM Picker is "
