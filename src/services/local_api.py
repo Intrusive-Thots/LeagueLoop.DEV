@@ -159,9 +159,10 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                 ws_telemetry = app.automation.lcu.get_ws_telemetry()
 
             sidebar = getattr(app, 'sidebar', None) if app else None
+            is_auto_active = not app.automation.paused if (app and getattr(app, "automation", None) and app.automation.running) else power_state
             data = {
                 "phase": phase,
-                "automation_enabled": power_state,
+                "automation_enabled": is_auto_active,
                 "queue_mode": queue_mode,
                 "queue_timer": getattr(sidebar, '_current_queue_time', 0) if sidebar else 0,
                 "queue_estimated": getattr(sidebar, '_estimated_queue_time', 120) if sidebar else 120,
