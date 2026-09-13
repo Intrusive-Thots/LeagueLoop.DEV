@@ -587,17 +587,34 @@ class SidebarWidget(ctk.CTkFrame):
 
         # SYSTEM & PERFORMANCE OPTIMIZATION
         card_sys = make_card(self.advanced_scroll, title="SYSTEM & PERFORMANCE", padx=0, pady=(0, SECTION_GAP))
-        from ui.components.settings_row import SettingsActionRow  # type: ignore
+        from ui.components.settings_row import SettingsActionRow, SettingsToggleRow  # type: ignore
 
         def _on_fix_ping():
+            self.row_fix_ping.set_loading(True, "Fixing...")
+            self.row_fix_ping.set_status("⏳ Applying MTU 1428, Cloudflare DNS & TCPNoDelay...")
+
             def _worker():
                 from services.system_optimizer import SystemOptimizer
+                from services.debug_tracker import DebugTracker
                 res = SystemOptimizer.fix_ping()
+                outcome_msg = res.get("message", "Ping optimized")
+                debug_res = DebugTracker.get_instance(self.config).record_action(
+                    action_name="fix_ping",
+                    outcome=outcome_msg,
+                    details=res,
+                    window=self
+                )
                 def _notify():
+                    self.row_fix_ping.set_loading(False)
                     from ui.components.toast import ToastManager
-                    theme = "success" if res.get("success") else "error"
+                    success = bool(res.get("success", False))
+                    theme = "success" if success else "error"
+                    display_text = f"✓ {outcome_msg}" if success else f"✗ {outcome_msg}"
+                    if debug_res.get("recorded") and debug_res.get("screenshot"):
+                        display_text += " [📸 Screenshot saved]"
+                    self.row_fix_ping.set_status(display_text, is_error=not success)
                     ToastManager.get_instance(self.winfo_toplevel()).show(
-                        res.get("message", "Ping optimized!"),
+                        outcome_msg,
                         icon="⚡",
                         theme=theme,
                         duration=4000
@@ -606,14 +623,31 @@ class SidebarWidget(ctk.CTkFrame):
             threading.Thread(target=_worker, daemon=True).start()
 
         def _on_kill_processes():
+            self.row_kill_proc.set_loading(True, "Scanning...")
+            self.row_kill_proc.set_status("⏳ Scanning & purging background processes...")
+
             def _worker():
                 from services.system_optimizer import SystemOptimizer
+                from services.debug_tracker import DebugTracker
                 res = SystemOptimizer.kill_unnecessary_processes()
+                outcome_msg = res.get("message", "Processes checked")
+                debug_res = DebugTracker.get_instance(self.config).record_action(
+                    action_name="kill_processes",
+                    outcome=outcome_msg,
+                    details=res,
+                    window=self
+                )
                 def _notify():
+                    self.row_kill_proc.set_loading(False)
                     from ui.components.toast import ToastManager
-                    theme = "success" if res.get("killed_count", 0) > 0 else "info"
+                    count = res.get("killed_count", 0)
+                    theme = "success" if count > 0 else "info"
+                    display_text = f"✓ {outcome_msg}"
+                    if debug_res.get("recorded") and debug_res.get("screenshot"):
+                        display_text += " [📸 Screenshot saved]"
+                    self.row_kill_proc.set_status(display_text, is_error=False)
                     ToastManager.get_instance(self.winfo_toplevel()).show(
-                        res.get("message", "Processes checked"),
+                        outcome_msg,
                         icon="🧹",
                         theme=theme,
                         duration=4000
@@ -642,7 +676,59 @@ class SidebarWidget(ctk.CTkFrame):
             command=_on_kill_processes,
             tooltip_text="Terminate non-essential background processes to free CPU, RAM, & bandwidth"
         )
-        self.row_kill_proc.pack(fill="x", pady=(0, 0))
+        self.row_kill_proc.pack(fill="x", pady=(0, INNER_GAP))
+
+        # Debug Mode toggle
+        self.debug_mode_var = ctk.BooleanVar(value=bool(self.config.get("debug_mode", False)))
+        def _on_debug_mode_toggle():
+            val = self.debug_mode_var.get()
+            self.config.set("debug_mode", val)
+            from services.debug_tracker import DebugTracker
+            tracker = DebugTracker.get_instance(self.config)
+            if val:
+                tracker.record_action(
+                    action_name="debug_mode_enabled",
+                    outcome="Debug Mode activated by user",
+                    details={"debug_mode": True},
+                    window=self
+                )
+                from ui.components.toast import ToastManager
+                ToastManager.get_instance(self.winfo_toplevel()).show(
+                    "Debug Mode enabled: Actions & screenshots will be logged",
+                    icon="📸",
+                    theme="info",
+                    duration=3500
+                )
+
+        self.row_debug_mode = SettingsToggleRow(
+            card_sys,
+            label_text="Debug Mode (Actions & Screenshots)",
+            variable=self.debug_mode_var,
+            command=_on_debug_mode_toggle,
+            tooltip_text="When enabled, every action logs details and captures a window screenshot to disk"
+        )
+        self.row_debug_mode.pack(fill="x", pady=(0, INNER_GAP))
+
+        def _open_screenshots_dir():
+            from services.debug_tracker import DebugTracker
+            from utils.logger import Logger
+            import os
+            path = DebugTracker.get_instance(self.config).get_screenshots_dir()
+            try:
+                os.startfile(path)
+            except Exception as exc:
+                Logger.debug("AppSidebar", f"Could not open screenshots dir: {exc}", exc=exc)
+
+        btn_debug_folder = make_button(
+            card_sys,
+            text="Open Screenshots Folder",
+            style="ghost",
+            font=get_font("caption", "bold"),
+            width=165,
+            height=24,
+            command=_open_screenshots_dir
+        )
+        btn_debug_folder.pack(anchor="w", pady=(0, 0))
 
         # ABOUT
         card_about = make_card(self.advanced_scroll, title="ABOUT", padx=0, pady=(0, SECTION_GAP))

@@ -2,6 +2,7 @@ import customtkinter as ctk  # type: ignore
 from ui.components.factory import get_color, get_font
 from ui.components.lol_toggle import LolToggle  # type: ignore
 from ui.ui_shared import CTkTooltip  # type: ignore
+from utils.logger import Logger
 
 class SettingsToggleRow(ctk.CTkFrame):
     """A reusable component for a simple setting toggle row."""
@@ -144,11 +145,18 @@ class SettingsHotkeyRow(ctk.CTkFrame):
 
 
 class SettingsActionRow(ctk.CTkFrame):
-    """A reusable component for a setting row with a label/description and an action button."""
+    """A reusable component for a setting row with a label/description, live feedback, and an action button."""
     def __init__(self, master, label_text, button_text, command, description="", tooltip_text="", button_width=110, style="primary", **kwargs):
         super().__init__(master, fg_color="transparent", **kwargs)
 
-        left_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.original_button_text = button_text
+        self.command = command
+
+        # Top row: title/description on the left, button on the right
+        self.top_row = ctk.CTkFrame(self, fg_color="transparent")
+        self.top_row.pack(fill="x", expand=True)
+
+        left_frame = ctk.CTkFrame(self.top_row, fg_color="transparent")
         left_frame.pack(side="left", fill="both", expand=True)
 
         self.text_label = ctk.CTkLabel(
@@ -172,7 +180,7 @@ class SettingsActionRow(ctk.CTkFrame):
 
         from ui.components.factory import make_button
         self.button = make_button(
-            self,
+            self.top_row,
             text=button_text,
             style=style,
             font=get_font("caption", "bold"),
@@ -182,7 +190,38 @@ class SettingsActionRow(ctk.CTkFrame):
         )
         self.button.pack(side="right", padx=(8, 0))
 
+        # Bottom live status feedback label
+        self.status_label = ctk.CTkLabel(
+            self,
+            text="",
+            font=get_font("small"),
+            anchor="w",
+            text_color=get_color("colors.accent.gold", "#C8AA6E")
+        )
+
         if tooltip_text:
             CTkTooltip(self.text_label, tooltip_text)
             CTkTooltip(self.button, tooltip_text)
+
+    def set_loading(self, is_loading: bool, loading_text: str = "Working..."):
+        """Toggles loading state and disables/enables button."""
+        try:
+            if is_loading:
+                self.button.configure(text=loading_text, state="disabled")
+            else:
+                self.button.configure(text=self.original_button_text, state="normal")
+        except Exception as exc:
+            Logger.debug("SettingsActionRow", f"Failed to update loading state: {exc}", exc=exc)
+
+    def set_status(self, message: str, is_error: bool = False):
+        """Sets inline real-time status display."""
+        try:
+            color = get_color("colors.state.danger", "#E74C3C") if is_error else get_color("colors.accent.gold", "#C8AA6E")
+            self.status_label.configure(text=message, text_color=color)
+            if message and not self.status_label.winfo_ismapped():
+                self.status_label.pack(side="top", anchor="w", pady=(3, 0))
+            elif not message and self.status_label.winfo_ismapped():
+                self.status_label.pack_forget()
+        except Exception as exc:
+            Logger.debug("SettingsActionRow", f"Failed to update status label: {exc}", exc=exc)
 
