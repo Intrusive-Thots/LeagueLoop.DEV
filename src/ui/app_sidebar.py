@@ -585,6 +585,65 @@ class SidebarWidget(ctk.CTkFrame):
             row.pack(fill="x", pady=(0, pad_bottom))
             self.recorders[config_key] = row.recorder
 
+        # SYSTEM & PERFORMANCE OPTIMIZATION
+        card_sys = make_card(self.advanced_scroll, title="SYSTEM & PERFORMANCE", padx=0, pady=(0, SECTION_GAP))
+        from ui.components.settings_row import SettingsActionRow  # type: ignore
+
+        def _on_fix_ping():
+            def _worker():
+                from services.system_optimizer import SystemOptimizer
+                res = SystemOptimizer.fix_ping()
+                def _notify():
+                    from ui.components.toast import ToastManager
+                    theme = "success" if res.get("success") else "error"
+                    ToastManager.get_instance(self.winfo_toplevel()).show(
+                        res.get("message", "Ping optimized!"),
+                        icon="⚡",
+                        theme=theme,
+                        duration=4000
+                    )
+                self.after(0, _notify)
+            threading.Thread(target=_worker, daemon=True).start()
+
+        def _on_kill_processes():
+            def _worker():
+                from services.system_optimizer import SystemOptimizer
+                res = SystemOptimizer.kill_unnecessary_processes()
+                def _notify():
+                    from ui.components.toast import ToastManager
+                    theme = "success" if res.get("killed_count", 0) > 0 else "info"
+                    ToastManager.get_instance(self.winfo_toplevel()).show(
+                        res.get("message", "Processes checked"),
+                        icon="🧹",
+                        theme=theme,
+                        duration=4000
+                    )
+                self.after(0, _notify)
+            threading.Thread(target=_worker, daemon=True).start()
+
+        self.row_fix_ping = SettingsActionRow(
+            card_sys,
+            label_text="Fix Ping",
+            description="MTU 1428, Cloudflare DNS, & TCPNoDelay",
+            button_text="Fix Ping",
+            button_width=110,
+            command=_on_fix_ping,
+            tooltip_text="Optimize gaming latency and eliminate cellular packet fragmentation"
+        )
+        self.row_fix_ping.pack(fill="x", pady=(0, INNER_GAP))
+
+        self.row_kill_proc = SettingsActionRow(
+            card_sys,
+            label_text="Kill Unnecessary Windows Processes",
+            description="Safely purge updaters, telemetry, & idle hogs",
+            button_text="Kill Processes",
+            button_width=110,
+            style="danger",
+            command=_on_kill_processes,
+            tooltip_text="Terminate non-essential background processes to free CPU, RAM, & bandwidth"
+        )
+        self.row_kill_proc.pack(fill="x", pady=(0, 0))
+
         # ABOUT
         card_about = make_card(self.advanced_scroll, title="ABOUT", padx=0, pady=(0, SECTION_GAP))
         from core.version import __version__

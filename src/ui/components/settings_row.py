@@ -141,3 +141,48 @@ class SettingsHotkeyRow(ctk.CTkFrame):
         
         if tooltip_text:
             CTkTooltip(self.recorder, tooltip_text)
+
+
+class SettingsActionRow(ctk.CTkFrame):
+    """A reusable component for a setting row with a label/description and an action button."""
+    def __init__(self, master, label_text, button_text, command, description="", tooltip_text="", button_width=110, style="primary", **kwargs):
+        super().__init__(master, fg_color="transparent", **kwargs)
+
+        left_frame = ctk.CTkFrame(self, fg_color="transparent")
+        left_frame.pack(side="left", fill="both", expand=True)
+
+        self.text_label = ctk.CTkLabel(
+            left_frame,
+            text=label_text,
+            font=get_font("body", "bold"),
+            anchor="w",
+            text_color=get_color("colors.text.primary")
+        )
+        self.text_label.pack(side="top", anchor="w")
+
+        if description:
+            self.desc_label = ctk.CTkLabel(
+                left_frame,
+                text=description,
+                font=get_font("small"),
+                anchor="w",
+                text_color=get_color("colors.text.muted")
+            )
+            self.desc_label.pack(side="top", anchor="w")
+
+        from ui.components.factory import make_button
+        self.button = make_button(
+            self,
+            text=button_text,
+            style=style,
+            font=get_font("caption", "bold"),
+            width=button_width,
+            height=28,
+            command=command
+        )
+        self.button.pack(side="right", padx=(8, 0))
+
+        if tooltip_text:
+            CTkTooltip(self.text_label, tooltip_text)
+            CTkTooltip(self.button, tooltip_text)
+
