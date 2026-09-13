@@ -36,7 +36,8 @@ a = Analysis(
         'lcu_driver',
         'aiohttp',
         'yarl',
-        'multidict'
+        'multidict',
+        'win32crypt'
     ],
     hookspath=[],
     hooksconfig={},
