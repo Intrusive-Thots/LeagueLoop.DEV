@@ -31,6 +31,7 @@ class Engine:
         self.logs = []
         self._last_priority_swap = 0.0
         self._sniper_picked_id = 0
+        self._sniper_swap_acquired = False
         self._sniper_overridden = False
         self._skin_equipped = False
         self._perform = AutomationEngine._perform_priority_sniper.__get__(self)

@@ -28,7 +28,7 @@ from core.config_keys import (
     DODGE_BLACKLIST_ENABLED,
 )
 from core.constants import (
-    QUEUE_ARENA, QUEUE_ARENA_16, QUEUE_ARENA_3V3, QUEUE_DRAFT, QUEUE_RANKED_SOLO, QUEUE_RANKED_FLEX,
+    QUEUE_ARAM, QUEUE_ARENA, QUEUE_ARENA_16, QUEUE_ARENA_3V3, QUEUE_DRAFT, QUEUE_RANKED_SOLO, QUEUE_RANKED_FLEX,
     TICK_SLEEP_DEFAULT, TICK_SLEEP_CHAMPSELECT,
     TICK_SLEEP_READYCHECK, TICK_SLEEP_LOBBY, TICK_SLEEP_INGAME,
     TICK_SLEEP_SPECTATING, TICK_SLEEP_SPECTATING_MAX,
@@ -723,7 +723,7 @@ class AutomationEngine:
                 a.get("actorCellId") == local_cell_id and a.get("type") == "pick" and a.get("isInProgress")
                 for row in actions for a in row
             )
-            if has_bench and not has_in_progress_pick:
+            if has_bench and (not has_in_progress_pick or queue_id == QUEUE_ARAM):
                 self._handle_bench(session, my_team, bench)
             # Anything with an action to take -- pick or ban -- goes to the
             # draft assistant, whatever the queue is.
@@ -1607,11 +1607,8 @@ class AutomationEngine:
         my_champ_id = me.get("championId", 0) if me else 0
         my_champ_name = self.assets.get_champ_name(my_champ_id) if my_champ_id else ""
 
-        if self._sniper_picked_id and my_champ_id == self._sniper_picked_id:
-            self._sniper_swap_acquired = True
-
-        # Did the user move off what we successfully acquired? Then they have overruled us.
-        if self._sniper_swap_acquired and my_champ_id > 0 and my_champ_id != self._sniper_picked_id:
+        # Did the user move off what we picked? Then they have overruled us.
+        if self._sniper_picked_id and my_champ_id > 0 and my_champ_id != self._sniper_picked_id:
             now = time.time()
             # Give the LCU state a moment to reflect our swap before assuming the user overrode it
             if now - self._last_priority_swap < PRIORITY_SWAP_COOLDOWN:
