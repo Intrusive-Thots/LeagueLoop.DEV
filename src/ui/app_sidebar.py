@@ -136,6 +136,13 @@ class SidebarWidget(ctk.CTkFrame):
         # Gold accent divider below header (pre-blended: #C8AA6E at ~12% on #091428)
         ctk.CTkFrame(self, height=1, fg_color="#1E1E2D").pack(fill="x", padx=CARD_PAD)
 
+        # Register primary window in DebugTracker for automatic screenshot bounds
+        try:
+            from services.debug_tracker import DebugTracker
+            DebugTracker.set_app_window(self)
+        except Exception as exc:
+            Logger.debug("AppSidebar", f"Failed to register window in DebugTracker: {exc}", exc=exc)
+
         # ── Collapsible Body ──
         # NOTE: main_body is created here but packed AFTER the footer
         # to ensure proper tkinter pack geometry (footer reserves bottom space first)
@@ -151,7 +158,20 @@ class SidebarWidget(ctk.CTkFrame):
         self._current_tab = "Play"
         
         def _switch_tab(tab_name):
+            prev_tab = self._current_tab
             self._current_tab = tab_name
+
+            if prev_tab != tab_name:
+                try:
+                    from services.debug_tracker import DebugTracker
+                    DebugTracker.get_instance(self.config).record_action(
+                        action_name="tab_switch",
+                        outcome=f"Switched from '{prev_tab}' to '{tab_name}' tab",
+                        details={"tab": tab_name, "prev_tab": prev_tab},
+                        window=self
+                    )
+                except Exception as exc:
+                    Logger.debug("AppSidebar", f"DebugTracker tab_switch hook suppressed: {exc}", exc=exc)
             
             # Hide everything
             self.session_frame.pack_forget()
@@ -1235,6 +1255,17 @@ class SidebarWidget(ctk.CTkFrame):
         mode = self.config.get("aram_mode", "ARAM")
         self.update_action_log(f"Initiating {mode}...")
 
+        try:
+            from services.debug_tracker import DebugTracker
+            DebugTracker.get_instance(self.config).record_action(
+                action_name="find_match_clicked",
+                outcome=f"Initiating {mode} matchmaking",
+                details={"mode": mode},
+                window=self
+            )
+        except Exception as exc:
+            Logger.debug("AppSidebar", f"DebugTracker find_match hook suppressed: {exc}", exc=exc)
+
         def _execute_sync():
             import time
 
@@ -1262,6 +1293,16 @@ class SidebarWidget(ctk.CTkFrame):
             if state_data.get("searchState") == "Searching":
                 self.lcu.request("DELETE", "/lol-lobby/v2/lobby/matchmaking/search")
                 self.after(0, lambda: self.update_action_log("Matchmaking Cancelled."))
+                try:
+                    from services.debug_tracker import DebugTracker
+                    DebugTracker.get_instance(self.config).record_action(
+                        action_name="matchmaking_cancelled",
+                        outcome=f"Matchmaking cancelled for {mode}",
+                        details={"mode": mode},
+                        window=self
+                    )
+                except Exception as exc:
+                    Logger.debug("AppSidebar", f"DebugTracker cancel hook suppressed: {exc}", exc=exc)
                 if getattr(self, "power_state", False):
                     self.after(0, self._on_power_click)
                 return
@@ -1323,8 +1364,28 @@ class SidebarWidget(ctk.CTkFrame):
                 if res and res.status_code in [200, 204]:
                     self.update_action_log(f"Searching ({mode})...")
                     self.set_power_state(True)
+                    try:
+                        from services.debug_tracker import DebugTracker
+                        DebugTracker.get_instance(self.config).record_action(
+                            action_name="queue_search_started",
+                            outcome=f"Queue search started ({mode})",
+                            details={"mode": mode, "status_code": res.status_code},
+                            window=self
+                        )
+                    except Exception as exc:
+                        Logger.debug("AppSidebar", f"DebugTracker queue start hook suppressed: {exc}", exc=exc)
                 else:
                     self.update_action_log("Matchmaking failed — check client.")
+                    try:
+                        from services.debug_tracker import DebugTracker
+                        DebugTracker.get_instance(self.config).record_action(
+                            action_name="queue_search_failed",
+                            outcome="Matchmaking failed to start",
+                            details={"mode": mode, "status_code": getattr(res, "status_code", None)},
+                            window=self
+                        )
+                    except Exception as exc:
+                        Logger.debug("AppSidebar", f"DebugTracker queue fail hook suppressed: {exc}", exc=exc)
 
             self.after(0, _update_ui)
 
@@ -1896,6 +1957,18 @@ class SidebarWidget(ctk.CTkFrame):
 
         # Track the last phase we processed to avoid redundant resets
         prev_ui_phase = self._last_ui_phase
+
+        if phase != prev_ui_phase and prev_ui_phase is not None and phase:
+            try:
+                from services.debug_tracker import DebugTracker
+                DebugTracker.get_instance(self.config).record_action(
+                    action_name="game_phase_change",
+                    outcome=f"Phase changed: '{prev_ui_phase}' -> '{phase}'",
+                    details={"prev_phase": prev_ui_phase, "new_phase": phase},
+                    window=self
+                )
+            except Exception as exc:
+                Logger.debug("AppSidebar", f"DebugTracker phase change hook suppressed: {exc}", exc=exc)
 
         if phase == "Matchmaking" and search_state and search_state.get("searchState") == "Searching":
             time_in_queue = search_state.get("timeInQueue", 0)

@@ -175,15 +175,48 @@ class ConfigManager:
 
     def set(self, key: str, val: Any, save: bool = True) -> None:
         """Set a configuration value and optionally save to file."""
+        old_val = self.cfg.get(key)
         self.cfg[key] = val
         if save:
             self.save()
 
+        if old_val != val:
+            try:
+                from services.debug_tracker import DebugTracker
+                tracker = DebugTracker.get_instance(self)
+                if tracker.is_enabled():
+                    action_type = "toggle" if isinstance(val, bool) else "setting"
+                    status_text = "Enabled" if val is True else ("Disabled" if val is False else str(val))
+                    tracker.record_action(
+                        action_name=f"{action_type}:{key}",
+                        outcome=f"{key} -> {status_text}",
+                        details={"key": key, "old_value": old_val, "new_value": val},
+                    )
+            except Exception as exc:
+                Logger.debug("ConfigManager", f"DebugTracker hook suppressed: {exc}", exc=exc)
+
     def set_batch(self, updates: dict, save: bool = True) -> None:
         """Set multiple configuration values and optionally save to file."""
+        changed = {k: v for k, v in updates.items() if self.cfg.get(k) != v}
         self.cfg.update(updates)
         if save:
             self.save()
+
+        if changed:
+            try:
+                from services.debug_tracker import DebugTracker
+                tracker = DebugTracker.get_instance(self)
+                if tracker.is_enabled():
+                    for k, v in changed.items():
+                        action_type = "toggle" if isinstance(v, bool) else "setting"
+                        status_text = "Enabled" if v is True else ("Disabled" if v is False else str(v))
+                        tracker.record_action(
+                            action_name=f"{action_type}:{k}",
+                            outcome=f"{k} -> {status_text}",
+                            details={"key": k, "value": v},
+                        )
+            except Exception as exc:
+                Logger.debug("ConfigManager", f"DebugTracker batch hook suppressed: {exc}", exc=exc)
 
     def save(self) -> None:
         """Save configuration to file securely in AppData using atomic write."""

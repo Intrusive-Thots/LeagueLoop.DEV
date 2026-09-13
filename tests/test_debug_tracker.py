@@ -15,9 +15,11 @@ class TestDebugTracker(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp()
         self.config = {"debug_mode": False}
+        DebugTracker._instance = None
         self.tracker = DebugTracker(self.config)
 
     def tearDown(self):
+        DebugTracker._instance = None
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_disabled_by_default(self):
@@ -112,6 +114,32 @@ class TestDebugTracker(unittest.TestCase):
         # Ensure the first call to ImageGrab.grab used bbox
         first_call = mock_grab.call_args_list[0]
         self.assertEqual(first_call.kwargs.get("bbox"), (100, 150, 900, 750))
+
+    @patch("services.debug_tracker.get_data_dir")
+    @patch("PIL.ImageGrab.grab")
+    def test_config_manager_toggle_logged_in_debug_mode(self, mock_grab, mock_get_data_dir):
+        """When a config toggle or setting is changed, DebugTracker logs it and captures screenshot."""
+        from PIL import Image
+        from services.config_manager import ConfigManager
+        mock_get_data_dir.return_value = self.temp_dir
+        mock_grab.return_value = Image.new("RGB", (300, 400), (20, 30, 40))
+
+        cfg = ConfigManager()
+        cfg.cfg["debug_mode"] = True
+        DebugTracker.get_instance(cfg)
+
+        # Trigger setting change on a controlled test key
+        cfg.cfg["test_unit_toggle"] = False
+        cfg.set("test_unit_toggle", True, save=False)
+
+        # Verify log file has action
+        tracker = DebugTracker.get_instance()
+        log_file = os.path.join(tracker.get_debug_dir(), "debug_actions.log")
+        self.assertTrue(os.path.exists(log_file))
+
+        with open(log_file, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+            self.assertTrue(any("toggle:test_unit_toggle" in line for line in lines))
 
 
 if __name__ == "__main__":

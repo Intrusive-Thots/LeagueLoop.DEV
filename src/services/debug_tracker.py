@@ -19,9 +19,19 @@ class DebugTracker:
     """Tracks every user/system action and captures corresponding window screenshots."""
 
     _instance: Optional[DebugTracker] = None
+    _app_window: Any = None
 
     def __init__(self, config=None):
         self.config = config
+
+    @classmethod
+    def set_app_window(cls, window) -> None:
+        """Registers the primary application window for automatic screenshot bounds."""
+        cls._app_window = window
+
+    @classmethod
+    def get_app_window(cls) -> Any:
+        return cls._app_window
 
     @classmethod
     def get_instance(cls, config=None) -> DebugTracker:
@@ -199,6 +209,9 @@ class DebugTracker:
         filename = f"{timestamp}_{clean_slug}.png"
         filepath = os.path.join(self.get_screenshots_dir(), filename)
 
+        if window is None and self._app_window is not None:
+            window = self._app_window
+
         # 1. Grab LeagueLoop Program Window
         prog_bbox = self._get_window_bbox(window)
         try:
@@ -276,6 +289,9 @@ class DebugTracker:
         """
         if not self.is_enabled():
             return {"recorded": False, "reason": "debug_mode_disabled"}
+
+        if window is None and self._app_window is not None:
+            window = self._app_window
 
         screenshot_path = self.capture_screenshot(
             window=window,
