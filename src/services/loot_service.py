@@ -192,6 +192,32 @@ class LootService:
             msg = str(payload) if payload else (r.reason or "error")
         return False, payload, f"HTTP {r.status_code}: {msg}"
 
+    def _put(
+        self, endpoint: str, body: Any = None
+    ) -> Tuple[bool, Any, str]:
+        if not getattr(self.lcu, "is_connected", False):
+            if hasattr(self.lcu, "connect"):
+                self.lcu.connect(silent=True)
+        r = self.lcu.request("PUT", endpoint, data=body, silent=True)
+        if r is None:
+            return False, None, "no response / not connected"
+        try:
+            payload = r.json() if r.content else None
+        except ValueError:
+            payload = r.text
+        if 200 <= r.status_code < 300:
+            return True, payload, ""
+        msg = ""
+        if isinstance(payload, dict):
+            msg = str(
+                payload.get("message")
+                or payload.get("errorCode")
+                or payload
+            )
+        else:
+            msg = str(payload) if payload else (r.reason or "error")
+        return False, payload, f"HTTP {r.status_code}: {msg}"
+
     # ── inventory ──────────────────────────────────────────────
 
     def fetch_loot(self) -> List[LootItem]:
@@ -489,8 +515,105 @@ class LootService:
             res.sources.append("Reward Grants")
         return res
 
+    def claim_season_pass_rewards(self) -> ClaimResult:
+        """Claim all available Season Pass and Event Pass rewards via Event Hub."""
+        res = ClaimResult()
+        events = self._get_json("/lol-event-hub/v1/events") or []
+        if isinstance(events, list):
+            for ev in events:
+                if not isinstance(ev, dict):
+                    continue
+                eid = ev.get("id") or ev.get("eventId")
+                if not eid:
+                    continue
+                ev_name = ev.get("name") or ev.get("title") or eid[:8]
+
+                # Check unclaimed count
+                unclaimed = self._get_json(f"/lol-event-hub/v1/events/{eid}/reward-track/unclaimed-rewards")
+                uc_count = unclaimed.get("rewardsCount", 0) if isinstance(unclaimed, dict) else 0
+
+                ok, payload, err = self._post(f"/lol-event-hub/v1/events/{eid}/reward-track/claim-all", body={})
+                if ok:
+                    count = uc_count if uc_count > 0 else 1
+                    res.claimed += count
+                    res.sources.append(f"Season/Event Pass ({ev_name})")
+                    self.log(f"Claimed {count} reward(s) from Season/Event Pass ({ev_name})")
+                elif uc_count > 0:
+                    self.log(f"Failed claiming Season/Event Pass ({ev_name}): {err}")
+        return res
+
+    def claim_season_progression_grants(self) -> ClaimResult:
+        """Claim all pending Season Pass progression grants and choice selections."""
+        res = ClaimResult()
+        grants = self._get_json("/lol-rewards/v1/grants") or []
+        if isinstance(grants, list):
+            for g in grants:
+                if not isinstance(g, dict):
+                    continue
+                info = g.get("info", {})
+                status = info.get("status")
+                gid = info.get("id")
+                rgid = info.get("rewardGroupId")
+
+                if status == "PENDING_SELECTION" and gid and rgid:
+                    rewards = g.get("rewardGroup", {}).get("rewards", [])
+                    sel_ids = [r.get("id") for r in rewards if isinstance(r, dict) and r.get("id")]
+                    if sel_ids:
+                        payload = {
+                            "grantId": gid,
+                            "rewardGroupId": rgid,
+                            "selections": sel_ids[:1],
+                        }
+                        reward_title = (
+                            rewards[0].get("localizations", {}).get("title")
+                            if rewards and isinstance(rewards[0], dict)
+                            else "Reward"
+                        )
+                        ok, _, err = self._post(f"/lol-rewards/v1/grants/{gid}/select", body=payload)
+                        if ok:
+                            res.claimed += 1
+                            res.sources.append(f"Progression: {reward_title}")
+                            self.log(f"Claimed progression reward: {reward_title}")
+                        else:
+                            self.log(f"Failed selecting progression grant {gid[:8]}: {err}")
+        return res
+
+    def claim_tft_pass_rewards(self) -> ClaimResult:
+        """Claim TFT Battle Pass and Season Pass rewards."""
+        res = ClaimResult()
+        passes = self._get_json("/lol-tft-pass/v1/active-passes") or []
+        if isinstance(passes, list):
+            for p in passes:
+                if not isinstance(p, dict):
+                    continue
+                info = p.get("info", {})
+                pass_id = info.get("passId") or p.get("id")
+                title = info.get("title", "TFT Pass")
+                if pass_id:
+                    ok, _, _ = self._put(f"/lol-tft-pass/v1/pass/{pass_id}/milestone/claimAllRewards", body={})
+                    if ok:
+                        res.claimed += 1
+                        res.sources.append(f"TFT Pass ({title})")
+                        self.log(f"Claimed rewards from {title}")
+        return res
+
+    def claim_ranked_split_rewards(self) -> ClaimResult:
+        """Claim ranked season split rewards."""
+        res = ClaimResult()
+        ok1, _, _ = self._post("/lol-ranked/v1/split-rewards/claim", body={})
+        if ok1:
+            res.claimed += 1
+            res.sources.append("Ranked Split Rewards")
+            self.log("Claimed Ranked Split rewards")
+        ok2, _, _ = self._post("/lol-ranked/v1/rewards/claim", body={})
+        if ok2:
+            res.claimed += 1
+            res.sources.append("Ranked Rewards")
+            self.log("Claimed Ranked rewards")
+        return res
+
     def claim_battle_pass_rewards(self) -> ClaimResult:
-        """Claim battle pass rewards."""
+        """Claim battle pass rewards (legacy endpoint fallback)."""
         res = ClaimResult()
         ok, payload, _ = self._post("/lol-battle-pass/v1/rewards/claim")
         if ok:
@@ -502,23 +625,48 @@ class LootService:
         return res
 
     def claim_all_rewards(self) -> ClaimResult:
-        """Run all reward claim endpoints."""
+        """Run all reward claim endpoints across Season Passes, Events, TFT, Missions, and Milestones."""
         total = ClaimResult()
+
+        # 1. Season Pass & Event Hub Passes
+        season_res = self.claim_season_pass_rewards()
+        total.claimed += season_res.claimed
+        total.sources.extend(season_res.sources)
+
+        # 2. Season Progression Grants (Pending Selections)
+        prog_res = self.claim_season_progression_grants()
+        total.claimed += prog_res.claimed
+        total.sources.extend(prog_res.sources)
+
+        # 3. TFT Battle Pass & Season Pass
+        tft_res = self.claim_tft_pass_rewards()
+        total.claimed += tft_res.claimed
+        total.sources.extend(tft_res.sources)
+
+        # 4. Legacy Battle Pass Endpoint Fallback
         pass_res = self.claim_battle_pass_rewards()
         total.claimed += pass_res.claimed
         total.sources.extend(pass_res.sources)
 
+        # 5. Missions
         miss_res = self.claim_mission_rewards()
         total.claimed += miss_res.claimed
         total.sources.extend(miss_res.sources)
 
+        # 6. Loot Milestones
         ms_res = self.claim_loot_milestones()
         total.claimed += ms_res.claimed
         total.sources.extend(ms_res.sources)
 
+        # 7. Mastery Milestones & Generic Grants
         grant_res = self.claim_mastery_and_grants()
         total.claimed += grant_res.claimed
         total.sources.extend(grant_res.sources)
+
+        # 8. Ranked Season Split Rewards
+        split_res = self.claim_ranked_split_rewards()
+        total.claimed += split_res.claimed
+        total.sources.extend(split_res.sources)
 
         self.log(f"Claim step completed: {total.claimed} reward(s)")
         return total

@@ -91,8 +91,102 @@ class TestLootServiceClaiming(unittest.TestCase):
         res = self.service.claim_mastery_and_grants()
         self.assertEqual(res.claimed, 2)
 
+    def test_claim_season_pass_rewards_success(self):
+        def mock_request(method, endpoint, data=None, silent=False):
+            if method == "GET" and endpoint == "/lol-event-hub/v1/events":
+                return DummyResponse(200, [{"id": "event_pass_2026", "name": "Noxus Event Pass"}])
+            if method == "GET" and "/reward-track/unclaimed-rewards" in endpoint:
+                return DummyResponse(200, {"rewardsCount": 4})
+            if method == "POST" and "/lol-event-hub/v1/events/event_pass_2026/reward-track/claim-all" in endpoint:
+                return DummyResponse(204, {})
+            return DummyResponse(404, {})
+
+        self.mock_lcu.request.side_effect = mock_request
+        res = self.service.claim_season_pass_rewards()
+        self.assertEqual(res.claimed, 4)
+        self.assertIn("Season/Event Pass (Noxus Event Pass)", res.sources)
+        self.assertTrue(any("Claimed 4 reward(s) from Season/Event Pass" in log for log in self.logs))
+
+    def test_claim_season_progression_grants_success(self):
+        def mock_request(method, endpoint, data=None, silent=False):
+            if method == "GET" and endpoint == "/lol-rewards/v1/grants":
+                return DummyResponse(200, [
+                    {
+                        "info": {
+                            "id": "grant_999",
+                            "rewardGroupId": "group_888",
+                            "status": "PENDING_SELECTION",
+                        },
+                        "rewardGroup": {
+                            "rewards": [
+                                {
+                                    "id": "reward_choice_1",
+                                    "localizations": {"title": "750 Blue Essence"},
+                                }
+                            ]
+                        },
+                    }
+                ])
+            if method == "POST" and endpoint == "/lol-rewards/v1/grants/grant_999/select":
+                self.assertEqual(data.get("grantId"), "grant_999")
+                self.assertEqual(data.get("rewardGroupId"), "group_888")
+                self.assertEqual(data.get("selections"), ["reward_choice_1"])
+                return DummyResponse(200, {})
+            return DummyResponse(404, {})
+
+        self.mock_lcu.request.side_effect = mock_request
+        res = self.service.claim_season_progression_grants()
+        self.assertEqual(res.claimed, 1)
+        self.assertIn("Progression: 750 Blue Essence", res.sources)
+        self.assertTrue(any("Claimed progression reward: 750 Blue Essence" in log for log in self.logs))
+
+    def test_claim_tft_pass_rewards_success(self):
+        def mock_request(method, endpoint, data=None, silent=False):
+            if method == "GET" and endpoint == "/lol-tft-pass/v1/active-passes":
+                return DummyResponse(200, [
+                    {
+                        "info": {
+                            "passId": "tft_pass_set13",
+                            "title": "Into the Arcane Pass",
+                        }
+                    }
+                ])
+            if method == "PUT" and endpoint == "/lol-tft-pass/v1/pass/tft_pass_set13/milestone/claimAllRewards":
+                return DummyResponse(200, {})
+            return DummyResponse(404, {})
+
+        self.mock_lcu.request.side_effect = mock_request
+        res = self.service.claim_tft_pass_rewards()
+        self.assertEqual(res.claimed, 1)
+        self.assertIn("TFT Pass (Into the Arcane Pass)", res.sources)
+        self.assertTrue(any("Claimed rewards from Into the Arcane Pass" in log for log in self.logs))
+
+    def test_claim_ranked_split_rewards_success(self):
+        def mock_request(method, endpoint, data=None, silent=False):
+            if method == "POST" and endpoint == "/lol-ranked/v1/split-rewards/claim":
+                return DummyResponse(200, {})
+            if method == "POST" and endpoint == "/lol-ranked/v1/rewards/claim":
+                return DummyResponse(200, {})
+            return DummyResponse(404, {})
+
+        self.mock_lcu.request.side_effect = mock_request
+        res = self.service.claim_ranked_split_rewards()
+        self.assertEqual(res.claimed, 2)
+        self.assertIn("Ranked Split Rewards", res.sources)
+        self.assertIn("Ranked Rewards", res.sources)
+
     def test_claim_all_rewards_pipeline(self):
         def mock_request(method, endpoint, data=None, silent=False):
+            if method == "GET" and endpoint == "/lol-event-hub/v1/events":
+                return DummyResponse(200, [{"id": "ev1", "name": "Event1"}])
+            if method == "GET" and "/lol-event-hub/v1/events/ev1/reward-track/unclaimed-rewards" in endpoint:
+                return DummyResponse(200, {"rewardsCount": 3})
+            if method == "POST" and "/lol-event-hub/v1/events/ev1/reward-track/claim-all" in endpoint:
+                return DummyResponse(204, {})
+            if method == "GET" and endpoint == "/lol-rewards/v1/grants":
+                return DummyResponse(200, [])
+            if method == "GET" and endpoint == "/lol-tft-pass/v1/active-passes":
+                return DummyResponse(200, [])
             if method == "POST" and "/lol-battle-pass/v1/rewards/claim" in endpoint:
                 return DummyResponse(200, {"rewards": ["token_1"]})
             if method == "GET" and "/lol-missions/v1/missions" in endpoint:
@@ -103,8 +197,8 @@ class TestLootServiceClaiming(unittest.TestCase):
 
         self.mock_lcu.request.side_effect = mock_request
         res = self.service.claim_all_rewards()
-        self.assertEqual(res.claimed, 2)
-        self.assertTrue(any("Claim step completed: 2 reward(s)" in log for log in self.logs))
+        self.assertEqual(res.claimed, 5)  # 3 from Event Hub + 1 from legacy + 1 from mission
+        self.assertTrue(any("Claim step completed: 5 reward(s)" in log for log in self.logs))
 
     def test_open_all_with_claim_first(self):
         inventory = [{"lootId": "CHEST_champion_capsule", "localizedName": "Champion Capsule", "count": 1, "type": "CHEST", "displayCategories": "CHEST"}]
