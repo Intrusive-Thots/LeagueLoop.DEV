@@ -328,6 +328,88 @@ class TestUIComponents(unittest.TestCase):
         self.assertEqual(list(tab_bar.buttons.keys()), expected_tabs)
         self.assertNotIn("Config", tab_bar.buttons)
 
+    def test_apply_click_animation(self):
+        """Test the apply_click_animation utility function."""
+        from unittest.mock import ANY
+        from ui.components.hover import apply_click_animation
+
+        # Setup mock widget
+        mock_widget = MagicMock()
+        mock_widget.cget.side_effect = lambda k: {
+            "state": "normal",
+            "fg_color": "#000000",
+            "hover_color": "#111111"
+        }.get(k)
+        mock_widget.winfo_exists.return_value = True
+
+        # MagicMock returns another MagicMock for any undefined attribute.
+        # So `getattr(mock_widget, '_is_pulsing', False)` returns a truthy Mock object
+        # instead of False unless explicitly set or deleted.
+        if hasattr(mock_widget, "_is_pulsing"):
+            del mock_widget._is_pulsing
+        if hasattr(mock_widget, "_orig_pulse_fg"):
+            del mock_widget._orig_pulse_fg
+        if hasattr(mock_widget, "_orig_pulse_hover"):
+            del mock_widget._orig_pulse_hover
+
+        # Call function
+        apply_click_animation(mock_widget, normal_color="#000000", pulse_color="#FF0000", button_num=1)
+
+        # Verify bind was called
+        mock_widget.bind.assert_called_with("<ButtonPress-1>", ANY, add="+")
+
+        # Get the bound handler
+        bind_args = mock_widget.bind.call_args
+        on_click_handler = bind_args[0][1]
+
+        # 1. Happy path: click it
+        mock_widget.cget.side_effect = lambda k: {
+            "state": "normal",
+            "fg_color": "#000000",
+            "hover_color": "#111111"
+        }.get(k)
+        on_click_handler(None)
+
+        # Verify configure was called with pulse color
+        mock_widget.configure.assert_called_with(fg_color="#FF0000", hover_color="#FF0000")
+
+        # Verify it schedules a revert
+        mock_widget.after.assert_called_once()
+        after_args = mock_widget.after.call_args
+        self.assertEqual(after_args[0][0], 150)
+        revert_func = after_args[0][1]
+
+        # Ensure _is_pulsing is set
+        self.assertTrue(mock_widget._is_pulsing)
+
+        # Execute revert and verify
+        revert_func()
+        mock_widget.configure.assert_called_with(fg_color="#000000", hover_color="#111111")
+        self.assertFalse(mock_widget._is_pulsing)
+
+        # 2. Disabled state
+        mock_widget.reset_mock()
+        mock_widget.cget.side_effect = lambda k: {
+            "state": "disabled",
+            "fg_color": "#000000",
+            "hover_color": "#111111"
+        }.get(k)
+        on_click_handler(None)
+        # Configure should not be called
+        mock_widget.configure.assert_not_called()
+
+        # 3. Re-entrancy check
+        mock_widget.reset_mock()
+        mock_widget.cget.side_effect = lambda k: {
+            "state": "normal",
+            "fg_color": "#000000",
+            "hover_color": "#111111"
+        }.get(k)
+        mock_widget._is_pulsing = True
+        on_click_handler(None)
+        # Configure should not be called
+        mock_widget.configure.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()
