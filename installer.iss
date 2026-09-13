@@ -15,7 +15,7 @@ DefaultGroupName=LeagueLoop
 OutputDir=dist
 OutputBaseFilename=LeagueLoop_Installer
 SetupIconFile=assets\icon-f871f4e9.ico
-UninstallDisplayIcon={app}\assets\icon-f871f4e9.ico
+UninstallDisplayIcon={app}\app.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 LZMADictionarySize=65536
@@ -24,7 +24,7 @@ ArchitecturesInstallIn64BitMode=x64
 WizardStyle=modern
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [InstallDelete]
 ; Remove stale runtime-generated files from previous installs that cause PermissionError
@@ -36,10 +36,12 @@ Type: files; Name: "{app}\error.log.*"
 [Files]
 Source: "dist\LeagueLoop\LeagueLoop.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "dist\LeagueLoop\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "assets\icon-f871f4e9.ico"; DestDir: "{app}"; DestName: "app.ico"; Flags: ignoreversion
+Source: "assets\icon-f871f4e9.ico"; DestDir: "{app}\assets"; DestName: "icon-f871f4e9.ico"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\LeagueLoop"; Filename: "{app}\LeagueLoop.exe"; IconFilename: "{app}\assets\icon-f871f4e9.ico"
-Name: "{autodesktop}\LeagueLoop"; Filename: "{app}\LeagueLoop.exe"; Tasks: desktopicon; IconFilename: "{app}\assets\icon-f871f4e9.ico"
+Name: "{group}\LeagueLoop"; Filename: "{app}\LeagueLoop.exe"; IconFilename: "{app}\app.ico"
+Name: "{autodesktop}\LeagueLoop"; Filename: "{app}\LeagueLoop.exe"; Tasks: desktopicon; IconFilename: "{app}\app.ico"
 
 [Run]
 Filename: "{app}\LeagueLoop.exe"; Description: "{cm:LaunchProgram,LeagueLoop}"; Flags: nowait postinstall skipifsilent
