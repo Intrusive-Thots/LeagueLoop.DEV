@@ -5,16 +5,22 @@ import functools
 
 def _resolve_token_path():
     """Resolve design_tokens.json for both dev and PyInstaller frozen builds."""
-    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-        # Frozen: Try common locations in _MEIPASS
-        candidates = [
-            os.path.join(sys._MEIPASS, "ui", "theme", "design_tokens.json"),
-            os.path.join(sys._MEIPASS, "design_tokens.json"),
-            os.path.join(os.path.dirname(sys.executable), "ui", "theme", "design_tokens.json"),
-        ]
-        for c in candidates:
-            if os.path.exists(c):
-                return c
+    if getattr(sys, 'frozen', False):
+        base_dirs = []
+        if hasattr(sys, '_MEIPASS'):
+            base_dirs.append(sys._MEIPASS)
+        base_dirs.append(os.path.dirname(sys.executable))
+        base_dirs.append(os.path.join(os.path.dirname(sys.executable), "_internal"))
+        
+        for b in base_dirs:
+            candidates = [
+                os.path.join(b, "ui", "theme", "design_tokens.json"),
+                os.path.join(b, "src", "ui", "theme", "design_tokens.json"),
+                os.path.join(b, "design_tokens.json"),
+            ]
+            for c in candidates:
+                if os.path.exists(c):
+                    return c
     
     # Dev or fallback
     base = os.path.abspath(os.path.dirname(__file__))
@@ -33,7 +39,16 @@ DEFAULT_TOKENS = {
     "colors": {
         "background": {"app": "#091428", "panel": "#0A1428", "card": "#141E28"},
         "text": {"primary": "#F0E6D2", "secondary": "#C8AA6E", "muted": "#6C757D"},
-        "accent": {"primary": "#C8AA6E", "gold": "#C8AA6E", "blue": "#0BC6E3"}
+        "accent": {"primary": "#C8AA6E", "gold": "#C8AA6E", "blue": "#0BC6E3"},
+        "border": {"subtle": "#1E2328", "soft": "#1A2332", "card": "#1A2332"}
+    },
+    "borders": {
+        "subtle": "1px solid #1E2328",
+        "soft": "1px solid #1A2332",
+        "strong": "1px solid #3C3C41",
+        "gold": "1px solid #C8AA6E",
+        "card": "1px solid #1A2332",
+        "card_gold": "1px solid #1E1E2D"
     }
 }
 

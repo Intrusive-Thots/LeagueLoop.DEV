@@ -218,8 +218,9 @@ def make_input(parent, placeholder="", width=None, **kw):
     )
     def_border_w, def_border_c = parse_border("subtle")
     border_w = kw.pop("border_width", def_border_w)
+    raw_border_c = kw.pop("border_color", def_border_c) or def_border_c
     border_c = ctk_safe_color(
-        kw.pop("border_color", def_border_c) or def_border_c,
+        raw_border_c,
         fallback="transparent",
     )
     kw.pop("cursor", None)
@@ -296,13 +297,15 @@ def make_card(parent, title=None, fg_color=None, border_color=None, corner_radiu
     card_bg = fg_color or get_color("colors.background.card", "#0F1923")
     card_border_w, card_border_c = parse_border("card")
     border_c = border_color or card_border_c or "#1A2332"
+    if border_c == "transparent":
+        border_c = "#1A2332"
     radius = corner_radius or get_radius("md")
     
     card = ctk.CTkFrame(
         parent,
         fg_color=card_bg,
         corner_radius=radius,
-        border_width=1,
+        border_width=card_border_w if (card_border_w is not None and card_border_w > 0) else 1,
         border_color=border_c
     )
     card.pack(fill="x", padx=padx, pady=pady)

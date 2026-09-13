@@ -14,8 +14,8 @@ DefaultDirName={autopf}\LeagueLoop
 DefaultGroupName=LeagueLoop
 OutputDir=dist
 OutputBaseFilename=LeagueLoop_Installer
-SetupIconFile=assets\app.ico
-UninstallDisplayIcon={app}\LeagueLoop.exe
+SetupIconFile=assets\icon-f871f4e9.ico
+UninstallDisplayIcon={app}\assets\icon-f871f4e9.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 LZMADictionarySize=65536
@@ -38,8 +38,8 @@ Source: "dist\LeagueLoop\LeagueLoop.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "dist\LeagueLoop\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\LeagueLoop"; Filename: "{app}\LeagueLoop.exe"
-Name: "{autodesktop}\LeagueLoop"; Filename: "{app}\LeagueLoop.exe"; Tasks: desktopicon
+Name: "{group}\LeagueLoop"; Filename: "{app}\LeagueLoop.exe"; IconFilename: "{app}\assets\icon-f871f4e9.ico"
+Name: "{autodesktop}\LeagueLoop"; Filename: "{app}\LeagueLoop.exe"; Tasks: desktopicon; IconFilename: "{app}\assets\icon-f871f4e9.ico"
 
 [Run]
 Filename: "{app}\LeagueLoop.exe"; Description: "{cm:LaunchProgram,LeagueLoop}"; Flags: nowait postinstall skipifsilent

@@ -13,7 +13,10 @@ a = Analysis(
     datas=[
         (ctk_path, 'customtkinter'),
         ('assets', 'assets'),
-        ('config', 'config')
+        ('config', 'config'),
+        ('src/ui/theme/design_tokens.json', 'ui/theme'),
+        ('src/ui/theme/design_tokens.json', 'src/ui/theme'),
+        ('src/ui/theme/design_tokens.json', '.')
     ],
     hiddenimports=[
         'requests',
@@ -64,7 +67,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['assets\\app.ico'],
+    icon=['assets\\icon-f871f4e9.ico'],
 )
 
 coll = COLLECT(
