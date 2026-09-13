@@ -211,17 +211,22 @@ class ProfileService:
         except Exception:
             return None
 
-    def _champ_name(self, champion_id: int) -> str:
+    def _get_champ_name_resolver(self):
         getter = getattr(self._assets, "get_champ_name", None)
-        if callable(getter):
-            try:
-                name = getter(champion_id)
-                if name:
-                    return str(name)
-            except Exception as exc:
-                Logger.debug("ProfileService", "_champ_name suppressed an error", exc=exc)
-        # A bare id is honest; inventing a name is not.
-        return str(champion_id) if champion_id else ""
+        has_getter = callable(getter)
+
+        def resolve_champ_name(champion_id: int) -> str:
+            if has_getter:
+                try:
+                    name = getter(champion_id)
+                    if name:
+                        return str(name)
+                except Exception as exc:
+                    Logger.debug("ProfileService", "_champ_name suppressed an error", exc=exc)
+            # A bare id is honest; inventing a name is not.
+            return str(champion_id) if champion_id else ""
+
+        return resolve_champ_name
 
     # ---------------------------------------------------------------- reads
     def load(self, limit: int = 20) -> Profile:
@@ -247,13 +252,14 @@ class ProfileService:
         )
         games = ((history or {}).get("games") or {}).get("games") or []
         matches = []
+        resolve_champ_name = self._get_champ_name_resolver()
         for game in games:
             match = parse_match(game)
             if match is None:
                 continue
             matches.append(
                 Match(**{**match.__dict__,
-                         "champion_name": self._champ_name(match.champion_id)})
+                         "champion_name": resolve_champ_name(match.champion_id)})
             )
 
         if matches:
@@ -282,13 +288,14 @@ class ProfileService:
             return []
 
         out = []
+        resolve_champ_name = self._get_champ_name_resolver()
         for row in rows:
             out.append(
                 Match(
                     game_id=_int(row.get("game_id")),
                     champion_id=_int(row.get("champion_id")),
                     champion_name=str(row.get("champion_name") or "")
-                    or self._champ_name(_int(row.get("champion_id"))),
+                    or resolve_champ_name(_int(row.get("champion_id"))),
                     queue_id=_int(row.get("queue_id")),
                     win=bool(row.get("win")),
                     kills=_int(row.get("kills")),
