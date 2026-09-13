@@ -5,6 +5,7 @@ import json
 import random
 import subprocess
 import sys
+import urllib.parse
 import threading
 import time
 import traceback
@@ -971,23 +972,26 @@ class AutomationEngine:
         my_cell = session.get("localPlayerCellId")
         my_team = session.get("myTeam", [])
         
+        su_ids = []
         for p in my_team:
             if p.get("cellId") == my_cell: continue
-            
             su_id = p.get("summonerId", 0)
-            if not su_id: continue
-            
-            req = self.lcu.request("GET", f"/lol-summoner/v1/summoners/{su_id}", silent=True)
+            if su_id:
+                su_ids.append(su_id)
+
+        if su_ids:
+            encoded_ids = urllib.parse.quote(json.dumps(su_ids))
+            req = self.lcu.request("GET", f"/lol-summoner/v2/summoners?ids={encoded_ids}", silent=True)
             if req and req.status_code == 200:
-                summoner_data = req.json()  # Item #160: Parse JSON once
-                name = summoner_data.get("gameName", "").lower()
-                tag = summoner_data.get("tagLine", "").lower()
-                full_name = f"{name}#{tag}"
-                
-                if name in self._blacklist or full_name in self._blacklist:
-                    self._log(f"BLACKLIST MATCH: {full_name}. Dodging immediately.")
-                    self._force_close_client(f"blacklisted player {full_name}")
-                    return
+                for summoner_data in req.json():
+                    name = summoner_data.get("gameName", "").lower()
+                    tag = summoner_data.get("tagLine", "").lower()
+                    full_name = f"{name}#{tag}"
+
+                    if name in self._blacklist or full_name in self._blacklist:
+                        self._log(f"BLACKLIST MATCH: {full_name}. Dodging immediately.")
+                        self._force_close_client(f"blacklisted player {full_name}")
+                        return
 
     def _handle_chat_warden(self, session):
         # Reads every message in the lobby. That is a thing to opt into, not
