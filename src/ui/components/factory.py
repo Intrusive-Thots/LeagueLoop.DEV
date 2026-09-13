@@ -6,6 +6,7 @@ from utils.logger import Logger
 import functools
 import customtkinter as ctk
 from ..theme.token_loader import TOKENS
+from .color_utils import ctk_safe_color
 
 # ... (omitted)
 
@@ -211,10 +212,16 @@ def make_input(parent, placeholder="", width=None, **kw):
     radius = kw.pop("corner_radius", get_radius("sm"))
     height = kw.pop("height", 32)
     
-    bg_color = kw.pop("fg_color", get_color("colors.background.app", "#091428")) or "#091428"
+    bg_color = ctk_safe_color(
+        kw.pop("fg_color", get_color("colors.background.app", "#091428")),
+        fallback="#091428",
+    )
     def_border_w, def_border_c = parse_border("subtle")
     border_w = kw.pop("border_width", def_border_w)
-    border_c = kw.pop("border_color", def_border_c) or def_border_c or "transparent"
+    border_c = ctk_safe_color(
+        kw.pop("border_color", def_border_c) or def_border_c,
+        fallback="transparent",
+    )
     kw.pop("cursor", None)
     
     entry = ctk.CTkEntry(
@@ -235,22 +242,29 @@ def make_input(parent, placeholder="", width=None, **kw):
 
     # ⚡ Bolt: Precompute static colors for focus handlers to avoid main thread latency
     # during high-frequency focus events.
-    _focus_border = get_color("colors.accent.blue", "#0BC6E3")
-    _focus_bg = get_color("colors.background.card", "#141E28")
-    _unfocus_border = border_c or "transparent"
-    _unfocus_bg = bg_color or "transparent"
+    # CTkEntry.configure raises ValueError if any color component is None.
+    _focus_border = ctk_safe_color(get_color("colors.accent.blue", "#0BC6E3"), "#0BC6E3")
+    _focus_bg = ctk_safe_color(get_color("colors.background.card", "#141E28"), "#141E28")
+    _unfocus_border = ctk_safe_color(border_c, "transparent")
+    _unfocus_bg = ctk_safe_color(bg_color, "#091428")
 
     def _on_focus(e):
-        entry.configure(
-            border_color=_focus_border,
-            fg_color=_focus_bg
-        )
+        try:
+            entry.configure(
+                border_color=_focus_border,
+                fg_color=_focus_bg
+            )
+        except Exception as exc:
+            Logger.debug("factory.py", "_on_focus suppressed an error", exc=exc)
 
     def _on_unfocus(e):
-        entry.configure(
-            border_color=_unfocus_border or "transparent",
-            fg_color=_unfocus_bg or "transparent"
-        )
+        try:
+            entry.configure(
+                border_color=_unfocus_border,
+                fg_color=_unfocus_bg
+            )
+        except Exception as exc:
+            Logger.debug("factory.py", "_on_unfocus suppressed an error", exc=exc)
 
     entry.bind("<FocusIn>", _on_focus, add="+")
     entry.bind("<FocusOut>", _on_unfocus, add="+")

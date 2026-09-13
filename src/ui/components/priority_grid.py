@@ -1529,8 +1529,9 @@ class PriorityIconGrid(ctk.CTkFrame):
         if real_name is None:
             self.add_entry.configure(border_color="#e81123")
             try:
-                orig = self.add_entry.pack_info().get("padx", (0, 4))
-                self._shake_widget(self.add_entry, orig)
+                if getattr(self.add_entry, "winfo_manager", lambda: "")() == "pack":
+                    orig = self.add_entry.pack_info().get("padx", (0, 4))
+                    self._shake_widget(self.add_entry, orig)
             except Exception as exc:
                 Logger.debug("PriorityGrid", "_commit_add suppressed an error", exc=exc)
             self.after(1200, lambda: self.add_entry.configure(
@@ -1568,6 +1569,8 @@ class PriorityIconGrid(ctk.CTkFrame):
                 if not widget.winfo_exists():
                     return
                 pad = offsets[i]
+                if getattr(widget, "winfo_manager", lambda: "")() != "pack":
+                    return
                 widget.pack_configure(padx=(pad, 4))
                 if i < len(offsets) - 1:
                     self.after(40, lambda: _step(i + 1))

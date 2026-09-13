@@ -156,6 +156,8 @@ class Toast(ctk.CTkFrame):
         """Slide in animation for holographic feel."""
         if not self.winfo_exists():
             return
+        if getattr(self, "winfo_manager", lambda: "pack")() != "pack":
+            return
         if self._current_y > self._target_y:
             self._current_y = max(self._target_y, self._current_y - 8)
             # Use pack_configure to adjust padding dynamically
@@ -191,6 +193,11 @@ class Toast(ctk.CTkFrame):
     def _slide_out(self):
         """Slide out animation before destroying."""
         if not self.winfo_exists():
+            return
+        if getattr(self, "winfo_manager", lambda: "pack")() != "pack":
+            self._cleanup_confetti()
+            if self.winfo_exists():
+                self.destroy()
             return
         if self._current_y < 50:
             self._current_y += 8

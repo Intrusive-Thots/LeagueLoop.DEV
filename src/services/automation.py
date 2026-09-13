@@ -5,6 +5,7 @@ import json
 import random
 import subprocess
 import sys
+import urllib.parse
 import threading
 import time
 import traceback
@@ -199,15 +200,12 @@ class AutomationEngine:
         """
         now = time.time()
 
-        # Fast-path: reuse cached PID if still alive
-        game_pid = getattr(self, "_game_pid", None)
-        if game_pid is not None:
-            try:
-                p = psutil.Process(game_pid)
-                if p.is_running() and p.name().lower() == "league of legends.exe":
-                    return True
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                pass
+        # Fast-path: reuse cached process if still alive
+        game_proc = getattr(self, "_game_proc", None)
+        if game_proc is not None:
+            if game_proc.is_running():
+                return True
+            self._game_proc = None
             self._game_pid = None
 
         # Throttle full scans to every 3 seconds
@@ -219,6 +217,7 @@ class AutomationEngine:
         for p in psutil.process_iter(attrs=["name"]):
             try:
                 if (p.info["name"] or "").lower() == "league of legends.exe":
+                    self._game_proc = p
                     self._game_pid = p.pid
                     return True
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, KeyError):
@@ -316,9 +315,17 @@ class AutomationEngine:
             phase_req = self.lcu.request("GET", "/lol-gameflow/v1/gameflow-phase", None, True)
             if phase_req and phase_req.status_code == 200:
                 try:
-                    polled = phase_req.json()
-                    if isinstance(polled, str) and polled:
-                        phase = polled
+                    text = phase_req.text
+                    if text != getattr(self, "_last_phase_text", None):
+                        polled = phase_req.json()
+                        if isinstance(polled, str) and polled:
+                            self._cached_phase = polled
+                        else:
+                            self._cached_phase = None
+                        self._last_phase_text = text
+
+                    if getattr(self, "_cached_phase", None):
+                        phase = self._cached_phase
                 except Exception as exc:
                     Logger.debug("Automation", "_tick suppressed an error", exc=exc)
         else:
@@ -980,6 +987,7 @@ class AutomationEngine:
                 ["taskkill", "/IM", "LeagueClient.exe", "/F"],
                 creationflags=NO_WINDOW,
                 timeout=10,
+                shell=False,
             )
         except Exception as exc:
             Logger.error(
@@ -1004,23 +1012,26 @@ class AutomationEngine:
         my_cell = session.get("localPlayerCellId")
         my_team = session.get("myTeam", [])
         
+        su_ids = []
         for p in my_team:
             if p.get("cellId") == my_cell: continue
-            
             su_id = p.get("summonerId", 0)
-            if not su_id: continue
-            
-            req = self.lcu.request("GET", f"/lol-summoner/v1/summoners/{su_id}", silent=True)
+            if su_id:
+                su_ids.append(su_id)
+
+        if su_ids:
+            encoded_ids = urllib.parse.quote(json.dumps(su_ids))
+            req = self.lcu.request("GET", f"/lol-summoner/v2/summoners?ids={encoded_ids}", silent=True)
             if req and req.status_code == 200:
-                summoner_data = req.json()  # Item #160: Parse JSON once
-                name = summoner_data.get("gameName", "").lower()
-                tag = summoner_data.get("tagLine", "").lower()
-                full_name = f"{name}#{tag}"
-                
-                if name in self._blacklist or full_name in self._blacklist:
-                    self._log(f"BLACKLIST MATCH: {full_name}. Dodging immediately.")
-                    self._force_close_client(f"blacklisted player {full_name}")
-                    return
+                for summoner_data in req.json():
+                    name = summoner_data.get("gameName", "").lower()
+                    tag = summoner_data.get("tagLine", "").lower()
+                    full_name = f"{name}#{tag}"
+
+                    if name in self._blacklist or full_name in self._blacklist:
+                        self._log(f"BLACKLIST MATCH: {full_name}. Dodging immediately.")
+                        self._force_close_client(f"blacklisted player {full_name}")
+                        return
 
     def _handle_chat_warden(self, session):
         # Reads every message in the lobby. That is a thing to opt into, not
@@ -1069,12 +1080,10 @@ class AutomationEngine:
             return
 
         # Cache banned IDs once for both phases
-        banned_ids = []
-        for b in session.get("bannedChampions", []):
-            if isinstance(b, dict):
-                banned_ids.append(b.get("championId", 0))
-            else:
-                banned_ids.append(b)
+        banned_ids = [
+            b.get("championId", 0) if isinstance(b, dict) else b
+            for b in session.get("bannedChampions", [])
+        ]
 
         action_type = my_action.get("type", "")
         if action_type == "ban":

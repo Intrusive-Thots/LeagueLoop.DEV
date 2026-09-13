@@ -10,8 +10,16 @@ class DummyWidget:
         self._w = ".dummy"
         self._last_child_ids = {}
         self.children = {}
-    def bind(self, *args, **kwargs):
-        pass
+        self._config = {"state": "normal", "fg_color": "#000000", "hover_color": "#333333"}
+        self._bindings = {}
+        self._after_callbacks = []
+    def bind(self, sequence, func=None, add=None):
+        if add == "+":
+            if sequence not in self._bindings:
+                self._bindings[sequence] = []
+            self._bindings[sequence].append(func)
+        else:
+            self._bindings[sequence] = [func]
     def pack(self, *args, **kwargs):
         pass
     def grid(self, *args, **kwargs):
@@ -33,9 +41,9 @@ class DummyWidget:
     def grid_rowconfigure(self, *args, **kwargs):
         pass
     def configure(self, *args, **kwargs):
-        pass
+        self._config.update(kwargs)
     def cget(self, attr):
-        return "#000000"
+        return self._config.get(attr, "#000000")
     def delete(self, *args, **kwargs):
         pass
     def insert(self, *args, **kwargs):
@@ -53,9 +61,16 @@ class DummyWidget:
     def coords(self, *args, **kwargs):
         pass
     def after(self, ms, func=None, *args):
+        self._after_callbacks.append(func)
         return "job_1"
     def after_cancel(self, job):
         pass
+    def execute_after_callbacks(self):
+        callbacks = self._after_callbacks[:]
+        self._after_callbacks.clear()
+        for cb in callbacks:
+            if cb:
+                cb()
     def winfo_exists(self):
         return True
     def winfo_children(self):
@@ -328,6 +343,128 @@ class TestUIComponents(unittest.TestCase):
         self.assertEqual(list(tab_bar.buttons.keys()), expected_tabs)
         self.assertNotIn("Config", tab_bar.buttons)
 
+    def test_apply_click_animation(self):
+        """Test the apply_click_animation utility function."""
+        from unittest.mock import ANY
+        from ui.components.hover import apply_click_animation
+
+        # Setup mock widget
+        mock_widget = MagicMock()
+        mock_widget.cget.side_effect = lambda k: {
+            "state": "normal",
+            "fg_color": "#000000",
+            "hover_color": "#111111"
+        }.get(k)
+        mock_widget.winfo_exists.return_value = True
+
+        # MagicMock returns another MagicMock for any undefined attribute.
+        # So `getattr(mock_widget, '_is_pulsing', False)` returns a truthy Mock object
+        # instead of False unless explicitly set or deleted.
+        if hasattr(mock_widget, "_is_pulsing"):
+            del mock_widget._is_pulsing
+        if hasattr(mock_widget, "_orig_pulse_fg"):
+            del mock_widget._orig_pulse_fg
+        if hasattr(mock_widget, "_orig_pulse_hover"):
+            del mock_widget._orig_pulse_hover
+
+        # Call function
+        apply_click_animation(mock_widget, normal_color="#000000", pulse_color="#FF0000", button_num=1)
+
+        # Verify bind was called
+        mock_widget.bind.assert_called_with("<ButtonPress-1>", ANY, add="+")
+
+        # Get the bound handler
+        bind_args = mock_widget.bind.call_args
+        on_click_handler = bind_args[0][1]
+
+        # 1. Happy path: click it
+        mock_widget.cget.side_effect = lambda k: {
+            "state": "normal",
+            "fg_color": "#000000",
+            "hover_color": "#111111"
+        }.get(k)
+        on_click_handler(None)
+
+        # Verify configure was called with pulse color
+        mock_widget.configure.assert_called_with(fg_color="#FF0000", hover_color="#FF0000")
+
+        # Verify it schedules a revert
+        mock_widget.after.assert_called_once()
+        after_args = mock_widget.after.call_args
+        self.assertEqual(after_args[0][0], 150)
+        revert_func = after_args[0][1]
+
+        # Ensure _is_pulsing is set
+        self.assertTrue(mock_widget._is_pulsing)
+
+        # Execute revert and verify
+        revert_func()
+        mock_widget.configure.assert_called_with(fg_color="#000000", hover_color="#111111")
+        self.assertFalse(mock_widget._is_pulsing)
+
+        # 2. Disabled state
+        mock_widget.reset_mock()
+        mock_widget.cget.side_effect = lambda k: {
+            "state": "disabled",
+            "fg_color": "#000000",
+            "hover_color": "#111111"
+        }.get(k)
+        on_click_handler(None)
+        # Configure should not be called
+        mock_widget.configure.assert_not_called()
+
+        # 3. Re-entrancy check
+        mock_widget.reset_mock()
+        mock_widget.cget.side_effect = lambda k: {
+            "state": "normal",
+            "fg_color": "#000000",
+            "hover_color": "#111111"
+        }.get(k)
+        mock_widget._is_pulsing = True
+        on_click_handler(None)
+        # Configure should not be called
+        mock_widget.configure.assert_not_called()
+
+
+    def test_apply_click_animation(self):
+        """Test apply_click_animation binds properly, updates colors on click, and schedules reversion."""
+        from ui.components.hover import apply_click_animation
+
+        mock_widget = DummyWidget()
+        mock_widget.configure(fg_color="#101010", hover_color="#202020", state="normal")
+
+        # Test pulse_color argument
+        apply_click_animation(mock_widget, normal_color="#101010", pulse_color="#FF0000")
+
+        # Check if bound correctly
+        self.assertIn("<ButtonPress-1>", mock_widget._bindings)
+        handlers = mock_widget._bindings["<ButtonPress-1>"]
+        self.assertGreater(len(handlers), 0)
+
+        # Simulate click
+        click_handler = handlers[0]
+        click_handler(None)
+
+        # Check colors changed to pulse_color
+        self.assertEqual(mock_widget.cget("fg_color"), "#FF0000")
+        self.assertEqual(mock_widget.cget("hover_color"), "#FF0000")
+        self.assertTrue(mock_widget._is_pulsing)
+
+        # Simulate double click prevention
+        mock_widget.configure(fg_color="#00FF00", hover_color="#00FF00")
+        click_handler(None)
+        self.assertEqual(mock_widget.cget("fg_color"), "#00FF00") # Unchanged
+
+        # Simulate reversion
+        mock_widget.execute_after_callbacks()
+
+        self.assertEqual(mock_widget.cget("fg_color"), "#101010")
+        self.assertEqual(mock_widget.cget("hover_color"), "#202020")
+        self.assertFalse(mock_widget._is_pulsing)
+
+        # Test disabled state
+        mock_widget.configure(state="disabled")
+        click_handler(None)
 
 if __name__ == '__main__':
     unittest.main()

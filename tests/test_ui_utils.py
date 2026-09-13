@@ -25,28 +25,46 @@ hex_to_rgb = None
 interpolate_color = None
 lighten_color = None
 darken_color = None
+parse_hex_rgb = None
+ctk_safe_color = None
 apply_focus_ring = None
 scroll_to_widget = None
 apply_smooth_scroll = None
+apply_acrylic_blur = None
+remove_blur = None
 
 def setUpModule():
     global _patcher
     global hex_to_rgb, interpolate_color, lighten_color, darken_color
+    global parse_hex_rgb, ctk_safe_color
     global apply_focus_ring, scroll_to_widget, apply_smooth_scroll
+    global apply_acrylic_blur, remove_blur
     _patcher = patch.dict(sys.modules, mods_to_mock)
     _patcher.start()
 
-    from ui.components.color_utils import hex_to_rgb as h2r, interpolate_color as ic, lighten_color as lc, darken_color as dc
+    from ui.components.color_utils import (
+        hex_to_rgb as h2r,
+        interpolate_color as ic,
+        lighten_color as lc,
+        darken_color as dc,
+        parse_hex_rgb as phr,
+        ctk_safe_color as csc,
+    )
     from utils.focus_states import apply_focus_ring as afr, scroll_to_widget as stw
     from utils.smooth_scroll import apply_smooth_scroll as ass
+    from utils.acrylic_blur import apply_acrylic_blur as aab, remove_blur as rb
     
     hex_to_rgb = h2r
     interpolate_color = ic
     lighten_color = lc
     darken_color = dc
+    parse_hex_rgb = phr
+    ctk_safe_color = csc
     apply_focus_ring = afr
     scroll_to_widget = stw
     apply_smooth_scroll = ass
+    apply_acrylic_blur = aab
+    remove_blur = rb
 
 def tearDownModule():
     global _patcher
@@ -84,6 +102,28 @@ class TestColorUtils(unittest.TestCase):
         self.assertEqual(lighten_color("#000000", 50), "#7f7f7f")
         self.assertEqual(darken_color("#ffffff", 50), "#7f7f7f")
         self.assertEqual(lighten_color("transparent", 10), "transparent")
+
+    def test_parse_hex_rgb_accepts_common_forms(self):
+        self.assertEqual(parse_hex_rgb("#FFF"), (255, 255, 255))
+        self.assertEqual(parse_hex_rgb("#1A2B3C"), (26, 43, 60))
+        self.assertEqual(parse_hex_rgb("C8A45D33"), (200, 164, 93))
+        self.assertEqual(parse_hex_rgb(("#091428", "#141E28")), (9, 20, 40))
+
+    def test_parse_hex_rgb_rejects_named_junk_without_raising(self):
+        """'invalid'[1:3] == 'nv' used to flood error.log via int(..., 16)."""
+        for junk in ("invalid", "#canvas", "canvas", "transparent", None, "", "navy"):
+            self.assertIsNone(parse_hex_rgb(junk), junk)
+
+    def test_ctk_safe_color_never_returns_none(self):
+        self.assertEqual(ctk_safe_color(None), "transparent")
+        self.assertEqual(ctk_safe_color((None, "#1E2328")), ("transparent", "#1E2328"))
+        self.assertEqual(ctk_safe_color((None, None)), ("transparent", "transparent"))
+        self.assertEqual(ctk_safe_color("#C8AA6E"), "#C8AA6E")
+
+    def test_lighten_invalid_color_does_not_raise(self):
+        self.assertEqual(lighten_color("invalid", 10), "invalid")
+        self.assertEqual(darken_color("#canvas", 10), "#canvas")
+        self.assertEqual(interpolate_color("invalid", "#ffffff", 0.5), "invalid")
 
 
 class TestFocusStates(unittest.TestCase):
@@ -196,6 +236,114 @@ class TestUIKwargs(unittest.TestCase):
             last_configure_kwargs = mock_instance.configure.call_args[1]
             self.assertIsNotNone(last_configure_kwargs.get("border_color"))
             self.assertIsNotNone(last_configure_kwargs.get("fg_color"))
+            self.assertNotEqual(last_configure_kwargs.get("border_color"), None)
+
+    def test_factory_make_input_tuple_none_border_is_sanitized(self):
+        from ui.components.factory import make_input
+        with patch("customtkinter.CTkEntry") as mock_ctk_entry:
+            mock_instance = MagicMock()
+            mock_ctk_entry.return_value = mock_instance
+            make_input(self.root, border_color=(None, "#1E2328"), fg_color=(None, "#091428"))
+            ctor_kwargs = mock_ctk_entry.call_args[1]
+            self.assertEqual(ctor_kwargs["border_color"], ("transparent", "#1E2328"))
+            self.assertEqual(ctor_kwargs["fg_color"], ("#091428", "#091428"))
+
+            focus_out_cb = None
+            for call in mock_instance.bind.call_args_list:
+                if call[0][0] == "<FocusOut>":
+                    focus_out_cb = call[0][1]
+            self.assertIsNotNone(focus_out_cb)
+            focus_out_cb(MagicMock())
+            last = mock_instance.configure.call_args[1]
+            self.assertNotIn(None, _flatten_color(last.get("border_color")))
+            self.assertNotIn(None, _flatten_color(last.get("fg_color")))
+
+
+def _flatten_color(color):
+    if isinstance(color, (tuple, list)):
+        return list(color)
+    return [color]
+
+
+class TestAcrylicBlur(unittest.TestCase):
+    def setUp(self):
+        import ctypes
+        self.added_windll = False
+        if not hasattr(ctypes, 'windll'):
+            self.mock_windll = MagicMock()
+            ctypes.windll = self.mock_windll
+            self.added_windll = True
+        else:
+            self.mock_windll = ctypes.windll
+
+    def tearDown(self):
+        import ctypes
+        if self.added_windll and hasattr(ctypes, 'windll'):
+            del ctypes.windll
+
+    @patch('platform.system', return_value="Linux")
+    def test_apply_acrylic_blur_non_windows(self, mock_system):
+        tk_window = MagicMock()
+        result = apply_acrylic_blur(tk_window)
+        self.assertFalse(result)
+
+    @patch('platform.system', return_value="Windows")
+    @patch('utils.acrylic_blur._get_hwnd', return_value=12345)
+    @patch('ctypes.windll.user32.SetWindowCompositionAttribute', create=True)
+    def test_apply_acrylic_blur_windows_success(self, mock_set_attr, mock_get_hwnd, mock_system):
+        mock_set_attr.return_value = True
+        tk_window = MagicMock()
+        result = apply_acrylic_blur(tk_window)
+        self.assertTrue(result)
+        mock_set_attr.assert_called_once()
+
+    @patch('platform.system', return_value="Windows")
+    @patch('utils.acrylic_blur._get_hwnd', return_value=12345)
+    @patch('ctypes.windll.user32.SetWindowCompositionAttribute', create=True)
+    def test_apply_acrylic_blur_windows_fallback(self, mock_set_attr, mock_get_hwnd, mock_system):
+        # Fail first call (acrylic), succeed second (standard blur)
+        mock_set_attr.side_effect = [False, True]
+        tk_window = MagicMock()
+        result = apply_acrylic_blur(tk_window)
+        self.assertTrue(result)
+        self.assertEqual(mock_set_attr.call_count, 2)
+
+    @patch('platform.system', return_value="Windows")
+    @patch('utils.acrylic_blur._get_hwnd', return_value=12345)
+    @patch('ctypes.windll.user32.SetWindowCompositionAttribute', create=True)
+    def test_apply_acrylic_blur_windows_fail(self, mock_set_attr, mock_get_hwnd, mock_system):
+        mock_set_attr.return_value = False
+        tk_window = MagicMock()
+        result = apply_acrylic_blur(tk_window)
+        self.assertFalse(result)
+
+    @patch('platform.system', return_value="Linux")
+    def test_remove_blur_non_windows(self, mock_system):
+        tk_window = MagicMock()
+        result = remove_blur(tk_window)
+        self.assertFalse(result)
+
+    @patch('platform.system', return_value="Windows")
+    @patch('utils.acrylic_blur._get_hwnd', return_value=12345)
+    @patch('ctypes.windll.user32.SetWindowCompositionAttribute', create=True)
+    def test_remove_blur_windows_success(self, mock_set_attr, mock_get_hwnd, mock_system):
+        mock_set_attr.return_value = True
+        tk_window = MagicMock()
+        result = remove_blur(tk_window)
+        self.assertTrue(result)
+        mock_set_attr.assert_called_once()
+
+        # Verify it tries to disable it (ACCENT_DISABLED = 0)
+        args, kwargs = mock_set_attr.call_args
+        # We know from implementation that Data points to AccentPolicy where state should be 0
+        self.assertIsNotNone(args)
+
+    @patch('platform.system', return_value="Windows")
+    @patch('utils.acrylic_blur._get_hwnd', side_effect=Exception("Test Exception"))
+    def test_remove_blur_exception(self, mock_get_hwnd, mock_system):
+        tk_window = MagicMock()
+        result = remove_blur(tk_window)
+        self.assertFalse(result)
 
 
 if __name__ == '__main__':

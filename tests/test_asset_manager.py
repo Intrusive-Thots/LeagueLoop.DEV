@@ -3,7 +3,11 @@ from unittest.mock import MagicMock, patch, mock_open
 import os
 import json
 
-from services.asset_manager import AssetManager
+from services.asset_manager import (
+    AssetManager,
+    _coerce_numeric_id,
+    _is_usable_ddragon_ver,
+)
 
 SAMPLE_CHAMP_DATA = {
     "data": {
@@ -112,6 +116,145 @@ class TestAssetManager(unittest.TestCase):
                 size=(40, 40)
             )
 
+    def test_coerce_numeric_id_never_calls_isdigit_on_int(self):
+        self.assertEqual(_coerce_numeric_id(350), 350)
+        self.assertEqual(_coerce_numeric_id("266"), 266)
+        self.assertIsNone(_coerce_numeric_id("Yuumi"))
+        self.assertIsNone(_coerce_numeric_id(True))
+        self.assertIsNone(_coerce_numeric_id(None))
+
+    def test_preload_integer_keys_resolves_without_attribute_error(self):
+        """Champ-select preload receives LCU ints; must not hit key.isdigit()."""
+        self.assets.id_to_key = {350: "Yuumi", 266: "Aatrox"}
+        with patch.object(self.assets, "get_icon") as mock_get:
+            self.assets.preload_champion_icons([350, "266", "Yuumi"])
+            self.assets._download_queue.join()
+            called = [c.args[1] for c in mock_get.call_args_list]
+            self.assertEqual(set(called), {"Yuumi", "Aatrox"})
+
+    def test_usable_ddragon_version_rejects_sentinels(self):
+        self.assertTrue(_is_usable_ddragon_ver("15.18.1"))
+        self.assertTrue(_is_usable_ddragon_ver("14.1.1"))
+        self.assertFalse(_is_usable_ddragon_ver("99.9.9"))
+        self.assertFalse(_is_usable_ddragon_ver("0.0.0"))
+        self.assertFalse(_is_usable_ddragon_ver(""))
+        self.assertFalse(_is_usable_ddragon_ver(None))
+        self.assertFalse(_is_usable_ddragon_ver(15181))
+
+
+    def test_get_icon_async_immediate(self):
+        """Test get_icon_async returns immediately if the icon is available."""
+        mock_callback = MagicMock()
+        mock_img = MagicMock()
+
+        with patch.object(self.assets, 'get_icon', return_value=mock_img) as mock_get_icon:
+            self.assets.get_icon_async("champion", 350, mock_callback)
+
+            mock_get_icon.assert_called_once_with("champion", 350, size=(40, 40))
+            mock_callback.assert_called_once_with(mock_img)
+
+    def test_get_icon_async_widget_poll(self):
+        """Test get_icon_async polls using widget.after if icon is initially unavailable."""
+        mock_callback = MagicMock()
+        mock_widget = MagicMock()
+        mock_widget.winfo_exists.return_value = True
+
+        mock_img = MagicMock()
+        # get_icon returns None on first call, then the image on second call
+
+        with patch.object(self.assets, 'get_icon', side_effect=[None, mock_img]) as mock_get_icon:
+            self.assets.get_icon_async("champion", 350, mock_callback, widget=mock_widget)
+
+            # Initial check
+            self.assertEqual(mock_get_icon.call_count, 1)
+            mock_callback.assert_not_called()
+
+            # Widget after should be called with 0 delay for initial _poll
+            mock_widget.after.assert_called_once()
+            args, _ = mock_widget.after.call_args
+            self.assertEqual(args[0], 0)
+
+            # Execute the scheduled _poll function
+            poll_func = args[1]
+            poll_func()
+
+            # Poll calls get_icon again, gets the image, calls callback
+            self.assertEqual(mock_get_icon.call_count, 2)
+            mock_callback.assert_called_once_with(mock_img)
+
+    def test_get_icon_async_widget_destroyed(self):
+        """Test get_icon_async polling stops if widget is destroyed."""
+        mock_callback = MagicMock()
+        mock_widget = MagicMock()
+        mock_widget.winfo_exists.return_value = False
+
+        with patch.object(self.assets, 'get_icon', return_value=None) as mock_get_icon:
+            self.assets.get_icon_async("champion", 350, mock_callback, widget=mock_widget)
+
+            # Extract and call the _poll function
+            args, _ = mock_widget.after.call_args
+            poll_func = args[1]
+
+            # reset get_icon mock count to ensure it's not called in _poll if destroyed
+            mock_get_icon.reset_mock()
+            poll_func()
+
+            # Should return immediately and not call get_icon or callback
+            mock_get_icon.assert_not_called()
+            mock_callback.assert_not_called()
+
+            # Should not schedule another after call
+            self.assertEqual(mock_widget.after.call_count, 1) # Only the initial after(0)
+
+    def test_get_icon_async_thread_poll(self):
+        """Test get_icon_async uses threading to poll if no widget is provided."""
+        mock_callback = MagicMock()
+        mock_img = MagicMock()
+
+        with patch.object(self.assets, 'get_icon', side_effect=[None, mock_img]) as mock_get_icon, \
+             patch('services.asset_manager.threading.Thread') as mock_thread, \
+             patch('services.asset_manager.time.sleep') as mock_sleep:
+
+            self.assets.get_icon_async("champion", 350, mock_callback)
+
+            # Initial get_icon call returns None
+            self.assertEqual(mock_get_icon.call_count, 1)
+            mock_callback.assert_not_called()
+
+            # Thread should be created and started
+            mock_thread.assert_called_once()
+            args, kwargs = mock_thread.call_args
+            self.assertTrue(kwargs.get('daemon', False))
+            target_func = kwargs.get('target')
+
+            # Execute thread target manually
+            target_func()
+
+            # Target function calls get_icon, gets mock_img, calls callback
+            self.assertEqual(mock_get_icon.call_count, 2)
+            mock_callback.assert_called_once_with(mock_img)
+            mock_sleep.assert_not_called() # Should return before sleep
+
+    def test_get_icon_async_thread_poll_timeout(self):
+        """Test get_icon_async thread stops polling after 50 attempts."""
+        mock_callback = MagicMock()
+
+        with patch.object(self.assets, 'get_icon', return_value=None) as mock_get_icon, \
+             patch('services.asset_manager.threading.Thread') as mock_thread, \
+             patch('services.asset_manager.time.sleep') as mock_sleep:
+
+            self.assets.get_icon_async("champion", 350, mock_callback)
+
+            args, kwargs = mock_thread.call_args
+            target_func = kwargs.get('target')
+
+            # Execute thread target manually
+            target_func()
+
+            # Should have called get_icon 50 times in the loop (plus 1 initial)
+            self.assertEqual(mock_get_icon.call_count, 51)
+            self.assertEqual(mock_sleep.call_count, 50)
+            mock_callback.assert_not_called()
 
     def test_get_memory_summary_diagnostics(self):
         """Test memory usage summary diagnostics logging and structure."""

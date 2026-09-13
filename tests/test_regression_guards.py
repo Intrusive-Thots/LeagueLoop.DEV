@@ -51,6 +51,43 @@ def test_architecture_constraints_doc_present():
     assert "NEVER interacts with the running game process" in text
 
 
+def test_asset_manager_never_calls_isdigit_on_raw_key():
+    """ASSET-001: never call .isdigit() on a key that may be an LCU int."""
+    text = (SRC / "services" / "asset_manager.py").read_text(encoding="utf-8")
+    assert "_coerce_numeric_id" in text
+    assert "_resolve_champion_key" in text
+    for i, line in enumerate(text.splitlines(), 1):
+        if ".isdigit()" not in line:
+            continue
+        stripped = line.strip()
+        if stripped.startswith("#") or stripped.startswith("*") or '"""' in stripped:
+            continue
+        if "``" in stripped:  # docstring discussing the old bug
+            continue
+        if "isinstance(key, str)" in line or "isinstance(ver, str)" in line:
+            continue
+        if "all(p.isdigit()" in line:
+            continue
+        pytest.fail(f"unguarded .isdigit() at asset_manager.py:{i}: {stripped}")
+
+
+def test_factory_unfocus_uses_safe_colors():
+    """UI-001: CTk configure must not receive None colors."""
+    factory = (SRC / "ui" / "components" / "factory.py").read_text(encoding="utf-8")
+    colors = (SRC / "ui" / "components" / "color_utils.py").read_text(encoding="utf-8")
+    assert "ctk_safe_color" in factory
+    assert "def _on_unfocus" in factory
+    assert "def ctk_safe_color" in colors
+
+
+def test_color_utils_parses_without_raw_slice():
+    """COLOR-001: do not slice hex_color[1:3] without validation."""
+    text = (SRC / "ui" / "components" / "color_utils.py").read_text(encoding="utf-8")
+    assert "def parse_hex_rgb" in text
+    assert "int(hex_color[1:3], 16)" not in text
+    assert "int(hex_color[3:5], 16)" not in text
+
+
 def test_main_app_init_order_regression():
     """Ensure self.running is defined before _process_ui_queue is called in LeagueLoopApp."""
     main_py = SRC / "core" / "main.py"

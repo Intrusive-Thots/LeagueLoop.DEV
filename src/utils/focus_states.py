@@ -7,6 +7,7 @@ Applies a colored ring to focused interactive elements.
 
 import customtkinter as ctk
 from ui.components.factory import get_color
+from ui.components.color_utils import ctk_safe_color
 from utils.logger import Logger
 
 
@@ -45,13 +46,14 @@ def apply_focus_ring(widget, color=None, width=2):
     if orig_border_width is None:
         try:
             orig_border_width = widget.cget("border_width") or 0
-            orig_border_color = widget.cget("border_color") or "transparent"
+            orig_border_color = ctk_safe_color(widget.cget("border_color"), "transparent")
         except Exception:
             orig_border_width = 0
             orig_border_color = "transparent"
 
     widget._orig_border_width = orig_border_width
-    widget._orig_border_color = orig_border_color
+    widget._orig_border_color = ctk_safe_color(orig_border_color, "transparent")
+    focus_color = ctk_safe_color(focus_color, "#C8AA6E")
 
     def _on_focus_in(event):
         try:
@@ -63,7 +65,7 @@ def apply_focus_ring(widget, color=None, width=2):
         try:
             widget.configure(
                 border_width=widget._orig_border_width,
-                border_color=widget._orig_border_color
+                border_color=ctk_safe_color(widget._orig_border_color, "transparent")
             )
         except Exception as exc:
             Logger.debug("FocusStates", "_on_focus_out suppressed an error", exc=exc)
