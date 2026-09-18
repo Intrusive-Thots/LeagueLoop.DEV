@@ -763,13 +763,6 @@ class SidebarWidget(ctk.CTkFrame):
         btn_about = make_button(card_about, text="Info & Legal", style="ghost", font=get_font("caption", "bold"), width=100, height=24, command=_open_about)
         btn_about.pack(anchor="w")
 
-        def _open_mobile_qr():
-            if hasattr(self.master, "_show_mobile_qr"):
-                self.master._show_mobile_qr()
-        
-        btn_mobile = make_button(card_about, text="Link Mobile Device", style="primary", font=get_font("caption", "bold"), width=150, height=24, command=_open_mobile_qr)
-        btn_mobile.pack(anchor="w", pady=(INNER_GAP, 0))
-
         # ── Profile Section (Moved into Advanced Scroll) ──
         self.profile_frame = make_card(
             self.advanced_scroll,
@@ -793,33 +786,9 @@ class SidebarWidget(ctk.CTkFrame):
             border_color=get_color("colors.border.subtle"),
             height=30,
         )
-        self.entry_status.pack(fill="x", padx=CARD_PAD, pady=(0, INNER_GAP))
+        self.entry_status.pack(fill="x", padx=CARD_PAD, pady=(0, CARD_PAD))
         self.entry_status.bind("<Return>", self._on_status_submit)
         CTkTooltip(self.entry_status, "Press Enter to update your League Client status")
-
-        # ── Quick Status Presets ──
-        self.preset_frame = ctk.CTkFrame(self.profile_frame, fg_color="transparent")
-        self.preset_frame.pack(fill="x", padx=CARD_PAD, pady=(0, CARD_PAD))
-
-        presets = [
-            ("🚀", "Grinding Ranked"),
-            ("🎮", "LeagueLoop ⚙️ https://github.com/Intrusive-Thots/LeagueLoop-Installer"),
-            ("🌮", "Eating / Brb"),
-            ("💤", "AFK"),
-        ]
-
-        for emoji, text in presets:
-            btn = ctk.CTkButton(
-                self.preset_frame, text=emoji, width=32, height=32,
-                corner_radius=get_radius("sm"),
-                font=get_font("title"),
-                fg_color=get_color("colors.background.panel"),
-                hover_color=get_color("colors.state.hover"),
-                command=lambda e=emoji, t=text: self._on_quick_status(e, t),
-                cursor="hand2"
-            )
-            btn.pack(side="left", padx=(0, 4))
-            CTkTooltip(btn, f"Set status to: {text}")
 
         # Enable mousewheel scrolling on advanced settings frame
         apply_smooth_scroll(self.advanced_scroll)
@@ -1785,23 +1754,6 @@ class SidebarWidget(ctk.CTkFrame):
         engine = getattr(self.master, "automation", None)
         if engine and text:
             threading.Thread(target=lambda: engine.set_custom_status(text), daemon=True).start()
-
-    def _on_quick_status(self, emoji, text):
-        """Handler for quick status presets."""
-        status_text = f"{emoji} {text}"
-        self.entry_status.delete(0, "end")
-        self.entry_status.insert(0, status_text)
-        self._on_status_submit()
-        try:
-            from ui.components.toast import ToastManager
-            ToastManager.get_instance(self.winfo_toplevel()).show(
-                message=f"Status set: {text}",
-                icon=emoji,
-                theme="success",
-                duration=2000
-            )
-        except Exception as exc:
-            Logger.debug("AppSidebar", "_on_quick_status suppressed an error", exc=exc)
 
     def update_action_log(self, text):
         """Updates the action log."""
