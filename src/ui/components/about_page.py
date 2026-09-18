@@ -1,6 +1,7 @@
 import customtkinter as ctk
 
 from ui.components.factory import get_color, get_font, get_radius
+from utils.logger import Logger
 
 class AboutPage(ctk.CTkToplevel):
     def __init__(self, master, **kwargs):
@@ -12,6 +13,11 @@ class AboutPage(ctk.CTkToplevel):
         self.resizable(False, False)
         self.attributes("-topmost", True)
         self.configure(fg_color=get_color("colors.background.app"))
+        
+        # Override CustomTkinter's deferred 200ms default window icon
+        self._apply_icon()
+        self.after(250, self._apply_icon)
+        self.after(500, self._apply_icon)
         
         self.update_idletasks()
         try:
@@ -26,6 +32,21 @@ class AboutPage(ctk.CTkToplevel):
         
         # Bind Escape key to close window
         self.bind("<Escape>", lambda e: self.destroy())
+
+    def _apply_icon(self):
+        try:
+            import os
+            from utils.path_utils import get_asset_path
+            icon_path = get_asset_path("assets/app.ico")
+            if os.path.exists(icon_path):
+                self.iconbitmap(icon_path)
+            else:
+                backup = get_asset_path("assets/icon.png")
+                if os.path.exists(backup):
+                    import tkinter as tk
+                    self.iconphoto(False, tk.PhotoImage(file=backup))
+        except Exception as exc:
+            Logger.debug("AboutPage", "_apply_icon suppressed an error", exc=exc)
 
     def _setup_ui(self):
         header = ctk.CTkFrame(self, fg_color=get_color("colors.background.app", "#0A1428"), corner_radius=0, height=56)
