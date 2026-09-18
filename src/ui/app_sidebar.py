@@ -469,55 +469,7 @@ class SidebarWidget(ctk.CTkFrame):
         self.var_priority = ctk.BooleanVar(value=self.config.get("priority_picker", {}).get("enabled", False))
         self.row_priority = _make_item_card("priority_picker", "ARAM Picker", self.var_priority, self._on_toggle_priority, "Attempts to pick highest available champion from ARAM List", "2010")
 
-        # Auto-Add Played Champions (Sub-setting of ARAM Picker)
         self.var_auto_add_played = ctk.BooleanVar(value=self.config.get("aram_auto_add_played", False))
-
-        self.sep_auto_add = ctk.CTkFrame(self.row_priority.card, height=1, fg_color="#1E2838")
-        self.sep_auto_add.pack(fill="x", padx=10, pady=(0, 3))
-
-        self.subrow_auto_add_played = ctk.CTkFrame(self.row_priority.card, fg_color="transparent", height=24)
-        self.subrow_auto_add_played.pack(fill="x", padx=(28, 8), pady=(0, 6))
-        self.subrow_auto_add_played.pack_propagate(False)
-
-        self._sub_lbl_auto_add = ctk.CTkLabel(
-            self.subrow_auto_add_played,
-            text="↳ Auto-Add Played",
-            font=get_font("caption"),
-            text_color=get_color("colors.text.secondary", "#A09B8C"),
-            anchor="w"
-        )
-        self._sub_lbl_auto_add.pack(side="left")
-        CTkTooltip(self._sub_lbl_auto_add, "Automatically adds champions you play to the ARAM List after each game")
-
-        self._sub_gear_auto_add = ctk.CTkButton(
-            self.subrow_auto_add_played,
-            text="⚙",
-            width=18,
-            height=18,
-            corner_radius=4,
-            font=("Segoe UI Symbol", 12),
-            fg_color="transparent",
-            border_width=0,
-            text_color=get_color("colors.accent.gold", "#C8AA6E"),
-            hover_color="#1A2332",
-            command=lambda: self._open_editor("auto_add_played"),
-            cursor="hand2"
-        )
-        self._sub_gear_auto_add.pack(side="left", padx=(4, 0))
-        CTkTooltip(self._sub_gear_auto_add, "Configure auto-add position (top / bottom)")
-
-        self._sub_toggle_auto_add = LolToggle(
-            self.subrow_auto_add_played,
-            width=32,
-            height=16,
-            variable=self.var_auto_add_played,
-            command=self._on_toggle_auto_add_played,
-            bg_color=get_color("colors.background.card", "#1E2328")
-        )
-        self._sub_toggle_auto_add.pack(side="right")
-        CTkTooltip(self._sub_toggle_auto_add, "Toggle Auto-Add Played Champions")
-
-        self.row_auto_add_played = self.subrow_auto_add_played
 
         # Friend Auto-Join
         self.var_auto_join = ctk.BooleanVar(value=self.config.get("auto_join_enabled", True))
@@ -549,7 +501,7 @@ class SidebarWidget(ctk.CTkFrame):
         # Ensure bi-directional trace updates for all automation variables
         for _v in [self.var_accept, self.var_priority, self.var_auto_join, self.var_auto_honor,
                    self.var_skip_stats, self.var_auto_runes, self.var_auto_skin,
-                   self.var_auto_add_played, self.var_auto_ban]:
+                   self.var_auto_ban]:
             try:
                 _v.trace_add("write", lambda *args: self._update_all_quick_icons())
             except Exception as exc:
@@ -1656,21 +1608,6 @@ class SidebarWidget(ctk.CTkFrame):
         cfg["enabled"] = self.var_priority.get()
         self.config.set("priority_picker", cfg)
         self._update_all_quick_icons()
-        self._update_auto_add_subrow_state()
-
-    def _update_auto_add_subrow_state(self):
-        """Update Auto-Add Played sub-setting appearance based on ARAM Picker ON/OFF."""
-        if not hasattr(self, "_sub_lbl_auto_add"):
-            return
-        is_aram_enabled = self.var_priority.get()
-        if is_aram_enabled:
-            self._sub_lbl_auto_add.configure(text_color=get_color("colors.text.secondary", "#A09B8C"))
-            if hasattr(self, "_sub_gear_auto_add"):
-                self._sub_gear_auto_add.configure(state="normal")
-        else:
-            self._sub_lbl_auto_add.configure(text_color=get_color("colors.text.disabled", "#3C3C41"))
-            if hasattr(self, "_sub_gear_auto_add"):
-                self._sub_gear_auto_add.configure(state="disabled")
 
     def _on_toggle_auto_join(self):
         self.config.set("auto_join_enabled", self.var_auto_join.get())
