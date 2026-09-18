@@ -106,6 +106,7 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self.minsize(260, 520)
         self.overrideredirect(True)
         self.attributes("-topmost", True)
+        self.after(50, self._ensure_taskbar_presence)
         
         self.configure(fg_color=get_color("colors.background.app"))
 
@@ -256,6 +257,29 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                     default_idx,
                     log_func=self.sidebar.update_action_log if hasattr(self, "sidebar") else None
                 ))
+
+    def _ensure_taskbar_presence(self):
+        """Ensure borderless overrideredirect window is visible in the Windows taskbar."""
+        try:
+            if hasattr(ctypes, "windll"):
+                self.update_idletasks()
+                hwnd = ctypes.windll.user32.GetParent(self.winfo_id()) or self.winfo_id()
+                GWL_EXSTYLE = -20
+                WS_EX_APPWINDOW = 0x00040000
+                WS_EX_TOOLWINDOW = 0x00000080
+                style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+                ctypes.windll.user32.SetWindowLongW(
+                    hwnd, GWL_EXSTYLE, (style & ~WS_EX_TOOLWINDOW) | WS_EX_APPWINDOW
+                )
+        except Exception as exc:
+            Logger.debug("Main", "_ensure_taskbar_presence suppressed an error", exc=exc)
+
+    def show_from_tray(self):
+        """Restore window from system tray or background."""
+        self._manually_hidden = False
+        self.deiconify()
+        self.lift()
+        self.focus_force()
 
     def _on_close_request(self):
         if self.config.get("run_in_tray", True):
@@ -496,15 +520,10 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                     continue
 
                 if window.minimized:
-                    if not last_minimized:
-                        last_minimized = True
-                        self.after(0, self.withdraw)
+                    # Client is minimized (e.g. at -32000, -32000).
+                    # Do not move LeagueLoop offscreen, and do not hide it.
                     time.sleep(DOCKING_POLL_INTERVAL)
                     continue
-                elif last_minimized:
-                    last_minimized = False
-                    if not self._manually_hidden:
-                        self.after(0, lambda: (self.deiconify(), self.lift()))
 
                 # Determine docked position
                 client_x, client_y, client_w, client_h = window.rect

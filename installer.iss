@@ -44,4 +44,4 @@ Name: "{group}\LeagueLoop"; Filename: "{app}\LeagueLoop.exe"; IconFilename: "{ap
 Name: "{autodesktop}\LeagueLoop"; Filename: "{app}\LeagueLoop.exe"; Tasks: desktopicon; IconFilename: "{app}\app.ico"
 
 [Run]
-Filename: "{app}\LeagueLoop.exe"; Description: "{cm:LaunchProgram,LeagueLoop}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\LeagueLoop.exe"; Description: "{cm:LaunchProgram,LeagueLoop}"; Flags: runasoriginaluser nowait postinstall skipifsilent

@@ -75,7 +75,12 @@ def apply_focus_ring(widget, color=None, width=2):
 
     # Make the widget focusable via Tab
     try:
-        widget.configure(takefocus=True)
+        if hasattr(widget, "_canvas") and hasattr(widget._canvas, "configure"):
+            widget._canvas.configure(takefocus=True)
+        elif hasattr(widget, "tk") and hasattr(widget, "_w"):
+            widget.tk.call(widget._w, "configure", "-takefocus", 1)
+        elif hasattr(widget, "configure"):
+            widget.configure(takefocus=True)
     except Exception as exc:
         Logger.debug("FocusStates", "apply_focus_ring suppressed an error", exc=exc)
 
