@@ -99,7 +99,7 @@ class AutomationEditor(ctk.CTkToplevel):
             "skip_stats": "Skip Stats",
             "auto_runes": "Auto Runes",
             "auto_skin": "Auto Select Skin",
-            "auto_add_played": "Auto-Add Played",
+            "auto_add_played": "ARAM Auto-Add Played",
             "auto_ban": "Auto-Ban",
         }
         return names.get(self._automation_key, self._automation_key)

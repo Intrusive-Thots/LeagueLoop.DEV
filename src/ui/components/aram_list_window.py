@@ -149,6 +149,61 @@ class AramListWindow(ctk.CTkToplevel):
         )
         self.btn_close.pack(side="right", padx=4)
 
+        # Footer Bar with ARAM Picker sub-settings
+        self.footer_bar = ctk.CTkFrame(
+            self.outer_frame, fg_color="#121C2A", height=36, corner_radius=0
+        )
+        self.footer_bar.pack(fill="x", side="bottom")
+        self.footer_bar.pack_propagate(False)
+
+        self.var_auto_add = ctk.BooleanVar(
+            value=self.config.get("aram_auto_add_played", False)
+        )
+
+        def _on_toggle_auto_add():
+            val = self.var_auto_add.get()
+            self.config.set("aram_auto_add_played", val)
+            if hasattr(self.master, "var_auto_add_played"):
+                self.master.var_auto_add_played.set(val)
+
+        self.chk_auto_add = ctk.CTkCheckBox(
+            self.footer_bar,
+            text="Auto-Add Played Champions to ARAM List",
+            variable=self.var_auto_add,
+            command=_on_toggle_auto_add,
+            font=get_font("caption", "bold"),
+            text_color=get_color("colors.text.primary", "#F0E6D2"),
+            fg_color=get_color("colors.accent.gold", "#C8AA6E"),
+            hover_color="#A88B4A",
+            border_width=1,
+            checkbox_width=18,
+            checkbox_height=18,
+            corner_radius=4,
+        )
+        self.chk_auto_add.pack(side="left", padx=12, pady=6)
+
+        def _on_pos_change(choice):
+            pos = "top" if "Top" in choice else "bottom"
+            self.config.set("auto_add_position", pos)
+
+        current_pos = self.config.get("auto_add_position", "bottom")
+        pos_display = "Insert at Top" if current_pos == "top" else "Append to Bottom"
+
+        self.opt_pos = ctk.CTkOptionMenu(
+            self.footer_bar,
+            values=["Append to Bottom", "Insert at Top"],
+            command=_on_pos_change,
+            width=140,
+            height=24,
+            font=get_font("caption"),
+            fg_color="#1A2332",
+            button_color="#243042",
+            button_hover_color="#2F3E55",
+            dropdown_fg_color="#1A2332",
+        )
+        self.opt_pos.set(pos_display)
+        self.opt_pos.pack(side="right", padx=12, pady=6)
+
         self.body_frame = ctk.CTkFrame(self.outer_frame, fg_color="transparent")
         self.body_frame.pack(fill="both", expand=True, padx=8, pady=(4, 8))
 
