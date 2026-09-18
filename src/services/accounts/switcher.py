@@ -314,6 +314,9 @@ class AccountSwitcher:
         if self._already_active(key):
             if self._on_success:
                 self._safely(self._on_success, index)
+            if launch_league:
+                self._progress(SwitchPhase.LAUNCHING, "Launching League of Legends", index)
+                self.session.launch_league()
             return self._finish(
                 SwitchResult(
                     SwitchOutcome.ALREADY_ACTIVE, SwitchPhase.DONE, index, label
@@ -383,6 +386,10 @@ class AccountSwitcher:
         # on disk now is fresher than what we restored. Re-capturing resets
         # the clock and is the reason regular use keeps a session alive.
         self.vault.capture(key)
+
+        if launch_league:
+            self._progress(SwitchPhase.LAUNCHING, "Launching League of Legends", index)
+            self.session.launch_league()
 
         return self._finish(
             SwitchResult(SwitchOutcome.SUCCESS, SwitchPhase.DONE, index, label)

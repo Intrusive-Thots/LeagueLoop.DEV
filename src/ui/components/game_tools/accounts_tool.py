@@ -743,6 +743,7 @@ class AccountsTool(ctk.CTkFrame):
                 "Remembered this sign-in. Switching to it will not need a "
                 "password."
             )
+            self._launch_league_client()
         else:
             self._log_message(
                 "Nothing to remember yet — sign in to this account in the "
@@ -839,8 +840,9 @@ class AccountsTool(ctk.CTkFrame):
     def _launch_riot_client_only(self):
         """Launch Riot Client launcher."""
         top_app = self._get_top_app()
-        if top_app and hasattr(top_app, "launch_client"):
-            top_app.launch_client(launch_league=False)
+        launch_fn = getattr(top_app, "launch_client", getattr(top_app, "_hotkey_launch_client", None))
+        if launch_fn:
+            launch_fn(launch_league=False)
         elif self.acct_mgr:
             self.acct_mgr._launch_riot_client(launch_league=False)
         self._log_message("Launching Riot Client...")
@@ -848,8 +850,9 @@ class AccountsTool(ctk.CTkFrame):
     def _launch_league_client(self):
         """Launch Riot Client and start League of Legends."""
         top_app = self._get_top_app()
-        if top_app and hasattr(top_app, "launch_client"):
-            top_app.launch_client(launch_league=True)
+        launch_fn = getattr(top_app, "launch_client", getattr(top_app, "_hotkey_launch_client", None))
+        if launch_fn:
+            launch_fn(launch_league=True)
         elif self.acct_mgr:
             self.acct_mgr._launch_riot_client(launch_league=True)
         self._log_message("Launching League of Legends Client...")
@@ -858,7 +861,7 @@ class AccountsTool(ctk.CTkFrame):
         """Find the root application instance."""
         widget = self.master
         while widget is not None:
-            if hasattr(widget, "launch_client"):
+            if hasattr(widget, "launch_client") or hasattr(widget, "_hotkey_launch_client"):
                 return widget
             widget = getattr(widget, "master", None)
         return None

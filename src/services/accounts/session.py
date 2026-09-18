@@ -69,6 +69,14 @@ class RiotSession:
         except Exception:
             return False
 
+    def launch_league(self) -> bool:
+        try:
+            if hasattr(self.api, "launch_league_of_legends"):
+                return bool(self.api.launch_league_of_legends())
+            return False
+        except Exception:
+            return False
+
     # -------------------------------------------------------------- waiting
     @staticmethod
     def wait_until(

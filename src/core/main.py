@@ -366,15 +366,28 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         "--launch-patchline=live",
     )
 
-    def _hotkey_launch_client(self, launch_league: bool = True, clean_restart: bool = True):
+    def _hotkey_launch_client(self, launch_league: bool = True, clean_restart: bool = False):
         """Start the Riot Client, and ask it to open League.
 
-        Terminates any stale or zombie client instances beforehand to prevent
-        session collisions, lockfile deadlocks, and 'unexpected error while logging in' popups.
+        If the Riot Client is already running and League is requested,
+        triggers League launch directly via the Riot Client API without killing processes.
         """
         try:
             if clean_restart:
                 terminate_all_client_instances()
+
+            # Check if Riot Client is already running and can launch League directly
+            riot_running = False
+            if hasattr(self, "account_manager") and self.account_manager and hasattr(self.account_manager, "riot_client"):
+                riot_running = self.account_manager.riot_client.is_riot_client_running()
+
+            if riot_running and launch_league:
+                if self.account_manager.riot_client.launch_league_of_legends():
+                    Logger.action("SYS", "Triggered League of Legends launch via active Riot Client.")
+                    if hasattr(self, "sidebar") and self.sidebar.winfo_exists():
+                        self.after(0, lambda: self.sidebar.update_action_log("Launching League of Legends..."))
+                    return
+
             riot = get_riot_executable_path()
             if riot and os.path.exists(riot):
                 command = [riot]
@@ -385,8 +398,9 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                     "SYS", "Launching the Riot Client.",
                     exe=riot, league=launch_league,
                 )
+                msg = "Launching League of Legends..." if launch_league else "Launching Riot Client..."
                 if hasattr(self, "sidebar") and self.sidebar.winfo_exists():
-                    self.after(0, lambda: self.sidebar.update_action_log("Launching Riot Client..."))
+                    self.after(0, lambda: self.sidebar.update_action_log(msg))
                 return
 
             league = get_league_executable_path()
@@ -416,6 +430,8 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
             Logger.error("SYS", "Could not launch the client.", exc=exc)
             if hasattr(self, "sidebar") and self.sidebar.winfo_exists():
                 self.after(0, lambda: self.sidebar.update_action_log("Launching the client failed."))
+
+    launch_client = _hotkey_launch_client
 
     def _hotkey_toggle_automation(self):
         """Toggle automation power via hotkey."""

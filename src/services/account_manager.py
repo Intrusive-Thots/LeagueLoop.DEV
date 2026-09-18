@@ -152,6 +152,31 @@ class RiotClientAPI:
             Logger.warning("RiotClientAPI", "Sign out failed: no response")
         return False
 
+    def launch_league_of_legends(self) -> bool:
+        """
+        Trigger League of Legends launch directly through the active Riot Client.
+        This corresponds to clicking the 'Play' button in the Riot Client UI.
+        """
+        res = self.request(
+            "POST",
+            "/product-launcher/v1/products/league_of_legends/patchlines/live",
+            data={},
+        )
+        if res and res.status_code in [200, 204]:
+            Logger.info("RiotClientAPI", "Successfully requested Riot Client to launch League of Legends.")
+            return True
+
+        if res:
+            try:
+                body = res.json()
+                msg = body.get("message", "")
+                Logger.warning("RiotClientAPI", f"Launch League failed ({res.status_code}): {msg}")
+            except Exception:
+                Logger.warning("RiotClientAPI", f"Launch League failed: {res.status_code}")
+        else:
+            Logger.warning("RiotClientAPI", "Launch League failed: no response from Riot Client API")
+        return False
+
     #: The Riot-identity flow: start opens a prompt, complete answers it.
     RSO_RESET = "/rso-authenticator/v1/authentication"
     RSO_START = "/rso-authenticator/v1/authentication/riot-identity/start"
@@ -1014,16 +1039,25 @@ class AccountManager:
     # re-enabled by a future "fallback" change, so it is gone rather than
     # deprecated. Git history has it if it is ever genuinely needed.
 
+    def launch_league(self) -> bool:
+        """Trigger League of Legends launch directly via the active Riot Client."""
+        return self.riot_client.launch_league_of_legends()
+
     # ─────────── Helpers ───────────
-    def _launch_riot_client(self, launch_league: bool = True, clean_restart: bool = True):
+    def _launch_riot_client(self, launch_league: bool = True, clean_restart: bool = False):
         """Launch the Riot Client or League of Legends Client."""
         from utils.client_detector import terminate_all_client_instances
 
         if clean_restart:
             terminate_all_client_instances()
 
+        # If Riot Client is already running and League is requested, launch League directly!
+        if launch_league and self.riot_client.is_riot_client_running():
+            if self.riot_client.launch_league_of_legends():
+                return
+
         if self._launch_client_func and launch_league:
-            self._launch_client_func()
+            self._launch_client_func(launch_league=launch_league, clean_restart=clean_restart)
             return
 
         import ctypes

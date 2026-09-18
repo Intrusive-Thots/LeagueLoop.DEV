@@ -63,6 +63,7 @@ TAG = "SessionVault"
 #: Files that together make up one signed-in identity, relative to the Riot
 #: Client's Data directory. `None` for the directory entry means "a tree".
 SESSION_FILE = "RiotClientPrivateSettings.yaml"
+SESSION_FILES = ("RiotGamesPrivateSettings.yaml", "RiotClientPrivateSettings.yaml")
 COOKIE_DIR = "Cookies"
 
 #: Written beside each saved session so age can be reported without trusting
@@ -190,6 +191,10 @@ class SessionVault:
         return os.path.join(self.root, safe or "unnamed")
 
     def _live_session(self) -> str:
+        for fname in SESSION_FILES:
+            path = os.path.join(self.data_dir, fname)
+            if os.path.exists(path):
+                return path
         return os.path.join(self.data_dir, SESSION_FILE)
 
     def _live_cookies(self) -> str:
@@ -199,8 +204,13 @@ class SessionVault:
     def info(self, account_id: str) -> SessionInfo:
         """What is saved for this account, and how old it is."""
         slot = self._slot(account_id)
-        session = os.path.join(slot, SESSION_FILE)
-        if not os.path.exists(session):
+        session = None
+        for fname in SESSION_FILES:
+            candidate = os.path.join(slot, fname)
+            if os.path.exists(candidate):
+                session = candidate
+                break
+        if not session:
             return SessionInfo(account_id=str(account_id), exists=False)
 
         captured_at = 0.0
@@ -231,7 +241,7 @@ class SessionVault:
         try:
             return sorted(
                 name for name in os.listdir(self.root)
-                if os.path.exists(os.path.join(self.root, name, SESSION_FILE))
+                if any(os.path.exists(os.path.join(self.root, name, fname)) for fname in SESSION_FILES)
             )
         except OSError:
             return []
@@ -259,7 +269,10 @@ class SessionVault:
         self._remove_tree(pending)
         try:
             os.makedirs(pending, exist_ok=True)
-            shutil.copy2(live, os.path.join(pending, SESSION_FILE))
+            live_basename = os.path.basename(live)
+            shutil.copy2(live, os.path.join(pending, live_basename))
+            if live_basename != SESSION_FILE:
+                shutil.copy2(live, os.path.join(pending, SESSION_FILE))
 
             cookies = self._live_cookies()
             if os.path.isdir(cookies):
@@ -314,7 +327,15 @@ class SessionVault:
         slot = self._slot(account_id)
         try:
             os.makedirs(self.data_dir, exist_ok=True)
-            shutil.copy2(os.path.join(slot, SESSION_FILE), self._live_session())
+            saved_session = None
+            for fname in SESSION_FILES:
+                candidate = os.path.join(slot, fname)
+                if os.path.exists(candidate):
+                    saved_session = candidate
+                    break
+            if saved_session:
+                for fname in SESSION_FILES:
+                    shutil.copy2(saved_session, os.path.join(self.data_dir, fname))
 
             saved_cookies = os.path.join(slot, COOKIE_DIR)
             live_cookies = self._live_cookies()

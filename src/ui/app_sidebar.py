@@ -912,10 +912,18 @@ class SidebarWidget(ctk.CTkFrame):
                     "Sidebar", "Could not check for the Riot Client", exc=exc,
                 )
 
-        if not lcu_connected and not riot_running:
+        if not lcu_connected:
             if not bool(self.btn_launch_client.winfo_manager()):
                 from .theme.token_loader import TOKENS
                 self.btn_launch_client.pack(fill="x", pady=(TOKENS.get("spacing", "sm", 4), 0))
+            if riot_running:
+                self.btn_launch_client.configure(
+                    text="⚔️ Launch League",
+                )
+            else:
+                self.btn_launch_client.configure(
+                    text="🚀 Launch Client",
+                )
         else:
             if bool(self.btn_launch_client.winfo_manager()):
                 self.btn_launch_client.pack_forget()
