@@ -78,14 +78,23 @@ DEFAULT_CONFIG = {
     "hotkey_toggle_automation": "ctrl+shift+a",
     "hotkey_find_match": "ctrl+shift+f",
     "hotkey_compact_mode": "ctrl+shift+m",
-    # The bench sniper's legacy home. `enabled` defaulted to True with ten
-    # champions nobody chose, so a fresh install would swap toward a
-    # developer's favourites in ARAM without ever being switched on. Both are
-    # now empty/off; the ARAM screen writes `aram_bench_swap` and
-    # `aram_priority_list`, and this survives only to keep old configs working.
+    # The bench sniper's legacy home. `enabled` defaults to False so a fresh
+    # install requires intentional activation, while `list` is pre-populated with
+    # the top 10 most played ARAM Mayhem champions for instant usability.
     "priority_picker": {
         "enabled": False,
-        "list": []
+        "list": [
+            "Jinx",
+            "Caitlyn",
+            "Lux",
+            "Ezreal",
+            "Yasuo",
+            "Teemo",
+            "AurelionSol",
+            "Sett",
+            "Belveth",
+            "Hecarim",
+        ],
     },
     # Engine and UI must agree on these, or the screen shows a switch in the
     # opposite position to the behaviour. They were read with a default of

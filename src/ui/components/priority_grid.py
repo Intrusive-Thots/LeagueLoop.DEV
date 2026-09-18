@@ -180,7 +180,12 @@ class PriorityIconGrid(ctk.CTkFrame):
                         Logger.debug("PriorityGrid", "_get_priority_list suppressed an error", exc=exc)
             return self._dedup(raw or [])
 
-        raw = self.config.get("priority_picker", {}).get("list", [])
+        raw = self.config.get("priority_picker", {}).get("list", None)
+        if raw is None:
+            raw = [
+                "Jinx", "Caitlyn", "Lux", "Ezreal", "Yasuo",
+                "Teemo", "AurelionSol", "Sett", "Belveth", "Hecarim",
+            ]
         return self._dedup(raw)
 
     def _save_priority_list(self, lst, record_history=True):
