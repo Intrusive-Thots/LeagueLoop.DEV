@@ -119,31 +119,38 @@ class LeagueLoopAPIHandler(BaseHTTPRequestHandler):
                         
                         summoner_info = getattr(self.server, '_summoner_cache', None)
                         
-                        # Fetch lobby info
-                        try:
-                            lobby_res = lcu.request('GET', '/lol-lobby/v2/lobby', silent=True)
-                            if lobby_res and lobby_res.status_code == 200:
-                                lobby_data = lobby_res.json()
-                                members = []
-                                for m in lobby_data.get('members', []):
-                                    m_name = resolve_riot_id(m)
-                                    if not m_name and summoner_info and m.get('puuid') == summoner_info.get("puuid"):
-                                        m_name = summoner_info.get("summoner_name") or "Summoner"
-                                    if not m_name:
-                                        m_name = "Summoner"
-                                    
-                                    members.append({
-                                        "summonerName": m_name,
-                                        "isLeader": m.get('isLeader', False),
-                                        "position1": m.get('firstPositionPreference', 'UNSELECTED'),
-                                        "position2": m.get('secondPositionPreference', 'UNSELECTED')
-                                    })
-                                lobby_info = {
-                                    "queueId": lobby_data.get('gameConfig', {}).get('queueId', 0),
-                                    "members": members
-                                }
-                        except Exception as e:
-                            Logger.debug("API", f"Error fetching lobby info: {e}")
+                        # Fetch lobby info (cached with 2.0s TTL to prevent LCU HTTP thrashing from rapid status polls)
+                        if not hasattr(self.server, '_lobby_cache_time') or (now - getattr(self.server, '_lobby_cache_time', 0) > 2.0):
+                            try:
+                                lobby_res = lcu.request('GET', '/lol-lobby/v2/lobby', silent=True)
+                                if lobby_res and lobby_res.status_code == 200:
+                                    lobby_data = lobby_res.json()
+                                    members = []
+                                    for m in lobby_data.get('members', []):
+                                        m_name = resolve_riot_id(m)
+                                        if not m_name and summoner_info and m.get('puuid') == summoner_info.get("puuid"):
+                                            m_name = summoner_info.get("summoner_name") or "Summoner"
+                                        if not m_name:
+                                            m_name = "Summoner"
+                                        
+                                        members.append({
+                                            "summonerName": m_name,
+                                            "isLeader": m.get('isLeader', False),
+                                            "position1": m.get('firstPositionPreference', 'UNSELECTED'),
+                                            "position2": m.get('secondPositionPreference', 'UNSELECTED')
+                                        })
+                                    self.server._lobby_cache = {
+                                        "queueId": lobby_data.get('gameConfig', {}).get('queueId', 0),
+                                        "members": members
+                                    }
+                                else:
+                                    self.server._lobby_cache = None
+                                self.server._lobby_cache_time = now
+                            except Exception as e:
+                                Logger.debug("API", f"Error fetching lobby info: {e}")
+                                self.server._lobby_cache = None
+                                self.server._lobby_cache_time = now
+                        lobby_info = getattr(self.server, '_lobby_cache', None)
 
                 if hasattr(app, "sidebar") and app.sidebar:
                     power_state = getattr(app.sidebar, "power_state", False)

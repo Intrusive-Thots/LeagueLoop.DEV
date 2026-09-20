@@ -3,11 +3,13 @@ LCU API Handler
 Manages communication with the League of Legends Client Update (LCU).
 """
 import base64
+import inspect
 import math
 import random
 import sys
 import threading
 import time
+import weakref
 import zlib
 from typing import Any, Dict, Optional
 from concurrent.futures import ThreadPoolExecutor
@@ -2310,6 +2312,10 @@ class LCUClient:
                         from core.events import EventBus
                         EventBus.emit("lcu_connected", False)
                     self.is_connected = False
+                    self.port = None
+                    self.auth_token = None
+                    self.base_url = None
+                    self._client_pid = None
                     self._connection_state = ConnectionStateEnum.DISCONNECTED
                     self._backoff = min(self._backoff * 1.2, 2.0)
                     return False
@@ -2474,8 +2480,21 @@ class LCUClient:
                 self._record_http_status_code(response.status_code, method, endpoint)
 
                 if response.status_code == 429:
+                    # Deplete token bucket and apply backoff cooldown to prevent cascade disconnections
+                    retry_after_s = 1.0
+                    try:
+                        ra = response.headers.get("Retry-After")
+                        if ra:
+                            retry_after_s = max(0.5, float(ra))
+                    except (ValueError, TypeError):
+                        pass
+                    except Exception as exc:
+                        Logger.debug("LCU", "Could not parse Retry-After header", exc=exc)
+                    with self._rate_lock:
+                        self._tokens = 0.0
+                        self._last_token_update = time.time()
                     if not silent:
-                        Logger.warning("LCU", f"HTTP 429 Rate Limit response on {endpoint}")
+                        Logger.warning("LCU", f"HTTP 429 Rate Limit response on {endpoint} (cooldown: {retry_after_s:.1f}s)")
                 elif 500 <= response.status_code <= 599:
                     if attempt < max_attempts - 1:
                         with self._req_diag_lock:
@@ -2812,14 +2831,93 @@ class LCUClient:
         if self._ws_thread and self._ws_thread.is_alive():
             self._ws_thread.join(timeout=3)
 
-    def subscribe(self, event_name: str, callback):
-        """Subscribes an event callback to the LCU WAMP WebSocket."""
+    def subscribe(self, event_name: str, callback, weak: bool = False):
+        """Subscribes an event callback to the LCU WAMP WebSocket.
+
+        Args:
+            event_name: LCU WAMP event topic string (e.g. 'OnJsonApiEvent_lol-gameflow_v1_gameflow-phase')
+            callback: Callable taking (event_name, payload)
+            weak: If True, stores a weak reference to prevent pinning listener instances in memory.
+        """
+        if self.is_connected and (not self._ws_thread or not self._ws_thread.is_alive()):
+            self.start_websocket()
+
         with self._lock:
             if event_name not in self._subscriptions:
                 self._subscriptions[event_name] = []
                 self._server_subscribe(event_name)
-            if callback not in self._subscriptions[event_name]:
-                self._subscriptions[event_name].append(callback)
+
+            cb_entry = callback
+            if weak:
+                try:
+                    if inspect.ismethod(callback):
+                        cb_entry = weakref.WeakMethod(callback)
+                    else:
+                        cb_entry = weakref.ref(callback)
+                except Exception:
+                    cb_entry = callback
+
+            existing = False
+            for existing_cb in self._subscriptions[event_name]:
+                target = existing_cb() if isinstance(existing_cb, (weakref.ref, weakref.WeakMethod)) else existing_cb
+                if target == callback or existing_cb == callback:
+                    existing = True
+                    break
+
+            if not existing:
+                self._subscriptions[event_name].append(cb_entry)
+
+    def unsubscribe(self, event_name: str, callback) -> bool:
+        """Unsubscribes a callback from an event. If no listeners remain, unsubscribes from LCU WAMP."""
+        with self._lock:
+            if event_name not in self._subscriptions:
+                return False
+            cbs = self._subscriptions[event_name]
+            new_cbs = []
+            removed = False
+            for cb in cbs:
+                target = cb() if isinstance(cb, (weakref.ref, weakref.WeakMethod)) else cb
+                if target == callback or cb == callback:
+                    removed = True
+                elif target is not None:
+                    new_cbs.append(cb)
+            if not new_cbs:
+                del self._subscriptions[event_name]
+                self._server_unsubscribe(event_name)
+            else:
+                self._subscriptions[event_name] = new_cbs
+            return removed
+
+    def unsubscribe_all(self, callback) -> int:
+        """Unsubscribes a callback from all subscribed events."""
+        with self._lock:
+            total_removed = 0
+            empty_events = []
+            for ev, cbs in list(self._subscriptions.items()):
+                new_cbs = []
+                for cb in cbs:
+                    target = cb() if isinstance(cb, (weakref.ref, weakref.WeakMethod)) else cb
+                    if target == callback or cb == callback:
+                        total_removed += 1
+                    elif target is not None:
+                        new_cbs.append(cb)
+                if not new_cbs:
+                    empty_events.append(ev)
+                    if ev in self._subscriptions:
+                        del self._subscriptions[ev]
+                else:
+                    self._subscriptions[ev] = new_cbs
+            for ev in empty_events:
+                self._server_unsubscribe(ev)
+            return total_removed
+
+    def clear_subscriptions(self) -> None:
+        """Clears all subscriptions and notifies the LCU WAMP server."""
+        with self._lock:
+            events = list(self._subscriptions.keys())
+            self._subscriptions.clear()
+            for ev in events:
+                self._server_unsubscribe(ev)
 
     def _server_subscribe(self, event_name: str):
         if self._ws_connection:
@@ -2828,6 +2926,15 @@ class LCUClient:
                 self._ws_connection.send(json.dumps(msg))
             except Exception as e:
                 Logger.error("LCU_WS", f"Subscribe error: {e}")
+
+    def _server_unsubscribe(self, event_name: str):
+        """Sends WAMP v1 unsubscribe [6, event_name] to stop LCU pushing unneeded events."""
+        if self._ws_connection:
+            try:
+                msg = [6, event_name]
+                self._ws_connection.send(json.dumps(msg))
+            except Exception as e:
+                Logger.debug("LCU_WS", f"Unsubscribe error (safe to ignore): {e}")
 
     #: How long to wait for a pong before calling the socket dead.
     WS_PING_TIMEOUT_S = 10.0
@@ -2964,21 +3071,38 @@ class LCUClient:
                                 from core.events import EventBus
                                 EventBus.emit(event_name, payload)
 
-                                # Find callbacks
+                                # Find callbacks and auto-prune dead weak references
                                 callbacks = []
+                                empty_events = []
                                 with self._lock:
-                                    if event_name in self._subscriptions:
-                                        callbacks = self._subscriptions[event_name].copy()
-                                    if "OnJsonApiEvent" in self._subscriptions:
-                                        callbacks.extend(self._subscriptions["OnJsonApiEvent"])
-                                
+                                    for key in (event_name, "OnJsonApiEvent"):
+                                        if key in self._subscriptions:
+                                            live_cbs = []
+                                            for cb_entry in self._subscriptions[key]:
+                                                target = cb_entry() if isinstance(cb_entry, (weakref.ref, weakref.WeakMethod)) else cb_entry
+                                                if target is not None:
+                                                    live_cbs.append(cb_entry)
+                                                    callbacks.append(target)
+                                            if not live_cbs:
+                                                empty_events.append(key)
+                                                del self._subscriptions[key]
+                                            else:
+                                                self._subscriptions[key] = live_cbs
+                                for ev in empty_events:
+                                    self._server_unsubscribe(ev)
+
                                 t_dispatch_start = time.perf_counter()
                                 for cb in callbacks:
                                     try:
                                         # Run callback in bounded pool so we don't stall the websocket
                                         if self._ws_executor is None:
                                             self._ws_executor = ThreadPoolExecutor(max_workers=4)
-                                        self._ws_executor.submit(cb, event_name, payload)
+                                        try:
+                                            self._ws_executor.submit(cb, event_name, payload)
+                                        except RuntimeError:
+                                            # Executor was shut down; restart worker pool and retry submit
+                                            self._ws_executor = ThreadPoolExecutor(max_workers=4)
+                                            self._ws_executor.submit(cb, event_name, payload)
                                     except Exception as e:
                                         Logger.error("LCU_WS", f"Callback error in {event_name}: {e}")
 

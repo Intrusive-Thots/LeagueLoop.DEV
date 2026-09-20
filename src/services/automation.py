@@ -162,6 +162,11 @@ class AutomationEngine:
         self._wake_event.set()
         self._cancel_accept_timer()
         try:
+            if hasattr(self.lcu, "unsubscribe_all"):
+                self.lcu.unsubscribe_all(self._on_ws_event)
+        except Exception as e:
+            Logger.debug("Auto", f"WebSocket unsubscribe error (safe to ignore): {e}")
+        try:
             self.lcu.stop_websocket()
         except Exception as e:
             Logger.debug("Auto", f"WebSocket stop error (safe to ignore): {e}")

@@ -182,14 +182,14 @@ def scan_clients(force: bool = False) -> Dict[str, Dict]:
     _last_scan_time = now
 
     # Reset temp states
-    league_found = False
-    riot_found = False
+    league_seen = False
+    riot_seen = False
     league_data = {"port": None, "token": None, "connected": False, "pid": None}
     riot_data = {"port": None, "token": None, "connected": False, "pid": None}
 
-    # Process lists we care about
+    # Process lists we care about: prioritize UX processes containing credentials
     league_procs = ["LeagueClientUx.exe", "LeagueClient.exe"]
-    riot_procs = ["RiotClientServices.exe", "RiotClientUx.exe"]
+    riot_procs = ["RiotClientUx.exe", "RiotClientServices.exe"]
 
     try:
         # Perform single process iteration pass
@@ -198,9 +198,12 @@ def scan_clients(force: bool = False) -> Dict[str, Dict]:
                 name = proc.info.get("name", "")
                 pid = proc.info.get("pid")
                 
-                # Check for League of Legends client
-                if not league_found and name in league_procs:
-                    league_data["pid"] = pid
+                # Check for League of Legends client (continue checking until credentials found)
+                if not (league_data["port"] and league_data["token"]) and name in league_procs:
+                    if league_data["pid"] is None or name == "LeagueClientUx.exe":
+                        league_data["pid"] = pid
+                    league_seen = True
+
                     # Try to extract credentials from command line
                     try:
                         cmdline = " ".join(proc.cmdline())
@@ -212,14 +215,16 @@ def scan_clients(force: bool = False) -> Dict[str, Dict]:
                         if port_match and token_match:
                             league_data["port"] = port_match.group(1)
                             league_data["token"] = token_match.group(1)
+                            league_data["pid"] = pid
                     except psutil.AccessDenied:
                         pass  # Handled below by lockfile fallback
-                    
-                    league_found = True
 
-                # Check for Riot Client
-                if not riot_found and name in riot_procs:
-                    riot_data["pid"] = pid
+                # Check for Riot Client (continue checking until credentials found)
+                if not (riot_data["port"] and riot_data["token"]) and name in riot_procs:
+                    if riot_data["pid"] is None or name == "RiotClientUx.exe":
+                        riot_data["pid"] = pid
+                    riot_seen = True
+
                     # Try to extract credentials from command line
                     try:
                         cmdline = " ".join(proc.cmdline())
@@ -230,13 +235,12 @@ def scan_clients(force: bool = False) -> Dict[str, Dict]:
                         if port_match and token_match:
                             riot_data["port"] = port_match.group(1)
                             riot_data["token"] = token_match.group(1)
+                            riot_data["pid"] = pid
                     except psutil.AccessDenied:
                         pass
-                    
-                    riot_found = True
 
-                # Stop iteration early if both are fully resolved
-                if league_found and riot_found:
+                # Stop iteration early only if BOTH are fully resolved with credentials
+                if (league_data["port"] and league_data["token"]) and (riot_data["port"] and riot_data["token"]):
                     break
 
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
@@ -245,14 +249,14 @@ def scan_clients(force: bool = False) -> Dict[str, Dict]:
         Logger.error("Detector", f"Process scanning failed: {e}")
 
     # Fallback 1: League Client credentials from lockfile
-    if league_found and (not league_data["port"] or not league_data["token"]):
+    if league_seen and (not league_data["port"] or not league_data["token"]):
         port, token = get_league_lockfile()
         if port and token:
             league_data["port"] = port
             league_data["token"] = token
 
     # Fallback 2: Riot Client credentials from lockfile
-    if riot_found and (not riot_data["port"] or not riot_data["token"]):
+    if riot_seen and (not riot_data["port"] or not riot_data["token"]):
         port, token = get_riot_lockfile()
         if port and token:
             riot_data["port"] = port

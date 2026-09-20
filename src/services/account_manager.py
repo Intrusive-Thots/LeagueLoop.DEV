@@ -21,6 +21,7 @@ Security: Passwords encrypted at rest using Windows DPAPI
 import base64
 import json
 import os
+import random
 import subprocess
 import threading
 import time
@@ -67,6 +68,12 @@ class RiotClientAPI:
         from services.http_session_factory import create_pooled_session
         self.session = create_pooled_session(pool_connections=10, pool_maxsize=10, max_retries=1)
         self.is_connected = False
+        # Token-bucket rate limiter for Riot Client REST API
+        self._tokens = 10.0
+        self._token_capacity = 10.0
+        self._token_rate = 5.0
+        self._last_token_update = time.time()
+        self._rate_lock = threading.Lock()
 
     def connect(self) -> bool:
         """Find and connect to the Riot Client's local API."""
@@ -98,36 +105,74 @@ class RiotClientAPI:
         Logger.debug("RiotClientAPI", f"Connected to Riot Client on port {port}")
 
     def request(self, method: str, endpoint: str, data=None, silent=False) -> Optional[requests.Response]:
-        """Make a request to the Riot Client API."""
+        """Make a request to the Riot Client API with rate-limiting and exponential back-off."""
         if not self.is_connected:
             if not self.connect():
                 return None
 
+        # Token-bucket rate limiting to prevent overwhelming Riot Client
+        sleep_time = 0.0
+        with self._rate_lock:
+            now = time.time()
+            self._tokens = min(self._token_capacity, self._tokens + (now - self._last_token_update) * self._token_rate)
+            self._last_token_update = now
+            if self._tokens < 1.0:
+                sleep_time = (1.0 - self._tokens) / self._token_rate
+                self._tokens = 0.0
+            else:
+                self._tokens -= 1.0
+        if sleep_time > 0:
+            time.sleep(sleep_time)
+
         url = f"{self.base_url}{endpoint}"
-        try:
-            if not silent:
-                Logger.debug("RiotClientAPI", f"REQ -> {method} {endpoint}")
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            try:
+                if not silent and attempt == 0:
+                    Logger.debug("RiotClientAPI", f"REQ -> {method} {endpoint}")
 
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
-                response = self.session.request(
-                    method=method,
-                    url=url,
-                    json=data,
-                    verify=False,
-                    timeout=10,
-                )
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
+                    response = self.session.request(
+                        method=method,
+                        url=url,
+                        json=data,
+                        verify=False,
+                        timeout=10,
+                    )
 
-            if not silent:
-                Logger.debug("RiotClientAPI", f"RES <- {response.status_code} {endpoint}")
-            return response
-        except requests.exceptions.ConnectionError:
-            self.is_connected = False
-            return None
-        except Exception as e:
-            Logger.error("RiotClientAPI", f"Request failed: {e}")
-            self.is_connected = False
-            return None
+                if response.status_code == 429:
+                    with self._rate_lock:
+                        self._tokens = 0.0
+                        self._last_token_update = time.time()
+                    if attempt < max_attempts - 1:
+                        backoff = 0.5 * (2 ** attempt) + random.uniform(0.05, 0.2)
+                        if not silent:
+                            Logger.warning("RiotClientAPI", f"HTTP 429 Rate limited on {endpoint}. Retrying after {backoff:.2f}s backoff...")
+                        time.sleep(backoff)
+                        continue
+                elif 500 <= response.status_code <= 599:
+                    if attempt < max_attempts - 1:
+                        backoff = 0.2 * (2 ** attempt) + random.uniform(0.02, 0.1)
+                        if not silent:
+                            Logger.warning("RiotClientAPI", f"HTTP {response.status_code} Server Error on {endpoint}. Retrying after {backoff:.2f}s...")
+                        time.sleep(backoff)
+                        continue
+
+                if not silent:
+                    Logger.debug("RiotClientAPI", f"RES <- {response.status_code} {endpoint}")
+                return response
+            except requests.exceptions.ConnectionError:
+                if attempt < max_attempts - 1:
+                    time.sleep(0.2)
+                    continue
+                self.is_connected = False
+                return None
+            except Exception as e:
+                Logger.error("RiotClientAPI", f"Request failed: {e}")
+                self.is_connected = False
+                return None
+        return None
 
     def sign_out(self) -> bool:
         """

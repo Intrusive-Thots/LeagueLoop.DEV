@@ -76,18 +76,18 @@ class SubscriptionHandle:
     
     def __init__(self, event_name: str, callback: Callable, bus: '_EventBus'):
         self._event_name = event_name
-        self._callback = weakref.ref(callback) if callable(callback) else None
+        self._callback: Optional[Callable] = callback
         self._bus = weakref.ref(bus)
         self._disposed = False
     
     def dispose(self):
-        """Unsubscribe from the event."""
+        """Unsubscribe from the event and release callback reference."""
         if not self._disposed:
             bus = self._bus()
-            if bus:
-                callback = self._callback() if self._callback else None
-                if callback:
-                    bus.off(self._event_name, callback)
+            cb = self._callback
+            if bus and cb is not None:
+                bus.off(self._event_name, cb)
+            self._callback = None
             self._disposed = True
     
     def __enter__(self):

@@ -179,9 +179,10 @@ class ClientStateService:
                         f"{self._consecutive_poll_errors} failure(s).",
                     )
                 self._consecutive_poll_errors = 0
-            self._stop.wait(
-                self._poll_interval_s if connected else self._idle_interval_s
-            )
+            sleep_duration = self._poll_interval_s if connected else self._idle_interval_s
+            if connected and self._last_phase == GameflowPhase.IN_PROGRESS.value:
+                sleep_duration = max(sleep_duration, 5.0)
+            self._stop.wait(sleep_duration)
 
     # ------------------------------------------------------------------ poll
     def tick(self) -> bool:
@@ -290,6 +291,13 @@ class ClientStateService:
             return
         self._last_phase = phase
         self._state.update_client(phase=phase)
+
+        # Notify LCU of in-game mode to relax websocket stale timeouts and HTTP polling
+        if hasattr(self._lcu, "set_in_game_mode") and callable(self._lcu.set_in_game_mode):
+            try:
+                self._lcu.set_in_game_mode(phase == GameflowPhase.IN_PROGRESS.value)
+            except Exception as exc:
+                Logger.debug("ClientStateService", f"Failed to sync in_game_mode: {exc}")
 
         in_draft = phase == GameflowPhase.CHAMP_SELECT.value
         if in_draft:
