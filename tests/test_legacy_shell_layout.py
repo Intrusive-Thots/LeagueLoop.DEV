@@ -32,23 +32,6 @@ WIDTHS = (240, 300, 380, 460)
 
 @unittest.skipUnless(HAVE_TK, "CustomTkinter/Tk is not available here")
 class QuickIconBarTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        import customtkinter as ctk
-
-        try:
-            cls.root = ctk.CTk()
-        except Exception as exc:         # pragma: no cover - no display
-            raise unittest.SkipTest("no display available: %s" % exc)
-        cls.root.withdraw()
-
-    @classmethod
-    def tearDownClass(cls):
-        try:
-            cls.root.destroy()
-        except Exception:
-            pass
-
     def test_the_column_count_never_drops_below_one(self):
         """A zero would place every icon in column zero, on top of itself."""
         from ui.app_sidebar import SidebarWidget
