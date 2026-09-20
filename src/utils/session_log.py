@@ -342,7 +342,7 @@ def install_qt_message_handler() -> None:
     try:
         from PySide6.QtCore import qInstallMessageHandler, QtMsgType
 
-        def _qt_message_handler(msg_type, context, msg):
+        def _qt_message_handler(msg_type, _context, msg):
             if msg_type == QtMsgType.QtDebugMsg:
                 Logger.debug("Qt", msg)
             elif msg_type == QtMsgType.QtInfoMsg:

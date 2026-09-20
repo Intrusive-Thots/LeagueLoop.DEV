@@ -70,7 +70,7 @@ import threading
 import time
 import traceback
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from typing import Any, Dict, List, Optional
 

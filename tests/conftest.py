@@ -12,7 +12,16 @@ ends. It cannot stop the hang, but it turns "stuck with no output" into a
 line saying exactly what is holding the interpreter open.
 """
 import os
+import sys
 import threading
+
+# Ensure Tk/Tcl libraries in base Python are located properly in virtual environments.
+_base_tcl = os.path.join(sys.base_prefix, "tcl", "tcl8.6")
+_base_tk = os.path.join(sys.base_prefix, "tcl", "tk8.6")
+if os.path.exists(_base_tcl):
+    os.environ.setdefault("TCL_LIBRARY", _base_tcl)
+if os.path.exists(_base_tk):
+    os.environ.setdefault("TK_LIBRARY", _base_tk)
 
 # Every UI test runs headless. Set before Qt/Tk are imported anywhere.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")

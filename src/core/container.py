@@ -206,12 +206,13 @@ class ApplicationContainer:
             except Exception as exc:
                 errors.append(("assets", exc))
 
-        try:
-            self.create_automation(**(automation_hooks or {}))
-            self.create_automation_controller()
-            started.append("automation")
-        except Exception as exc:
-            errors.append(("automation", exc))
+        if start_automation:
+            try:
+                self.create_automation(**(automation_hooks or {}))
+                self.create_automation_controller()
+                started.append("automation")
+            except Exception as exc:
+                errors.append(("automation", exc))
 
         try:
             self.create_account_manager(launch_client_func=launch_client_func)

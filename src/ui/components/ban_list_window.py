@@ -20,7 +20,7 @@ def _get_league_client_rect():
         league_hwnd = [0]
         riot_hwnd = [0]
 
-        def enum_callback(h, extra):
+        def enum_callback(h, _):
             if not user32.IsWindowVisible(h):
                 return True
             length = user32.GetWindowTextLengthW(h)

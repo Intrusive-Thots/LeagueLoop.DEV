@@ -16,7 +16,6 @@ import traceback
 import queue
 import subprocess
 import tkinter as tk
-from tkinter import TclError
 
 import customtkinter as ctk  # type: ignore
 import keyboard  # type: ignore

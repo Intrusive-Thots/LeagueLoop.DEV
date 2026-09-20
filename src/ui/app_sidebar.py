@@ -22,9 +22,9 @@ from ui.components.lol_toggle import LolToggle  # type: ignore
 from ui.components.friend_list import FriendPriorityList  # type: ignore
 from core.events import EventBus  # type: ignore
 from core.constants import (  # type: ignore
-    SPACING_XS, SPACING_SM, SPACING_MD, SPACING_LG, SPACING_XL,
+    SPACING_XS, SPACING_SM, SPACING_MD,
     SECTION_GAP, CARD_PAD, INNER_GAP, CARD_RADIUS, ROW_HEIGHT,
-    BTN_HEIGHT, HEADER_HEIGHT, FOOTER_HEIGHT
+    BTN_HEIGHT, FOOTER_HEIGHT
 )
 
 class SidebarWidget(ctk.CTkFrame):
@@ -534,7 +534,7 @@ class SidebarWidget(ctk.CTkFrame):
 
         # UI status and dummy stats stripped for cleaner layout
 
-        from ui.components.settings_row import SettingsToggleRow, SettingsSliderRow  # type: ignore
+        from ui.components.settings_row import SettingsToggleRow  # type: ignore
 
         # ── Advanced Settings Tab Content ──
         self.advanced_scroll = ctk.CTkScrollableFrame(self.main_body, fg_color="transparent")

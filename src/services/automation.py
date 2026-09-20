@@ -19,8 +19,6 @@ from .asset_manager import AssetManager, ConfigManager  # type: ignore
 from services.draft.priority_engine import PriorityEngine
 from utils.logger import Logger  # type: ignore
 from core.config_keys import (
-    ARAM_BENCH_SWAP,
-    ARAM_AUTO_REROLL,
     AUTO_HONOR_ENABLED,
     AUTO_JOIN_ENABLED,
     CHAT_WARDEN_ENABLED,
@@ -28,7 +26,7 @@ from core.config_keys import (
     DODGE_BLACKLIST_ENABLED,
 )
 from core.constants import (
-    QUEUE_ARAM, QUEUE_ARENA, QUEUE_ARENA_16, QUEUE_ARENA_3V3, QUEUE_DRAFT, QUEUE_RANKED_SOLO, QUEUE_RANKED_FLEX,
+    QUEUE_ARAM, QUEUE_ARENA, QUEUE_ARENA_16, QUEUE_ARENA_3V3,
     TICK_SLEEP_DEFAULT, TICK_SLEEP_CHAMPSELECT,
     TICK_SLEEP_READYCHECK, TICK_SLEEP_LOBBY, TICK_SLEEP_INGAME,
     TICK_SLEEP_SPECTATING, TICK_SLEEP_SPECTATING_MAX,
