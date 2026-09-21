@@ -59,6 +59,7 @@ class AramListWindow(ctk.CTkToplevel):
     """Top-drawer overlay window for the ARAM Champion Priority List."""
 
     _instance = None
+    _last_aram_champ_select_state = None  # {"bench": [...], "me": ..., "team": [...]}
 
     def __init__(self, master, config, assets, **kwargs):
         super().__init__(master, **kwargs)
@@ -114,6 +115,39 @@ class AramListWindow(ctk.CTkToplevel):
             font=get_font("body", "bold"),
             text_color=get_color("colors.accent.gold", "#C8AA6E"),
         ).pack(side="left", padx=12)
+
+        # Live ARAM Champ Select Legend (visible during active draft)
+        self.cs_legend_frame = ctk.CTkFrame(self.header, fg_color="transparent")
+        ctk.CTkLabel(
+            self.cs_legend_frame,
+            text="🎲 Bench",
+            font=get_font("caption", "bold"),
+            text_color="#00D4FF",
+            fg_color="#003D4D",
+            corner_radius=4,
+            width=58,
+            height=20,
+        ).pack(side="left", padx=3)
+        ctk.CTkLabel(
+            self.cs_legend_frame,
+            text="★ You",
+            font=get_font("caption", "bold"),
+            text_color="#00FF88",
+            fg_color="#0A3D24",
+            corner_radius=4,
+            width=48,
+            height=20,
+        ).pack(side="left", padx=3)
+        ctk.CTkLabel(
+            self.cs_legend_frame,
+            text="👥 Team",
+            font=get_font("caption", "bold"),
+            text_color="#FFC107",
+            fg_color="#3D2E0A",
+            corner_radius=4,
+            width=54,
+            height=20,
+        ).pack(side="left", padx=3)
 
         self.btn_done = ctk.CTkButton(
             self.header,
@@ -216,6 +250,51 @@ class AramListWindow(ctk.CTkToplevel):
             show_section_header=False,
         )
         self.grid_widget.pack(fill="both", expand=True)
+
+        if AramListWindow._last_aram_champ_select_state:
+            self._apply_live_champ_select_state()
+
+    def _apply_live_champ_select_state(self):
+        state = AramListWindow._last_aram_champ_select_state
+        if not state:
+            self._clear_live_champ_select_state()
+            return
+        if hasattr(self, "grid_widget"):
+            self.grid_widget.set_aram_champ_select_highlights(
+                state.get("bench", []),
+                state.get("me"),
+                state.get("team", []),
+            )
+        if hasattr(self, "cs_legend_frame") and not self.cs_legend_frame.winfo_viewable():
+            self.cs_legend_frame.pack(side="left", padx=(8, 0))
+
+    def _clear_live_champ_select_state(self):
+        if hasattr(self, "grid_widget"):
+            self.grid_widget.clear_aram_champ_select_highlights()
+        if hasattr(self, "cs_legend_frame") and self.cs_legend_frame.winfo_viewable():
+            self.cs_legend_frame.pack_forget()
+
+    @classmethod
+    def update_champ_select_state(cls, bench_names, my_name, team_names):
+        cls._last_aram_champ_select_state = {
+            "bench": bench_names or [],
+            "me": my_name,
+            "team": team_names or [],
+        }
+        if cls._instance is not None and cls._instance.winfo_exists():
+            try:
+                cls._instance._apply_live_champ_select_state()
+            except Exception as exc:
+                Logger.debug("AramListWindow", "Failed applying live champ select state", exc=exc)
+
+    @classmethod
+    def clear_champ_select_state(cls):
+        cls._last_aram_champ_select_state = None
+        if cls._instance is not None and cls._instance.winfo_exists():
+            try:
+                cls._instance._clear_live_champ_select_state()
+            except Exception as exc:
+                Logger.debug("AramListWindow", "Failed clearing live champ select state", exc=exc)
 
     def _setup_dragging(self):
         self._drag_data = {"x": 0, "y": 0}

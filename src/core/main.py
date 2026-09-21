@@ -146,8 +146,8 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
             automation_hooks=dict(
                 log_func=None,
                 stop_func=self.stop_func,
-                stats_func=lambda team, bench, me=None: self.after(
-                    0, lambda: self.sidebar.update_lobby_stats(team, bench, me)
+                stats_func=lambda team, bench, me=None, *a, **kw: self.after(
+                    0, lambda: self.sidebar.update_lobby_stats(team, bench, me, *a, **kw)
                 ) if hasattr(self, "sidebar") else None,
                 window_func=_window_func,
                 queue_func=_queue_func,

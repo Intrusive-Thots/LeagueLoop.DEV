@@ -698,7 +698,7 @@ class AutomationEngine:
         if sf2 is not None:
             local_cell_id = session.get("localPlayerCellId")
             me = next((p for p in my_team if p.get("cellId") == local_cell_id), None)
-            sf2(my_team, bench, me)
+            sf2(my_team, bench, me, session)
 
         has_bench = len(bench) > 0
         # The draft session carries its own queue id. Reading it only from the

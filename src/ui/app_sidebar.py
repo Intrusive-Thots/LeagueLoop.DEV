@@ -1928,6 +1928,13 @@ class SidebarWidget(ctk.CTkFrame):
             except Exception as exc:
                 Logger.debug("AppSidebar", f"DebugTracker phase change hook suppressed: {exc}", exc=exc)
 
+        if prev_ui_phase == "ChampSelect" and phase != "ChampSelect":
+            try:
+                from ui.components.aram_list_window import AramListWindow
+                AramListWindow.clear_champ_select_state()
+            except Exception as exc:
+                Logger.debug("AppSidebar", "clear_champ_select_state suppressed an error", exc=exc)
+
         if phase == "Matchmaking" and search_state and search_state.get("searchState") == "Searching":
             time_in_queue = search_state.get("timeInQueue", 0)
             estimated_time = search_state.get("estimatedQueueTime", 0)
@@ -2013,7 +2020,7 @@ class SidebarWidget(ctk.CTkFrame):
 
         self._current_game_phase = phase
 
-    def update_lobby_stats(self, team, bench, me=None):
+    def update_lobby_stats(self, team, bench, me=None, session=None):
         """Called from AutomationEngine during ChampSelect to show winrate stats."""
         if not self.winfo_exists(): return
         
@@ -2021,6 +2028,51 @@ class SidebarWidget(ctk.CTkFrame):
         champ_id = me.get("championId", 0) if me else 0
         if hasattr(self, "priority_grid") and hasattr(self.priority_grid, "set_hovered_champion"):
             self.priority_grid.set_hovered_champion(champ_id)
+
+        # Update ARAM list window live champion select highlights if active in ARAM or ARAM variant
+        try:
+            from ui.components.aram_list_window import AramListWindow
+            queue_id = (session.get("queueId") or (session.get("gameConfig") or {}).get("queueId")) if session else None
+            master = getattr(self, "master", None)
+            if not queue_id and master and hasattr(master, "automation") and master.automation:
+                queue_id = getattr(master.automation, "current_queue_id", None)
+            game_mode = (session.get("gameConfig") or {}).get("gameMode", "").upper() if session else ""
+            bench_enabled = session.get("benchEnabled", False) if session else False
+            is_aram = bool(bench) or bench_enabled or (queue_id in {450, 2400, 1010}) or (game_mode in {"ARAM", "ARAM_MAYHEM", "ARURF"})
+
+            if is_aram and team and getattr(self, "assets", None):
+                bench_names = []
+                for b in (bench or []):
+                    bid = b.get("championId") if isinstance(b, dict) else b
+                    if bid:
+                        bname = self.assets.get_champ_name(bid)
+                        if bname and bname != str(bid):
+                            bench_names.append(bname)
+
+                my_name = None
+                if me:
+                    mid = me.get("championId") or me.get("championPickIntent")
+                    if mid:
+                        mname = self.assets.get_champ_name(mid)
+                        if mname and mname != str(mid):
+                            my_name = mname
+
+                team_names = []
+                my_cell_id = me.get("cellId") if me else None
+                for p in team:
+                    if my_cell_id is not None and p.get("cellId") == my_cell_id:
+                        continue
+                    tid = p.get("championId") or p.get("championPickIntent")
+                    if tid:
+                        tname = self.assets.get_champ_name(tid)
+                        if tname and tname != str(tid):
+                            team_names.append(tname)
+
+                AramListWindow.update_champ_select_state(bench_names, my_name, team_names)
+            else:
+                AramListWindow.clear_champ_select_state()
+        except Exception as exc:
+            Logger.debug("AppSidebar", "Failed updating ARAM champ select state", exc=exc)
             
         if not hasattr(self, "stats_card"):
             return

@@ -103,6 +103,22 @@ class PriorityIconGrid(ctk.CTkFrame):
         self._render_job = None          # cancel token for progressive render
         self._render_gen = 0             # bump to drop stale progressive batches
 
+        # ARAM Champ Select live highlights
+        self._aram_bench_names = set()
+        self._aram_my_name = None
+        self._aram_team_names = set()
+
+        if self.list_kind == "aram":
+            try:
+                from ui.components.aram_list_window import AramListWindow
+                if getattr(AramListWindow, "_last_aram_champ_select_state", None):
+                    st = AramListWindow._last_aram_champ_select_state
+                    self._aram_bench_names = {self._norm_name(n) for n in st.get("bench", []) if n}
+                    self._aram_my_name = self._norm_name(st.get("me")) if st.get("me") else None
+                    self._aram_team_names = {self._norm_name(n) for n in st.get("team", []) if n}
+            except Exception as exc:
+                Logger.debug("PriorityGrid", "Error loading initial champ select state", exc=exc)
+
         # Always build the toolbar (count / edit / add / import). When
         # show_section_header is False the collapsible title is omitted so a
         # parent window can own the sole title bar (no double header).
@@ -553,6 +569,156 @@ class PriorityIconGrid(ctk.CTkFrame):
                 except Exception as exc:
                     Logger.debug("PriorityGrid", "_add_hovered_champion suppressed an error", exc=exc)
 
+    # ───────────── ARAM Champ Select Live Highlights ─────────────
+    @staticmethod
+    def _norm_name(name):
+        if not name:
+            return ""
+        return str(name).strip().lower().translate(_CLEAN_TRANS)
+
+    def set_aram_champ_select_highlights(self, bench_names=None, my_champ_name=None, team_names=None):
+        """Highlight champions currently on bench, selected by user, or selected by teammates."""
+        if self.list_kind != "aram":
+            return
+        self._aram_bench_names = {self._norm_name(n) for n in (bench_names or []) if n}
+        self._aram_my_name = self._norm_name(my_champ_name) if my_champ_name else None
+        self._aram_team_names = {self._norm_name(n) for n in (team_names or []) if n}
+        self._apply_champ_select_highlights()
+
+    def clear_aram_champ_select_highlights(self):
+        """Clear all champion select availability highlights."""
+        self._aram_bench_names = set()
+        self._aram_my_name = None
+        self._aram_team_names = set()
+        self._apply_champ_select_highlights()
+
+    def _get_champ_highlight_info(self, name):
+        """Return (kind, border_color, bg_color, badge_text, badge_fg, badge_bg, tooltip_status) or None."""
+        if self.list_kind != "aram" or not name:
+            return None
+        norm = self._norm_name(name)
+        if self._aram_my_name and norm == self._aram_my_name:
+            return (
+                "me",
+                "#00FF88",   # Bright emerald border
+                "#062115",   # Emerald tint bg
+                "YOU",       # Badge text
+                "#00FF88",   # Badge text color
+                "#0A3D24",   # Badge bg
+                "● Selected by You",
+            )
+        if norm in self._aram_bench_names:
+            return (
+                "bench",
+                "#00D4FF",   # Bright cyan border
+                "#051C24",   # Cyan tint bg
+                "BENCH",     # Badge text
+                "#00D4FF",   # Badge text color
+                "#003D4D",   # Badge bg
+                "● Available on Bench",
+            )
+        if norm in self._aram_team_names:
+            return (
+                "team",
+                "#FFC107",   # Warm amber border
+                "#211806",   # Amber tint bg
+                "TEAM",      # Badge text
+                "#FFC107",   # Badge text color
+                "#3D2E0A",   # Badge bg
+                "● Selected by Teammate",
+            )
+        return None
+
+    def _apply_cell_highlight(self, cell, lbl, idx, name):
+        info = self._get_champ_highlight_info(name)
+        if info:
+            kind, border_col, bg_col, text, fg_col, bg_badge, tip_text = info
+            cell._highlight_kind = kind
+            cell._highlight_color = border_col
+            cell._highlight_bg = bg_col
+            cell._tooltip_status = tip_text
+
+            if not self._edit_mode and idx not in self._selected_indices:
+                cell.configure(border_width=2, border_color=border_col, fg_color=bg_col)
+
+            badge = getattr(cell, "_status_badge", None)
+            badge_width = 34 if kind == "bench" else (30 if kind == "team" else 26)
+            if not badge or not badge.winfo_exists():
+                badge = ctk.CTkLabel(
+                    cell,
+                    text=text,
+                    width=badge_width,
+                    height=12,
+                    corner_radius=3,
+                    font=("Segoe UI", 7, "bold"),
+                    text_color=fg_col,
+                    fg_color=bg_badge,
+                )
+                cell._status_badge = badge
+            else:
+                badge.configure(
+                    text=text,
+                    width=badge_width,
+                    text_color=fg_col,
+                    fg_color=bg_badge,
+                )
+            badge.place(relx=0.5, rely=1.0, anchor="s", y=-2)
+            hb = get_color("colors.accent.gold", "#C8AA6E")
+            nb = get_color("colors.border.subtle")
+            badge.bind("<Enter>", lambda e, n=name, i=idx, c=cell, b=hb: self._on_cell_enter(e, n, i, c, b))
+            badge.bind("<Leave>", lambda e, c=cell, b=nb: self._on_cell_leave(e, c, b))
+            badge.bind("<ButtonPress-1>", lambda e=None, i=idx, l=lbl, c=cell: self._on_drag_start(e, i, l, c))
+            badge.bind("<B1-Motion>", self._on_drag_motion)
+            badge.bind("<ButtonRelease-1>", self._on_drag_release)
+        else:
+            cell._highlight_kind = None
+            cell._highlight_color = None
+            cell._highlight_bg = None
+            cell._tooltip_status = None
+            badge = getattr(cell, "_status_badge", None)
+            if badge and badge.winfo_exists():
+                badge.place_forget()
+            if not self._edit_mode and idx not in self._selected_indices:
+                cell.configure(
+                    border_width=1,
+                    border_color=get_color("colors.border.subtle"),
+                    fg_color="transparent",
+                )
+
+    def _apply_champ_select_highlights(self):
+        """Update border, background, and badge on all existing grid cells."""
+        if not hasattr(self, "_icon_widgets"):
+            return
+        plist = self._get_priority_list()
+        for cell, lbl, idx in self._icon_widgets:
+            if idx < 0 or not getattr(cell, "winfo_exists", lambda: False)():
+                continue
+            name = getattr(cell, "_champ_name", None)
+            if not name and 0 <= idx < len(plist):
+                name = plist[idx]
+                cell._champ_name = name
+            if name:
+                self._apply_cell_highlight(cell, lbl, idx, name)
+
+    def _on_cell_enter(self, e, n, idx, c, border):
+        self._show_tooltip(e, n, idx)
+        if not self._edit_mode and idx not in self._selected_indices and idx not in self._delete_marked:
+            c.configure(border_color=border)
+
+    def _on_cell_leave(self, e, c, border):
+        self._hide_tooltip()
+        if not self._edit_mode:
+            try:
+                cur_border = c.cget("border_color")
+            except Exception:
+                cur_border = border
+            if cur_border != SEL_BORDER and cur_border != DEL_BORDER:
+                highlight_color = getattr(c, "_highlight_color", None)
+                if highlight_color:
+                    c.configure(border_color=highlight_color)
+                else:
+                    c.configure(border_color=border)
+
     # ───────────── grid rendering ─────────────
     def _render_grid(self):
         """Clear and progressively re-populate the icon grid (batched for smoothness)."""
@@ -677,6 +843,11 @@ class PriorityIconGrid(ctk.CTkFrame):
         )
         rank_badge.place(x=2, y=2)
 
+        cell._champ_name = name
+        cell._rank_badge = rank_badge
+        cell._icon_lbl = lbl
+        self._apply_cell_highlight(cell, lbl, i, name)
+
         def _update_icon(img, label=lbl):
             try:
                 if label.winfo_exists():
@@ -692,23 +863,8 @@ class PriorityIconGrid(ctk.CTkFrame):
         hb = ctx["hover_border"]
         nb = ctx["normal_border"]
 
-        def _on_enter(e, n=name, idx=i, c=cell, border=hb):
-            self._show_tooltip(e, n, idx)
-            if not self._edit_mode and idx not in self._selected_indices and idx not in self._delete_marked:
-                c.configure(border_color=border)
-
-        def _on_leave(e, c=cell, border=nb):
-            self._hide_tooltip()
-            if not self._edit_mode:
-                try:
-                    cur_border = c.cget("border_color")
-                except Exception:
-                    cur_border = border
-                if cur_border != SEL_BORDER and cur_border != DEL_BORDER:
-                    c.configure(border_color=border)
-
-        lbl.bind("<Enter>", _on_enter)
-        lbl.bind("<Leave>", _on_leave)
+        lbl.bind("<Enter>", lambda e, n=name, idx=i, c=cell, border=hb: self._on_cell_enter(e, n, idx, c, border))
+        lbl.bind("<Leave>", lambda e, c=cell, border=nb: self._on_cell_leave(e, c, border))
         lbl.bind("<ButtonPress-1>", lambda e=None, idx=i, label=lbl, c=cell: self._on_drag_start(e, idx, label, c))
         lbl.bind("<B1-Motion>", self._on_drag_motion)
         lbl.bind("<ButtonRelease-1>", self._on_drag_release)
@@ -747,6 +903,18 @@ class PriorityIconGrid(ctk.CTkFrame):
             text_color=get_color("colors.accent.gold", "#C8AA6E"),
             font=get_font("caption", "bold")
         ).pack(anchor="w", padx=8, pady=(4, 0))
+
+        # ARAM Champ Select Status
+        highlight_info = self._get_champ_highlight_info(name)
+        if highlight_info:
+            _, _, _, _, badge_fg, _, status_text = highlight_info
+            ctk.CTkLabel(
+                tip_frame,
+                text=status_text,
+                fg_color="transparent",
+                text_color=badge_fg,
+                font=get_font("caption", "bold"),
+            ).pack(anchor="w", padx=8, pady=(1, 0))
                  
         # Rich Stats — pull real winrate from StatsScraper
         winrate = 50.0
@@ -1097,7 +1265,17 @@ class PriorityIconGrid(ctk.CTkFrame):
                     corner_radius=6
                 )
             else:
-                cell.configure(fg_color="transparent", border_width=1, border_color=get_color("colors.border.subtle"), corner_radius=4)
+                highlight_color = getattr(cell, "_highlight_color", None)
+                highlight_bg = getattr(cell, "_highlight_bg", None)
+                if highlight_color:
+                    cell.configure(
+                        fg_color=highlight_bg or "transparent",
+                        border_width=2,
+                        border_color=highlight_color,
+                        corner_radius=4,
+                    )
+                else:
+                    cell.configure(fg_color="transparent", border_width=1, border_color=get_color("colors.border.subtle"), corner_radius=4)
 
     def _delete_active(self):
         if not self._selected_indices:
