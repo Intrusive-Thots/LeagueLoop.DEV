@@ -137,7 +137,6 @@ class RiotClientAPI:
                         method=method,
                         url=url,
                         json=data,
-                        verify=False,
                         timeout=10,
                     )
 
