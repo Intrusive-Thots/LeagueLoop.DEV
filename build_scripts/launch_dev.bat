@@ -27,10 +27,6 @@ echo ---- LeagueLoop-related processes BEFORE launch ---- >> "%LOG%"
 powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.Name -like 'python*' -or $_.Name -like 'LeagueLoop*' -or $_.CommandLine -like '*LeagueLoop*' -or $_.CommandLine -like '*run.py*' } | Select-Object ProcessId,Name,CommandLine | Format-List" >> "%LOG%" 2>&1
 
 echo. >> "%LOG%"
-echo ---- port 8337 (Local API) holder ---- >> "%LOG%"
-powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8337 -ErrorAction SilentlyContinue | Select-Object State,OwningProcess | Format-List" >> "%LOG%" 2>&1
-
-echo. >> "%LOG%"
 echo ---- launching app (unbuffered) ---- >> "%LOG%"
 REM -u is essential: without it Python block-buffers stdout when redirected,
 REM and every line is lost if the process is terminated rather than exiting.

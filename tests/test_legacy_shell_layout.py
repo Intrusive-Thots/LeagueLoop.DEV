@@ -126,7 +126,7 @@ class LiveWindowTests(unittest.TestCase):
         # callbacks. Stubbing them is the whole cost of not building the
         # application — and none of them are layout.
         for name in (
-            "_hotkey_launch_client", "_on_close", "_show_mobile_qr",
+            "_hotkey_launch_client", "_on_close",
             "on_dock_toggled", "on_settings_saved",
         ):
             setattr(cls.app, name, lambda *a, **k: None)
