@@ -44,7 +44,7 @@ class LCUClient:
         self.is_connected: bool = False
         self.headers: Dict[str, str] = {}
         self.session = requests.Session()
-        self.session.verify = False
+        self.session.verify = True
         
         # 3.2 Connection pooling
         adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=10, max_retries=1)
