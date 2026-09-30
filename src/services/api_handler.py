@@ -44,7 +44,7 @@ class LCUClient:
         self.is_connected: bool = False
         self.headers: Dict[str, str] = {}
         self.session = requests.Session()
-        self.session.verify = True
+        self.session.verify = False  # LCU runs locally on 127.0.0.1 with self-signed certificate
         
         # 3.2 Connection pooling
         adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=10, max_retries=1)
