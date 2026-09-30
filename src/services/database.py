@@ -137,7 +137,7 @@ class DatabaseService:
                     "SELECT * FROM matches ORDER BY timestamp DESC LIMIT ?",
                     (max(1, limit),)
                 )
-                return [dict(row) for row in cur.fetchall()]
+                return [dict(row) for row in cur]
             except Exception as e:
                 Logger.error("DatabaseService", f"Failed to query recent matches: {e}")
                 return []
@@ -250,7 +250,7 @@ class DatabaseService:
                     "SELECT * FROM telemetry_snapshots ORDER BY timestamp DESC LIMIT ?",
                     (max(1, limit),)
                 )
-                return [dict(row) for row in cur.fetchall()]
+                return [dict(row) for row in cur]
             except Exception as e:
                 Logger.error("DatabaseService", f"Failed to query telemetry snapshots: {e}")
                 return []
