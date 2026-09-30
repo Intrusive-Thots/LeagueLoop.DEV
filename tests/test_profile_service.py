@@ -10,9 +10,7 @@ import unittest
 
 from services.profile_service import (
     Match,
-    Profile,
     ProfileService,
-    RankEntry,
     parse_match,
     parse_rank,
 )

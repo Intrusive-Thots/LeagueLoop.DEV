@@ -4,12 +4,11 @@ Validates latency, throughput, and resource optimization across services and UI 
 """
 from __future__ import annotations
 
-import os
 import time
 import tracemalloc
 import unittest
 from utils.running_stats import RunningStats, RunningPercentile
-from services.http_session_factory import create_pooled_session, get_shared_session
+from services.http_session_factory import create_pooled_session
 
 
 class TestPerformanceBenchmarks(unittest.TestCase):

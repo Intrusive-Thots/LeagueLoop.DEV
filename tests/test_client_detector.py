@@ -1,7 +1,7 @@
 import pytest
 import psutil
 from unittest.mock import patch, MagicMock
-from utils.client_detector import scan_clients, _cached_results
+from utils.client_detector import scan_clients
 
 @pytest.fixture(autouse=True)
 def reset_cache():

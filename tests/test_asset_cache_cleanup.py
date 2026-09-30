@@ -3,7 +3,6 @@ Unit tests and benchmark for DDragon image disk cache cleanup strategy during hi
 """
 import os
 import time
-import pytest
 from services.asset_manager import AssetManager, CACHE_DIR
 
 

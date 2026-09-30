@@ -8,7 +8,6 @@ name entirely. These tests pin the shape of the replacement.
 """
 import json
 import os
-import re
 import subprocess
 import sys
 import tempfile

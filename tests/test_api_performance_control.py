@@ -4,7 +4,6 @@ and memory leak prevention.
 """
 import gc
 import json
-import time
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -13,7 +12,7 @@ from services.account_manager import RiotClientAPI
 from services.client_state_service import ClientStateService
 from core.state import StateManager, ConnectionStateEnum, GameflowPhase
 from core.events import EventBus
-from utils.client_detector import scan_clients, _cached_results
+from utils.client_detector import scan_clients
 
 
 class TestWebSocketListenerLifecycle(unittest.TestCase):

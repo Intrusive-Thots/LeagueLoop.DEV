@@ -4,7 +4,7 @@ Ensures champions selected or banned are valid, available, and not picked or ban
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, Set
 
 
 class ActionValidator:

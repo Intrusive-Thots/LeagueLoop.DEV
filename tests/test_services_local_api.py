@@ -1,6 +1,5 @@
 import json
 import io
-import pytest
 from unittest.mock import MagicMock, patch
 from services.local_api import LeagueLoopAPIHandler, get_local_ip, ensure_firewall_rule, start_api_server
 

@@ -10,7 +10,7 @@ import threading
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional, Callable, List
+from typing import Optional, Callable
 
 import psutil
 

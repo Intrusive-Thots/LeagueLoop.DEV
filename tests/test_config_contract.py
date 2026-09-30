@@ -12,12 +12,7 @@ these tests assert the contract instead.
 import unittest
 
 from core.config_keys import (
-    ARAM_PRIORITY_LIST,
-    BAN_LIST,
-    PRIORITY_LIST,
     read_champion_ids,
-    role_ban_key,
-    role_priority_key,
 )
 from services.draft.priority_engine import PriorityEngine
 
@@ -85,7 +80,6 @@ class VersionTests(unittest.TestCase):
         )
 
     def test_the_format_holds(self):
-        import re
         from core.version import __version__
 
         self.assertRegex(__version__, r"^\d-\d{2}-\d{1,3}-\d{4}$")

@@ -1,7 +1,5 @@
 import unittest
 from unittest.mock import patch, MagicMock
-import platform
-import ctypes
 
 from utils.acrylic_blur import apply_acrylic_blur, remove_blur, _get_hwnd
 
