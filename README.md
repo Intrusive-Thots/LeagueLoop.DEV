@@ -1,7 +1,8 @@
 <div align="center">
   <img src="assets/app.png" alt="LeagueLoop" width="120"/>
   <h1>LeagueLoop</h1>
-  <p><strong>A League Client companion for queue, champ select, and post-game automation.</strong></p>
+  <p><strong>Never Miss a Queue Again.</strong></p>
+  <p>A League Client companion for queue, champ select, and post-game automation.</p>
 
   <p>
     <a href="https://github.com/Intrusive-Thots/LeagueLoop.DEV/actions/workflows/ci.yml"><img src="https://github.com/Intrusive-Thots/LeagueLoop.DEV/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>

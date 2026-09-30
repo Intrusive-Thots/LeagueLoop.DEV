@@ -98,6 +98,7 @@ class SidebarWidget(ctk.CTkFrame):
             text_color=get_color("colors.accent.gold", "#C8AA6E")
         )
         self.lbl_title.pack(side="left", padx=(0, 4))
+        CTkTooltip(self.lbl_title, "LeagueLoop — Never Miss a Queue Again")
 
         # Dock / Undock Lock Button (Gold 🔒 when docked/ON, Red 🔓 when undocked/OFF)
         self._dock_state = self.config.get("docked", True)
