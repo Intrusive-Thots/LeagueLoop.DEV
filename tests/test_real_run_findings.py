@@ -8,7 +8,6 @@ session is the first evidence, and it contained two things worth pinning.
 import sys
 import types
 import unittest
-from unittest import mock
 
 # The account manager imports DPAPI at module scope; it is Windows-only and
 # the test suite is headless. Same stub the other account tests use.

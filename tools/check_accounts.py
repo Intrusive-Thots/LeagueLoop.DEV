@@ -179,7 +179,6 @@ def preflight() -> int:
 def do_switch(index: int) -> int:
     from services.account_manager import AccountManager
     from services.accounts import (
-        EVENT_SWITCH_FINISHED,
         EVENT_SWITCH_PROGRESS,
     )
     from core.events import EventBus

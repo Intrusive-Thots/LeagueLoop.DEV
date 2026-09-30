@@ -5,8 +5,6 @@ Every case here is a control a user could see, click, and get no effect from
 — the failure mode that is worse than a missing feature, because the screen
 claims the feature exists. They are pinned so they cannot come back.
 """
-import os
-import re
 import unittest
 from pathlib import Path
 from unittest import mock

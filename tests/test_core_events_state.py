@@ -1,4 +1,3 @@
-import pytest
 from unittest.mock import MagicMock
 from core.events import _EventBus, EventBus
 from core.state import AppState, State

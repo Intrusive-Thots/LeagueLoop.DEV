@@ -13,7 +13,6 @@ Both now go through `PriorityEngine` — the same code the Champ Select screen
 previews with — keyed by `core.config_keys` and working in ids.
 """
 import unittest
-from unittest import mock
 
 from core.config_keys import (
     AUTO_BAN_ENABLED,

@@ -19,7 +19,6 @@ import tkinter as tk
 
 import customtkinter as ctk  # type: ignore
 import keyboard  # type: ignore
-from PIL import Image  # type: ignore
 
 from typing import Optional, TYPE_CHECKING
 

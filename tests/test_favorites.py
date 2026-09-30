@@ -20,7 +20,6 @@ import unittest
 
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 
-from core.config_keys import FAVORITE_CHAMPIONS
 
 AHRI, GAREN, JINX = 103, 86, 222
 

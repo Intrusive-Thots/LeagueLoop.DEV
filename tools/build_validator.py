@@ -3,14 +3,11 @@ build_validator.py — Automated pre-build verification utility for LeagueLoop.
 Validates environment, test suite status, version formatting, required assets, and spec file integrity.
 """
 
-import io
-import json
 import os
 import re
 import sys
 import time
 import threading
-import subprocess
 from pathlib import Path
 from typing import Dict, Any, Optional
 

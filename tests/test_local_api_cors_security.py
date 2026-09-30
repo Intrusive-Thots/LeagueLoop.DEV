@@ -1,4 +1,3 @@
-import pytest
 from src.services.local_api import LeagueLoopAPIHandler
 
 class DummyServer:

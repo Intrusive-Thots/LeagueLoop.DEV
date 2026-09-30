@@ -24,12 +24,11 @@ except Exception:  # pragma: no cover - headless / Qt-only contexts
 import requests
 from PIL import Image
 
-from utils.path_utils import get_asset_path, get_data_dir
+from utils.path_utils import get_asset_path
 from services.config_manager import (
     ConfigManager,
     DEFAULT_CONFIG,
     USER_CONFIG_FILE,
-    BUNDLED_CONFIG_FILE,
     USER_DATA_DIR,
 )
 

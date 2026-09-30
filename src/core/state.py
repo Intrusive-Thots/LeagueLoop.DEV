@@ -8,7 +8,7 @@ import dataclasses
 import threading
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from core.events import EventBus, EventType
 

@@ -7,11 +7,10 @@ using services.loot_service.LootService.
 from __future__ import annotations
 
 import threading
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import customtkinter as ctk
 
-from core.constants import SPACING_MD, SPACING_SM
 from services.loot_service import LootService
 from ui.components.factory import get_color, get_font, make_card
 from ui.components.toast import ToastManager

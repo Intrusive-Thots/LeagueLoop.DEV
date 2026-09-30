@@ -1,6 +1,6 @@
 import unittest
 import time
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 from services.api_handler import LCUClient
 
