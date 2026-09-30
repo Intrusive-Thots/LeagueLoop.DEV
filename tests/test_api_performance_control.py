@@ -178,6 +178,23 @@ class TestRiotClientAPIPerformance(unittest.TestCase):
             self.assertEqual(api.session.request.call_count, 2)
             mock_sleep.assert_called()
 
+    def test_riot_client_request_does_not_pass_verify_false_override(self):
+        """Test that RiotClientAPI.request does not pass verify=False to session.request."""
+        api = RiotClientAPI()
+        api.is_connected = True
+        api.port = "5555"
+        api.base_url = "https://127.0.0.1:5555"
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        api.session = MagicMock()
+        api.session.request.return_value = mock_resp
+
+        api.request("GET", "/rso-auth/v1/session", silent=True)
+
+        _, kwargs = api.session.request.call_args
+        self.assertNotIn("verify", kwargs)
+
 
 class TestClientStateInGameSynchronization(unittest.TestCase):
     def test_in_game_mode_sync(self):
