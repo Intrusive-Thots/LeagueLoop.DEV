@@ -51,6 +51,18 @@ class TestPerformanceBenchmarks(unittest.TestCase):
         self.assertLess(peak_kb, 500.0, f"Session pool allocation exceeded 500KB ({peak_kb:.2f}KB)")
         session.close()
 
+    def test_string_join_performance(self):
+        """Verify that str.join operates with high performance over log entry slices."""
+        log_entries = [f"Log entry line item {i}" for i in range(100)]
+        start = time.perf_counter()
+
+        for _ in range(50_000):
+            recent = log_entries[-10:]
+            _text = "\n".join(recent) + ("\n" if recent else "")
+
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        self.assertLess(elapsed_ms, 100.0, f"str.join log formatting took {elapsed_ms:.2f}ms (exceeded budget)")
+
 
 
 
