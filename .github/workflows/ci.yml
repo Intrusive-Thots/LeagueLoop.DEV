@@ -38,7 +38,6 @@ jobs:
         run: |
           python -c "from core.main import LeagueLoopApp; print('Core imports OK')"
           python -c "from core.events import EventBus, EventType; print('Events imports OK')"
-          python -c "from services.local_api import start_api_server; print('Local API imports OK')"
 
   test:
     name: Build & Test Suite

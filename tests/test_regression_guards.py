@@ -99,3 +99,32 @@ def test_main_app_init_order_regression():
     assert ui_queue_pos != -1, "self._process_ui_queue() missing from LeagueLoopApp"
     assert running_pos < ui_queue_pos, "self.running must be initialized before calling _process_ui_queue"
 
+
+def test_no_fabricated_build_recommendations_called():
+    """Assert none of the 21 search_item_*_recommendations methods in AssetManager are called from src/ outside asset_manager.py."""
+    asset_mgr = (SRC / "services" / "asset_manager.py").read_text(encoding="utf-8")
+    import ast
+
+    tree = ast.parse(asset_mgr)
+    rec_methods = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name.startswith("search_item_") and node.name.endswith("_recommendations"):
+            rec_methods.add(node.name)
+
+    assert len(rec_methods) == 21, f"Expected 21 search_item_*_recommendations methods in AssetManager, found {len(rec_methods)}"
+
+    offenders = []
+    for py_path in SRC.rglob("*.py"):
+        if py_path.name == "asset_manager.py":
+            continue
+        text = py_path.read_text(encoding="utf-8-sig")
+        for method in rec_methods:
+            if method in text:
+                offenders.append(f"{py_path.relative_to(SRC.parent)} calls '{method}'")
+
+    msg = (
+        "Fabricated build recommendation stats from AssetManager are being called outside asset_manager.py: "
+        f"{offenders}. The win/pick rates in these methods are hardcoded filler numbers. When wiring up real recommendation "
+        "data, either update or replace these methods and delete this regression guard once real statistics are used."
+    )
+    assert not offenders, msg

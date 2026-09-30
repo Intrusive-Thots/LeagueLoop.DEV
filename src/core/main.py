@@ -26,7 +26,6 @@ from core.container import ApplicationContainer  # type: ignore
 from services.automation import AutomationEngine  # type: ignore
 from utils.logger import Logger  # type: ignore
 from utils.path_utils import get_asset_path  # type: ignore
-from services.local_api import start_api_server  # type: ignore
 from core.constants import (  # type: ignore
     SIDEBAR_WIDTH, SIDEBAR_HEIGHT, DOCKING_POLL_INTERVAL, DOCKING_IDLE_INTERVAL,
     CONNECTION_POLL_INTERVAL, CONNECTION_ERROR_INTERVAL,
@@ -194,8 +193,6 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
             self.tray.start()
             
         self.protocol("WM_DELETE_WINDOW", self._on_close_request)
-
-        self._local_ip, self._local_port = start_api_server(self, port=8337, bind_local=True)
 
         threading.Thread(target=self.connection_loop, daemon=True).start()
         threading.Thread(target=self.docking_loop, daemon=True).start()
@@ -580,13 +577,78 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
     def on_dock_toggled(self, docked):
         self.config.set("docked", bool(docked))
 
-    def _show_mobile_qr(self):
-        """Placeholder for mobile QR display."""
-        Logger.info("SYS", f"Mobile API at http://{self._local_ip}:{self._local_port}")
+
+def _get_install_root() -> str:
+    """Return the absolute path of the current installation root directory."""
+    if getattr(sys, "frozen", False):
+        return os.path.abspath(os.path.dirname(sys.executable))
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+
+def _is_our_entry_point(proc, root_dir: str) -> bool:
+    """Determine whether proc belongs to this installation of LeagueLoop."""
+    try:
+        info = proc.info if hasattr(proc, "info") and proc.info else {}
+        name = (info.get("name") or (proc.name() if callable(getattr(proc, "name", None)) else "") or "").lower()
+    except Exception:
+        name = ""
+
+    root_dir = os.path.abspath(root_dir)
+    target_run = os.path.abspath(os.path.join(root_dir, "run.py"))
+    target_main = os.path.abspath(os.path.join(root_dir, "src", "core", "main.py"))
+
+    # Frozen executable case: LeagueLoop.exe
+    if name == "leagueloop.exe" or name.endswith("leagueloop.exe"):
+        try:
+            exe_path = info.get("exe") or (proc.exe() if callable(getattr(proc, "exe", None)) else None)
+        except Exception:
+            exe_path = None
+        if exe_path:
+            abs_exe = os.path.abspath(exe_path)
+            try:
+                if os.path.commonpath([root_dir, abs_exe]) == root_dir:
+                    expected_exe = os.path.abspath(os.path.join(root_dir, "LeagueLoop.exe"))
+                    if os.path.normcase(abs_exe) == os.path.normcase(expected_exe):
+                        return True
+            except ValueError:
+                pass
+        return False
+
+    # Python script case
+    if "python" in name:
+        try:
+            cmdline = info.get("cmdline") or (proc.cmdline() if callable(getattr(proc, "cmdline", None)) else []) or []
+        except Exception:
+            cmdline = []
+        if len(cmdline) <= 1:
+            return False
+
+        try:
+            proc_cwd = proc.cwd() if callable(getattr(proc, "cwd", None)) else None
+        except Exception:
+            proc_cwd = None
+
+        for arg in cmdline[1:]:
+            arg_str = str(arg)
+            if not arg_str or arg_str.startswith("-"):
+                continue
+            if proc_cwd and not os.path.isabs(arg_str):
+                abs_arg = os.path.abspath(os.path.join(proc_cwd, arg_str))
+            else:
+                abs_arg = os.path.abspath(arg_str)
+
+            try:
+                if os.path.commonpath([root_dir, abs_arg]) == root_dir:
+                    if os.path.normcase(abs_arg) in (os.path.normcase(target_run), os.path.normcase(target_main)):
+                        return True
+            except ValueError:
+                pass
+
+    return False
 
 
 def _kill_other_instances():
-    """Terminate any other running instances of LeagueLoop."""
+    """Terminate any other running instances of LeagueLoop from this install."""
     try:
         import psutil  # type: ignore
         current_proc = psutil.Process(os.getpid())
@@ -595,27 +657,41 @@ def _kill_other_instances():
             for parent in current_proc.parents():
                 ignored_pids.add(parent.pid)
         except Exception as exc:
-            Logger.debug("Main", "_kill_other_instances suppressed an error", exc=exc)
+            Logger.debug("Main", "_kill_other_instances suppressed parent error", exc=exc)
 
-        for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+        root_dir = _get_install_root()
+        matched_procs = []
+
+        for proc in psutil.process_iter(["pid", "name", "cmdline", "exe"]):
             try:
-                if proc.info["pid"] in ignored_pids:
+                pid = proc.info.get("pid") if hasattr(proc, "info") and proc.info else getattr(proc, "pid", None)
+                if pid in ignored_pids:
                     continue
-                name = (proc.info.get("name") or "").lower()
-                cmdline = proc.info.get("cmdline") or []
-                is_match = False
-                if "leagueloop.exe" in name:
-                    is_match = True
-                elif "python" in name:
-                    # Check script arguments (excluding python binary path in cmdline[0])
-                    for arg in cmdline[1:]:
-                        arg_str = str(arg).lower()
-                        if arg_str.endswith("run.py") or arg_str.endswith("main.py") or "src.core.main" in arg_str or "core.main" in arg_str:
-                            is_match = True
-                            break
-                if is_match:
-                    proc.terminate()
+                if _is_our_entry_point(proc, root_dir):
+                    matched_procs.append(proc)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
+
+        if not matched_procs:
+            return
+
+        terminated_count = 0
+        for proc in matched_procs:
+            try:
+                proc.terminate()
+                terminated_count += 1
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+
+        gone, alive = psutil.wait_procs(matched_procs, timeout=5)
+        for proc in alive:
+            try:
+                proc.kill()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+
+        if terminated_count > 0:
+            Logger.info("Main", f"Terminated {terminated_count} other instance(s) of LeagueLoop from {root_dir}")
+
     except Exception as exc:
         Logger.debug("Main", "_kill_other_instances suppressed an error", exc=exc)

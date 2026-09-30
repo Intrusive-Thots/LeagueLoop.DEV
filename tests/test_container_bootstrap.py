@@ -17,13 +17,11 @@ class TestContainerBootstrap(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_bootstrap_initializes_core_services(self):
-        with patch.object(self.container.assets, "start_loading") as mock_assets, \
-             patch("services.local_api.start_api_server", return_value=("127.0.0.1", 8337)) as mock_api:
+        with patch.object(self.container.assets, "start_loading") as mock_assets:
             self.container.bootstrap(
                 start_assets=True,
                 start_automation=True,
                 start_client_state=False,
-                start_api=True,
             )
 
             mock_assets.assert_called_once()
@@ -31,10 +29,9 @@ class TestContainerBootstrap(unittest.TestCase):
             self.assertIsNotNone(self.container.automation_controller)
             self.assertIsNotNone(self.container.automation)
             self.assertIsNotNone(self.container.client_state)
-            mock_api.assert_called_once()
 
     def test_account_manager_syncs_state(self):
-        self.container.bootstrap(start_assets=False, start_api=False)
+        self.container.bootstrap(start_assets=False)
         mgr = self.container.account_manager
         self.assertIsNotNone(mgr)
         self.assertIsNotNone(mgr.state_manager)
