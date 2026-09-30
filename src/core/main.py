@@ -35,7 +35,7 @@ from core.constants import (  # type: ignore
 )
 
 from ui.app_sidebar import SidebarWidget  # type: ignore
-from ui.components.factory import get_color, get_font  # type: ignore
+from ui.components.factory import get_color  # type: ignore
 from ui.components.toast import ToastManager  # type: ignore
 from ui.components.mini_player import MiniPlayer
 from ui.components.tray_icon import SystemTrayApp
