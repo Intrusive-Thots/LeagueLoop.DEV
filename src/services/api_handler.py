@@ -2471,7 +2471,6 @@ class LCUClient:
                         method=method,
                         url=url,
                         json=data,
-                        verify=False,
                         timeout=adaptive_timeout,
                     )
 

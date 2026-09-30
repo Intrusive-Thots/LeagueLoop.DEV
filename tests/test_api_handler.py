@@ -51,6 +51,22 @@ class TestLCUClient(unittest.TestCase):
         self.assertEqual(result, mock_response)
         self.client.session.request.assert_called_once()
 
+    def test_request_does_not_pass_verify_false(self):
+        self.client.is_connected = True
+        self.client.port = "1234"
+        self.client.base_url = "https://127.0.0.1:1234"
+        self.client.headers = {"Authorization": "Basic xxx"}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        self.client.session = MagicMock()
+        self.client.session.request.return_value = mock_response
+
+        self.client.request("GET", "/test", silent=True)
+        self.client.session.request.assert_called_once()
+        _args, kwargs = self.client.session.request.call_args
+        self.assertNotIn("verify", kwargs)
+
     def test_request_not_connected(self):
         self.client.is_connected = False
         with patch.object(self.client, 'connect', return_value=False) as mock_connect:
