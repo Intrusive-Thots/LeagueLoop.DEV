@@ -5,6 +5,7 @@
 
   <p>
     <a href="https://github.com/Intrusive-Thots/LeagueLoop.DEV/actions/workflows/ci.yml"><img src="https://github.com/Intrusive-Thots/LeagueLoop.DEV/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+    <img src="https://img.shields.io/badge/version-2--09--273--1535-gold.svg" alt="Version 2-09-273-1535"/>
     <img src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue" alt="Python 3.10-3.13"/>
     <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey" alt="Windows"/>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT"/></a>
@@ -46,12 +47,26 @@ does happens in the client, between games. Full statement of the constraint:
 <div align="center">
   <table>
     <tr>
-      <td align="center"><img src="assets/screenshots/lobby_idle.png" alt="Lobby" width="240"/><br/><sub>Lobby — idle</sub></td>
-      <td align="center"><img src="assets/screenshots/connected.png" alt="Connected" width="240"/><br/><sub>Connected</sub></td>
-    </tr>
-    <tr>
-      <td align="center"><img src="assets/screenshots/champ_select.png" alt="Champ select" width="240"/><br/><sub>Champ select</sub></td>
-      <td align="center"><img src="assets/screenshots/mode_picker.png" alt="Queue picker" width="240"/><br/><sub>Queue picker</sub></td>
+      <td align="center" valign="top" width="25%">
+        <strong>Live Companion Dock</strong><br/><br/>
+        <img src="assets/screenshots/connected.png" height="380" alt="Live Companion Dock"/><br/><br/>
+        <sub>Magnetic auto-docking and real-time state</sub>
+      </td>
+      <td align="center" valign="top" width="25%">
+        <strong>Champ Select</strong><br/><br/>
+        <img src="assets/screenshots/champ_select.png" height="380" alt="Champ Select Assistant"/><br/><br/>
+        <sub>Priority hover/lock & auto-ban</sub>
+      </td>
+      <td align="center" valign="top" width="25%">
+        <strong>Dynamic Queue Picker</strong><br/><br/>
+        <img src="assets/screenshots/mode_picker.png" height="380" alt="Queue Picker"/><br/><br/>
+        <sub>Live queue modes from LCU runtime</sub>
+      </td>
+      <td align="center" valign="top" width="25%">
+        <strong>ARAM Priority Drawer</strong><br/><br/>
+        <img src="assets/screenshots/aram_picker.png" height="380" alt="ARAM Priority Drawer"/><br/><br/>
+        <sub>Bench sniper & meta priority order</sub>
+      </td>
     </tr>
   </table>
 </div>
