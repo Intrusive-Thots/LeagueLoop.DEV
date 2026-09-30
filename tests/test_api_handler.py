@@ -1316,6 +1316,11 @@ class TestLCUClient(unittest.TestCase):
         self.assertIn("http_retry_jitter_wolfson_xx_index", entropy_tel)
         self.assertIn("http_retry_jitter_foster_wolfson_xx_index", entropy_tel)
 
+    def test_session_verify_default(self):
+        """Verify that LCUClient session.verify defaults to True (Secure TLS)."""
+        client = LCUClient()
+        self.assertTrue(client.session.verify)
+
 if __name__ == '__main__':
     unittest.main()
 
