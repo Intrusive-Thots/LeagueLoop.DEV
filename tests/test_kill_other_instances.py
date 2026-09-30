@@ -3,23 +3,13 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
-dummy_ctk = type("CTk", (), {})
-dummy_dnd = type("DnDWrapper", (), {})
-mock_ctk = MagicMock()
-mock_ctk.CTk = dummy_ctk
-mock_dnd2 = MagicMock()
-mock_dnd2.TkinterDnD.DnDWrapper = dummy_dnd
+# Only stub out UI/OS-dependent modules if they cannot be imported in the test environment
+for _mod in ("customtkinter", "keyboard", "pystray", "tkinterdnd2", "PIL", "PIL.Image", "PIL.ImageTk"):
+    try:
+        __import__(_mod)
+    except Exception:
+        sys.modules[_mod] = MagicMock()
 
-mods_to_mock = {
-    "customtkinter": mock_ctk,
-    "keyboard": MagicMock(),
-    "pystray": MagicMock(),
-    "tkinterdnd2": mock_dnd2,
-    "PIL": MagicMock(),
-    "PIL.Image": MagicMock(),
-    "PIL.ImageTk": MagicMock(),
-}
-sys.modules.update(mods_to_mock)
 
 from core.main import _get_install_root, _is_our_entry_point, _kill_other_instances
 
@@ -114,7 +104,7 @@ class TestKillOtherInstances(unittest.TestCase):
         with patch.object(sys, "frozen", True, create=True), \
              patch.object(sys, "executable", "/opt/LeagueLoop/LeagueLoop.exe"):
             root = _get_install_root()
-            self.assertEqual(os.path.normcase(root), os.path.normcase("/opt/LeagueLoop"))
+            self.assertEqual(os.path.normcase(root), os.path.normcase(os.path.abspath("/opt/LeagueLoop")))
 
     def test_kill_other_instances_execution_flow(self):
         proc_me = DummyProc(os.getpid(), "python.exe", ["python", self.run_py])
