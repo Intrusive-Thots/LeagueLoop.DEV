@@ -1,6 +1,6 @@
 import unittest
 import time
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 from services.api_handler import LCUClient
 
@@ -50,6 +50,22 @@ class TestLCUClient(unittest.TestCase):
         result = self.client.request("GET", "/test", silent=True)
         self.assertEqual(result, mock_response)
         self.client.session.request.assert_called_once()
+
+    def test_request_does_not_pass_verify_false(self):
+        self.client.is_connected = True
+        self.client.port = "1234"
+        self.client.base_url = "https://127.0.0.1:1234"
+        self.client.headers = {"Authorization": "Basic xxx"}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        self.client.session = MagicMock()
+        self.client.session.request.return_value = mock_response
+
+        self.client.request("GET", "/test", silent=True)
+        self.client.session.request.assert_called_once()
+        _args, kwargs = self.client.session.request.call_args
+        self.assertNotIn("verify", kwargs)
 
     def test_request_not_connected(self):
         self.client.is_connected = False
@@ -1315,6 +1331,12 @@ class TestLCUClient(unittest.TestCase):
         entropy_tel = self.client.get_http_retry_jitter_entropy_telemetry()
         self.assertIn("http_retry_jitter_wolfson_xx_index", entropy_tel)
         self.assertIn("http_retry_jitter_foster_wolfson_xx_index", entropy_tel)
+
+    def test_session_verify_default(self):
+        """Verify that LCUClient session.verify defaults to False (local self-signed cert)."""
+        client = LCUClient()
+        self.assertFalse(client.session.verify)
+
 
 if __name__ == '__main__':
     unittest.main()

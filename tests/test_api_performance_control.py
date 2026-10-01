@@ -4,7 +4,6 @@ and memory leak prevention.
 """
 import gc
 import json
-import time
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -13,7 +12,7 @@ from services.account_manager import RiotClientAPI
 from services.client_state_service import ClientStateService
 from core.state import StateManager, ConnectionStateEnum, GameflowPhase
 from core.events import EventBus
-from utils.client_detector import scan_clients, _cached_results
+from utils.client_detector import scan_clients
 
 
 class TestWebSocketListenerLifecycle(unittest.TestCase):
@@ -177,6 +176,23 @@ class TestRiotClientAPIPerformance(unittest.TestCase):
             self.assertEqual(res, ok_resp)
             self.assertEqual(api.session.request.call_count, 2)
             mock_sleep.assert_called()
+
+    def test_riot_client_request_does_not_pass_verify_false_override(self):
+        """Test that RiotClientAPI.request does not pass verify=False to session.request."""
+        api = RiotClientAPI()
+        api.is_connected = True
+        api.port = "5555"
+        api.base_url = "https://127.0.0.1:5555"
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        api.session = MagicMock()
+        api.session.request.return_value = mock_resp
+
+        api.request("GET", "/rso-auth/v1/session", silent=True)
+
+        _, kwargs = api.session.request.call_args
+        self.assertNotIn("verify", kwargs)
 
 
 class TestClientStateInGameSynchronization(unittest.TestCase):

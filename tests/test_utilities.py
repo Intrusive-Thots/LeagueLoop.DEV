@@ -12,7 +12,7 @@ import json
 import re
 import os
 import sys
-from unittest.mock import patch, mock_open, MagicMock
+from unittest.mock import patch, mock_open
 
 # Import modules under test
 from core import constants

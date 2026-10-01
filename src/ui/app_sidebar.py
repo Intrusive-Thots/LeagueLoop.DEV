@@ -23,8 +23,7 @@ from ui.components.friend_list import FriendPriorityList  # type: ignore
 from core.events import EventBus  # type: ignore
 from core.constants import (  # type: ignore
     SPACING_XS, SPACING_SM, SPACING_MD,
-    SECTION_GAP, CARD_PAD, INNER_GAP, CARD_RADIUS, ROW_HEIGHT,
-    BTN_HEIGHT, FOOTER_HEIGHT
+    SECTION_GAP, CARD_PAD, INNER_GAP, CARD_RADIUS, BTN_HEIGHT, FOOTER_HEIGHT
 )
 
 class SidebarWidget(ctk.CTkFrame):
@@ -99,6 +98,7 @@ class SidebarWidget(ctk.CTkFrame):
             text_color=get_color("colors.accent.gold", "#C8AA6E")
         )
         self.lbl_title.pack(side="left", padx=(0, 4))
+        CTkTooltip(self.lbl_title, "LeagueLoop — Never Miss a Queue Again")
 
         # Dock / Undock Lock Button (Gold 🔒 when docked/ON, Red 🔓 when undocked/OFF)
         self._dock_state = self.config.get("docked", True)
@@ -416,7 +416,6 @@ class SidebarWidget(ctk.CTkFrame):
         TOGGLE_ROW_HEIGHT = 28
 
         from ui.components.toggle_row import ToggleRow  # type: ignore
-        from ui.components.automation_editor import AutomationEditor  # type: ignore
 
         # Store all automation rows for master switch control
         self._automation_rows = []

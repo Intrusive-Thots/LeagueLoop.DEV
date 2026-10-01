@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock
-from src.services.queue_manager import QueueManager, BASELINE_NAME_TO_ID, BASELINE_QUEUE_MAP
+from src.services.queue_manager import QueueManager
 
 @pytest.fixture
 def queue_manager():

@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 # --- EventBus channel names -------------------------------------------------
 # Defined here rather than in core.events so the accounts subsystem can add

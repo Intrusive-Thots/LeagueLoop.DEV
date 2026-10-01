@@ -4,8 +4,8 @@ Opens as a Toplevel dialog with dark theme styling, matching the app's aesthetic
 """
 import customtkinter as ctk  # type: ignore
 
-from ui.components.factory import get_color, get_font, make_card  # type: ignore
-from core.constants import SPACING_SM, SPACING_MD, INNER_GAP  # type: ignore
+from ui.components.factory import get_color, get_font  # type: ignore
+from core.constants import SPACING_SM, SPACING_MD  # type: ignore
 from utils.logger import Logger
 
 

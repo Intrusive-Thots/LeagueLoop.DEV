@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Optional
+from typing import Any
 
 from utils.logger import Logger
 from utils.path_utils import get_asset_path, get_data_dir

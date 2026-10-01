@@ -1,15 +1,9 @@
 import unittest
-from unittest.mock import MagicMock
 
 from core.events import EventBus, EventType
 from core.state import (
-    ApplicationState,
     ClientState,
     ConnectionStateEnum,
-    GameflowPhase,
-    QueueState,
-    ChampSelectState,
-    AutomationState,
     StateManager,
 )
 

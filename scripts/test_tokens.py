@@ -1,5 +1,5 @@
 import unittest
-from src.ui.theme.token_loader import DesignTokens, TOKENS
+from src.ui.theme.token_loader import TOKENS
 
 class TestDesignTokens(unittest.TestCase):
     def test_get_simple(self):

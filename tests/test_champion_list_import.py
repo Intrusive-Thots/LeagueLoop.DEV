@@ -9,7 +9,6 @@ because a list that silently lost four entries is worse than one that says so.
 import unittest
 
 from services.champion_list_import import (
-    ImportResult,
     build_lookup,
     parse_champion_list,
     split_names,

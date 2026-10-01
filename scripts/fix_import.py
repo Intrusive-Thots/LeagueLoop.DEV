@@ -1,5 +1,3 @@
-import os
-import re
 
 file_path = "src/ui/components/friend_list.py"
 with open(file_path, "r") as f:

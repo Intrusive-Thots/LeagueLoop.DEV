@@ -11,7 +11,6 @@ Three things made that failure permanent and invisible:
 * the failure was logged and nowhere else, so the UI could not explain it or
   offer a retry.
 """
-import json
 import os
 import tempfile
 import unittest

@@ -13,7 +13,6 @@ import argparse
 import datetime
 import os
 import re
-import sys
 
 MAJOR = 2
 ROOT = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))

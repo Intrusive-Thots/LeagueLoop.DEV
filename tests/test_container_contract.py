@@ -171,44 +171,25 @@ class SuiteHygieneTests(unittest.TestCase):
             "running and hangs the suite on Windows: %s" % offenders,
         )
 
-    def test_no_test_binds_the_local_api_port(self):
-        """A test may name `start_api_server`; it may not let one really run.
+    def test_no_local_api_or_mobile_companion_remnants(self):
+        """Assert none of local_api/start_api_server/LeagueLoopMobile comes back anywhere in src/ or tests/."""
+        import pathlib
 
-        The first version of this check flagged the mere string, which
-        condemned the two files doing the right thing -- patching
-        `start_api_server` out, or mocking `ThreadingHTTPServer` and the
-        thread it runs on. What actually hangs the suite on Windows is a live
-        call, so look for a call that nothing in the file has neutralised.
-        """
-        import ast
-
+        forbidden = ("local_api", "start_api_server", "LeagueLoopMobile")
+        root = pathlib.Path(__file__).resolve().parent.parent
+        this_file = pathlib.Path(__file__).resolve()
         offenders = []
-        for path in self._others():
-            body = path.read_text(encoding="utf-8-sig")
-            if "start_api_server" not in body:
-                continue
-            neutralised = any(
-                name in body
-                for name in (
-                    "services.local_api.start_api_server",
-                    "services.local_api.ThreadingHTTPServer",
-                )
-            )
-            if neutralised:
-                continue
-            try:
-                tree = ast.parse(body)
-            except SyntaxError:
-                continue
-            for node in ast.walk(tree):
-                if not isinstance(node, ast.Call):
+
+        for target in (root / "src", root / "tests"):
+            for path in target.rglob("*.py"):
+                if path.resolve() == this_file:
                     continue
-                func = node.func
-                name = getattr(func, "id", None) or getattr(func, "attr", None)
-                if name == "start_api_server":
-                    offenders.append("%s:%d" % (path.name, node.lineno))
+                text = path.read_text(encoding="utf-8-sig")
+                for term in forbidden:
+                    if term in text:
+                        offenders.append(f"{path.relative_to(root)} contains '{term}'")
+
         self.assertEqual(
             offenders, [],
-            "these really start the HTTP server, which binds a port and "
-            "leaves a thread running: %s" % offenders,
+            "Mobile companion / local API remnants found: %s" % offenders,
         )
