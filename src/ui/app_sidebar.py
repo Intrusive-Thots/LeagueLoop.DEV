@@ -1967,7 +1967,10 @@ class SidebarWidget(ctk.CTkFrame):
                 self._show_quick_actions(show_requeue=False)
                 if getattr(self, "friend_list", None) and hasattr(self.friend_list, "_expanded") and self.friend_list._expanded:
                     try:
-                        self.friend_list._toggle_collapse()
+                        if hasattr(self.friend_list, "collapse"):
+                            self.friend_list.collapse()
+                        elif hasattr(self.friend_list, "_toggle_collapse"):
+                            self.friend_list._toggle_collapse()
                     except Exception as exc:
                         Logger.debug("AppSidebar", "Failed to collapse friend list in champ select", exc=exc)
             self._last_ui_phase = "ChampSelect"

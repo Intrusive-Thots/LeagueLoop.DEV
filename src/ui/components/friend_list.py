@@ -125,7 +125,7 @@ class FriendPriorityList(ctk.CTkFrame):
         self.config = config
         self.lcu = lcu
 
-        self._expanded = True
+        self._is_expanded_state = True
         self._friends_data = []
         self._auto_join_names = {
             f.get("name", "").lower(): f.get("enabled", True)
@@ -152,6 +152,38 @@ class FriendPriorityList(ctk.CTkFrame):
     def _save_priority_list(self):
         lst = [{"name": name, "enabled": enabled} for name, enabled in self._auto_join_names.items()]
         self.config.set("auto_join_list", lst)
+
+    # ─────────── Collapse / Expand Controls ───────────
+
+    @property
+    def _expanded(self) -> bool:
+        ctrl = getattr(getattr(self, "card", None), "_toggle_controller", None)
+        if ctrl is not None:
+            return getattr(ctrl, "is_expanded", True)
+        return getattr(self, "_is_expanded_state", True)
+
+    @_expanded.setter
+    def _expanded(self, val: bool) -> None:
+        self._is_expanded_state = bool(val)
+
+    def _toggle_collapse(self) -> None:
+        """Toggle collapsed state of the friend list card."""
+        ctrl = getattr(getattr(self, "card", None), "_toggle_controller", None)
+        if ctrl is not None:
+            ctrl.toggle()
+            self._is_expanded_state = getattr(ctrl, "is_expanded", True)
+        else:
+            self._is_expanded_state = not getattr(self, "_is_expanded_state", True)
+
+    def collapse(self) -> None:
+        """Collapse the friend list card if currently expanded."""
+        if self._expanded:
+            self._toggle_collapse()
+
+    def expand(self) -> None:
+        """Expand the friend list card if currently collapsed."""
+        if not self._expanded:
+            self._toggle_collapse()
 
     # ─────────── UI Construction ───────────
 
