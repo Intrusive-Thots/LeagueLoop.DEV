@@ -582,6 +582,9 @@ class AutomationEngine:
                 body = (resp.text or "")[:200]
             except Exception as exc:
                 Logger.debug("Automation", "_act suppressed an error", exc=exc)
+            if endpoint == "/lol-matchmaking/v1/ready-check/accept" and code == 404:
+                Logger.debug("Automation", f"{label} — queue was already aborted or concluded (HTTP 404)")
+                return False
             Logger.error(
                 "Automation",
                 f"{label} — the client refused it (HTTP {code}) {body}".strip(),
@@ -604,12 +607,24 @@ class AutomationEngine:
         if prev_phase is None:
             prev_phase = self.last_phase
         if phase == "Lobby" and prev_phase in ("ChampSelect", "ReadyCheck"):
+            # Check if local player is leader before requesting search to avoid INVALID_PERMISSIONS
+            lobby_resp = self.lcu.request("GET", "/lol-lobby/v2/lobby")
+            if lobby_resp and getattr(lobby_resp, "status_code", 0) == 200:
+                try:
+                    lobby_data = lobby_resp.json()
+                    local_member = lobby_data.get("localMember", {})
+                    if not local_member.get("isLeader", True):
+                        Logger.debug("Automation", "Dodge detected but local player is not lobby leader; skipping matchmaking restart.")
+                        return
+                except Exception as exc:
+                    Logger.debug("Automation", "Failed to query lobby leader state", exc=exc)
+
             now = time.time()
             if self._cached_search_state and (now - self._last_search_state_time < 3.0):
                 state = self._cached_search_state
             else:
                 search_state = self.lcu.request("GET", "/lol-lobby/v2/lobby/matchmaking/search-state")
-                state = search_state.json() if search_state and search_state.status_code == 200 else None
+                state = search_state.json() if search_state and getattr(search_state, "status_code", 0) == 200 else None
                 self._cached_search_state = state
                 self._last_search_state_time = now
             

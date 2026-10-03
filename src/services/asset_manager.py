@@ -3266,11 +3266,23 @@ class AssetManager:
         """Map a champion id (int or numeric str) or display name to a DDragon key."""
         nid = _coerce_numeric_id(key)
         if nid is not None:
-            return self.id_to_key.get(nid, str(key))
-        cid = self.name_to_id.get(str(key).lower())
+            if not self.id_to_key:
+                champ_path = os.path.join(CACHE_DIR, "champion.json")
+                if os.path.exists(champ_path):
+                    try:
+                        self._load_champion_data()
+                    except Exception as exc:
+                        Logger.debug("Assets", f"Deferred champion data load failed: {exc}", exc=exc)
+            res = self.id_to_key.get(nid)
+            return res if res else None
+        key_str = str(key).strip()
+        cid = self.name_to_id.get(key_str.lower())
         if cid is not None:
-            return self.id_to_key.get(cid, str(key))
-        return key
+            res = self.id_to_key.get(cid)
+            return res if res else None
+        if isinstance(key, str) and key.isdigit():
+            return None
+        return key_str
 
     def get_icon(self, type_, key, size=(40, 40)) -> Optional[ctk.CTkImage]:
         """Synchronously get an icon if cached on disk, otherwise trigger a download and return None."""
@@ -3282,6 +3294,8 @@ class AssetManager:
             # DDragon uses champion name keys (e.g. "Yuumi"), not numeric IDs (e.g. "350")
             # or display names with spaces (e.g. "Twisted Fate" -> "TwistedFate")
             resolved_key = self._resolve_champion_key(key)
+            if not resolved_key or _coerce_numeric_id(resolved_key) is not None:
+                return None
             fname = f"champion_{resolved_key}.png"
             url = f"https://ddragon.leagueoflegends.com/cdn/{self.ddragon_ver}/img/champion/{resolved_key}.png"
         elif type_ == "item":
@@ -3361,6 +3375,8 @@ class AssetManager:
             if not key:
                 continue
             resolved_key = self._resolve_champion_key(key)
+            if not resolved_key or _coerce_numeric_id(resolved_key) is not None:
+                continue
             cache_key = f"champion_{resolved_key}_{size[0]}x{size[1]}"
             if cache_key in self.icons:
                 continue
