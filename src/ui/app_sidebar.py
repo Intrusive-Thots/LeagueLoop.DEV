@@ -29,16 +29,13 @@ from core.constants import (  # type: ignore
 class SidebarWidget(ctk.CTkFrame):
     """The main layout component containing the sidebar navigation, header, and primary content area."""
     def __init__(self, master, toggle_callback, config, lcu=None, assets=None, scraper=None):
-        """Initializes the SidebarWidget."""
         self._account_manager = None  # Set externally by main.py
-        is_docked = config.get("docked", True) if config else True
-        init_border = get_color("colors.borders.seamless", "#785A28") if is_docked else get_color("colors.border.subtle", "#1E2328")
         super().__init__(  # type: ignore
             master, 
             corner_radius=0,  # type: ignore
             fg_color=get_color("colors.background.app"),  # type: ignore
             border_width=1,  # type: ignore
-            border_color=init_border  # type: ignore
+            border_color=get_color("colors.border.subtle")  # type: ignore
         )
         self.toggle_callback = toggle_callback
         self.config = config
@@ -940,8 +937,7 @@ class SidebarWidget(ctk.CTkFrame):
     def update_dock_styling(self, docked: bool):
         """Update border color and corner styling based on docked state."""
         try:
-            border_c = get_color("colors.borders.seamless", "#785A28") if docked else get_color("colors.border.subtle", "#1E2328")
-            self.configure(border_color=border_c)
+            self.configure(border_color=get_color("colors.border.subtle"))
         except Exception as exc:
             Logger.debug("AppSidebar", f"update_dock_styling error: {exc}", exc=exc)
 
