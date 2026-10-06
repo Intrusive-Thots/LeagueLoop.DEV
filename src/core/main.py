@@ -37,6 +37,7 @@ from ui.components.factory import get_color  # type: ignore
 from ui.components.toast import ToastManager  # type: ignore
 from ui.components.mini_player import MiniPlayer
 from ui.components.tray_icon import SystemTrayApp
+from ui.components.feather_edge import FeatherEdge
 from utils.focus_states import apply_focus_states_recursive
 from tkinterdnd2 import TkinterDnD  # type: ignore
 from utils.client_detector import (
@@ -104,6 +105,7 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self.overrideredirect(True)
         self.attributes("-topmost", True)
         self.after(50, self._ensure_taskbar_presence)
+        self.after(80, lambda: self.apply_window_shape(SIDEBAR_WIDTH, SIDEBAR_HEIGHT, docked=self.config.get("docked", True), dock_side="right"))
         
         self.configure(fg_color=get_color("colors.background.app"))
 
@@ -217,8 +219,13 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
             self.after(50, self._process_ui_queue)
 
     def setup_ui(self):
+        # Feather edge gradient strip along docking seam
+        is_docked = self.config.get("docked", True)
+        self.feather_strip = FeatherEdge(self, width=24, side="left")
+        if is_docked:
+            self.feather_strip.pack(side="left", fill="y")
         self.sidebar = SidebarWidget(self, self.toggle_power, self.config, lcu=self.lcu, assets=self.assets, scraper=self.scraper)
-        self.sidebar.pack(fill="both", expand=True)
+        self.sidebar.pack(side="left", fill="both", expand=True)
         self.mini_player = MiniPlayer(self, self.config)
 
     def toggle_power(self, state):
@@ -269,12 +276,72 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         except Exception as exc:
             Logger.debug("Main", "_ensure_taskbar_presence suppressed an error", exc=exc)
 
+    def minimize_window(self):
+        """Minimize window to taskbar using Win32 API for borderless window."""
+        try:
+            if hasattr(ctypes, "windll"):
+                hwnd = ctypes.windll.user32.GetParent(self.winfo_id()) or self.winfo_id()
+                SW_MINIMIZE = 6
+                ctypes.windll.user32.ShowWindow(hwnd, SW_MINIMIZE)
+            else:
+                self.iconify()
+        except Exception as exc:
+            Logger.debug("Main", f"minimize_window exception: {exc}", exc=exc)
+            self.iconify()
+
     def show_from_tray(self):
         """Restore window from system tray or background."""
         self._manually_hidden = False
+        try:
+            if hasattr(ctypes, "windll"):
+                hwnd = ctypes.windll.user32.GetParent(self.winfo_id()) or self.winfo_id()
+                SW_RESTORE = 9
+                ctypes.windll.user32.ShowWindow(hwnd, SW_RESTORE)
+        except Exception:
+            pass
         self.deiconify()
         self.lift()
         self.focus_force()
+
+    def apply_window_shape(self, width: int, height: int, docked: bool, dock_side: str = "right", radius: int = 14):
+        """Apply asymmetric window shape clipping via Win32 SetWindowRgn.
+        
+        When docked on the right side of League Client, left edge is flush/flat
+        and right corners are smoothly rounded. When undocked, all 4 corners are rounded.
+        """
+        if not hasattr(ctypes, "windll"):
+            return
+        try:
+            hwnd = ctypes.windll.user32.GetParent(self.winfo_id()) or self.winfo_id()
+            gdi32 = ctypes.windll.gdi32
+            user32 = ctypes.windll.user32
+            
+            if not docked:
+                hrgn = gdi32.CreateRoundRectRgn(0, 0, width, height, radius * 2, radius * 2)
+                user32.SetWindowRgn(hwnd, hrgn, True)
+                return
+
+            RGN_OR = 2
+            if dock_side == "right":
+                # Docked on right of League: seam is on left edge (x=0). Keep left flat, round right.
+                rgn_rect = gdi32.CreateRectRgn(0, 0, radius + 2, height)
+                rgn_round = gdi32.CreateRoundRectRgn(0, 0, width, height, radius * 2, radius * 2)
+                rgn_final = gdi32.CreateRectRgn(0, 0, 0, 0)
+                gdi32.CombineRgn(rgn_final, rgn_rect, rgn_round, RGN_OR)
+                user32.SetWindowRgn(hwnd, rgn_final, True)
+                gdi32.DeleteObject(rgn_rect)
+                gdi32.DeleteObject(rgn_round)
+            else:
+                # Docked on left of League: seam is on right edge (x=width). Keep right flat, round left.
+                rgn_rect = gdi32.CreateRectRgn(max(0, width - radius - 2), 0, width, height)
+                rgn_round = gdi32.CreateRoundRectRgn(0, 0, width, height, radius * 2, radius * 2)
+                rgn_final = gdi32.CreateRectRgn(0, 0, 0, 0)
+                gdi32.CombineRgn(rgn_final, rgn_rect, rgn_round, RGN_OR)
+                user32.SetWindowRgn(hwnd, rgn_final, True)
+                gdi32.DeleteObject(rgn_rect)
+                gdi32.DeleteObject(rgn_round)
+        except Exception as exc:
+            Logger.debug("Main", f"apply_window_shape error: {exc}", exc=exc)
 
     def _on_close_request(self):
         if self.config.get("run_in_tray", True):
@@ -527,24 +594,41 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                     continue
 
                 app_w = SIDEBAR_WIDTH
-                target_h = max(client_h, 520)
-                gap = 4
+                target_h = client_h  # Match League Client exact height for seamless pairing
+                gap = 0  # Flush docking against client border
 
                 # Screen width probe
                 screen_w = self.winfo_screenwidth() or 1920
                 target_x = client_x + client_w + gap
+                dock_side = "right"  # Docked to the right of the client
                 if target_x + app_w > screen_w:
                     target_x = max(0, client_x - app_w - gap)
+                    dock_side = "left"  # Docked to the left of the client
 
-                target_y = max(0, client_y)
+                target_y = client_y
 
                 if (last_pos is None
                         or abs(target_x - last_pos[0]) >= GEOMETRY_THRESHOLD
                         or abs(target_y - last_pos[1]) >= GEOMETRY_THRESHOLD
-                        or getattr(self, "_last_docked_h", None) != target_h):
+                        or getattr(self, "_last_docked_h", None) != target_h
+                        or getattr(self, "_last_dock_side", None) != dock_side):
                     last_pos = (target_x, target_y)
                     self._last_docked_h = target_h
-                    self.after(0, lambda w=app_w, h=target_h, tx=target_x, ty=target_y: self.geometry(f"{w}x{h}+{tx}+{ty}"))
+                    self._last_dock_side = dock_side
+                    
+                    def _apply_dock_geom(w=app_w, h=target_h, tx=target_x, ty=target_y, side=dock_side):
+                        self.geometry(f"{w}x{h}+{tx}+{ty}")
+                        if hasattr(self, "feather_strip"):
+                            feather_canvas_side = "left" if side == "right" else "right"
+                            self.feather_strip.set_side(feather_canvas_side)
+                            self.feather_strip.pack_forget()
+                            self.feather_strip.pack(side=feather_canvas_side, fill="y")
+                            if hasattr(self, "sidebar"):
+                                self.sidebar.pack_forget()
+                                self.sidebar.pack(side="left" if side == "right" else "right", fill="both", expand=True)
+                        self.apply_window_shape(w, h, docked=True, dock_side=side)
+                    
+                    self.after(0, _apply_dock_geom)
 
                 time.sleep(DOCKING_POLL_INTERVAL)
             except Exception as e:
@@ -576,6 +660,17 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
 
     def on_dock_toggled(self, docked):
         self.config.set("docked", bool(docked))
+        if hasattr(self, "sidebar"):
+            self.sidebar.update_dock_styling(bool(docked))
+        if hasattr(self, "feather_strip"):
+            if docked:
+                self.feather_strip.pack(side="left", fill="y")
+                self.feather_strip.redraw()
+            else:
+                self.feather_strip.pack_forget()
+        w = self.winfo_width() or SIDEBAR_WIDTH
+        h = self.winfo_height() or SIDEBAR_HEIGHT
+        self.apply_window_shape(w, h, docked=bool(docked), dock_side=getattr(self, "_last_dock_side", "right"))
 
 
 def _get_install_root() -> str:

@@ -31,12 +31,14 @@ class SidebarWidget(ctk.CTkFrame):
     def __init__(self, master, toggle_callback, config, lcu=None, assets=None, scraper=None):
         """Initializes the SidebarWidget."""
         self._account_manager = None  # Set externally by main.py
+        is_docked = config.get("docked", True) if config else True
+        init_border = get_color("colors.borders.seamless", "#785A28") if is_docked else get_color("colors.border.subtle", "#1E2328")
         super().__init__(  # type: ignore
             master, 
             corner_radius=0,  # type: ignore
             fg_color=get_color("colors.background.app"),  # type: ignore
             border_width=1,  # type: ignore
-            border_color=get_color("colors.border.subtle")  # type: ignore
+            border_color=init_border  # type: ignore
         )
         self.toggle_callback = toggle_callback
         self.config = config
@@ -122,6 +124,17 @@ class SidebarWidget(ctk.CTkFrame):
             "Docked to League Client (Click to Undock)" if self._dock_state else "Undocked (Click to Dock)"
         )
 
+        # 🗕 Minimize
+        self.btn_minimize = ctk.CTkButton(
+            self.header, text="🗕", width=20, height=20,
+            corner_radius=10, font=get_font("caption"),
+            fg_color="transparent", hover_color="#1E2328",
+            text_color=get_color("colors.text.muted", "#6C757D"),
+            command=self._on_minimize_click, cursor="hand2",
+        )
+        self.btn_minimize.pack(side="right", padx=(2, 2))
+        CTkTooltip(self.btn_minimize, "Minimize Window")
+
         # ✕ Close
         self.btn_close = ctk.CTkButton(
             self.header, text="✕", width=20, height=20,
@@ -129,7 +142,7 @@ class SidebarWidget(ctk.CTkFrame):
             fg_color="transparent", hover_color=get_color("colors.state.danger", "#e81123"),
             command=self.master._on_close, cursor="hand2",
             )
-        self.btn_close.pack(side="right", padx=(4, 2))
+        self.btn_close.pack(side="right", padx=(2, 2))
         CTkTooltip(self.btn_close, "Close Application")
         self.drag_widgets = [self.header, self.lbl_title]
 
@@ -939,8 +952,20 @@ class SidebarWidget(ctk.CTkFrame):
         if hasattr(self.master, "on_dock_toggled"):
             self.master.on_dock_toggled(self._dock_state)
 
+    def _on_minimize_click(self):
+        """Minimize window to taskbar."""
+        if hasattr(self.master, "minimize_window"):
+            self.master.minimize_window()
+        elif hasattr(self.master, "iconify"):
+            self.master.iconify()
 
-
+    def update_dock_styling(self, docked: bool):
+        """Update border color and corner styling based on docked state."""
+        try:
+            border_c = get_color("colors.borders.seamless", "#785A28") if docked else get_color("colors.border.subtle", "#1E2328")
+            self.configure(border_color=border_c)
+        except Exception as exc:
+            Logger.debug("AppSidebar", f"update_dock_styling error: {exc}", exc=exc)
 
     def _game_tool_active(self) -> bool:
         """True when a mode-specific tool is currently packed inside the host."""

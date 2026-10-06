@@ -47,6 +47,7 @@ DEFAULT_TOKENS = {
         "soft": "1px solid #1A2332",
         "strong": "1px solid #3C3C41",
         "gold": "1px solid #C8AA6E",
+        "seamless": "1px solid #785A28",
         "card": "1px solid #1A2332",
         "card_gold": "1px solid #1E1E2D"
     }

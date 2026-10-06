@@ -1,11 +1,18 @@
 import sys
+from pathlib import Path
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+if str(_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(_ROOT / "src"))
+
 import unittest
 from unittest.mock import MagicMock, patch
 
 class DummyWidget:
     def __init__(self, *args, **kwargs):
         self._exists = True
-        self.master = MagicMock()
+        self.master = args[0] if len(args) > 0 else MagicMock()
         self.tk = MagicMock()
         self._w = ".dummy"
         self._last_child_ids = {}
@@ -20,6 +27,8 @@ class DummyWidget:
             self._bindings[sequence].append(func)
         else:
             self._bindings[sequence] = [func]
+    def unbind(self, sequence, funcid=None):
+        self._bindings.pop(sequence, None)
     def pack(self, *args, **kwargs):
         pass
     def grid(self, *args, **kwargs):
@@ -50,6 +59,14 @@ class DummyWidget:
         pass
     def get(self, *args, **kwargs):
         return ""
+    def focus_set(self):
+        pass
+    def focus(self):
+        pass
+    def focus_force(self):
+        pass
+    def _on_close(self):
+        pass
     def create_oval(self, *args, **kwargs):
         return 1
     def create_rectangle(self, *args, **kwargs):
@@ -73,6 +90,8 @@ class DummyWidget:
                 cb()
     def winfo_exists(self):
         return True
+    def winfo_manager(self):
+        return "pack"
     def winfo_children(self):
         return []
     def winfo_width(self):
@@ -465,6 +484,42 @@ class TestUIComponents(unittest.TestCase):
         # Test disabled state
         mock_widget.configure(state="disabled")
         click_handler(None)
+
+    def test_feather_edge_component(self):
+        """Test FeatherEdge gradient canvas initialization and color updates."""
+        from ui.components.feather_edge import FeatherEdge
+        fe = FeatherEdge(self.mock_parent, width=24, side="left")
+        self.assertEqual(fe.feather_width, 24)
+        self.assertEqual(fe.side, "left")
+
+        # Test set_side
+        fe.set_side("right")
+        self.assertEqual(fe.side, "right")
+
+        # Test color updates
+        fe.update_colors(client_color="#000000", app_color="#101010", seam_color="#C8AA6E")
+        self.assertEqual(fe.client_color, "#000000")
+        self.assertEqual(fe.app_color, "#101010")
+        self.assertEqual(fe.seam_color, "#C8AA6E")
+
+    def test_sidebar_minimize_button_and_dock_styling(self):
+        """Test minimize button and dock styling updates on SidebarWidget."""
+        from ui.app_sidebar import SidebarWidget
+        mock_master = DummyWidget()
+        mock_master.minimize_window = MagicMock()
+        mock_config = MagicMock()
+        mock_config.get.side_effect = lambda k, default=None: "ctrl+shift+a" if "hotkey" in k else default
+
+        sidebar = SidebarWidget(mock_master, toggle_callback=MagicMock(), config=mock_config)
+        self.assertTrue(hasattr(sidebar, "btn_minimize"))
+        
+        # Test minimize click triggers master.minimize_window
+        sidebar._on_minimize_click()
+        mock_master.minimize_window.assert_called_once()
+
+        # Test dock styling update
+        sidebar.update_dock_styling(docked=True)
+        sidebar.update_dock_styling(docked=False)
 
 if __name__ == '__main__':
     unittest.main()
