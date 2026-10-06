@@ -47,7 +47,11 @@ class DummyWidget:
         pass
     def grid_columnconfigure(self, *args, **kwargs):
         pass
+    def columnconfigure(self, *args, **kwargs):
+        pass
     def grid_rowconfigure(self, *args, **kwargs):
+        pass
+    def rowconfigure(self, *args, **kwargs):
         pass
     def configure(self, *args, **kwargs):
         self._config.update(kwargs)
@@ -118,6 +122,12 @@ class DummyWidget:
         pass
     def destroy(self):
         self._exists = False
+    def start(self, *args, **kwargs):
+        pass
+    def stop(self, *args, **kwargs):
+        pass
+    def set(self, val=None):
+        pass
 
 # Mock modules using DummyWidget classes
 mock_tk = MagicMock()
@@ -134,6 +144,8 @@ mock_ctk.CTkSlider = DummyWidget
 mock_ctk.CTkSwitch = DummyWidget
 mock_ctk.CTkRadioButton = DummyWidget
 mock_ctk.CTkToplevel = DummyWidget
+mock_ctk.CTkCheckBox = DummyWidget
+mock_ctk.CTkProgressBar = DummyWidget
 
 class DummyVar:
     def __init__(self, value=None): self._val = value
@@ -520,6 +532,39 @@ class TestUIComponents(unittest.TestCase):
         # Test dock styling update
         sidebar.update_dock_styling(docked=True)
         sidebar.update_dock_styling(docked=False)
+
+    def test_loot_tool_visuals_and_telemetry(self):
+        """Test LootTool visual elements, telemetry chips, category mapping and busy states."""
+        from ui.components.game_tools.loot_tool import LootTool, _get_loot_visuals
+        mock_lcu = MagicMock()
+        mock_lcu.is_connected = True
+
+        # Test category visuals mapping
+        self.assertEqual(_get_loot_visuals("CHEST_1", "Hextech Chest", "CHEST", "CHEST")["icon"], "📦")
+        self.assertEqual(_get_loot_visuals("CHEST_masterwork", "Masterwork Chest", "CHEST", "CHEST")["icon"], "👑")
+        self.assertEqual(_get_loot_visuals("CHEST_capsule", "Champion Capsule", "CHEST", "CHEST")["icon"], "💎")
+        self.assertEqual(_get_loot_visuals("ORB_event", "Arcane Orb", "ORB", "ORB")["icon"], "🔮")
+        self.assertEqual(_get_loot_visuals("EGG_tft", "TFT Egg", "EGG", "TFT")["icon"], "🥚")
+
+        tool = LootTool(self.mock_parent, lcu=mock_lcu)
+        self.assertIsNotNone(tool.stats_frame)
+        self.assertIsNotNone(tool.progress_bar)
+
+        rows = [
+            {"loot_id": "CHEST_1", "name": "Hextech Chest", "count": 2, "type": "CHEST", "category": "CHEST", "can_open": True, "will_open": 2, "needs_key": False},
+            {"loot_id": "CHEST_2", "name": "Masterwork Chest", "count": 1, "type": "CHEST", "category": "CHEST", "can_open": False, "will_open": 0, "needs_key": True},
+        ]
+        tool._render_rows(rows, keys=3, frags=5)
+        self.assertEqual(tool.lbl_stat_openable_num.cget("text"), "2")
+        self.assertEqual(tool.lbl_stat_keys_num.cget("text"), "3")
+        self.assertEqual(tool.lbl_stat_frags_num.cget("text"), "5")
+
+        # Test busy state toggle
+        tool._set_busy(True)
+        self.assertEqual(tool.btn_open.cget("state"), "disabled")
+        tool._set_busy(False)
+        self.assertEqual(tool.btn_open.cget("state"), "normal")
+
 
 if __name__ == '__main__':
     unittest.main()

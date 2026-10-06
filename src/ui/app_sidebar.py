@@ -566,32 +566,10 @@ class SidebarWidget(ctk.CTkFrame):
         )
         self.row_tray.pack(fill="x", pady=(INNER_GAP, 0))
 
-        # SOCIAL & IDENTITY
-        card_social = make_card(self.advanced_scroll, title="SOCIAL & IDENTITY", padx=0, pady=(0, SECTION_GAP))
-        
-        self.join_vip_var = ctk.BooleanVar(value=bool(self.config.get("auto_join_vip_only", False)))
-        self.row_join_vip = SettingsToggleRow(
-            card_social,
-            label_text="VIP Invites Only",
-            variable=self.join_vip_var,
-            command=lambda: self.config.set("auto_join_vip_only", self.join_vip_var.get())
-        )
-        self.row_join_vip.pack(fill="x", pady=(0, INNER_GAP))
-        
-        from ui.components.settings_row import SettingsInputRow, SettingsHotkeyRow  # type: ignore
-
-        self.vip_var = ctk.StringVar(value=self.config.get("vip_invite_list", ""))
-        self.row_vip_list = SettingsInputRow(
-            card_social,
-            label_text="VIP Invite List",
-            variable=self.vip_var,
-            command=lambda val: self.config.set("vip_invite_list", val.strip()),
-            placeholder_text="Enter summoner names, comma separated..."
-        )
-        self.row_vip_list.pack(fill="x", pady=(0, 0))
-        
         # HOTKEYS
+        from ui.components.settings_row import SettingsHotkeyRow  # type: ignore
         card_hotkeys = make_card(self.advanced_scroll, title="HOTKEYS", padx=0, pady=(0, SECTION_GAP))
+
         hotkeys = [
             ("Client Launch", "hotkey_launch_client", "ctrl+shift+l"),
             ("Toggle Auto", "hotkey_toggle_automation", "ctrl+shift+a"),

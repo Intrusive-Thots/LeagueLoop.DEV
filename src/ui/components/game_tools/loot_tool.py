@@ -1,13 +1,14 @@
 """
-Loot Opener — collapsible Play-tab tool.
+Loot Opener — Hextech visual loot inventory and opener tool.
 
-Opens Hextech chests, capsules, orbs, and mystery boxes via LCU
-using services.loot_service.LootService.
+Bulk-opens Hextech chests, capsules, orbs, and mystery boxes via LCU
+using services.loot_service.LootService, featuring category visual cards,
+telemetry counters, and per-stack opening capabilities.
 """
 from __future__ import annotations
 
 import threading
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 import customtkinter as ctk
 
@@ -16,6 +17,86 @@ from ui.components.factory import get_color, get_font, make_card
 from ui.components.toast import ToastManager
 from ui.ui_shared import CTkTooltip
 from utils.logger import Logger
+
+
+def _get_loot_visuals(loot_id: str, name: str, item_type: str, category: str) -> Dict[str, str]:
+    """Return styling parameters based on loot item identity."""
+    lid = (loot_id or "").upper()
+    nm = (name or "").upper()
+    typ = (item_type or "").upper()
+    cat = (category or "").upper()
+
+    if "MASTERWORK" in lid or "MASTERWORK" in nm:
+        return {
+            "icon": "👑",
+            "pill_text": "MASTERWORK",
+            "badge_color": "#C8AA6E",
+            "badge_bg": "#211A0E",
+            "border_color": "#3D311A",
+            "bg_color": "#0F1622",
+        }
+    if "CAPSULE" in lid or "CAPSULE" in nm:
+        return {
+            "icon": "💎",
+            "pill_text": "CAPSULE",
+            "badge_color": "#1ABC9C",
+            "badge_bg": "#0E2922",
+            "border_color": "#1B5244",
+            "bg_color": "#0E1A22",
+        }
+    if "ORB" in lid or "ORB" in nm:
+        return {
+            "icon": "🔮",
+            "pill_text": "ORB",
+            "badge_color": "#C05CD9",
+            "badge_bg": "#220F2E",
+            "border_color": "#441D5E",
+            "bg_color": "#121424",
+        }
+    if "EGG" in lid or "EGG" in nm or "LITTLE_LEGEND" in lid or "TFT" in lid:
+        return {
+            "icon": "🥚",
+            "pill_text": "TFT EGG",
+            "badge_color": "#E67E22",
+            "badge_bg": "#2A180B",
+            "border_color": "#522F15",
+            "bg_color": "#141720",
+        }
+    if "BAG" in lid or "BAG" in nm or "GRAB_BAG" in lid:
+        return {
+            "icon": "🛍️",
+            "pill_text": "GRAB BAG",
+            "badge_color": "#FF6B8B",
+            "badge_bg": "#2E0E1B",
+            "border_color": "#5C1D36",
+            "bg_color": "#141524",
+        }
+    if "CHEST" in lid or "CHEST" in nm or typ == "CHEST":
+        return {
+            "icon": "📦",
+            "pill_text": "CHEST",
+            "badge_color": "#0AC8B9",
+            "badge_bg": "#0B1F24",
+            "border_color": "#133D47",
+            "bg_color": "#0D1824",
+        }
+    if "KEY" in lid or "KEY" in nm:
+        return {
+            "icon": "🗝️",
+            "pill_text": "KEY",
+            "badge_color": "#F1C40F",
+            "badge_bg": "#29240A",
+            "border_color": "#574C13",
+            "bg_color": "#141820",
+        }
+    return {
+        "icon": "🎁",
+        "pill_text": "REWARD",
+        "badge_color": "#5DADE2",
+        "badge_bg": "#0F1F2C",
+        "border_color": "#1C3C54",
+        "bg_color": "#0D1622",
+    }
 
 
 class LootTool(ctk.CTkFrame):
@@ -64,22 +145,110 @@ class LootTool(ctk.CTkFrame):
 
         self.body = self.card
 
+        # Hextech Telemetry / Stat Chips
+        self.stats_frame = ctk.CTkFrame(self.body, fg_color="transparent")
+        self.stats_frame.pack(fill="x", padx=10, pady=(6, 2))
+
+        # 1. Containers Chip
+        self.chip_openable = ctk.CTkFrame(
+            self.stats_frame,
+            fg_color="#0D1520",
+            border_width=1,
+            border_color="#1E2B3C",
+            corner_radius=6,
+            height=46,
+        )
+        self.chip_openable.pack(side="left", fill="both", expand=True, padx=(0, 2))
+        self.chip_openable.pack_propagate(False)
+
+        self.lbl_stat_openable_num = ctk.CTkLabel(
+            self.chip_openable,
+            text="0",
+            font=("Inter", 13, "bold"),
+            text_color=get_color("colors.accent.gold", "#C8AA6E"),
+        )
+        self.lbl_stat_openable_num.pack(pady=(4, 0))
+
+        self.lbl_stat_openable_sub = ctk.CTkLabel(
+            self.chip_openable,
+            text="📦 Openable",
+            font=("Inter", 9),
+            text_color=get_color("colors.text.muted", "#8A9BA8"),
+        )
+        self.lbl_stat_openable_sub.pack(pady=(0, 4))
+
+        # 2. Keys Chip
+        self.chip_keys = ctk.CTkFrame(
+            self.stats_frame,
+            fg_color="#0D1520",
+            border_width=1,
+            border_color="#1E2B3C",
+            corner_radius=6,
+            height=46,
+        )
+        self.chip_keys.pack(side="left", fill="both", expand=True, padx=2)
+        self.chip_keys.pack_propagate(False)
+
+        self.lbl_stat_keys_num = ctk.CTkLabel(
+            self.chip_keys,
+            text="0",
+            font=("Inter", 13, "bold"),
+            text_color=get_color("colors.accent.cyan", "#0AC8B9"),
+        )
+        self.lbl_stat_keys_num.pack(pady=(4, 0))
+
+        self.lbl_stat_keys_sub = ctk.CTkLabel(
+            self.chip_keys,
+            text="🗝️ Keys",
+            font=("Inter", 9),
+            text_color=get_color("colors.text.muted", "#8A9BA8"),
+        )
+        self.lbl_stat_keys_sub.pack(pady=(0, 4))
+
+        # 3. Fragments Chip
+        self.chip_frags = ctk.CTkFrame(
+            self.stats_frame,
+            fg_color="#0D1520",
+            border_width=1,
+            border_color="#1E2B3C",
+            corner_radius=6,
+            height=46,
+        )
+        self.chip_frags.pack(side="left", fill="both", expand=True, padx=(2, 0))
+        self.chip_frags.pack_propagate(False)
+
+        self.lbl_stat_frags_num = ctk.CTkLabel(
+            self.chip_frags,
+            text="0",
+            font=("Inter", 13, "bold"),
+            text_color="#F1C40F",
+        )
+        self.lbl_stat_frags_num.pack(pady=(4, 0))
+
+        self.lbl_stat_frags_sub = ctk.CTkLabel(
+            self.chip_frags,
+            text="🧩 Fragments",
+            font=("Inter", 9),
+            text_color=get_color("colors.text.muted", "#8A9BA8"),
+        )
+        self.lbl_stat_frags_sub.pack(pady=(0, 4))
+
         # Options
         opts = ctk.CTkFrame(self.body, fg_color="transparent")
-        opts.pack(fill="x", padx=10, pady=(6, 2))
+        opts.pack(fill="x", padx=10, pady=(4, 2))
 
         self.var_claim = ctk.BooleanVar(value=True)
         self.chk_claim = ctk.CTkCheckBox(
             opts,
-            text="Claim pass & missions first",
+            text="Claim pass/missions",
             variable=self.var_claim,
-            font=get_font("caption"),
+            font=("Inter", 10),
             text_color=get_color("colors.text.primary"),
             fg_color=get_color("colors.accent.gold", "#C8AA6E"),
             hover_color=get_color("colors.accent.gold", "#C8AA6E"),
             checkmark_color="#0A1428",
-            checkbox_width=16,
-            checkbox_height=16,
+            checkbox_width=15,
+            checkbox_height=15,
         )
         self.chk_claim.pack(side="left")
         CTkTooltip(self.chk_claim, "Claim all pending battle pass, event pass, and mission rewards before opening")
@@ -87,35 +256,46 @@ class LootTool(ctk.CTkFrame):
         self.var_keys = ctk.BooleanVar(value=True)
         self.chk_keys = ctk.CTkCheckBox(
             opts,
-            text="Keys from fragments first",
+            text="Forge keys",
             variable=self.var_keys,
-            font=get_font("caption"),
+            font=("Inter", 10),
             text_color=get_color("colors.text.primary"),
             fg_color=get_color("colors.accent.gold", "#C8AA6E"),
             hover_color=get_color("colors.accent.gold", "#C8AA6E"),
             checkmark_color="#0A1428",
-            checkbox_width=16,
-            checkbox_height=16,
+            checkbox_width=15,
+            checkbox_height=15,
         )
-        self.chk_keys.pack(side="left", padx=(12, 0))
+        self.chk_keys.pack(side="left", padx=(10, 0))
         CTkTooltip(self.chk_keys, "Forge key fragments into keys before opening chests")
 
         self.summary_lbl = ctk.CTkLabel(
             opts,
             text="",
-            font=get_font("caption"),
-            text_color=get_color("colors.text.muted"),
+            font=("Inter", 9),
+            text_color=get_color("colors.text.muted", "#8A9BA8"),
         )
         self.summary_lbl.pack(side="right")
+
+        # Activity Progress Bar
+        self.progress_bar = ctk.CTkProgressBar(
+            self.body,
+            height=3,
+            corner_radius=2,
+            fg_color="#141E28",
+            progress_color=get_color("colors.accent.cyan", "#0AC8B9"),
+        )
+        self.progress_bar.pack(fill="x", padx=10, pady=(2, 2))
+        self.progress_bar.set(0)
 
         # Scrollable inventory list
         self.list_frame = ctk.CTkScrollableFrame(
             self.body,
             fg_color=get_color("colors.background.card", "#0F1A24"),
-            height=280,
+            height=260,
             corner_radius=6,
         )
-        self.list_frame.pack(fill="both", expand=True, padx=10, pady=(4, 4))
+        self.list_frame.pack(fill="both", expand=True, padx=10, pady=(2, 4))
 
         self.empty_lbl = ctk.CTkLabel(
             self.list_frame,
@@ -127,17 +307,20 @@ class LootTool(ctk.CTkFrame):
 
         # Actions
         actions = ctk.CTkFrame(self.body, fg_color="transparent")
-        actions.pack(fill="x", padx=10, pady=(2, 10))
+        actions.pack(fill="x", padx=10, pady=(2, 4))
 
         self.btn_refresh = ctk.CTkButton(
             actions,
-            text="Refresh",
-            width=72,
+            text="🔄 Refresh",
+            width=68,
             height=28,
-            font=get_font("caption", "bold"),
-            fg_color=get_color("colors.background.card"),
-            hover_color=get_color("colors.state.hover"),
-            text_color=get_color("colors.text.primary"),
+            corner_radius=5,
+            font=("Inter", 10, "bold"),
+            fg_color=get_color("colors.background.card", "#101923"),
+            hover_color=get_color("colors.state.hover", "#1B2A3B"),
+            text_color=get_color("colors.text.primary", "#F0F6FC"),
+            border_width=1,
+            border_color=get_color("colors.border.subtle", "#1E2B3C"),
             command=self.refresh,
             cursor="hand2",
         )
@@ -145,34 +328,36 @@ class LootTool(ctk.CTkFrame):
 
         self.btn_claim = ctk.CTkButton(
             actions,
-            text="Claim",
-            width=64,
+            text="🎁 Claim",
+            width=62,
             height=28,
-            font=get_font("caption", "bold"),
-            fg_color=get_color("colors.background.card"),
-            hover_color=get_color("colors.state.hover"),
-            text_color=get_color("colors.text.primary"),
+            corner_radius=5,
+            font=("Inter", 10, "bold"),
+            fg_color=get_color("colors.background.card", "#101923"),
+            hover_color=get_color("colors.state.hover", "#1B2A3B"),
+            text_color=get_color("colors.text.primary", "#F0F6FC"),
             border_width=1,
-            border_color=get_color("colors.border.subtle"),
+            border_color=get_color("colors.border.subtle", "#1E2B3C"),
             command=self.claim_rewards,
             cursor="hand2",
         )
-        self.btn_claim.pack(side="left", padx=(6, 0))
+        self.btn_claim.pack(side="left", padx=(5, 0))
         CTkTooltip(self.btn_claim, "Claim pending battle pass, event pass, and mission rewards")
 
         self.btn_open = ctk.CTkButton(
             actions,
-            text="Open All",
-            width=88,
+            text="✨ Open All",
+            width=80,
             height=28,
-            font=get_font("caption", "bold"),
+            corner_radius=5,
+            font=("Inter", 11, "bold"),
             fg_color=get_color("colors.accent.gold", "#C8AA6E"),
             hover_color="#A88B4A",
             text_color="#0A1428",
             command=self.open_all,
             cursor="hand2",
         )
-        self.btn_open.pack(side="left", padx=(6, 0))
+        self.btn_open.pack(side="left", padx=(5, 0))
         CTkTooltip(
             self.btn_open,
             "Open all chests, capsules, orbs & mystery boxes (never disenchants)",
@@ -180,29 +365,32 @@ class LootTool(ctk.CTkFrame):
 
         self.btn_stop = ctk.CTkButton(
             actions,
-            text="Stop",
-            width=56,
+            text="⏹",
+            width=36,
             height=28,
-            font=get_font("caption", "bold"),
-            fg_color=get_color("colors.background.card"),
+            corner_radius=5,
+            font=("Inter", 11, "bold"),
+            fg_color=get_color("colors.background.card", "#101923"),
             hover_color="#FF4655",
-            text_color=get_color("colors.text.primary"),
+            text_color=get_color("colors.text.primary", "#F0F6FC"),
             border_width=1,
-            border_color=get_color("colors.border.subtle"),
+            border_color=get_color("colors.border.subtle", "#1E2B3C"),
             command=self._request_stop,
             state="disabled",
             cursor="hand2",
         )
-        self.btn_stop.pack(side="left", padx=(6, 0))
+        self.btn_stop.pack(side="left", padx=(5, 0))
+        CTkTooltip(self.btn_stop, "Stop ongoing loot opening process")
 
+        # Status row below actions
         self.status_lbl = ctk.CTkLabel(
-            actions,
+            self.body,
             text="",
-            font=get_font("caption"),
-            text_color=get_color("colors.text.muted"),
-            anchor="e",
+            font=("Inter", 9),
+            text_color=get_color("colors.text.muted", "#8A9BA8"),
+            anchor="w",
         )
-        self.status_lbl.pack(side="right", fill="x", expand=True, padx=(8, 0))
+        self.status_lbl.pack(fill="x", padx=12, pady=(0, 6))
 
     # ─────────── logging / status ───────────
 
@@ -212,7 +400,7 @@ class LootTool(ctk.CTkFrame):
         def _ui():
             if not self.winfo_exists():
                 return
-            short = msg if len(msg) < 48 else msg[:45] + "…"
+            short = msg if len(msg) < 52 else msg[:49] + "…"
             self.status_lbl.configure(text=short)
 
         try:
@@ -228,6 +416,13 @@ class LootTool(ctk.CTkFrame):
             self.btn_claim.configure(state=state)
             self.btn_refresh.configure(state=state)
             self.btn_stop.configure(state="normal" if busy else "disabled")
+            if busy:
+                self.progress_bar.configure(mode="indeterminate")
+                self.progress_bar.start()
+            else:
+                self.progress_bar.stop()
+                self.progress_bar.configure(mode="determinate")
+                self.progress_bar.set(0)
         except Exception as exc:
             Logger.debug("LootTool", "_set_busy suppressed an error", exc=exc)
 
@@ -250,17 +445,76 @@ class LootTool(ctk.CTkFrame):
                 Logger.debug("LootTool", "_clear_list suppressed an error", exc=exc)
         self._row_widgets.clear()
         try:
-            if self.empty_lbl.winfo_exists():
+            if hasattr(self, "empty_lbl") and self.empty_lbl.winfo_exists():
                 self.empty_lbl.pack_forget()
         except Exception as exc:
             Logger.debug("LootTool", "_clear_list suppressed an error", exc=exc)
 
-    def _render_rows(self, rows: List[Dict[str, Any]]) -> None:
+    def _render_empty_state(self, message: str = "No openable containers found.") -> None:
+        empty_box = ctk.CTkFrame(
+            self.list_frame,
+            fg_color="#0B131C",
+            border_width=1,
+            border_color="#182330",
+            corner_radius=8,
+        )
+        empty_box.pack(fill="x", padx=6, pady=20)
+
+        # Hextech graphic icon
+        ctk.CTkLabel(
+            empty_box,
+            text="💎",
+            font=("Segoe UI Emoji", 24),
+        ).pack(pady=(14, 2))
+
+        ctk.CTkLabel(
+            empty_box,
+            text="Hextech Vault Empty",
+            font=("Inter", 12, "bold"),
+            text_color=get_color("colors.text.primary", "#F0F6FC"),
+        ).pack(pady=(0, 2))
+
+        ctk.CTkLabel(
+            empty_box,
+            text=message,
+            font=("Inter", 9),
+            text_color=get_color("colors.text.muted", "#8A9BA8"),
+            wraplength=220,
+            justify="center",
+        ).pack(pady=(0, 10), padx=10)
+
+        btn_scan = ctk.CTkButton(
+            empty_box,
+            text="🔄 Scan Inventory",
+            font=("Inter", 10, "bold"),
+            width=120,
+            height=24,
+            corner_radius=5,
+            fg_color="#162534",
+            hover_color="#1F344A",
+            text_color=get_color("colors.accent.gold", "#C8AA6E"),
+            command=self.refresh,
+            cursor="hand2",
+        )
+        btn_scan.pack(pady=(0, 14))
+
+        self._row_widgets.append(empty_box)
+
+    def _render_rows(self, rows: List[Dict[str, Any]], keys: int = 0, frags: int = 0) -> None:
         self._clear_list()
         self._rows = rows
 
         ready = sum(r["will_open"] for r in rows if r.get("can_open"))
         blocked = sum(1 for r in rows if r.get("needs_key") and not r.get("can_open"))
+
+        # Update telemetry labels
+        self.lbl_stat_openable_num.configure(text=str(ready))
+        self.lbl_stat_keys_num.configure(text=str(keys))
+        craftable_keys = frags // 3
+        frags_sub = f"🧩 Frags (+{craftable_keys})" if craftable_keys > 0 else "🧩 Fragments"
+        self.lbl_stat_frags_sub.configure(text=frags_sub)
+        self.lbl_stat_frags_num.configure(text=str(frags))
+
         if rows:
             self.lbl_count.configure(text=f"({ready})")
             self.summary_lbl.configure(
@@ -272,62 +526,148 @@ class LootTool(ctk.CTkFrame):
             self.summary_lbl.configure(text="")
 
         if not rows:
-            self.empty_lbl = ctk.CTkLabel(
-                self.list_frame,
-                text="No openable chests / capsules / orbs found.",
-                font=get_font("caption"),
-                text_color=get_color("colors.text.muted"),
-            )
-            self.empty_lbl.pack(pady=16)
-            self._row_widgets.append(self.empty_lbl)
+            self._render_empty_state("No openable chests, capsules, or orbs found.")
             return
 
         for row in rows:
-            fr = ctk.CTkFrame(self.list_frame, fg_color="transparent", height=22)
-            fr.pack(fill="x", pady=1)
-            fr.pack_propagate(False)
-
-            name_color = (
-                get_color("colors.text.primary")
-                if row.get("can_open")
-                else get_color("colors.text.muted")
-            )
+            loot_id = str(row.get("loot_id") or "")
+            name = str(row.get("name") or "Loot Item")
+            count = int(row.get("count") or 0)
+            item_type = str(row.get("type") or "")
+            cat = str(row.get("category") or "")
+            can_open = bool(row.get("can_open"))
+            needs_key = bool(row.get("needs_key"))
             will = int(row.get("will_open") or 0)
-            note_bits = []
-            if row.get("needs_key") and will == 0:
-                note_bits.append("needs key")
-            elif row.get("needs_key"):
-                note_bits.append("key")
-            note = f" · {note_bits[0]}" if note_bits else ""
+
+            visuals = _get_loot_visuals(loot_id, name, item_type, cat)
+
+            card_fr = ctk.CTkFrame(
+                self.list_frame,
+                fg_color=visuals["bg_color"],
+                border_width=1,
+                border_color=visuals["border_color"],
+                corner_radius=6,
+                height=48,
+            )
+            card_fr.pack(fill="x", pady=2, padx=2)
+            card_fr.pack_propagate(False)
+
+            # Left: Icon Badge (34x34)
+            icon_badge = ctk.CTkFrame(
+                card_fr,
+                width=34,
+                height=34,
+                fg_color=visuals["badge_bg"],
+                border_width=1,
+                border_color=visuals["badge_color"],
+                corner_radius=5,
+            )
+            icon_badge.pack(side="left", padx=(5, 5), pady=6)
+            icon_badge.pack_propagate(False)
 
             ctk.CTkLabel(
-                fr,
-                text=f"{row.get('count', 0)}×",
-                width=28,
-                anchor="e",
-                font=get_font("caption", "bold"),
+                icon_badge,
+                text=visuals["icon"],
+                font=("Segoe UI Emoji", 14),
+            ).pack(expand=True)
+
+            # Center: Info Column (Name & Status)
+            info_col = ctk.CTkFrame(card_fr, fg_color="transparent")
+            info_col.pack(side="left", fill="both", expand=True, pady=4)
+
+            # Row 1: Quantity + Name
+            top_row = ctk.CTkFrame(info_col, fg_color="transparent", height=18)
+            top_row.pack(fill="x")
+            top_row.pack_propagate(False)
+
+            ctk.CTkLabel(
+                top_row,
+                text=f"{count}×",
+                font=("Inter", 11, "bold"),
                 text_color=get_color("colors.accent.gold", "#C8AA6E"),
             ).pack(side="left")
-            ctk.CTkLabel(
-                fr,
-                text=str(row.get("name") or "?")[:28],
-                anchor="w",
-                font=get_font("caption"),
-                text_color=name_color,
-            ).pack(side="left", fill="x", expand=True, padx=(6, 0))
-            ctk.CTkLabel(
-                fr,
-                text=(f"→{will}{note}" if will or note else "—"),
-                anchor="e",
-                font=get_font("caption"),
-                text_color=(
-                    get_color("colors.state.success", "#3FB950")
-                    if will > 0
-                    else get_color("colors.text.muted")
-                ),
-            ).pack(side="right")
 
-            self._row_widgets.append(fr)
+            display_name = name if len(name) <= 18 else name[:16] + "…"
+            name_lbl = ctk.CTkLabel(
+                top_row,
+                text=display_name,
+                font=("Inter", 11, "bold"),
+                text_color=get_color("colors.text.primary", "#F0F6FC") if can_open else get_color("colors.text.muted", "#8A9BA8"),
+                anchor="w",
+            )
+            name_lbl.pack(side="left", padx=(4, 0), fill="x", expand=True)
+            if len(name) > 18:
+                CTkTooltip(name_lbl, name)
+
+            # Row 2: Category Pill + Status Pill
+            bot_row = ctk.CTkFrame(info_col, fg_color="transparent", height=16)
+            bot_row.pack(fill="x")
+            bot_row.pack_propagate(False)
+
+            ctk.CTkLabel(
+                bot_row,
+                text=f"[{visuals['pill_text']}]",
+                font=("Inter", 8, "bold"),
+                text_color=visuals["badge_color"],
+            ).pack(side="left")
+
+            if can_open:
+                status_text = f"✓ Ready ({will})" if will > 1 else "✓ Ready"
+                status_color = "#2ECC71"
+            elif needs_key:
+                status_text = "🗝️ Needs key"
+                status_color = "#E67E22"
+            else:
+                status_text = "— Blocked"
+                status_color = "#8A9BA8"
+
+            ctk.CTkLabel(
+                bot_row,
+                text=f" · {status_text}",
+                font=("Inter", 8),
+                text_color=status_color,
+            ).pack(side="left", padx=(2, 0))
+
+            # Right: Action Button
+            action_col = ctk.CTkFrame(card_fr, fg_color="transparent")
+            action_col.pack(side="right", padx=(4, 6), pady=6)
+
+            if can_open:
+                btn_single = ctk.CTkButton(
+                    action_col,
+                    text="Open",
+                    width=46,
+                    height=24,
+                    corner_radius=4,
+                    font=("Inter", 10, "bold"),
+                    fg_color=get_color("colors.accent.gold", "#C8AA6E"),
+                    hover_color="#A88B4A",
+                    text_color="#0A1428",
+                    command=lambda lid=loot_id: self.open_single(lid),
+                    cursor="hand2",
+                )
+                btn_single.pack()
+                CTkTooltip(btn_single, f"Open stack of {name}")
+            elif needs_key:
+                need_badge = ctk.CTkFrame(
+                    action_col,
+                    width=52,
+                    height=22,
+                    fg_color="#18202A",
+                    border_width=1,
+                    border_color="#2A374A",
+                    corner_radius=4,
+                )
+                need_badge.pack()
+                need_badge.pack_propagate(False)
+                ctk.CTkLabel(
+                    need_badge,
+                    text="Need Key",
+                    font=("Inter", 8),
+                    text_color="#8A9BA8",
+                ).pack(expand=True)
+
+            self._row_widgets.append(card_fr)
 
     # ─────────── actions ───────────
 
@@ -387,12 +727,14 @@ class LootTool(ctk.CTkFrame):
         if self._busy:
             return
         if not self.service or not self.lcu:
-            self._render_rows([])
+            self._render_rows([], 0, 0)
             self.status_lbl.configure(text="No LCU client")
             return
 
         def work():
             rows: List[Dict[str, Any]] = []
+            keys = 0
+            frags = 0
             err = ""
             try:
                 if not getattr(self.lcu, "is_connected", False):
@@ -401,7 +743,10 @@ class LootTool(ctk.CTkFrame):
                 if not getattr(self.lcu, "is_connected", False):
                     err = "Client not connected"
                 else:
-                    rows = self.service.summarize_openable()
+                    loot_items = self.service.fetch_loot()
+                    rows = self.service.summarize_openable(items=loot_items)
+                    keys = self.service.count_keys(items=loot_items)
+                    frags = self.service.count_key_fragments(items=loot_items)
             except Exception as e:
                 err = str(e)
                 Logger.error("Loot", f"Refresh failed: {e}")
@@ -411,11 +756,11 @@ class LootTool(ctk.CTkFrame):
                     return
                 if err and not rows:
                     self.status_lbl.configure(text=err)
-                    self._render_rows([])
+                    self._render_rows([], 0, 0)
                 else:
-                    self._render_rows(rows)
+                    self._render_rows(rows, keys, frags)
                     self.status_lbl.configure(
-                        text=f"{len(rows)} stack(s)" if rows else "Empty"
+                        text=f"{len(rows)} stack(s) detected" if rows else "Ready"
                     )
 
             try:
@@ -424,6 +769,63 @@ class LootTool(ctk.CTkFrame):
                 Logger.debug("LootTool", "work suppressed an error", exc=exc)
 
         self.status_lbl.configure(text="Scanning…")
+        threading.Thread(target=work, daemon=True).start()
+
+    def open_single(self, loot_id: str) -> None:
+        """Open a single specific loot stack."""
+        if self._busy:
+            return
+        if not self.service or not self.lcu:
+            self.status_lbl.configure(text="No LCU client")
+            return
+
+        self._stop = False
+        self._set_busy(True)
+        craft_keys = bool(self.var_keys.get())
+
+        def work():
+            summary = ""
+            try:
+                if not getattr(self.lcu, "is_connected", False):
+                    if hasattr(self.lcu, "connect"):
+                        self.lcu.connect(silent=True)
+                if not getattr(self.lcu, "is_connected", False):
+                    summary = "Client not connected"
+                else:
+                    res = self.service.open_all(
+                        craft_keys_first=craft_keys,
+                        max_passes=2,
+                        only_ids={loot_id},
+                        stop_flag=lambda: self._stop,
+                        claim_rewards_first=False,
+                    )
+                    summary = f"Opened {res.opened} · failed {res.failed} · skipped {res.skipped}"
+            except Exception as e:
+                summary = f"Error: {e}"
+                Logger.error("Loot", f"Open single item failed: {e}")
+
+            def done():
+                if not self.winfo_exists():
+                    return
+                self._set_busy(False)
+                self.status_lbl.configure(text=summary)
+                try:
+                    ToastManager.get_instance(self.winfo_toplevel()).show(
+                        summary,
+                        icon="📦",
+                        duration=3500,
+                        theme="success" if "Opened 0" not in summary and "Opened" in summary else "neutral",
+                    )
+                except Exception as exc:
+                    Logger.debug("LootTool", "done suppressed an error", exc=exc)
+                self.refresh()
+
+            try:
+                self.after(0, done)
+            except Exception as exc:
+                Logger.debug("LootTool", "work suppressed an error", exc=exc)
+
+        self.status_lbl.configure(text="Opening stack…")
         threading.Thread(target=work, daemon=True).start()
 
     def open_all(self) -> None:
@@ -471,7 +873,7 @@ class LootTool(ctk.CTkFrame):
                         summary,
                         icon="📦",
                         duration=4000,
-                        theme="success" if "Opened" in summary else "error",
+                        theme="success" if "Opened" in summary and "Opened 0" not in summary else "neutral",
                     )
                 except Exception as exc:
                     Logger.debug("LootTool", "done suppressed an error", exc=exc)

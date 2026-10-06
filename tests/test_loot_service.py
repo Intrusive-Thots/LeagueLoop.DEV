@@ -224,6 +224,16 @@ class TestLootServiceClaiming(unittest.TestCase):
         self.assertEqual(result.rewards_claimed, 1)
         self.assertEqual(result.opened, 1)
 
+    def test_count_keys_and_fragments(self):
+        inventory = [
+            {"lootId": "MATERIAL_key_fragment", "localizedName": "Key Fragment", "count": 4, "type": "MATERIAL"},
+            {"lootId": "MATERIAL_key", "localizedName": "Hextech Key", "count": 2, "type": "MATERIAL"},
+            {"lootId": "CHEST_123", "localizedName": "Masterwork Chest", "count": 3, "type": "CHEST"},
+        ]
+        self.mock_lcu.request.return_value = DummyResponse(200, inventory)
+        self.assertEqual(self.service.count_key_fragments(), 4)
+        self.assertEqual(self.service.count_keys(), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

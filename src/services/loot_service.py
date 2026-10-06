@@ -343,7 +343,7 @@ class LootService:
 
     # ── key fragments ──────────────────────────────────────────
 
-    def count_key_fragments(self) -> int:
+    def count_key_fragments(self, items: Optional[List[LootItem]] = None) -> int:
         """How many key fragments are in the loot, for the preview.
 
         `open_all` forges these into keys *before* opening anything, and
@@ -351,10 +351,21 @@ class LootService:
         irreversible step the user was never shown was the one that ran first.
         """
         total = 0
-        for item in self.fetch_loot():
+        loot = items if items is not None else self.fetch_loot()
+        for item in loot:
             if _KEY_FRAGMENT_IDS.search(item.loot_id):
                 total += max(0, int(item.count or 0))
         return total
+
+    def count_keys(self, items: Optional[List[LootItem]] = None) -> int:
+        """How many forged keys are in the loot."""
+        total = 0
+        loot = items if items is not None else self.fetch_loot()
+        for item in loot:
+            if _KEY_IDS.search(item.loot_id) and not _KEY_FRAGMENT_IDS.search(item.loot_id):
+                total += max(0, int(item.count or 0))
+        return total
+
 
     def craft_keys_from_fragments(self) -> int:
         items = self.fetch_loot()
@@ -752,8 +763,10 @@ class LootService:
         )
         return result
 
-    def summarize_openable(self) -> List[Dict[str, Any]]:
-        items = self.fetch_loot()
+    def summarize_openable(
+        self, items: Optional[List[LootItem]] = None
+    ) -> List[Dict[str, Any]]:
+        items = items if items is not None else self.fetch_loot()
         plans = {p.loot_id: p for p in self.plan_opens(items)}
         rows: List[Dict[str, Any]] = []
         for item in items:
