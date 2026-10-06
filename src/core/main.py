@@ -666,6 +666,7 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                     self._last_dock_side = dock_side
                     
                     def _apply_dock_geom(w=app_w, h=target_h, tx=target_x, ty=target_y, side=dock_side):
+                        Logger.info("Main", f"Docking companion to client: {w}x{h}+{tx}+{ty} (side={side})")
                         if hasattr(ctypes, "windll"):
                             try:
                                 hwnd = ctypes.windll.user32.GetParent(self.winfo_id()) or self.winfo_id()
@@ -674,6 +675,7 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                             except Exception as exc:
                                 Logger.debug("Main", "_apply_dock_geom SetWindowPos error", exc=exc)
                         self.geometry(f"{w}x{h}+{tx}+{ty}")
+
                         if hasattr(self, "feather_strip"):
                             feather_canvas_side = "left" if side == "right" else "right"
                             self.feather_strip.set_side(feather_canvas_side)
