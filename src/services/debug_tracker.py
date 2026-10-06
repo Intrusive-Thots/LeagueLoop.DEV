@@ -212,6 +212,17 @@ class DebugTracker:
         if window is None and self._app_window is not None:
             window = self._app_window
 
+        # Ensure calling thread is attached to active desktop for ImageGrab on Windows
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                hdesk = ctypes.windll.user32.OpenInputDesktop(0, False, 0x01FF)
+                if hdesk:
+                    ctypes.windll.user32.SetThreadDesktop(hdesk)
+                    ctypes.windll.user32.CloseDesktop(hdesk)
+            except Exception as exc:
+                Logger.debug("DebugTracker", "SetThreadDesktop in grab suppressed error", exc=exc)
+
         # 1. Grab LeagueLoop Program Window
         prog_bbox = self._get_window_bbox(window)
         try:

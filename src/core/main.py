@@ -297,8 +297,8 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                 hwnd = ctypes.windll.user32.GetParent(self.winfo_id()) or self.winfo_id()
                 SW_RESTORE = 9
                 ctypes.windll.user32.ShowWindow(hwnd, SW_RESTORE)
-        except Exception:
-            pass
+        except Exception as exc:
+            Logger.debug("Main", "show_from_tray restore suppressed an error", exc=exc)
         self.deiconify()
         self.lift()
         self.focus_force()
@@ -621,11 +621,13 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                         if hasattr(self, "feather_strip"):
                             feather_canvas_side = "left" if side == "right" else "right"
                             self.feather_strip.set_side(feather_canvas_side)
-                            self.feather_strip.pack_forget()
-                            self.feather_strip.pack(side=feather_canvas_side, fill="y")
-                            if hasattr(self, "sidebar"):
-                                self.sidebar.pack_forget()
-                                self.sidebar.pack(side="left" if side == "right" else "right", fill="both", expand=True)
+                            if getattr(self, "_current_feather_side", None) != feather_canvas_side:
+                                self._current_feather_side = feather_canvas_side
+                                self.feather_strip.pack_forget()
+                                self.feather_strip.pack(side=feather_canvas_side, fill="y")
+                                if hasattr(self, "sidebar"):
+                                    self.sidebar.pack_forget()
+                                    self.sidebar.pack(side="left" if side == "right" else "right", fill="both", expand=True)
                         self.apply_window_shape(w, h, docked=True, dock_side=side)
                     
                     self.after(0, _apply_dock_geom)

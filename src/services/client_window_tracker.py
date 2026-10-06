@@ -136,7 +136,15 @@ class ClientWindowTracker:
     def _still_valid(self, hwnd: int) -> bool:
         if not hwnd:
             return False
-        return bool(self._user32.IsWindow(hwnd))
+        if not bool(self._user32.IsWindow(hwnd)):
+            return False
+        # If we previously latched onto Riot Client, check if League of Legends
+        # client is now available so we upgrade immediately.
+        if self._title and any(r in self._title.lower() for r in RIOT_TITLES):
+            league_hwnd, _ = self._find()
+            if league_hwnd and league_hwnd != hwnd:
+                return False
+        return True
 
     def _find(self) -> Tuple[int, str]:
         """Enumerate top-level windows for the first title we recognise.
@@ -147,6 +155,16 @@ class ClientWindowTracker:
         user32 = self._user32
         league: list = [0, ""]
         riot: list = [0, ""]
+
+        # Ensure calling thread is attached to the active input desktop so EnumWindows
+        # sees interactive session windows across desktop switches.
+        try:
+            hdesk = user32.OpenInputDesktop(0, False, 0x01FF)
+            if hdesk:
+                user32.SetThreadDesktop(hdesk)
+                user32.CloseDesktop(hdesk)
+        except Exception as exc:
+            Logger.debug(TAG, "OpenInputDesktop check suppressed an error", exc=exc)
 
         def enum_callback(hwnd, _lparam):
             try:
@@ -159,9 +177,14 @@ class ClientWindowTracker:
                 user32.GetWindowTextW(hwnd, buf, length + 1)
                 raw = buf.value.strip()
                 title = raw.lower()
+                is_iconic = bool(user32.IsIconic(hwnd))
                 if title in LEAGUE_TITLES:
-                    league[0], league[1] = hwnd, raw
-                    return False  # stop: nothing beats the League window
+                    # Prefer non-iconic active League client over any minimized placeholder
+                    if not league[0] or (not is_iconic and getattr(self, "_found_league_iconic", True)):
+                        league[0], league[1] = hwnd, raw
+                        self._found_league_iconic = is_iconic
+                        if not is_iconic:
+                            return False  # stop: nothing beats active League window
                 if title in RIOT_TITLES and not riot[0]:
                     riot[0], riot[1] = hwnd, raw
             except Exception as exc:
