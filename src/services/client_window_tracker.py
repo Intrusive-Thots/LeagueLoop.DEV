@@ -138,12 +138,11 @@ class ClientWindowTracker:
             return False
         if not bool(self._user32.IsWindow(hwnd)):
             return False
-        # If we previously latched onto Riot Client, check if League of Legends
-        # client is now available so we upgrade immediately.
+        # If currently tracking Riot Client or an iconic handle, drop it so tick()
+        # discovers the real League window if it has opened.
         if self._title and any(r in self._title.lower() for r in RIOT_TITLES):
-            league_hwnd, _ = self._find()
-            if league_hwnd and league_hwnd != hwnd:
-                return False
+            # Only consider Riot Client valid if no League window is currently open
+            return False
         return True
 
     def _find(self) -> Tuple[int, str]:
