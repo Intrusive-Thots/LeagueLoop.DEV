@@ -46,10 +46,11 @@ TAG = "ClientWindow"
 
 #: Window titles the League Client presents. The client is a CEF host, so the
 #: class name varies by patch far more than the title does.
-LEAGUE_TITLES = ("league of legends",)
+LEAGUE_TITLES = ("league of legends", "league of legends (tm) client")
 #: The Riot Client, used as a fallback so the companion still anchors during
 #: the sign-in step, before League itself has a window.
 RIOT_TITLES = ("riot client", "riot client main")
+
 
 _IS_WINDOWS = sys.platform == "win32"
 
@@ -133,16 +134,54 @@ class ClientWindowTracker:
         self._title = ""
         self._last_rect = None
 
+    def _find_league_only(self) -> bool:
+        """Quick check to see if an active League client window is present."""
+        user32 = self._user32
+        found = False
+
+        def cb(hwnd, _lp):
+            nonlocal found
+            try:
+                if not user32.IsWindowVisible(hwnd) or user32.IsIconic(hwnd):
+                    return True
+                length = user32.GetWindowTextLengthW(hwnd)
+                if length <= 0:
+                    return True
+                buf = ctypes.create_unicode_buffer(length + 1)
+                user32.GetWindowTextW(hwnd, buf, length + 1)
+                t = buf.value.strip().lower()
+                if t in LEAGUE_TITLES:
+                    rect = ctypes.wintypes.RECT()
+                    user32.GetWindowRect(hwnd, ctypes.byref(rect))
+                    if rect.left > -30000 and rect.top > -30000:
+                        found = True
+                        return False
+            except Exception as exc:
+                Logger.debug(TAG, "_find_league_only enum callback error", exc=exc)
+            return True
+
+
+        WNDENUMPROC = ctypes.WINFUNCTYPE(
+            ctypes.wintypes.BOOL, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM
+        )
+        user32.EnumWindows(WNDENUMPROC(cb), 0)
+        return found
+
     def _still_valid(self, hwnd: int) -> bool:
         if not hwnd:
             return False
         if not bool(self._user32.IsWindow(hwnd)):
             return False
-        # If currently tracking Riot Client or an iconic handle, drop it so tick()
-        # discovers the real League window if it has opened.
-        if self._title and any(r in self._title.lower() for r in RIOT_TITLES):
-            # Only consider Riot Client valid if no League window is currently open
+        if bool(self._user32.IsIconic(hwnd)):
             return False
+        rect = ctypes.wintypes.RECT()
+        self._user32.GetWindowRect(hwnd, ctypes.byref(rect))
+        if rect.left <= -30000 or rect.top <= -30000:
+            return False
+        # If currently tracking Riot Client, check if League window is now available
+        if self._title and any(r in self._title.lower() for r in RIOT_TITLES):
+            if self._find_league_only():
+                return False
         return True
 
     def _find(self) -> Tuple[int, str]:
@@ -177,14 +216,20 @@ class ClientWindowTracker:
                 raw = buf.value.strip()
                 title = raw.lower()
                 is_iconic = bool(user32.IsIconic(hwnd))
+                rect = ctypes.wintypes.RECT()
+                user32.GetWindowRect(hwnd, ctypes.byref(rect))
+                if rect.left <= -30000 or rect.top <= -30000:
+                    is_iconic = True
+
                 if title in LEAGUE_TITLES:
                     # Prefer non-iconic active League client over any minimized placeholder
                     if not league[0] or (not is_iconic and getattr(self, "_found_league_iconic", True)):
                         league[0], league[1] = hwnd, raw
                         self._found_league_iconic = is_iconic
-                        if not is_iconic:
-                            return False  # stop: nothing beats active League window
-                if title in RIOT_TITLES and not riot[0]:
+                        if not is_iconic and title == "league of legends":
+                            return False  # stop: nothing beats active League main client window
+                elif title in RIOT_TITLES and not riot[0] and not is_iconic:
+                    # Only accept Riot Client if not minimized or off-screen
                     riot[0], riot[1] = hwnd, raw
             except Exception as exc:
                 # A window can vanish mid-enumeration. Never let one bad
@@ -209,6 +254,7 @@ class ClientWindowTracker:
             )
             self._announced = True
         return hwnd, title
+
 
     def _rect_of(self, hwnd: int) -> Tuple[int, int, int, int]:
         rect = ctypes.wintypes.RECT()

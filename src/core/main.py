@@ -381,6 +381,12 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         def do_drag(event):
             x = self.winfo_x() + (event.x - self._drag_data["x"])
             y = self.winfo_y() + (event.y - self._drag_data["y"])
+            if hasattr(ctypes, "windll"):
+                try:
+                    hwnd = ctypes.windll.user32.GetParent(self.winfo_id()) or self.winfo_id()
+                    ctypes.windll.user32.SetWindowPos(hwnd, 0, x, y, 0, 0, 0x0015)  # SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
+                except Exception as exc:
+                    Logger.debug("Main", "do_drag SetWindowPos suppressed error", exc=exc)
             self.geometry(f"+{x}+{y}")
 
         self.bind("<ButtonPress-1>", start_drag)
@@ -597,26 +603,76 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                 target_h = client_h  # Match League Client exact height for seamless pairing
                 gap = 0  # Flush docking against client border
 
-                # Screen width probe
-                screen_w = self.winfo_screenwidth() or 1920
+                # Determine monitor work area containing the client
+                mon_left = 0
+                mon_right = self.winfo_screenwidth() or 1920
+                mon_top = 0
+                mon_bottom = self.winfo_screenheight() or 1080
+                if hasattr(ctypes, "windll"):
+                    try:
+                        class _MONITORINFO(ctypes.Structure):
+                            _fields_ = [
+                                ('cbSize', ctypes.wintypes.DWORD),
+                                ('rcMonitor', ctypes.wintypes.RECT),
+                                ('rcWork', ctypes.wintypes.RECT),
+                                ('dwFlags', ctypes.wintypes.DWORD),
+                            ]
+                        _r = ctypes.wintypes.RECT(client_x, client_y, client_x + client_w, client_y + client_h)
+                        _hmon = ctypes.windll.user32.MonitorFromRect(ctypes.byref(_r), 2)  # MONITOR_DEFAULTTONEAREST
+                        if _hmon:
+                            _mi = _MONITORINFO()
+                            _mi.cbSize = ctypes.sizeof(_MONITORINFO)
+                            if ctypes.windll.user32.GetMonitorInfoW(_hmon, ctypes.byref(_mi)):
+                                mon_left = _mi.rcWork.left
+                                mon_right = _mi.rcWork.right
+                                mon_top = _mi.rcWork.top
+                                mon_bottom = _mi.rcWork.bottom
+                    except Exception as exc:
+                        Logger.debug("Main", "docking_loop monitor calculation error", exc=exc)
+
                 target_x = client_x + client_w + gap
                 dock_side = "right"  # Docked to the right of the client
-                if target_x + app_w > screen_w:
-                    target_x = max(0, client_x - app_w - gap)
-                    dock_side = "left"  # Docked to the left of the client
+                if target_x + app_w > mon_right:
+                    # Not enough room on the right of this monitor; check left
+                    if client_x - app_w - gap >= mon_left:
+                        target_x = client_x - app_w - gap
+                        dock_side = "left"
+                    else:
+                        # If neither side fits fully, pick the side with more available space
+                        right_space = mon_right - (client_x + client_w)
+                        left_space = client_x - mon_left
+                        if left_space >= right_space:
+                            target_x = max(mon_left, client_x - app_w - gap)
+                            dock_side = "left"
+                        else:
+                            target_x = min(mon_right - app_w, client_x + client_w + gap)
+                            dock_side = "right"
 
-                target_y = client_y
+                target_y = max(mon_top, client_y)
+                # Keep height within work area
+                if target_y + target_h > mon_bottom:
+                    target_h = max(400, mon_bottom - target_y)
 
-                if (last_pos is None
+                force_update = getattr(self, "_force_dock_update", False)
+                if (force_update
+                        or last_pos is None
                         or abs(target_x - last_pos[0]) >= GEOMETRY_THRESHOLD
                         or abs(target_y - last_pos[1]) >= GEOMETRY_THRESHOLD
                         or getattr(self, "_last_docked_h", None) != target_h
                         or getattr(self, "_last_dock_side", None) != dock_side):
+                    self._force_dock_update = False
                     last_pos = (target_x, target_y)
                     self._last_docked_h = target_h
                     self._last_dock_side = dock_side
                     
                     def _apply_dock_geom(w=app_w, h=target_h, tx=target_x, ty=target_y, side=dock_side):
+                        if hasattr(ctypes, "windll"):
+                            try:
+                                hwnd = ctypes.windll.user32.GetParent(self.winfo_id()) or self.winfo_id()
+                                # SWP_NOZORDER (0x0004) | SWP_NOACTIVATE (0x0010) = 0x0014
+                                ctypes.windll.user32.SetWindowPos(hwnd, 0, tx, ty, w, h, 0x0014)
+                            except Exception as exc:
+                                Logger.debug("Main", "_apply_dock_geom SetWindowPos error", exc=exc)
                         self.geometry(f"{w}x{h}+{tx}+{ty}")
                         if hasattr(self, "feather_strip"):
                             feather_canvas_side = "left" if side == "right" else "right"
@@ -662,17 +718,22 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
 
     def on_dock_toggled(self, docked):
         self.config.set("docked", bool(docked))
+        self._force_dock_update = True
         if hasattr(self, "sidebar"):
             self.sidebar.update_dock_styling(bool(docked))
         if hasattr(self, "feather_strip"):
             if docked:
-                self.feather_strip.pack(side="left", fill="y")
+                side = getattr(self, "_last_dock_side", "right")
+                feather_canvas_side = "left" if side == "right" else "right"
+                self.feather_strip.set_side(feather_canvas_side)
+                self.feather_strip.pack(side=feather_canvas_side, fill="y")
                 self.feather_strip.redraw()
             else:
                 self.feather_strip.pack_forget()
         w = self.winfo_width() or SIDEBAR_WIDTH
         h = self.winfo_height() or SIDEBAR_HEIGHT
         self.apply_window_shape(w, h, docked=bool(docked), dock_side=getattr(self, "_last_dock_side", "right"))
+
 
 
 def _get_install_root() -> str:
