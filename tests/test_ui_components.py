@@ -18,8 +18,10 @@ class DummyWidget:
         self._last_child_ids = {}
         self.children = {}
         self._config = {"state": "normal", "fg_color": "#000000", "hover_color": "#333333"}
+        self._config.update(kwargs)
         self._bindings = {}
         self._after_callbacks = []
+        self._mapped = False
     def bind(self, sequence, func=None, add=None):
         if add == "+":
             if sequence not in self._bindings:
@@ -30,19 +32,19 @@ class DummyWidget:
     def unbind(self, sequence, funcid=None):
         self._bindings.pop(sequence, None)
     def pack(self, *args, **kwargs):
-        pass
+        self._mapped = True
     def grid(self, *args, **kwargs):
-        pass
+        self._mapped = True
     def place(self, *args, **kwargs):
-        pass
+        self._mapped = True
     def pack_configure(self, *args, **kwargs):
         pass
     def pack_forget(self, *args, **kwargs):
-        pass
+        self._mapped = False
     def grid_forget(self, *args, **kwargs):
-        pass
+        self._mapped = False
     def place_forget(self, *args, **kwargs):
-        pass
+        self._mapped = False
     def pack_propagate(self, *args, **kwargs):
         pass
     def grid_columnconfigure(self, *args, **kwargs):
@@ -94,6 +96,10 @@ class DummyWidget:
                 cb()
     def winfo_exists(self):
         return True
+    def winfo_ismapped(self):
+        return getattr(self, "_mapped", False)
+    def winfo_reqwidth(self):
+        return self._config.get("width", 100)
     def winfo_manager(self):
         return "pack"
     def winfo_children(self):
@@ -559,11 +565,76 @@ class TestUIComponents(unittest.TestCase):
         self.assertEqual(tool.lbl_stat_keys_num.cget("text"), "3")
         self.assertEqual(tool.lbl_stat_frags_num.cget("text"), "5")
 
-        # Test busy state toggle
+        # Test stat chips have width=60 to prevent width overflow
+        self.assertEqual(tool.chip_openable.cget("width"), 60)
+        self.assertEqual(tool.chip_keys.cget("width"), 60)
+        self.assertEqual(tool.chip_frags.cget("width"), 60)
+
+        # Test options labels and separation
+        self.assertEqual(tool.chk_claim.cget("text"), "Claim rewards first")
+        self.assertEqual(tool.chk_keys.cget("text"), "Craft keys first")
+        self.assertIsNotNone(tool.summary_frame)
+        self.assertIsNotNone(tool.summary_lbl)
+
+        # Test responsive action layout: Stop button hidden when idle, shown when busy
+        self.assertFalse(tool.btn_stop.winfo_ismapped())
         tool._set_busy(True)
         self.assertEqual(tool.btn_open.cget("state"), "disabled")
+        self.assertTrue(tool.btn_stop.winfo_ismapped())
         tool._set_busy(False)
         self.assertEqual(tool.btn_open.cget("state"), "normal")
+        self.assertFalse(tool.btn_stop.winfo_ismapped())
+
+        # Test responsive inventory height
+        tool._render_rows([])
+        self.assertEqual(tool.list_frame.cget("height"), 125)
+
+        single_row = [{"loot_id": "CHEST_1", "name": "Box", "count": 1, "type": "CHEST", "category": "CHEST", "can_open": True, "will_open": 1, "needs_key": False}]
+        tool._render_rows(single_row)
+        self.assertEqual(tool.list_frame.cget("height"), 60)  # max(60, min(170, 1 * 52 + 6)) = 60
+
+        ten_rows = [{"loot_id": f"C_{i}", "name": f"Box {i}", "count": 1, "type": "CHEST", "category": "CHEST", "can_open": True, "will_open": 1, "needs_key": False} for i in range(10)]
+        tool._render_rows(ten_rows)
+        self.assertEqual(tool.list_frame.cget("height"), 170)  # clamped at max 170
+
+    def test_settings_action_row_responsive(self):
+        """Test SettingsActionRow text wrapping, reserved button width, loading and status clearing."""
+        from ui.components.settings_row import SettingsActionRow
+        row = SettingsActionRow(
+            self.mock_parent,
+            label_text="Kill Unnecessary Windows Processes",
+            description="Safely purge updaters, telemetry, & idle hogs",
+            button_text="Kill Processes",
+            button_width=105,
+            command=MagicMock(),
+        )
+        self.assertIsNotNone(row.button)
+        self.assertIsNotNone(row.text_label)
+        self.assertIsNotNone(row.desc_label)
+        self.assertIsNotNone(row.status_label)
+
+        # Test configure event dynamic wraplength update
+        row.winfo_width = MagicMock(return_value=280)
+        row.button.winfo_reqwidth = MagicMock(return_value=105)
+        row._on_configure()
+        self.assertEqual(row.text_label.cget("wraplength"), 161)  # 280 - 105 - 14
+        self.assertEqual(row.desc_label.cget("wraplength"), 161)
+        self.assertEqual(row.status_label.cget("wraplength"), 272)
+
+        # Test set_loading preserves button visibility without disabling
+        row.set_loading(True, "Working...")
+        self.assertEqual(row.button.cget("text"), "Working...")
+        self.assertNotEqual(row.button.cget("state"), "disabled")
+        row.set_loading(False)
+        self.assertEqual(row.button.cget("text"), "Kill Processes")
+
+        # Test set_status and clear_status
+        row.set_status("✓ Optimized successfully", is_error=False)
+        self.assertEqual(row.status_label.cget("text"), "✓ Optimized successfully")
+        self.assertTrue(row.status_label.winfo_ismapped())
+        row.clear_status()
+        self.assertEqual(row.status_label.cget("text"), "")
+        self.assertFalse(row.status_label.winfo_ismapped())
 
 
 if __name__ == '__main__':

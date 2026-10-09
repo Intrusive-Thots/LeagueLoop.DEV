@@ -597,7 +597,7 @@ class SidebarWidget(ctk.CTkFrame):
 
         def _on_fix_ping():
             self.row_fix_ping.set_loading(True, "Fixing...")
-            self.row_fix_ping.set_status("⏳ Applying MTU 1428, Cloudflare DNS & TCPNoDelay...")
+            self.row_fix_ping.set_status("⏳ Optimizing network & DNS...")
 
             def _worker():
                 from services.system_optimizer import SystemOptimizer
@@ -630,7 +630,7 @@ class SidebarWidget(ctk.CTkFrame):
 
         def _on_kill_processes():
             self.row_kill_proc.set_loading(True, "Scanning...")
-            self.row_kill_proc.set_status("⏳ Scanning & purging background processes...")
+            self.row_kill_proc.set_status("⏳ Purging background processes...")
 
             def _worker():
                 from services.system_optimizer import SystemOptimizer
@@ -666,7 +666,7 @@ class SidebarWidget(ctk.CTkFrame):
             label_text="Fix Ping",
             description="MTU 1428, Cloudflare DNS, & TCPNoDelay",
             button_text="Fix Ping",
-            button_width=110,
+            button_width=90,
             command=_on_fix_ping,
             tooltip_text="Optimize gaming latency and eliminate cellular packet fragmentation"
         )
@@ -677,7 +677,7 @@ class SidebarWidget(ctk.CTkFrame):
             label_text="Kill Unnecessary Windows Processes",
             description="Safely purge updaters, telemetry, & idle hogs",
             button_text="Kill Processes",
-            button_width=110,
+            button_width=105,
             style="danger",
             command=_on_kill_processes,
             tooltip_text="Terminate non-essential background processes to free CPU, RAM, & bandwidth"

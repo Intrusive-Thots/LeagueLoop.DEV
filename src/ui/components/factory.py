@@ -193,6 +193,11 @@ class RiotButton(ctk.CTkFrame):
         if kwargs:
             super().configure(**kwargs)
 
+    def cget(self, attribute_name: str):
+        if attribute_name == "text":
+            return self.lbl.cget("text")
+        return super().cget(attribute_name)
+
 def make_button(parent, text, style="primary", width=None, command=None, icon=None, **kw):
     """Factory wrapper for new RiotButton."""
     w = kw.pop("width", width or 120)

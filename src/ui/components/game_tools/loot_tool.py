@@ -156,6 +156,7 @@ class LootTool(ctk.CTkFrame):
             border_width=1,
             border_color="#1E2B3C",
             corner_radius=6,
+            width=60,
             height=46,
         )
         self.chip_openable.pack(side="left", fill="both", expand=True, padx=(0, 2))
@@ -184,6 +185,7 @@ class LootTool(ctk.CTkFrame):
             border_width=1,
             border_color="#1E2B3C",
             corner_radius=6,
+            width=60,
             height=46,
         )
         self.chip_keys.pack(side="left", fill="both", expand=True, padx=2)
@@ -212,6 +214,7 @@ class LootTool(ctk.CTkFrame):
             border_width=1,
             border_color="#1E2B3C",
             corner_radius=6,
+            width=60,
             height=46,
         )
         self.chip_frags.pack(side="left", fill="both", expand=True, padx=(2, 0))
@@ -234,13 +237,13 @@ class LootTool(ctk.CTkFrame):
         self.lbl_stat_frags_sub.pack(pady=(0, 4))
 
         # Options
-        opts = ctk.CTkFrame(self.body, fg_color="transparent")
-        opts.pack(fill="x", padx=10, pady=(4, 2))
+        opts_frame = ctk.CTkFrame(self.body, fg_color="transparent")
+        opts_frame.pack(fill="x", padx=10, pady=(3, 1))
 
         self.var_claim = ctk.BooleanVar(value=True)
         self.chk_claim = ctk.CTkCheckBox(
-            opts,
-            text="Claim pass/missions",
+            opts_frame,
+            text="Claim rewards first",
             variable=self.var_claim,
             font=("Inter", 10),
             text_color=get_color("colors.text.primary"),
@@ -250,13 +253,13 @@ class LootTool(ctk.CTkFrame):
             checkbox_width=15,
             checkbox_height=15,
         )
-        self.chk_claim.pack(side="left")
+        self.chk_claim.pack(anchor="w", pady=(0, 2))
         CTkTooltip(self.chk_claim, "Claim all pending battle pass, event pass, and mission rewards before opening")
 
         self.var_keys = ctk.BooleanVar(value=True)
         self.chk_keys = ctk.CTkCheckBox(
-            opts,
-            text="Forge keys",
+            opts_frame,
+            text="Craft keys first",
             variable=self.var_keys,
             font=("Inter", 10),
             text_color=get_color("colors.text.primary"),
@@ -266,14 +269,28 @@ class LootTool(ctk.CTkFrame):
             checkbox_width=15,
             checkbox_height=15,
         )
-        self.chk_keys.pack(side="left", padx=(10, 0))
-        CTkTooltip(self.chk_keys, "Forge key fragments into keys before opening chests")
+        self.chk_keys.pack(anchor="w", pady=(1, 2))
+        CTkTooltip(self.chk_keys, "Craft key fragments into keys before opening chests")
+
+        # Resource Summary & Section Header
+        self.summary_frame = ctk.CTkFrame(self.body, fg_color="transparent")
+        self.summary_frame.pack(fill="x", padx=10, pady=(3, 1))
+
+        self.lbl_vault_header = ctk.CTkLabel(
+            self.summary_frame,
+            text="VAULT INVENTORY",
+            font=("Inter", 9, "bold"),
+            text_color=get_color("colors.text.muted", "#8A9BA8"),
+            anchor="w",
+        )
+        self.lbl_vault_header.pack(side="left")
 
         self.summary_lbl = ctk.CTkLabel(
-            opts,
+            self.summary_frame,
             text="",
-            font=("Inter", 9),
-            text_color=get_color("colors.text.muted", "#8A9BA8"),
+            font=("Inter", 9, "bold"),
+            text_color=get_color("colors.accent.gold", "#C8AA6E"),
+            anchor="e",
         )
         self.summary_lbl.pack(side="right")
 
@@ -288,31 +305,63 @@ class LootTool(ctk.CTkFrame):
         self.progress_bar.pack(fill="x", padx=10, pady=(2, 2))
         self.progress_bar.set(0)
 
-        # Scrollable inventory list
-        self.list_frame = ctk.CTkScrollableFrame(
+        # Bottom controls (packed side="bottom" first to guarantee space reservation)
+        self.status_lbl = ctk.CTkLabel(
             self.body,
-            fg_color=get_color("colors.background.card", "#0F1A24"),
-            height=260,
-            corner_radius=6,
+            text="",
+            font=("Inter", 9),
+            text_color=get_color("colors.text.muted", "#8A9BA8"),
+            anchor="w",
+            justify="left",
+            wraplength=250,
         )
-        self.list_frame.pack(fill="both", expand=True, padx=10, pady=(2, 4))
+        self.status_lbl.pack(side="bottom", fill="x", padx=12, pady=(0, 4))
 
-        self.empty_lbl = ctk.CTkLabel(
-            self.list_frame,
-            text="Click Refresh — League Client must be logged in.",
-            font=get_font("caption"),
-            text_color=get_color("colors.text.muted"),
+        self.actions_row2 = ctk.CTkFrame(self.body, fg_color="transparent")
+        self.actions_row2.pack(side="bottom", fill="x", padx=10, pady=(2, 4))
+
+        self.btn_open = ctk.CTkButton(
+            self.actions_row2,
+            text="✨ Open All",
+            height=28,
+            corner_radius=5,
+            font=("Inter", 11, "bold"),
+            fg_color=get_color("colors.accent.gold", "#C8AA6E"),
+            hover_color="#A88B4A",
+            text_color="#0A1428",
+            command=self.open_all,
+            cursor="hand2",
         )
-        self.empty_lbl.pack(pady=16)
+        self.btn_open.pack(side="left", fill="x", expand=True)
+        CTkTooltip(
+            self.btn_open,
+            "Open all chests, capsules, orbs & mystery boxes (never disenchants)",
+        )
 
-        # Actions
-        actions = ctk.CTkFrame(self.body, fg_color="transparent")
-        actions.pack(fill="x", padx=10, pady=(2, 4))
+        self.btn_stop = ctk.CTkButton(
+            self.actions_row2,
+            text="⏹ Stop",
+            width=64,
+            height=28,
+            corner_radius=5,
+            font=("Inter", 10, "bold"),
+            fg_color="#2A1518",
+            hover_color="#7A2D35",
+            text_color="#FF6B6B",
+            border_width=1,
+            border_color="#5A242A",
+            command=self._request_stop,
+            cursor="hand2",
+        )
+        CTkTooltip(self.btn_stop, "Stop ongoing loot opening process")
+        # btn_stop is hidden when idle to avoid permanently consuming space
+
+        self.actions_row1 = ctk.CTkFrame(self.body, fg_color="transparent")
+        self.actions_row1.pack(side="bottom", fill="x", padx=10, pady=(3, 2))
 
         self.btn_refresh = ctk.CTkButton(
-            actions,
+            self.actions_row1,
             text="🔄 Refresh",
-            width=68,
             height=28,
             corner_radius=5,
             font=("Inter", 10, "bold"),
@@ -324,12 +373,12 @@ class LootTool(ctk.CTkFrame):
             command=self.refresh,
             cursor="hand2",
         )
-        self.btn_refresh.pack(side="left")
+        self.btn_refresh.pack(side="left", fill="x", expand=True, padx=(0, 3))
+        CTkTooltip(self.btn_refresh, "Refresh inventory from League Client")
 
         self.btn_claim = ctk.CTkButton(
-            actions,
+            self.actions_row1,
             text="🎁 Claim",
-            width=62,
             height=28,
             corner_radius=5,
             font=("Inter", 10, "bold"),
@@ -341,56 +390,25 @@ class LootTool(ctk.CTkFrame):
             command=self.claim_rewards,
             cursor="hand2",
         )
-        self.btn_claim.pack(side="left", padx=(5, 0))
+        self.btn_claim.pack(side="left", fill="x", expand=True, padx=(3, 0))
         CTkTooltip(self.btn_claim, "Claim pending battle pass, event pass, and mission rewards")
 
-        self.btn_open = ctk.CTkButton(
-            actions,
-            text="✨ Open All",
-            width=80,
-            height=28,
-            corner_radius=5,
-            font=("Inter", 11, "bold"),
-            fg_color=get_color("colors.accent.gold", "#C8AA6E"),
-            hover_color="#A88B4A",
-            text_color="#0A1428",
-            command=self.open_all,
-            cursor="hand2",
-        )
-        self.btn_open.pack(side="left", padx=(5, 0))
-        CTkTooltip(
-            self.btn_open,
-            "Open all chests, capsules, orbs & mystery boxes (never disenchants)",
-        )
-
-        self.btn_stop = ctk.CTkButton(
-            actions,
-            text="⏹",
-            width=36,
-            height=28,
-            corner_radius=5,
-            font=("Inter", 11, "bold"),
-            fg_color=get_color("colors.background.card", "#101923"),
-            hover_color="#FF4655",
-            text_color=get_color("colors.text.primary", "#F0F6FC"),
-            border_width=1,
-            border_color=get_color("colors.border.subtle", "#1E2B3C"),
-            command=self._request_stop,
-            state="disabled",
-            cursor="hand2",
-        )
-        self.btn_stop.pack(side="left", padx=(5, 0))
-        CTkTooltip(self.btn_stop, "Stop ongoing loot opening process")
-
-        # Status row below actions
-        self.status_lbl = ctk.CTkLabel(
+        # Scrollable inventory list
+        self.list_frame = ctk.CTkScrollableFrame(
             self.body,
-            text="",
-            font=("Inter", 9),
-            text_color=get_color("colors.text.muted", "#8A9BA8"),
-            anchor="w",
+            fg_color=get_color("colors.background.card", "#0F1A24"),
+            height=125,
+            corner_radius=6,
         )
-        self.status_lbl.pack(fill="x", padx=12, pady=(0, 6))
+        self.list_frame.pack(fill="both", expand=True, padx=10, pady=(2, 4))
+
+        self.empty_lbl = ctk.CTkLabel(
+            self.list_frame,
+            text="Click Refresh — League Client must be logged in.",
+            font=get_font("caption"),
+            text_color=get_color("colors.text.muted"),
+        )
+        self.empty_lbl.pack(pady=16)
 
     # ─────────── logging / status ───────────
 
@@ -415,11 +433,16 @@ class LootTool(ctk.CTkFrame):
             self.btn_open.configure(state=state)
             self.btn_claim.configure(state=state)
             self.btn_refresh.configure(state=state)
-            self.btn_stop.configure(state="normal" if busy else "disabled")
             if busy:
+                if hasattr(self, "btn_stop") and not self.btn_stop.winfo_ismapped():
+                    self.btn_stop.pack(side="right", padx=(6, 0))
+                self.btn_stop.configure(state="normal")
                 self.progress_bar.configure(mode="indeterminate")
                 self.progress_bar.start()
             else:
+                if hasattr(self, "btn_stop") and self.btn_stop.winfo_ismapped():
+                    self.btn_stop.pack_forget()
+                self.btn_stop.configure(state="disabled")
                 self.progress_bar.stop()
                 self.progress_bar.configure(mode="determinate")
                 self.progress_bar.set(0)
@@ -451,6 +474,9 @@ class LootTool(ctk.CTkFrame):
             Logger.debug("LootTool", "_clear_list suppressed an error", exc=exc)
 
     def _render_empty_state(self, message: str = "No openable containers found.") -> None:
+        if hasattr(self, "list_frame") and self.list_frame.winfo_exists():
+            self.list_frame.configure(height=125)
+
         empty_box = ctk.CTkFrame(
             self.list_frame,
             fg_color="#0B131C",
@@ -529,7 +555,12 @@ class LootTool(ctk.CTkFrame):
             self._render_empty_state("No openable chests, capsules, or orbs found.")
             return
 
-        for row in rows:
+        # Responsive inventory height: adapts to row count within bounds
+        calc_h = max(60, min(170, len(rows) * 52 + 6))
+        if hasattr(self, "list_frame") and self.list_frame.winfo_exists():
+            self.list_frame.configure(height=calc_h)
+
+        for idx, row in enumerate(rows):
             loot_id = str(row.get("loot_id") or "")
             name = str(row.get("name") or "Loot Item")
             count = int(row.get("count") or 0)
@@ -549,7 +580,8 @@ class LootTool(ctk.CTkFrame):
                 corner_radius=6,
                 height=48,
             )
-            card_fr.pack(fill="x", pady=2, padx=2)
+            pad_bottom = 6 if idx == len(rows) - 1 else 2
+            card_fr.pack(fill="x", pady=(2, pad_bottom), padx=(4, 6))
             card_fr.pack_propagate(False)
 
             # Left: Icon Badge (34x34)

@@ -151,34 +151,14 @@ class SettingsActionRow(ctk.CTkFrame):
 
         self.original_button_text = button_text
         self.command = command
+        self.button_width = button_width
 
         # Top row: title/description on the left, button on the right
         self.top_row = ctk.CTkFrame(self, fg_color="transparent")
         self.top_row.pack(fill="x", expand=True)
 
-        left_frame = ctk.CTkFrame(self.top_row, fg_color="transparent")
-        left_frame.pack(side="left", fill="both", expand=True)
-
-        self.text_label = ctk.CTkLabel(
-            left_frame,
-            text=label_text,
-            font=get_font("body", "bold"),
-            anchor="w",
-            text_color=get_color("colors.text.primary")
-        )
-        self.text_label.pack(side="top", anchor="w")
-
-        if description:
-            self.desc_label = ctk.CTkLabel(
-                left_frame,
-                text=description,
-                font=get_font("small"),
-                anchor="w",
-                text_color=get_color("colors.text.muted")
-            )
-            self.desc_label.pack(side="top", anchor="w")
-
         from ui.components.factory import make_button
+        # Reserve sufficient width for the action button and pack it first to guarantee space
         self.button = make_button(
             self.top_row,
             text=button_text,
@@ -188,14 +168,48 @@ class SettingsActionRow(ctk.CTkFrame):
             height=28,
             command=command
         )
-        self.button.pack(side="right", padx=(8, 0))
+        self.button.pack(side="right", padx=(8, 0), anchor="center")
 
-        # Bottom live status feedback label
+        # Responsive left-hand text container
+        self.left_frame = ctk.CTkFrame(self.top_row, fg_color="transparent")
+        self.left_frame.pack(side="left", fill="both", expand=True)
+
+        # Initial wrap estimate based on narrow panel width
+        init_text_w = max(60, 270 - button_width - 16)
+
+        self.text_label = ctk.CTkLabel(
+            self.left_frame,
+            text=label_text,
+            font=get_font("body", "bold"),
+            anchor="w",
+            justify="left",
+            wraplength=init_text_w,
+            text_color=get_color("colors.text.primary")
+        )
+        self.text_label.pack(side="top", fill="x", anchor="w")
+
+        if description:
+            self.desc_label = ctk.CTkLabel(
+                self.left_frame,
+                text=description,
+                font=get_font("small"),
+                anchor="w",
+                justify="left",
+                wraplength=init_text_w,
+                text_color=get_color("colors.text.muted")
+            )
+            self.desc_label.pack(side="top", fill="x", anchor="w", pady=(1, 0))
+        else:
+            self.desc_label = None
+
+        # Bottom live status feedback label below title/button row
         self.status_label = ctk.CTkLabel(
             self,
             text="",
             font=get_font("small"),
             anchor="w",
+            justify="left",
+            wraplength=250,
             text_color=get_color("colors.accent.gold", "#C8AA6E")
         )
 
@@ -203,23 +217,48 @@ class SettingsActionRow(ctk.CTkFrame):
             CTkTooltip(self.text_label, tooltip_text)
             CTkTooltip(self.button, tooltip_text)
 
+        self.bind("<Configure>", self._on_configure)
+
+    def _on_configure(self, event=None):
+        """Recalculate label wraplengths dynamically when row width changes."""
+        try:
+            total_w = self.winfo_width()
+            if total_w <= 1:
+                return
+            btn_w = self.button.winfo_reqwidth() if hasattr(self, "button") else self.button_width
+            avail_text_w = max(60, total_w - btn_w - 14)
+            if hasattr(self, "text_label") and self.text_label.winfo_exists():
+                self.text_label.configure(wraplength=avail_text_w)
+            if hasattr(self, "desc_label") and self.desc_label and self.desc_label.winfo_exists():
+                self.desc_label.configure(wraplength=avail_text_w)
+            if hasattr(self, "status_label") and self.status_label.winfo_exists():
+                self.status_label.configure(wraplength=max(60, total_w - 8))
+        except Exception as exc:
+            Logger.debug("SettingsActionRow", f"Error in _on_configure: {exc}", exc=exc)
+
     def set_loading(self, is_loading: bool, loading_text: str = "Working..."):
-        """Toggles loading state and disables/enables button."""
+        """Toggles loading text while keeping button visible and clickable."""
         try:
             if is_loading:
-                self.button.configure(text=loading_text, state="disabled")
+                self.button.configure(text=loading_text)
             else:
-                self.button.configure(text=self.original_button_text, state="normal")
+                self.button.configure(text=self.original_button_text)
         except Exception as exc:
             Logger.debug("SettingsActionRow", f"Failed to update loading state: {exc}", exc=exc)
 
+    def clear_status(self):
+        """Cleans up the inline status display."""
+        self.set_status("")
+
     def set_status(self, message: str, is_error: bool = False):
-        """Sets inline real-time status display."""
+        """Sets inline real-time status display with automatic wrapping and visibility."""
         try:
             color = get_color("colors.state.danger", "#E74C3C") if is_error else get_color("colors.accent.gold", "#C8AA6E")
-            self.status_label.configure(text=message, text_color=color)
+            total_w = self.winfo_width()
+            status_w = max(60, total_w - 8) if total_w > 1 else 250
+            self.status_label.configure(text=message, text_color=color, wraplength=status_w, justify="left")
             if message and not self.status_label.winfo_ismapped():
-                self.status_label.pack(side="top", anchor="w", pady=(3, 0))
+                self.status_label.pack(side="top", fill="x", anchor="w", pady=(3, 0))
             elif not message and self.status_label.winfo_ismapped():
                 self.status_label.pack_forget()
         except Exception as exc:
