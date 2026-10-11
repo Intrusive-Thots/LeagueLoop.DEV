@@ -37,6 +37,7 @@
     "arena_auto_lock": false,
     "arena_synergy_enabled": true,
     "run_in_tray": false,
+    "auto_save_replays": false,
     "auto_honor_enabled": true,
     "auto_join_enabled": false,
     "auto_join_list": [],
