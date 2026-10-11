@@ -241,6 +241,7 @@ class SidebarWidget(ctk.CTkFrame):
                 
             elif tab_name == "Settings":
                 self.advanced_scroll.pack(fill="both", expand=True, pady=(0, SPACING_XS))
+                self._refresh_replay_folder()
                 if getattr(self, "_stats_visible", False):
                     if hasattr(self, "stats_card"):
                         self.stats_card.pack(fill="x", pady=(0, SECTION_GAP))
@@ -543,7 +544,7 @@ class SidebarWidget(ctk.CTkFrame):
 
         # UI status and dummy stats stripped for cleaner layout
 
-        from ui.components.settings_row import SettingsToggleRow  # type: ignore
+        from ui.components.settings_row import SettingsActionRow, SettingsToggleRow  # type: ignore
 
         # ── Advanced Settings Tab Content ──
         self.advanced_scroll = ctk.CTkScrollableFrame(self.main_body, fg_color="transparent")
@@ -563,6 +564,65 @@ class SidebarWidget(ctk.CTkFrame):
         )
         self.row_tray.pack(fill="x", pady=(INNER_GAP, 0))
 
+        # REPLAYS
+        # Opt-in. The client only keeps a replay until the patch changes, and
+        # ARAM: Mayhem games aren't in Riot's match API, so the .rofl is the
+        # timeline. The download itself happens after the match, in ReplaySaver.
+        card_replays = make_card(self.advanced_scroll, title="REPLAYS", padx=0, pady=(0, SECTION_GAP))
+        from core.config_keys import AUTO_SAVE_REPLAYS
+        self.replay_saver = None
+        self.var_auto_save_replays = ctk.BooleanVar(
+            value=self.config.get(AUTO_SAVE_REPLAYS, False) is True
+        )
+
+        def _on_auto_save_replays():
+            # The widget value, not a config stand-in. BooleanVar can hand
+            # back 0/1 on some Tk builds; store a real bool either way.
+            self.config.set(AUTO_SAVE_REPLAYS, bool(self.var_auto_save_replays.get()))
+
+        self.row_auto_save_replays = SettingsToggleRow(
+            card_replays,
+            label_text="Auto-save replays after each match",
+            variable=self.var_auto_save_replays,
+            command=_on_auto_save_replays,
+            tooltip_text="After a game ends, ask the League client to download the replay (.rofl).",
+            height=46,
+        )
+        self.row_auto_save_replays.text_label.configure(wraplength=170)
+        self.row_auto_save_replays.pack(fill="x", pady=(INNER_GAP, 0))
+
+        self.lbl_replay_help = ctk.CTkLabel(
+            card_replays,
+            text="Downloads the replay (.rofl) when a match ends, before the patch removes it.",
+            font=get_font("caption"),
+            text_color=get_color("colors.text.muted"),
+            wraplength=230,
+            justify="left",
+            anchor="w",
+        )
+        self.lbl_replay_help.pack(fill="x", pady=(2, INNER_GAP))
+
+        self.lbl_replay_folder = ctk.CTkLabel(
+            card_replays,
+            text="Replay folder: open Settings with the client running to look it up.",
+            font=get_font("caption"),
+            text_color=get_color("colors.text.muted"),
+            wraplength=230,
+            justify="left",
+            anchor="w",
+        )
+        self.lbl_replay_folder.pack(fill="x", pady=(0, INNER_GAP))
+
+        self.row_replay_recent = SettingsActionRow(
+            card_replays,
+            label_text="Recent match replays",
+            description="Download replays for recent games",
+            button_text="Download",
+            button_width=90,
+            command=self._on_download_recent_replays,
+            tooltip_text="Asks the League client to save replays that are still on this patch. Older games are skipped.",
+        )
+        self.row_replay_recent.pack(fill="x", pady=(0, 0))
         # HOTKEYS
         from ui.components.settings_row import SettingsHotkeyRow  # type: ignore
         card_hotkeys = make_card(self.advanced_scroll, title="HOTKEYS", padx=0, pady=(0, SECTION_GAP))
@@ -1612,6 +1672,119 @@ class SidebarWidget(ctk.CTkFrame):
         if hasattr(self, "automation") and self.automation:
             self.automation.reset_auto_join_cooldowns()
         self._update_all_quick_icons()
+
+    def set_replay_saver(self, saver):
+        """Share the engine's saver so the settings row shows its status."""
+        current = getattr(self, "replay_saver", None)
+        if current is saver:
+            return
+        self.replay_saver = saver
+        if saver is None:
+            return
+        saver.add_listener(self._on_replay_status)
+        if getattr(saver, "last_message", ""):
+            self._on_replay_status(saver.last_message, bool(getattr(saver, "last_error", False)))
+
+    def _get_replay_saver(self):
+        saver = getattr(self, "replay_saver", None)
+        if saver is not None:
+            return saver
+        engine = getattr(getattr(self, "master", None), "automation", None)
+        saver = getattr(engine, "replay_saver", None)
+        if saver is not None:
+            self.set_replay_saver(saver)
+        return saver
+
+    def _run_on_ui(self, callback):
+        """Run ``callback`` on the UI thread.
+
+        The replay worker is a background thread. Tk rejects ``after`` from
+        any thread but the one running the main loop, so the result goes
+        through the app's existing UI queue when there is one.
+        """
+        ui_queue = getattr(getattr(self, "master", None), "_ui_queue", None)
+        if ui_queue is not None:
+            ui_queue.put(callback)
+            return
+        try:
+            self.after(0, callback)
+        except Exception:
+            callback()
+
+    def _on_replay_status(self, message, is_error=False):
+        """Settings-row status. Marshalled onto the UI thread."""
+        def _apply():
+            row = getattr(self, "row_replay_recent", None)
+            if row is None:
+                return
+            try:
+                if not self.winfo_exists():
+                    return
+            except Exception:
+                return
+            row.set_loading(False)
+            row.set_status(message, is_error=bool(is_error))
+
+        self._run_on_ui(_apply)
+
+    def _on_download_recent_replays(self):
+        row = getattr(self, "row_replay_recent", None)
+        saver = self._get_replay_saver()
+        if saver is None:
+            if row is not None:
+                row.set_status("Replay saver isn't available.", is_error=True)
+            return
+        if row is not None:
+            row.set_loading(True, "Checking...")
+            row.set_status("Checking recent games…")
+        if not saver.download_recent():
+            if row is not None:
+                row.set_loading(False)
+                row.set_status("A replay download is already running.")
+
+    def _refresh_replay_folder(self):
+        """One lookup of the client's replay directory. Not a poll."""
+        if getattr(self, "_current_game_phase", "") == "InProgress":
+            return
+        label = getattr(self, "lbl_replay_folder", None)
+        if label is None:
+            return
+        saver = self._get_replay_saver()
+        if saver is None:
+            return
+
+        def _work():
+            try:
+                path = saver.replay_folder()
+            except Exception as exc:
+                Logger.debug("AppSidebar", "Replay folder lookup failed.", exc=exc)
+                path = ""
+
+            def _show():
+                try:
+                    if not self.winfo_exists():
+                        return
+                except Exception:
+                    return
+                text = (
+                    f"Replay folder: {path}"
+                    if path
+                    else "Replay folder: connect the League client to see it."
+                )
+                try:
+                    label.configure(text=text)
+                except Exception as exc:
+                    Logger.debug("AppSidebar", "Replay folder label failed.", exc=exc)
+
+            self._run_on_ui(_show)
+
+        # One request, only when Settings is opened. With the app's UI queue
+        # it stays off the UI thread; without one (tests) it runs here.
+        ui_queue = getattr(getattr(self, "master", None), "_ui_queue", None)
+        if ui_queue is None:
+            _work()
+        else:
+            threading.Thread(target=_work, name="ReplayFolder", daemon=True).start()
 
     def _on_toggle_auto_honor(self):
         self.config.set("auto_honor_enabled", self.var_auto_honor.get())

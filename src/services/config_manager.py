@@ -118,6 +118,10 @@ DEFAULT_CONFIG = {
     "arena_synergy_enabled": False,
     "run_in_tray": True,
     "skip_stats_enabled": True,
+    # Download the post-game replay (.rofl) once the match ends. Off: replays
+    # expire when the patch changes, and the download is a client request the
+    # user has to ask for.
+    "auto_save_replays": False,
     "auto_runes_enabled": False,
     "aram_auto_add_played": False
 }
