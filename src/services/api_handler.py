@@ -2506,6 +2506,11 @@ class LCUClient:
         "/lol-gameflow/v1/session",
         "/lol-end-of-game/v1/eog-stats-block",
         "/lol-honor-v2/v1/ballot",
+        # A replay the client doesn't have (old patch, custom game, still
+        # uploading) 404s. That is the answer, not a broken request. Logging
+        # each one turned "download recent replays" into a warning per game.
+        "/lol-replays/v1/metadata",
+        "/lol-replays/v1/rofls",
     )
 
     @classmethod

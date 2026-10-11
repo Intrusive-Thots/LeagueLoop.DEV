@@ -159,6 +159,10 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         auto = self.automation
         if auto is not None and hasattr(self, "sidebar"):
             auto.log = self.sidebar.update_action_log
+            setter = getattr(self.sidebar, "set_replay_saver", None)
+            saver = getattr(auto, "replay_saver", None)
+            if callable(setter) and saver is not None:
+                setter(saver)
 
         # Already built by bootstrap(); just take the reference.
         self.account_manager = self.container.account_manager

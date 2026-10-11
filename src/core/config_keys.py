@@ -49,6 +49,10 @@ AUTO_HONOR_ENABLED = "auto_honor_enabled"
 HONOR_STRATEGY = "honor_strategy"
 #: Click through the post-game screens.
 SKIP_STATS_ENABLED = "skip_stats_enabled"
+#: Download the .rofl when a match ends. Off unless the user opts in: the
+#: client only keeps replays for the current patch, so this fires once, right
+#: after the game, and never during it.
+AUTO_SAVE_REPLAYS = "auto_save_replays"
 #: ARAM: swap to a higher-priority champion from the bench, and reroll.
 ARAM_BENCH_SWAP = "aram_bench_swap"
 ARAM_AUTO_REROLL = "aram_auto_reroll"

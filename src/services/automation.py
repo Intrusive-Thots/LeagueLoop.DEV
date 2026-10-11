@@ -21,10 +21,12 @@ from utils.logger import Logger  # type: ignore
 from core.config_keys import (
     AUTO_HONOR_ENABLED,
     AUTO_JOIN_ENABLED,
+    AUTO_SAVE_REPLAYS,
     CHAT_WARDEN_ENABLED,
     DODGE_BLACKLIST,
     DODGE_BLACKLIST_ENABLED,
 )
+from services.replay_service import ReplaySaver
 from core.constants import (
     QUEUE_ARAM, QUEUE_ARENA, QUEUE_ARENA_16, QUEUE_ARENA_3V3,
     TICK_SLEEP_DEFAULT, TICK_SLEEP_CHAMPSELECT,
@@ -123,6 +125,15 @@ class AutomationEngine:
         self._current_auto_joined_friend: Optional[str] = None
         self._current_auto_joined_party_id: Optional[str] = None
 
+        # Post-game replay download. Off until the user opts in. The saver
+        # itself refuses to run while a game is in progress.
+        self.replay_saver = ReplaySaver(
+            self.lcu,
+            self.config,
+            phase_getter=lambda: self.last_phase,
+        )
+        self.replay_saver.add_listener(self._on_replay_status)
+
     def start(self, start_paused: bool = False) -> None:
         """Starts the automation loop in a background thread."""
         if self.running: return
@@ -194,6 +205,42 @@ class AutomationEngine:
         if log_hook is not None:
             log_hook(msg)
         Logger.debug("Auto", msg)
+
+    def _on_replay_status(self, message: str, is_error: bool) -> None:
+        """One line in the action log when a replay was actually saved.
+
+        Failures stay in the log file and on the settings row. A missing
+        replay (old patch, custom game) should not take over the status line
+        the user is watching for honor and queue.
+        """
+        if is_error or not message:
+            return
+        self._log(message)
+
+    def _maybe_autosave_replay(self, phase: str, prev_phase: str) -> None:
+        """Start one download when the post-game screen opens.
+
+        Staying on that screen does not ask again. In-progress, lobby, and
+        champ select do not ask at all.
+        """
+        if phase not in ("PreEndOfGame", "EndOfGame"):
+            return
+        if prev_phase in ("PreEndOfGame", "EndOfGame"):
+            return
+        # `is True` so a MagicMock config (tests) or a missing key stays off.
+        try:
+            enabled = self.config.get(AUTO_SAVE_REPLAYS, False) is True
+        except Exception:
+            enabled = False
+        if not enabled:
+            return
+        saver = getattr(self, "replay_saver", None)
+        if saver is None:
+            return
+        try:
+            saver.on_match_ended()
+        except Exception as exc:
+            Logger.debug("AutoLoop", "Replay auto-save did not start.", exc=exc)
 
     def _is_game_running(self) -> bool:
         """Check if League of Legends.exe (the game) is running.
@@ -455,6 +502,13 @@ class AutomationEngine:
                     session_data = sess_req.json()
             except Exception as e:
                 Logger.debug("AutoLoop", f"Session data fetch error: {e}")
+
+        # Replay saving is its own opt-in, not an automation action. It has to
+        # run when the engine is paused (the power switch) or the toggle does
+        # nothing for anyone who doesn't also run auto-honor. It only acts on
+        # the transition into the post-game screen, so an in-progress game
+        # still makes no extra requests.
+        self._maybe_autosave_replay(phase, prev_phase)
 
         if self.paused:
             # Pause used to be checked inside `_handle_champ_select` alone, so
