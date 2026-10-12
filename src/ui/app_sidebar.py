@@ -432,7 +432,7 @@ class SidebarWidget(ctk.CTkFrame):
         self._automation_rows = []
         self._automation_saved_states = {}  # Saved states when master is turned off
 
-        def _make_item_card(key, label_text, var, command, tooltip_text, icon_id, icon_type="item"):
+        def _make_item_card(key, label_text, var, command, tooltip_text, icon_id, icon_type="item", pack_card=True):
             card = ctk.CTkFrame(
                 self.automations_scroll,
                 fg_color=get_color("colors.background.card", "#192230"),
@@ -440,7 +440,8 @@ class SidebarWidget(ctk.CTkFrame):
                 border_width=1,
                 border_color="#1E2838"
             )
-            card.pack(fill="x", padx=CARD_PAD, pady=(0, INNER_GAP))
+            if pack_card:
+                card.pack(fill="x", padx=CARD_PAD, pady=(0, INNER_GAP))
 
             def _edit_handler(k=key):
                 if k == "priority_picker":
@@ -468,7 +469,8 @@ class SidebarWidget(ctk.CTkFrame):
             row = ToggleRow(**row_kwargs)
             row.pack(fill="x", padx=8, pady=6)
             row.card = card
-            self._automation_rows.append((key, var, row))
+            if pack_card:
+                self._automation_rows.append((key, var, row))
             return row
 
         # Auto Accept
@@ -506,25 +508,20 @@ class SidebarWidget(ctk.CTkFrame):
             "3363"
         )
 
-        # Auto Runes
-        self.var_auto_runes = ctk.BooleanVar(value=self.config.get("auto_runes_enabled", False))
-        self.row_auto_runes = _make_item_card("auto_runes", "Auto Runes", self.var_auto_runes, self._on_toggle_auto_runes, "Automatically equips recommended runes for your champion", "3340")
-
         # Auto Select Skin
         self.var_auto_skin = ctk.BooleanVar(value=self.config.get("auto_random_skin", True))
         self.row_auto_skin = _make_item_card("auto_skin", "Auto Select Skin", self.var_auto_skin, self._on_toggle_auto_skin, "Automatically selects a random skin when a champion is selected", "3157", icon_type="item")
 
-        # Auto-Ban
+        # Auto-Ban (hidden for now: ARAM focus)
         self.var_auto_ban = ctk.BooleanVar(value=self.config.get("auto_ban_enabled", False))
-        self.row_auto_ban = _make_item_card("auto_ban", "Auto-Ban", self.var_auto_ban, self._on_toggle_auto_ban, "Automatically bans configured champions in champ select", "350", icon_type="champion")
+        self.row_auto_ban = _make_item_card("auto_ban", "Auto-Ban", self.var_auto_ban, self._on_toggle_auto_ban, "Automatically bans configured champions in champ select", "350", icon_type="champion", pack_card=False)
 
         # Build quick automation icons row below Find Match
         self._build_quick_automation_icon_bar()
 
-        # Ensure bi-directional trace updates for all automation variables
+        # Ensure bi-directional trace updates for all active automation variables
         for _v in [self.var_accept, self.var_priority, self.var_auto_join, self.var_auto_honor,
-                   self.var_skip_stats, self.var_auto_save_replays, self.var_auto_runes, self.var_auto_skin,
-                   self.var_auto_ban]:
+                   self.var_skip_stats, self.var_auto_save_replays, self.var_auto_skin]:
             try:
                 _v.trace_add("write", lambda *args: self._update_all_quick_icons())
             except Exception as exc:
@@ -1046,14 +1043,7 @@ class SidebarWidget(ctk.CTkFrame):
         if hasattr(self, "draft_tool"):
             self.draft_tool.pack_forget()
 
-        if mode in ["Arena", "Arena 3v6"]:
-            if hasattr(self, "arena_tool"):
-                self.arena_tool.pack(fill="x", pady=(0, SPACING_MD), padx=0)
-        elif mode in ["Draft Pick", "Ranked Solo/Duo", "Ranked Flex", "Quickplay"]:
-            if hasattr(self, "draft_tool"):
-                self.draft_tool.pack(fill="x", pady=(0, SPACING_MD), padx=0)
-
-        # Keep host collapsed on ARAM / other modes so Play tab has no dead gap
+        # Focused exclusively on ARAM aspects: non-ARAM tools remain hidden
         self._pack_game_tool_container_if_needed()
 
     def _on_mode_change(self, new_mode):
@@ -1524,9 +1514,7 @@ class SidebarWidget(ctk.CTkFrame):
             ("auto_honor", "Auto Honor", self.var_auto_honor, self._on_toggle_auto_honor, "3105", "item"),
             ("skip_stats", "Skip Stats", self.var_skip_stats, self._on_toggle_skip_stats, "3111", "item"),
             ("auto_save_replays", "Auto Replays", self.var_auto_save_replays, self._on_toggle_auto_save_replays, "3363", "item"),
-            ("auto_runes", "Auto Runes", self.var_auto_runes, self._on_toggle_auto_runes, "3340", "item"),
             ("auto_skin", "Auto Select Skin", self.var_auto_skin, self._on_toggle_auto_skin, "3157", "item"),
-            ("auto_ban", "Auto-Ban", self.var_auto_ban, self._on_toggle_auto_ban, "350", "champion"),
         ]
 
         self._quick_icon_widgets = {}
@@ -1843,10 +1831,8 @@ class SidebarWidget(ctk.CTkFrame):
             self._on_toggle_auto_honor()
             self._on_toggle_skip_stats()
             self._on_toggle_auto_save_replays()
-            self._on_toggle_auto_runes()
             self._on_toggle_auto_skin()
             self._on_toggle_auto_add_played()
-            self._on_toggle_auto_ban()
         else:
             # Save current states then turn all off
             self._master_label.configure(
@@ -1866,9 +1852,8 @@ class SidebarWidget(ctk.CTkFrame):
             self._on_toggle_auto_honor()
             self._on_toggle_skip_stats()
             self._on_toggle_auto_save_replays()
-            self._on_toggle_auto_runes()
+            self._on_toggle_auto_skin()
             self._on_toggle_auto_add_played()
-            self._on_toggle_auto_ban()
 
     def _open_editor(self, automation_key):
         """Open the automation parameter editor popup."""

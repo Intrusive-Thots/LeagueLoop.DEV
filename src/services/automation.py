@@ -874,10 +874,6 @@ class AutomationEngine:
         if self.config.get("auto_random_skin", True) and not self._skin_equipped:
             self._equip_random_skin(session)
 
-        # 2.1 Auto-Equip Runes
-        if not self._runes_equipped:
-            self._auto_equip_runes(session)
-
     def _handle_bench(self, session, my_team, bench):
         """The ARAM bench: swap toward the priority list, or note what you kept.
 
@@ -1033,70 +1029,9 @@ class AutomationEngine:
 
 
     def _auto_equip_runes(self, session):
-        """Inject baseline recommended runes via modern LCU perk endpoints."""
-        if not self.config.get("auto_runes_enabled", False):
-            self._runes_equipped = True
-            return
-
-        try:
-            me = self._get_local_player(session)
-            if not me: return
-            champ_id = me.get("championId", 0)
-            if not champ_id: return
-
-            assigned = (me.get("assignedPosition", "") or "").lower()
-            is_aram = self.current_queue_id in {450, 2400} or getattr(self, "current_queue_id", None) in {450, 2400}
-
-            candidate_endpoints = []
-            if is_aram or not assigned:
-                candidate_endpoints.append(f"/lol-perks/v1/recommended-pages/champion/{champ_id}/position/aram/map/12")
-            if assigned:
-                candidate_endpoints.append(f"/lol-perks/v1/recommended-pages/champion/{champ_id}/position/{assigned}/map/11")
-            candidate_endpoints.extend([
-                f"/lol-perks/v1/recommended-pages/champion/{champ_id}/position/middle/map/11",
-                f"/lol-perks/v1/recommended-pages/champion/{champ_id}/position/top/map/11",
-            ])
-
-            recs = None
-            for ep in candidate_endpoints:
-                req = self.lcu.request("GET", ep, silent=True)
-                if req and req.status_code == 200:
-                    data = req.json()
-                    if isinstance(data, list) and data:
-                        recs = data
-                        break
-
-            if not recs:
-                return
-
-            best_page = recs[0]
-            cname = self.assets.get_champ_name(champ_id) or str(champ_id)
-
-            curr_req = self.lcu.request("GET", "/lol-perks/v1/currentpage", silent=True)
-            if curr_req and curr_req.status_code == 200:
-                curr = curr_req.json()
-                if curr and isinstance(curr, dict) and curr.get("id") and curr.get("isEditable", True):
-                    page_id = curr["id"]
-                    curr["name"] = f"LeagueLoop: {cname}"
-                    curr["primaryStyleId"] = best_page.get("primaryPerkStyleId") or best_page.get("primaryStyleId")
-                    curr["subStyleId"] = best_page.get("secondaryPerkStyleId") or best_page.get("subStyleId")
-                    perk_ids = []
-                    if "perks" in best_page and isinstance(best_page["perks"], list):
-                        perk_ids = [p.get("id") for p in best_page["perks"] if isinstance(p, dict) and p.get("id")]
-                    elif "selectedPerkIds" in best_page:
-                        perk_ids = best_page["selectedPerkIds"]
-                    if perk_ids:
-                        curr["selectedPerkIds"] = perk_ids
-                    curr["current"] = True
-                    put_res = self.lcu.request("PUT", f"/lol-perks/v1/pages/{page_id}", data=curr, silent=True)
-                    if put_res and put_res.status_code in [200, 201, 204]:
-                        self._runes_equipped = True
-                        self._log(f"Auto-Equipped Recommended Runes for {cname}!")
-                        return
-
-            self._runes_equipped = True
-        except Exception as e:
-            Logger.debug("Auto", f"Rune equip error: {e}")
+        """No-op: Runes feature removed to focus app exclusively on ARAM aspects."""
+        self._runes_equipped = True
+        return
 
     def _dodge_blacklist(self) -> list:
         """The blacklist as it is configured right now."""
