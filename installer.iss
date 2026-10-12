@@ -1,7 +1,7 @@
 ; LeagueLoop Installer — Inno Setup Script
 
-#define AppVersion "2-10-284-0521"
-#define VersionInfoVersion "2.10.284.0521"
+#define AppVersion "2-10-285-0251"
+#define VersionInfoVersion "2.10.285.0251"
 
 
 [Setup]

@@ -493,6 +493,16 @@ class SidebarWidget(ctk.CTkFrame):
         self.var_skip_stats = ctk.BooleanVar(value=self.config.get("skip_stats_enabled", True))
         self.row_skip_stats = _make_item_card("skip_stats", "Skip Stats", self.var_skip_stats, self._on_toggle_skip_stats, "Automatically skips the post-match stats screen", "3111")
 
+        # Auto Replay
+        from core.config_keys import AUTO_SAVE_REPLAYS
+        self.var_auto_save_replays = ctk.BooleanVar(value=bool(self.config.get(AUTO_SAVE_REPLAYS, False)))
+        self.row_auto_save_replays_card = _make_item_card(
+            "auto_save_replays", "Auto Replays", self.var_auto_save_replays,
+            self._on_toggle_auto_save_replays,
+            "Automatically downloads match replays (.rofl) after each game (compatible with Skip Stats)",
+            "3363"
+        )
+
         # Auto Runes
         self.var_auto_runes = ctk.BooleanVar(value=self.config.get("auto_runes_enabled", False))
         self.row_auto_runes = _make_item_card("auto_runes", "Auto Runes", self.var_auto_runes, self._on_toggle_auto_runes, "Automatically equips recommended runes for your champion", "3340")
@@ -510,7 +520,7 @@ class SidebarWidget(ctk.CTkFrame):
 
         # Ensure bi-directional trace updates for all automation variables
         for _v in [self.var_accept, self.var_priority, self.var_auto_join, self.var_auto_honor,
-                   self.var_skip_stats, self.var_auto_runes, self.var_auto_skin,
+                   self.var_skip_stats, self.var_auto_save_replays, self.var_auto_runes, self.var_auto_skin,
                    self.var_auto_ban]:
             try:
                 _v.trace_add("write", lambda *args: self._update_all_quick_icons())
@@ -569,23 +579,14 @@ class SidebarWidget(ctk.CTkFrame):
         # ARAM: Mayhem games aren't in Riot's match API, so the .rofl is the
         # timeline. The download itself happens after the match, in ReplaySaver.
         card_replays = make_card(self.advanced_scroll, title="REPLAYS", padx=0, pady=(0, SECTION_GAP))
-        from core.config_keys import AUTO_SAVE_REPLAYS
         self.replay_saver = None
-        self.var_auto_save_replays = ctk.BooleanVar(
-            value=self.config.get(AUTO_SAVE_REPLAYS, False) is True
-        )
-
-        def _on_auto_save_replays():
-            # The widget value, not a config stand-in. BooleanVar can hand
-            # back 0/1 on some Tk builds; store a real bool either way.
-            self.config.set(AUTO_SAVE_REPLAYS, bool(self.var_auto_save_replays.get()))
 
         self.row_auto_save_replays = SettingsToggleRow(
             card_replays,
             label_text="Auto-save replays after each match",
             variable=self.var_auto_save_replays,
-            command=_on_auto_save_replays,
-            tooltip_text="After a game ends, ask the League client to download the replay (.rofl).",
+            command=self._on_toggle_auto_save_replays,
+            tooltip_text="After a game ends, ask the League client to download the replay (.rofl). Fully compatible with Skip Stats.",
             height=46,
         )
         self.row_auto_save_replays.text_label.configure(wraplength=170)
@@ -1519,6 +1520,7 @@ class SidebarWidget(ctk.CTkFrame):
             ("auto_join", "Friend Auto-Join", self.var_auto_join, self._on_toggle_auto_join, "3109", "item"),
             ("auto_honor", "Auto Honor", self.var_auto_honor, self._on_toggle_auto_honor, "3105", "item"),
             ("skip_stats", "Skip Stats", self.var_skip_stats, self._on_toggle_skip_stats, "3111", "item"),
+            ("auto_save_replays", "Auto Replays", self.var_auto_save_replays, self._on_toggle_auto_save_replays, "3363", "item"),
             ("auto_runes", "Auto Runes", self.var_auto_runes, self._on_toggle_auto_runes, "3340", "item"),
             ("auto_skin", "Auto Select Skin", self.var_auto_skin, self._on_toggle_auto_skin, "3157", "item"),
             ("auto_ban", "Auto-Ban", self.var_auto_ban, self._on_toggle_auto_ban, "350", "champion"),
@@ -1793,6 +1795,11 @@ class SidebarWidget(ctk.CTkFrame):
     def _on_toggle_skip_stats(self):
         self.config.set("skip_stats_enabled", self.var_skip_stats.get())
         self._update_all_quick_icons()
+
+    def _on_toggle_auto_save_replays(self):
+        from core.config_keys import AUTO_SAVE_REPLAYS
+        self.config.set(AUTO_SAVE_REPLAYS, bool(self.var_auto_save_replays.get()))
+        self._update_all_quick_icons()
         
     def _on_toggle_auto_runes(self):
         self.config.set("auto_runes_enabled", self.var_auto_runes.get())
@@ -1832,6 +1839,7 @@ class SidebarWidget(ctk.CTkFrame):
             self._on_toggle_auto_join()
             self._on_toggle_auto_honor()
             self._on_toggle_skip_stats()
+            self._on_toggle_auto_save_replays()
             self._on_toggle_auto_runes()
             self._on_toggle_auto_skin()
             self._on_toggle_auto_add_played()
@@ -1854,6 +1862,7 @@ class SidebarWidget(ctk.CTkFrame):
             self._on_toggle_auto_join()
             self._on_toggle_auto_honor()
             self._on_toggle_skip_stats()
+            self._on_toggle_auto_save_replays()
             self._on_toggle_auto_runes()
             self._on_toggle_auto_add_played()
             self._on_toggle_auto_ban()

@@ -2012,8 +2012,9 @@ class AutomationEngine:
 
         auto_honor = self.config.get(AUTO_HONOR_ENABLED, True)
         skip_stats = self.config.get("skip_stats_enabled", True)
+        auto_replays = self.config.get(AUTO_SAVE_REPLAYS, False) is True
 
-        if not auto_honor and not skip_stats:
+        if not auto_honor and not skip_stats and not auto_replays:
             return
 
         if self._honor_handled:
@@ -2086,8 +2087,6 @@ class AutomationEngine:
                         puuid = p.get("puuid", "")
                         if puuid and puuid != my_puuid:
                             teammates.append(p)
-                    break
-
             if not teammates:
                 self._honor_handled = True
                 return
@@ -2149,6 +2148,14 @@ class AutomationEngine:
                 self._honor_handled = True
 
             if self._honor_handled:
+                if auto_replays and game_id:
+                    saver = getattr(self, "replay_saver", None)
+                    if saver is not None:
+                        try:
+                            saver.on_match_ended(game_id=game_id)
+                        except Exception as e_rep:
+                            Logger.debug("AutoLoop", f"Replay saver trigger error: {e_rep}")
+
                 if skip_stats:
                     # Auto proceed to lobby ("Play Again")
                     play_again = self.lcu.request("POST", "/lol-lobby/v2/play-again", silent=True)

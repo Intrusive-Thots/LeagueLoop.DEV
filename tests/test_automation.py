@@ -774,6 +774,34 @@ class TestAutomationEngineAutoHonor(unittest.TestCase):
         self.assertTrue(engine._honor_handled)
         engine._log.assert_any_call("Honored Faker#T1 (Ahri) (random)")
 
+    def test_end_of_game_triggers_replay_saver_before_skip_stats(self):
+        engine = self._make_engine()
+        engine.config.get.side_effect = lambda key, default=False: {
+            "auto_honor_enabled": False,
+            "skip_stats_enabled": True,
+            "auto_save_replays": True,
+        }.get(key, default)
+        engine.replay_saver = MagicMock()
+
+        def mock_request(method, endpoint, *args, **kwargs):
+            mock = MagicMock()
+            mock.status_code = 200
+            if endpoint == "/lol-end-of-game/v1/eog-stats-block":
+                mock.json.return_value = {
+                    "gameId": 9999,
+                    "localPlayer": {"puuid": "player-me"},
+                    "teams": [{"isPlayerTeam": True, "players": [{"puuid": "player-me"}, {"puuid": "player-other"}]}],
+                }
+            elif endpoint == "/lol-lobby/v2/play-again":
+                mock.status_code = 200
+            return mock
+
+        engine.lcu.request.side_effect = mock_request
+        engine._handle_end_of_game("EndOfGame")
+
+        engine.replay_saver.on_match_ended.assert_called_once_with(game_id=9999)
+        self.assertTrue(engine._honor_handled)
+
 
 
 class TestAutomationEngineDraftAssistantCoverage(unittest.TestCase):

@@ -97,6 +97,7 @@ class AutomationEditor(ctk.CTkToplevel):
             "auto_join": "Friend Auto-Join",
             "auto_honor": "Auto Honor",
             "skip_stats": "Skip Stats",
+            "auto_save_replays": "Auto Replays",
             "auto_runes": "Auto Runes",
             "auto_skin": "Auto Select Skin",
             "auto_add_played": "ARAM Auto-Add Played",
@@ -298,6 +299,20 @@ class AutomationEditor(ctk.CTkToplevel):
         ctk.CTkLabel(
             self.body,
             text="Automatically skips the end-of-game victory/defeat stats screen and returns immediately to lobby or play again.",
+            font=get_font("caption"), text_color=get_color("colors.text.muted"),
+            wraplength=320, justify="left"
+        ).pack(anchor="w")
+
+    def _build_auto_save_replays(self):
+        """Auto Replays settings form."""
+        ctk.CTkLabel(
+            self.body, text="Post-Match Replay Behavior",
+            font=get_font("body", "bold"), text_color=get_color("colors.text.primary")
+        ).pack(anchor="w", pady=(0, 8))
+
+        ctk.CTkLabel(
+            self.body,
+            text="Automatically requests and downloads the match replay (.rofl) through the League Client as if clicking the download button after the match.\n\nFully compatible with Skip Stats — the replay download is dispatched and saved in the background even if the stats screen is skipped immediately.",
             font=get_font("caption"), text_color=get_color("colors.text.muted"),
             wraplength=320, justify="left"
         ).pack(anchor="w")
