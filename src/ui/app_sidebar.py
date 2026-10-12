@@ -491,7 +491,10 @@ class SidebarWidget(ctk.CTkFrame):
 
         # Skip Stats
         self.var_skip_stats = ctk.BooleanVar(value=self.config.get("skip_stats_enabled", True))
-        self.row_skip_stats = _make_item_card("skip_stats", "Skip Stats", self.var_skip_stats, self._on_toggle_skip_stats, "Automatically skips the post-match stats screen", "3111")
+        self.row_skip_stats = _make_item_card(
+            "skip_stats", "Skip Stats", self.var_skip_stats, self._on_toggle_skip_stats,
+            "Skips post-game stats and continuously loops: plays again and finds match automatically", "3111"
+        )
 
         # Auto Replay
         from core.config_keys import AUTO_SAVE_REPLAYS
@@ -1971,6 +1974,8 @@ class SidebarWidget(ctk.CTkFrame):
                     res = self.lcu.request("POST", "/lol-lobby/v2/play-again")
                     if res and res.status_code in [200, 204]:
                         self.after(0, lambda: self.update_action_log("Entered Lobby."))
+                        if self.config.get("skip_stats_enabled", True) and hasattr(self, "automation") and self.automation:
+                            self.automation._post_game_requeue_pending = True
                     else:
                         self.after(0, lambda: self.update_action_log("Play Again failed."))
                 except Exception as e:
@@ -2165,8 +2170,8 @@ class SidebarWidget(ctk.CTkFrame):
                 self._hide_quick_actions(show_find_match=False)
             self._last_ui_phase = phase
 
-        elif phase in ["EndOfGame", "PreEndOfGame"]:
-            if prev_ui_phase not in ["EndOfGame", "PreEndOfGame"]:
+        elif phase in ["EndOfGame", "PreEndOfGame", "WaitingForStats"]:
+            if prev_ui_phase not in ["EndOfGame", "PreEndOfGame", "WaitingForStats"]:
                 self._stop_local_queue_timer()
                 self.time_label.configure(text="Post Game", text_color=get_color("colors.text.primary"))
                 self.estimate_label.configure(text="● Waiting Stats", text_color=get_color("colors.state.warning", "#F59E0B"))

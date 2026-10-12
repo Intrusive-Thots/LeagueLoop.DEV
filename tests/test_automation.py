@@ -802,6 +802,80 @@ class TestAutomationEngineAutoHonor(unittest.TestCase):
         engine.replay_saver.on_match_ended.assert_called_once_with(game_id=9999)
         self.assertTrue(engine._honor_handled)
 
+    def test_end_of_game_waiting_for_stats_triggers_play_again_and_requeue(self):
+        engine = self._make_engine()
+        engine.config.get.side_effect = lambda key, default=False: {
+            "auto_honor_enabled": False,
+            "skip_stats_enabled": True,
+            "auto_save_replays": False,
+        }.get(key, default)
+
+        called_endpoints = []
+        def mock_request(method, endpoint, *args, **kwargs):
+            called_endpoints.append((method, endpoint))
+            mock = MagicMock()
+            mock.status_code = 200
+            return mock
+
+        engine.lcu.request.side_effect = mock_request
+        engine._handle_end_of_game("WaitingForStats")
+
+        self.assertIn(("POST", "/lol-lobby/v2/play-again"), called_endpoints)
+        self.assertTrue(engine._play_again_handled)
+        self.assertTrue(engine._post_game_requeue_pending)
+
+    def test_handle_post_game_requeue_starts_matchmaking_in_lobby(self):
+        engine = self._make_engine()
+        engine.config.get.side_effect = lambda key, default=False: {
+            "skip_stats_enabled": True,
+        }.get(key, default)
+        engine._post_game_requeue_pending = True
+
+        def mock_request(method, endpoint, *args, **kwargs):
+            mock = MagicMock()
+            mock.status_code = 200
+            if endpoint == "/lol-lobby/v2/lobby/matchmaking/search-state":
+                mock.json.return_value = {"searchState": "Invalid"}
+            elif endpoint == "/lol-lobby/v2/lobby":
+                mock.json.return_value = {
+                    "localMember": {"isLeader": True},
+                    "gameConfig": {"queueId": 450}
+                }
+            return mock
+
+        engine.lcu.request.side_effect = mock_request
+        engine._handle_post_game_requeue("Lobby", "WaitingForStats")
+
+        engine.lcu.request.assert_any_call("POST", "/lol-lobby/v2/lobby/matchmaking/search", None)
+        self.assertFalse(engine._post_game_requeue_pending)
+
+    def test_handle_post_game_requeue_non_leader_skips_cleanly(self):
+        engine = self._make_engine()
+        engine.config.get.side_effect = lambda key, default=False: {
+            "skip_stats_enabled": True,
+        }.get(key, default)
+        engine._post_game_requeue_pending = True
+
+        def mock_request(method, endpoint, *args, **kwargs):
+            mock = MagicMock()
+            mock.status_code = 200
+            if endpoint == "/lol-lobby/v2/lobby/matchmaking/search-state":
+                mock.json.return_value = {"searchState": "Invalid"}
+            elif endpoint == "/lol-lobby/v2/lobby":
+                mock.json.return_value = {
+                    "localMember": {"isLeader": False},
+                    "gameConfig": {"queueId": 450}
+                }
+            return mock
+
+        engine.lcu.request.side_effect = mock_request
+        engine._handle_post_game_requeue("Lobby", "WaitingForStats")
+
+        # Must not start search if not leader
+        search_calls = [c for c in engine.lcu.request.call_args_list if c[0] == ("POST", "/lol-lobby/v2/lobby/matchmaking/search")]
+        self.assertEqual(len(search_calls), 0)
+        self.assertFalse(engine._post_game_requeue_pending)
+
 
 
 class TestAutomationEngineDraftAssistantCoverage(unittest.TestCase):

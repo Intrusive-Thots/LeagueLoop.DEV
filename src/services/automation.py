@@ -125,6 +125,13 @@ class AutomationEngine:
         self._current_auto_joined_friend: Optional[str] = None
         self._current_auto_joined_party_id: Optional[str] = None
 
+        # Continuous loop post-match requeue tracking
+        self._post_game_requeue_pending: bool = False
+        self._post_game_requeue_attempts: int = 0
+        self._play_again_handled: bool = False
+        self._eog_stats_attempts: int = 0
+        self._last_recorded_eog_game_id: Optional[int] = None
+
         # Post-game replay download. Off until the user opts in. The saver
         # itself refuses to run while a game is in progress.
         self.replay_saver = ReplaySaver(
@@ -519,6 +526,7 @@ class AutomationEngine:
         self._handle_ready_check(phase)
         self._handle_champ_select(phase, session_data)
         self._handle_dodge_requeue(phase, prev_phase)
+        self._handle_post_game_requeue(phase, prev_phase)
         self._handle_end_of_game(phase)
         self._check_friend_lobby(phase)
 
@@ -687,6 +695,70 @@ class AutomationEngine:
                           what="Restarted matchmaking after a dodge")
                 self._log("Dodge detected. Restarting Matchmaking...")
                 self._last_search_state_time = 0
+
+    def _handle_post_game_requeue(self, phase, prev_phase=None):
+        """Continuous loop requeue: when skip_stats is enabled, restarts matchmaking search after match ends."""
+        if self.paused:
+            self._post_game_requeue_pending = False
+            return
+        if not self.config.get("skip_stats_enabled", True):
+            return
+
+        if prev_phase is None:
+            prev_phase = self.last_phase
+
+        # Trigger requeue flag if transitioning from match/post-game directly into Lobby
+        if phase == "Lobby" and prev_phase in ("InProgress", "WaitingForStats", "PreEndOfGame", "EndOfGame"):
+            self._post_game_requeue_pending = True
+
+        if phase != "Lobby" or not getattr(self, "_post_game_requeue_pending", False):
+            if phase in ("Matchmaking", "ReadyCheck", "ChampSelect", "InProgress"):
+                self._post_game_requeue_pending = False
+                self._post_game_requeue_attempts = 0
+            return
+
+        # Check if already searching
+        search_state = self.lcu.request("GET", "/lol-lobby/v2/lobby/matchmaking/search-state", silent=True)
+        if search_state and getattr(search_state, "status_code", 0) == 200:
+            st = search_state.json()
+            if st and st.get("searchState") == "Searching":
+                Logger.info("Automation", "Already searching matchmaking; continuous loop requeue satisfied.")
+                self._post_game_requeue_pending = False
+                self._post_game_requeue_attempts = 0
+                return
+
+        # Check lobby exists and verify leader permissions
+        lobby_resp = self.lcu.request("GET", "/lol-lobby/v2/lobby", silent=True)
+        if not lobby_resp or getattr(lobby_resp, "status_code", 0) != 200:
+            # Lobby still initializing; retry next tick
+            return
+
+        lobby_data = lobby_resp.json()
+        local_member = lobby_data.get("localMember", {})
+        if not local_member.get("isLeader", True):
+            Logger.debug("Automation", "Continuous loop: Local player is not lobby leader; skipping matchmaking search.")
+            self._post_game_requeue_pending = False
+            self._post_game_requeue_attempts = 0
+            return
+
+        game_cfg = lobby_data.get("gameConfig", {})
+        if not game_cfg.get("queueId"):
+            # Queue ID not yet populated in lobby config; retry next tick
+            return
+
+        # Hit Find Match
+        success = self._act("POST", "/lol-lobby/v2/lobby/matchmaking/search",
+                            what="Started matchmaking search (Continuous Loop)")
+        if success:
+            self._log("Started matchmaking search (Continuous Loop)")
+            self._post_game_requeue_pending = False
+            self._post_game_requeue_attempts = 0
+        else:
+            self._post_game_requeue_attempts = getattr(self, "_post_game_requeue_attempts", 0) + 1
+            if self._post_game_requeue_attempts >= 5:
+                Logger.warning("Automation", "Continuous loop: Failed to start matchmaking search after 5 attempts.")
+                self._post_game_requeue_pending = False
+                self._post_game_requeue_attempts = 0
 
     def _handle_champ_select(self, phase, session):
         if self.paused: return
@@ -2005,13 +2077,15 @@ class AutomationEngine:
         return f"{name} ({champ})" if champ else name
 
     def _handle_end_of_game(self, phase):
-        if phase not in ["PreEndOfGame", "EndOfGame"]:
+        if phase not in ["WaitingForStats", "PreEndOfGame", "EndOfGame"]:
             self._honor_handled = False
             self._honor_attempts = 0
+            self._eog_stats_attempts = 0
+            self._play_again_handled = False
             return
 
         auto_honor = self.config.get(AUTO_HONOR_ENABLED, True)
-        skip_stats = self.config.get("skip_stats_enabled", True)
+        skip_stats = self.config.get("skip_stats_enabled", False)
         auto_replays = self.config.get(AUTO_SAVE_REPLAYS, False) is True
 
         if not auto_honor and not skip_stats and not auto_replays:
@@ -2022,145 +2096,50 @@ class AutomationEngine:
 
         try:
             eog = self.lcu.request("GET", "/lol-end-of-game/v1/eog-stats-block", silent=True)
-            if not eog or eog.status_code != 200:
-                return
-            
-            data = eog.json()
-            game_id = data.get("gameId")
-
-            # Persist match history to local SQLite DatabaseService
-            if getattr(self, "db", None) is not None and game_id:
-                try:
-                    local_player = data.get("localPlayer", {})
-                    champ_id = local_player.get("championId")
-                    if champ_id:
-                        stats = local_player.get("stats", {})
-                        is_win = False
-                        for team in data.get("teams", []):
-                            if team.get("isPlayerTeam", False):
-                                is_win = team.get("isWinningTeam", False) or bool(team.get("win"))
-                                break
-                        champ_name = (
-                            self.assets.get_champ_name(champ_id)
-                            if hasattr(self.assets, "get_champ_name")
-                            else str(champ_id)
-                        )
-                        match_rec = {
-                            "game_id": game_id,
-                            "timestamp": time.time(),
-                            "queue_id": data.get("queueId", getattr(self, "current_queue_id", None)),
-                            "champion_id": champ_id,
-                            "champion_name": champ_name,
-                            "role": local_player.get("role", "") or local_player.get("position", ""),
-                            "win": is_win,
-                            "kills": stats.get("CHAMPIONS_KILLED", 0),
-                            "deaths": stats.get("NUM_DEATHS", 0),
-                            "assists": stats.get("ASSISTS", 0),
-                            "duration_s": data.get("gameLength", 0),
-                            "raw_json": data,
-                        }
-                        self.db.record_match(match_rec)
-                except Exception as db_err:
-                    Logger.debug("AutoLoop", f"Match DB record error: {db_err}")
-            
-            my_puuid = data.get("localPlayer", {}).get("puuid")
-            if not my_puuid:
-                me_req = self.lcu.request("GET", "/lol-chat/v1/me")
-                if me_req and me_req.status_code == 200:
-                    my_puuid = me_req.json().get("puuid")
-
-            teams = data.get("teams", [])
-            teammates = []
-            
-            for team in teams:
-                players = team.get("players", [])
-
-                is_my_team = team.get("isPlayerTeam", False)
-                if not is_my_team and my_puuid:
-                    for p in players:
-                        if p.get("puuid") == my_puuid:
-                            is_my_team = True
-                            break
-
-                if is_my_team:
-                    for p in players:
-                        puuid = p.get("puuid", "")
-                        if puuid and puuid != my_puuid:
-                            teammates.append(p)
-            if not teammates:
-                self._honor_handled = True
-                return
-
-            friend_teammates = []
-            friends_res = self.lcu.request("GET", "/lol-chat/v1/friends")
-            if friends_res and friends_res.status_code == 200:
-                friend_puuids = {f.get("puuid", "") for f in friends_res.json()}
-                friend_teammates = [p for p in teammates if p.get("puuid", "") in friend_puuids]
-            
-            candidates = friend_teammates if friend_teammates else teammates
-
-            if auto_honor:
-                strategy = self.config.get("honor_strategy", "random")
-                if strategy == "best_kda":
-                    def kda(p):
-                        """Calculates KDA."""
-                        k = p.get("stats", {}).get("CHAMPIONS_KILLED", 0)
-                        a = p.get("stats", {}).get("ASSISTS", 0)
-                        d = max(p.get("stats", {}).get("NUM_DEATHS", 1), 1)
-                        return (k + a) / d
-                    target = max(candidates, key=kda)
-                elif strategy == "mvp":
-                    def score(p):
-                        """Calculates score."""
-                        s = p.get("stats", {})
-                        return s.get("CHAMPIONS_KILLED", 0) + s.get("ASSISTS", 0)
-                    target = max(candidates, key=score)
-                else:
-                    target = random.choice(candidates)
-
-                summoner_id = target.get("summonerId", 0)
-                puuid = target.get("puuid", "")
-                honor_body = {
-                    "gameId": game_id,
-                    "honorCategory": "HEART",
-                    "honorType": "HEART",
-                    "summonerId": summoner_id,
-                    "puuid": puuid
-                }
-                res = self.lcu.request("POST", "/lol-honor-v2/v1/honor-player", honor_body)
-                name = self._describe_teammate(target)
-                if res and res.status_code in [200, 204]:
-                    self._log(f"Honored {name} ({strategy})")
-                    self._honor_handled = True
-                elif res and res.status_code == 409:
-                    self._log(f"Honor already submitted or invalid: {name}")
-                    self._honor_handled = True
-                elif res and res.status_code == 429:
-                    self._log(f"Honor rate limited (429). Retrying next tick...")
-                else:
-                    Logger.debug("Auto", f"Honor request returned {res.status_code if res else 'None'}. Full target: {name}")
-                    self._honor_attempts = getattr(self, "_honor_attempts", 0) + 1
-                    if self._honor_attempts >= 3:
-                        self._log(f"Honor failed after 3 attempts. Giving up.")
-                        self._honor_handled = True
-                        self._honor_attempts = 0
+            data = None
+            game_id = None
+            if eog and eog.status_code == 200:
+                data = eog.json()
+                game_id = data.get("gameId")
             else:
-                self._honor_handled = True
+                self._eog_stats_attempts = getattr(self, "_eog_stats_attempts", 0) + 1
 
-            if self._honor_handled:
-                if auto_replays and game_id:
-                    saver = getattr(self, "replay_saver", None)
-                    if saver is not None:
-                        try:
-                            saver.on_match_ended(game_id=game_id)
-                        except Exception as e_rep:
-                            Logger.debug("AutoLoop", f"Replay saver trigger error: {e_rep}")
-
-                if skip_stats:
-                    # Auto proceed to lobby ("Play Again")
-                    play_again = self.lcu.request("POST", "/lol-lobby/v2/play-again", silent=True)
-                    if play_again and play_again.status_code in [200, 204]:
-                        self._log("Proceeded to Lobby (Skipped Stats)")
+            # Persist match history to local SQLite DatabaseService (only once per game)
+            if data and game_id:
+                if getattr(self, "db", None) is not None and getattr(self, "_last_recorded_eog_game_id", None) != game_id:
+                    self._last_recorded_eog_game_id = game_id
+                    try:
+                        local_player = data.get("localPlayer", {})
+                        champ_id = local_player.get("championId")
+                        if champ_id:
+                            stats = local_player.get("stats", {})
+                            is_win = False
+                            for team in data.get("teams", []):
+                                if team.get("isPlayerTeam", False):
+                                    is_win = team.get("isWinningTeam", False) or bool(team.get("win"))
+                                    break
+                            champ_name = (
+                                self.assets.get_champ_name(champ_id)
+                                if hasattr(self.assets, "get_champ_name")
+                                else str(champ_id)
+                            )
+                            match_rec = {
+                                "game_id": game_id,
+                                "timestamp": time.time(),
+                                "queue_id": data.get("queueId", getattr(self, "current_queue_id", None)),
+                                "champion_id": champ_id,
+                                "champion_name": champ_name,
+                                "role": local_player.get("role", "") or local_player.get("position", ""),
+                                "win": is_win,
+                                "kills": stats.get("CHAMPIONS_KILLED", 0),
+                                "deaths": stats.get("NUM_DEATHS", 0),
+                                "assists": stats.get("ASSISTS", 0),
+                                "duration_s": data.get("gameLength", 0),
+                                "raw_json": data,
+                            }
+                            self.db.record_match(match_rec)
+                    except Exception as db_err:
+                        Logger.debug("AutoLoop", f"Match DB record error: {db_err}")
 
                 # Auto-add played champion to ARAM list
                 if self.config.get("aram_auto_add_played", False):
@@ -2172,7 +2151,6 @@ class AutomationEngine:
                             if played_name and played_name != str(played_champ_id):
                                 priority_cfg = self.config.get("priority_picker", {})
                                 plist = priority_cfg.get("list", [])
-                                # Check if already in list (case-insensitive)
                                 played_lower = played_name.lower()
                                 already_in = any(p.lower() == played_lower for p in plist)
                                 if not already_in:
@@ -2182,7 +2160,110 @@ class AutomationEngine:
                                     self._log(f"ARAM List: Auto-added {played_name}")
                     except Exception as e:
                         Logger.debug("Auto", f"Auto-add played champion error: {e}")
-                
+
+            # Auto-Honor handling
+            if auto_honor and not self._honor_handled:
+                if not data:
+                    # In WaitingForStats or early post-game, stats block might take a couple ticks
+                    if self._eog_stats_attempts < 3:
+                        return
+                    # Give up waiting for stats block so we don't stall skip_stats
+                    self._honor_handled = True
+                else:
+                    my_puuid = data.get("localPlayer", {}).get("puuid")
+                    if not my_puuid:
+                        me_req = self.lcu.request("GET", "/lol-chat/v1/me")
+                        if me_req and me_req.status_code == 200:
+                            my_puuid = me_req.json().get("puuid")
+
+                    teams = data.get("teams", [])
+                    teammates = []
+                    for team in teams:
+                        players = team.get("players", [])
+                        is_my_team = team.get("isPlayerTeam", False)
+                        if not is_my_team and my_puuid:
+                            for p in players:
+                                if p.get("puuid") == my_puuid:
+                                    is_my_team = True
+                                    break
+                        if is_my_team:
+                            for p in players:
+                                puuid = p.get("puuid", "")
+                                if puuid and puuid != my_puuid:
+                                    teammates.append(p)
+
+                    if not teammates:
+                        self._honor_handled = True
+                    else:
+                        friend_teammates = []
+                        friends_res = self.lcu.request("GET", "/lol-chat/v1/friends")
+                        if friends_res and friends_res.status_code == 200:
+                            friend_puuids = {f.get("puuid", "") for f in friends_res.json()}
+                            friend_teammates = [p for p in teammates if p.get("puuid", "") in friend_puuids]
+
+                        candidates = friend_teammates if friend_teammates else teammates
+                        strategy = self.config.get("honor_strategy", "random")
+                        if strategy == "best_kda":
+                            def kda(p):
+                                k = p.get("stats", {}).get("CHAMPIONS_KILLED", 0)
+                                a = p.get("stats", {}).get("ASSISTS", 0)
+                                d = max(p.get("stats", {}).get("NUM_DEATHS", 1), 1)
+                                return (k + a) / d
+                            target = max(candidates, key=kda)
+                        elif strategy == "mvp":
+                            def score(p):
+                                s = p.get("stats", {})
+                                return s.get("CHAMPIONS_KILLED", 0) + s.get("ASSISTS", 0)
+                            target = max(candidates, key=score)
+                        else:
+                            target = random.choice(candidates)
+
+                        summoner_id = target.get("summonerId", 0)
+                        puuid = target.get("puuid", "")
+                        honor_body = {
+                            "gameId": game_id,
+                            "honorCategory": "HEART",
+                            "honorType": "HEART",
+                            "summonerId": summoner_id,
+                            "puuid": puuid
+                        }
+                        res = self.lcu.request("POST", "/lol-honor-v2/v1/honor-player", honor_body)
+                        name = self._describe_teammate(target)
+                        if res and res.status_code in [200, 204]:
+                            self._log(f"Honored {name} ({strategy})")
+                            self._honor_handled = True
+                        elif res and res.status_code == 409:
+                            self._log(f"Honor already submitted or invalid: {name}")
+                            self._honor_handled = True
+                        elif res and res.status_code == 429:
+                            self._log("Honor rate limited (429). Retrying next tick...")
+                        else:
+                            Logger.debug("Auto", f"Honor request returned {res.status_code if res else 'None'}. Full target: {name}")
+                            self._honor_attempts = getattr(self, "_honor_attempts", 0) + 1
+                            if self._honor_attempts >= 3:
+                                self._log("Honor failed after 3 attempts. Giving up.")
+                                self._honor_handled = True
+                                self._honor_attempts = 0
+            else:
+                self._honor_handled = True
+
+            # If honor is resolved, dispatch replay saving and skip stats
+            if self._honor_handled:
+                if auto_replays and game_id:
+                    saver = getattr(self, "replay_saver", None)
+                    if saver is not None:
+                        try:
+                            saver.on_match_ended(game_id=game_id)
+                        except Exception as e_rep:
+                            Logger.debug("AutoLoop", f"Replay saver trigger error: {e_rep}")
+
+                if skip_stats and not getattr(self, "_play_again_handled", False):
+                    play_again = self.lcu.request("POST", "/lol-lobby/v2/play-again", silent=True)
+                    if play_again and play_again.status_code in [200, 204]:
+                        self._log("Proceeded to Lobby (Skipped Stats)")
+                        self._play_again_handled = True
+                        self._post_game_requeue_pending = True
+
         except Exception as e:
             Logger.debug("Auto", f"End of game error: {e}")
 

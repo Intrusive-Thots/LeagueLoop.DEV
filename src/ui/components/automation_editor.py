@@ -298,7 +298,7 @@ class AutomationEditor(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             self.body,
-            text="Automatically skips the end-of-game victory/defeat stats screen and returns immediately to lobby or play again.",
+            text="Automatically skips the post-match stats screen, clicks Play Again, and restarts matchmaking in a continuous loop without requiring manual client interaction.",
             font=get_font("caption"), text_color=get_color("colors.text.muted"),
             wraplength=320, justify="left"
         ).pack(anchor="w")
