@@ -2,19 +2,71 @@
 Holographic Toasts - Delightful Notification System
 Provides non-intrusive, animated feedback for background actions.
 """
+from dataclasses import dataclass
+from typing import Optional
 from utils.logger import Logger
 import customtkinter as ctk
 from .factory import get_color, get_font, get_radius, parse_border
 from .color_utils import lighten_color
+
+
+@dataclass
+class ToastConfig:
+    """Configuration options for a Toast notification."""
+    icon: str = "✨"
+    duration: int = 3000
+    theme: str = "primary"
+    confetti: bool = False
+
+    @classmethod
+    def resolve(
+        cls,
+        config: Optional["ToastConfig"] = None,
+        args: tuple = (),
+        kwargs: Optional[dict] = None,
+    ) -> "ToastConfig":
+        """
+        Resolves a ToastConfig instance from an optional ToastConfig object,
+        positional args, or keyword arguments.
+        """
+        if isinstance(config, cls):
+            return config
+
+        kwargs = kwargs or {}
+        positional = (config,) + args if config is not None else args
+        field_names = ["icon", "duration", "theme", "confetti"]
+
+        merged = {}
+        for idx, val in enumerate(positional):
+            if idx < len(field_names) and val is not None:
+                merged[field_names[idx]] = val
+
+        for key in field_names:
+            if key in kwargs:
+                merged[key] = kwargs[key]
+
+        return cls(
+            icon=merged.get("icon", "✨"),
+            duration=merged.get("duration", 3000),
+            theme=merged.get("theme", "primary"),
+            confetti=bool(merged.get("confetti", False)),
+        )
+
 
 class Toast(ctk.CTkFrame):
     """
     A single toast notification.
     Designed with a 'Holographic' aesthetic: translucent bg, subtle glow, and clean typography.
     """
-    def __init__(self, parent, message, icon="✨", duration=3000, theme="primary", confetti=False):
-        # Resolve colors based on theme
+    def __init__(self, parent, message, config: Optional[ToastConfig] = None, *args, **kwargs):
         """Initializes the Toast component."""
+        toast_config = ToastConfig.resolve(config, args, kwargs)
+        icon = toast_config.icon
+        duration = toast_config.duration
+        theme = toast_config.theme
+        confetti = toast_config.confetti
+
+        # Resolve colors based on theme
         bg_hex = get_color("colors.background.panel")
         
         border_w, border_c = parse_border("subtle")
@@ -254,7 +306,7 @@ class ToastManager:
         # Position at bottom-right
         self.container.place(relx=0.98, rely=0.95, anchor="se")
         
-    def show(self, message, icon="✨", duration=3000, theme="primary", confetti=False):
+    def show(self, message, config: Optional[ToastConfig] = None, *args, **kwargs):
         """Create and show a toast."""
         # Item #189: Evict oldest toast if at capacity
         while len(self._toasts) >= self.MAX_TOASTS:
@@ -266,7 +318,7 @@ class ToastManager:
             if oldest in self._toasts:
                 self._toasts.remove(oldest)
 
-        toast = Toast(self.container, message, icon, duration, theme, confetti)
+        toast = Toast(self.container, message, config, *args, **kwargs)
         # Pack with initial high padding for animation
         toast.pack(pady=(50, 0), fill="x")
         self._toasts.append(toast)
