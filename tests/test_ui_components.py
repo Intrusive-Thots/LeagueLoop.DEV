@@ -347,6 +347,17 @@ class TestUIComponents(unittest.TestCase):
         self.assertEqual(cfg_pos.theme, "error")
         self.assertTrue(cfg_pos.confetti)
 
+        # Explicit None as first positional arg
+        cfg_none_first = ToastConfig.resolve(config=None, args=(5000, "error"))
+        self.assertEqual(cfg_none_first.icon, "✨")
+        self.assertEqual(cfg_none_first.duration, 5000)
+        self.assertEqual(cfg_none_first.theme, "error")
+
+        # Instance with kwarg overrides
+        cfg_override = ToastConfig.resolve(config=custom_cfg, kwargs={"theme": "success"})
+        self.assertEqual(cfg_override.icon, "🔥")
+        self.assertEqual(cfg_override.theme, "success")
+
     def test_toast_manager_show_and_eviction(self):
         """Test showing toasts and MAX_TOASTS eviction."""
         ToastManager._instance = None

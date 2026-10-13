@@ -2,7 +2,7 @@
 Holographic Toasts - Delightful Notification System
 Provides non-intrusive, animated feedback for background actions.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 from utils.logger import Logger
 import customtkinter as ctk
@@ -29,11 +29,15 @@ class ToastConfig:
         Resolves a ToastConfig instance from an optional ToastConfig object,
         positional args, or keyword arguments.
         """
+        kwargs = kwargs or {}
+
         if isinstance(config, cls):
+            valid_kwargs = {k: v for k, v in kwargs.items() if hasattr(config, k)}
+            if valid_kwargs:
+                return replace(config, **valid_kwargs)
             return config
 
-        kwargs = kwargs or {}
-        positional = (config,) + args if config is not None else args
+        positional = (config,) + args
         field_names = ["icon", "duration", "theme", "confetti"]
 
         merged = {}
