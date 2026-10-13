@@ -106,6 +106,28 @@ class AccountIndexTests(unittest.TestCase):
         self.manager.get_accounts_display()
         self.assertEqual(os.stat(self.path).st_mtime_ns, before)
 
+    def test_edit_account_updates_fields(self):
+        self.manager.edit_account(
+            0,
+            label="Updated Main",
+            username="newmain",
+            password="secretpassword",
+            tagline="Tag#123",
+            region="EUW",
+            is_default=True,
+        )
+        acct = self.manager.get_accounts()[0]
+        self.assertEqual(acct["label"], "Updated Main")
+        self.assertEqual(acct["username"], "newmain")
+        self.assertEqual(acct["tagline"], "Tag#123")
+        self.assertEqual(acct["region"], "EUW")
+        self.assertTrue(acct["is_default"])
+        self.assertIn("password_enc", self.manager.get_accounts()[0])
+
+    def test_edit_account_out_of_bounds_ignored(self):
+        self.manager.edit_account(99, label="NonExistent")
+        self.assertEqual(len(self.manager.get_accounts()), 3)
+
 
 if __name__ == "__main__":
     unittest.main()

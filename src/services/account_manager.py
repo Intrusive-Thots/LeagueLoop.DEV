@@ -624,24 +624,24 @@ class AccountManager:
             self._save()
             return idx
 
-    def edit_account(self, idx: int, label: str = None, username: str = None,
-                     password: str = None, tagline: str = None, region: str = None, is_default: bool = None):
+    def edit_account(self, idx: int, **fields):
         """Update fields of an existing account. Only non-None fields are changed."""
         with self._lock:
             if not (0 <= idx < len(self._accounts)):
                 return
             acct = self._accounts[idx]
-            if label is not None:
-                acct["label"] = label.strip()
-            if username is not None:
-                acct["username"] = username.strip()
-            if password is not None:
-                acct["password_enc"] = self._encrypt(password)
-            if tagline is not None:
-                acct["tagline"] = tagline.strip()
-            if region is not None:
-                acct["region"] = region.strip()
-            if is_default is not None:
+            if fields.get("label") is not None:
+                acct["label"] = fields["label"].strip()
+            if fields.get("username") is not None:
+                acct["username"] = fields["username"].strip()
+            if fields.get("password") is not None:
+                acct["password_enc"] = self._encrypt(fields["password"])
+            if fields.get("tagline") is not None:
+                acct["tagline"] = fields["tagline"].strip()
+            if fields.get("region") is not None:
+                acct["region"] = fields["region"].strip()
+            if fields.get("is_default") is not None:
+                is_default = fields["is_default"]
                 if is_default:
                     for i, a in enumerate(self._accounts):
                         a["is_default"] = (i == idx)
