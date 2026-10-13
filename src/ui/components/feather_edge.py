@@ -2,6 +2,7 @@
 FeatherEdge: A vertical gradient blending strip that feathers the companion window
 seamlessly into the adjacent League Client.
 """
+from dataclasses import dataclass
 import sys
 import tkinter as tk
 from typing import Optional, Tuple
@@ -11,6 +12,16 @@ from ui.components.color_utils import interpolate_color
 DEFAULT_CLIENT_EDGE_COLOR = "#010A13"   # League Client dark edge tone
 DEFAULT_APP_BG_COLOR = "#091428"        # LeagueLoop primary background tone
 DEFAULT_GOLD_SEAM = "#785A28"           # Hextech antique gold accent tone
+
+
+@dataclass
+class FeatherEdgeConfig:
+    """Configuration options for FeatherEdge styling and dimensions."""
+    width: int = 24
+    side: str = "left"
+    client_color: str = DEFAULT_CLIENT_EDGE_COLOR
+    app_color: str = DEFAULT_APP_BG_COLOR
+    seam_color: str = DEFAULT_GOLD_SEAM
 
 
 class FeatherEdge(tk.Canvas):
@@ -23,13 +34,16 @@ class FeatherEdge(tk.Canvas):
     def __init__(
         self,
         master,
-        width: int = 24,
-        side: str = "left",
-        client_color: str = DEFAULT_CLIENT_EDGE_COLOR,
-        app_color: str = DEFAULT_APP_BG_COLOR,
-        seam_color: str = DEFAULT_GOLD_SEAM,
+        config: Optional[FeatherEdgeConfig] = None,
         **kwargs
     ):
+        cfg = config or FeatherEdgeConfig()
+        width = kwargs.pop("width", cfg.width)
+        side = kwargs.pop("side", cfg.side)
+        client_color = kwargs.pop("client_color", cfg.client_color)
+        app_color = kwargs.pop("app_color", cfg.app_color)
+        seam_color = kwargs.pop("seam_color", cfg.seam_color)
+
         super().__init__(
             master,
             width=width,
