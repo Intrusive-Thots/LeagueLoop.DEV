@@ -70,9 +70,21 @@ import threading
 import time
 import traceback
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from typing import Any, Dict, List, Optional
+
+
+@dataclass(frozen=True)
+class LogRecord:
+    """Internal log record payload passed to `Logger._record`."""
+
+    level: str
+    tag: str
+    msg: Any
+    exc: Optional[BaseException] = None
+    detail: Optional[Dict[str, Any]] = None
 
 # --------------------------------------------------------------- constants
 
@@ -266,37 +278,30 @@ class Logger:
     # ------------------------------------------------------------ internals
 
     @classmethod
-    def _record(
-        cls,
-        level: str,
-        tag: str,
-        msg: Any,
-        exc: Optional[BaseException] = None,
-        detail: Optional[Dict[str, Any]] = None,
-    ) -> None:
-        text = str(msg)
+    def _record(cls, record: LogRecord) -> None:
+        text = str(record.msg)
         stamp = datetime.now().astimezone()
 
         # `ACTION` is our own level; it rides on INFO so stdlib filtering and
         # rotation behave normally, but keeps its own name in both outputs.
-        py_level = logging.INFO if level == "ACTION" else getattr(
-            logging, level, logging.INFO
+        py_level = logging.INFO if record.level == "ACTION" else getattr(
+            logging, record.level, logging.INFO
         )
 
         exc_info = None
-        if exc is not None:
-            exc_info = (type(exc), exc, exc.__traceback__)
+        if record.exc is not None:
+            exc_info = (type(record.exc), record.exc, record.exc.__traceback__)
 
-        prefix = f"[{tag}] " if tag else ""
+        prefix = f"[{record.tag}] " if record.tag else ""
         # Structured detail is the point of `detail=` — but it is also worth
         # having in the human-readable file, where most reading happens.
         suffix = ""
         # A multi-line record (the session banner, for one) reads worse with a
         # key=value tail stapled to its last line.
-        if detail and "\n" not in text:
+        if record.detail and "\n" not in text:
             try:
                 suffix = "  (" + " ".join(
-                    f"{k}={v}" for k, v in detail.items()
+                    f"{k}={v}" for k, v in record.detail.items()
                     if not isinstance(v, (dict, list, tuple))
                 ) + ")"
                 if suffix == "  ()":
@@ -309,10 +314,10 @@ class Logger:
                 f"{prefix}{text}{suffix}",
                 exc_info=exc_info,
                 extra={
-                    "ll_tag": tag,
+                    "ll_tag": record.tag,
                     "ll_msg": text,
-                    "ll_level": level,
-                    "ll_detail": detail,
+                    "ll_level": record.level,
+                    "ll_detail": record.detail,
                 },
             )
         except Exception:
@@ -323,22 +328,22 @@ class Logger:
         entry: Dict[str, Any] = {
             "ts": stamp.isoformat(timespec="milliseconds"),
             "elapsed_s": round(time.time() - STARTED_AT, 3),
-            "level": level,
-            "module": tag,          # key name kept for existing callers
-            "tag": tag,
+            "level": record.level,
+            "module": record.tag,          # key name kept for existing callers
+            "tag": record.tag,
             "thread": threading.current_thread().name,
             "msg": text,
         }
-        if detail:
-            entry["detail"] = detail
-        if exc is not None:
-            entry["error"] = f"{type(exc).__name__}: {exc}"
+        if record.detail:
+            entry["detail"] = record.detail
+        if record.exc is not None:
+            entry["error"] = f"{type(record.exc).__name__}: {record.exc}"
             entry["traceback"] = "".join(
-                traceback.format_exception(type(exc), exc, exc.__traceback__)
+                traceback.format_exception(type(record.exc), record.exc, record.exc.__traceback__)
             ).rstrip()
 
         with cls._lock:
-            cls._counts[level] = cls._counts.get(level, 0) + 1
+            cls._counts[record.level] = cls._counts.get(record.level, 0) + 1
             cls._logs.append(entry)
             if len(cls._logs) > cls.MAX_LOGS:
                 del cls._logs[: len(cls._logs) - cls.MAX_LOGS]
@@ -347,34 +352,34 @@ class Logger:
 
     @classmethod
     def debug(cls, tag: str, msg: Any, exc: BaseException = None, **detail) -> None:
-        cls._record("DEBUG", tag, msg, exc, detail or None)
+        cls._record(LogRecord("DEBUG", tag, msg, exc, detail or None))
 
     @classmethod
     def info(cls, tag: str, msg: Any, exc: BaseException = None, **detail) -> None:
-        cls._record("INFO", tag, msg, exc, detail or None)
+        cls._record(LogRecord("INFO", tag, msg, exc, detail or None))
 
     @classmethod
     def warning(cls, tag: str, msg: Any, exc: BaseException = None, **detail) -> None:
-        cls._record("WARNING", tag, msg, exc, detail or None)
+        cls._record(LogRecord("WARNING", tag, msg, exc, detail or None))
 
     @classmethod
     def warn(cls, tag: str, msg: Any, exc: BaseException = None, **detail) -> None:
         """Alias for `warning`."""
-        cls._record("WARNING", tag, msg, exc, detail or None)
+        cls._record(LogRecord("WARNING", tag, msg, exc, detail or None))
 
     @classmethod
     def error(cls, tag: str, msg: Any, exc: BaseException = None, **detail) -> None:
-        cls._record("ERROR", tag, msg, exc, detail or None)
+        cls._record(LogRecord("ERROR", tag, msg, exc, detail or None))
 
     @classmethod
     def critical(cls, tag: str, msg: Any, exc: BaseException = None, **detail) -> None:
-        cls._record("CRITICAL", tag, msg, exc, detail or None)
+        cls._record(LogRecord("CRITICAL", tag, msg, exc, detail or None))
 
     @classmethod
     def exception(cls, tag: str, msg: Any, **detail) -> None:
         """Log the exception currently being handled, with its traceback."""
         exc = sys.exc_info()[1]
-        cls._record("ERROR", tag, msg, exc, detail or None)
+        cls._record(LogRecord("ERROR", tag, msg, exc, detail or None))
 
     @classmethod
     def action(cls, tag: str, msg: Any, **detail) -> None:
@@ -384,7 +389,7 @@ class Logger:
         switches, config writes the user did not make by hand. These are the
         lines you want when the question is "what did it actually do".
         """
-        cls._record("ACTION", tag, msg, None, detail or None)
+        cls._record(LogRecord("ACTION", tag, msg, None, detail or None))
 
     # -------------------------------------------------------------- reading
 
