@@ -42,16 +42,14 @@ class AutomationEngine:
         lcu: LCUClient,
         assets: AssetManager,
         config: ConfigManager,
-        log_func=None,
-        stop_func=None,
         **kwargs
     ):
         """Initializes the AutomationEngine with LCU client, asset manager, and config manager."""
         self.lcu = lcu
         self.assets = assets
         self.config = config
-        self.log: Optional[Callable] = log_func
-        self.stop_func: Optional[Callable] = stop_func
+        self.log: Optional[Callable] = kwargs.get("log_func")
+        self.stop_func: Optional[Callable] = kwargs.get("stop_func")
         self.stats_func: Optional[Callable] = kwargs.get("stats_func")
         self.window_func: Optional[Callable] = kwargs.get("window_func")
         self.toast_func: Optional[Callable] = kwargs.get("toast_func")
