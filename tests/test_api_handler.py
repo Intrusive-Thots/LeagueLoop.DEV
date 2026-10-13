@@ -67,6 +67,23 @@ class TestLCUClient(unittest.TestCase):
         _args, kwargs = self.client.session.request.call_args
         self.assertNotIn("verify", kwargs)
 
+    def test_request_enforces_ssl_verification_for_external_urls(self):
+        self.client.is_connected = True
+        self.client.port = "443"
+        self.client.base_url = "https://api.external-service.com"
+        self.client.headers = {"Authorization": "Basic xxx"}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        self.client.session = MagicMock()
+        self.client.session.request.return_value = mock_response
+
+        self.client.request("GET", "/v1/data", silent=True)
+        self.client.session.request.assert_called_once()
+        _args, kwargs = self.client.session.request.call_args
+        self.assertIn("verify", kwargs)
+        self.assertTrue(kwargs["verify"])
+
     def test_request_not_connected(self):
         self.client.is_connected = False
         with patch.object(self.client, 'connect', return_value=False) as mock_connect:

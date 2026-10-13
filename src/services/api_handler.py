@@ -19,6 +19,7 @@ import urllib3
 import warnings
 import json
 import ssl
+from urllib.parse import urlparse
 from websockets.sync.client import connect as ws_connect
 from websockets.exceptions import ConnectionClosed
 
@@ -2419,14 +2420,19 @@ class LCUClient:
                     Logger.debug("LCU_TRACE", f"DATA TYPE: {type(data)} | RAW: {data}")
                     
                 adaptive_timeout = self.get_adaptive_http_timeout()
+                parsed_url = urlparse(url)
+                req_kwargs = {
+                    "method": method,
+                    "url": url,
+                    "json": data,
+                    "timeout": adaptive_timeout,
+                }
+                if parsed_url.hostname and parsed_url.hostname.lower() not in ("127.0.0.1", "localhost", "::1"):
+                    req_kwargs["verify"] = True
+
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
-                    response = self.session.request(
-                        method=method,
-                        url=url,
-                        json=data,
-                        timeout=adaptive_timeout,
-                    )
+                    response = self.session.request(**req_kwargs)
 
                 dur = time.time() - t_start
                 self._record_http_latency(dur * 1000.0)
