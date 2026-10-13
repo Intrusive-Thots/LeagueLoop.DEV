@@ -505,7 +505,7 @@ class TestUIComponents(unittest.TestCase):
 
     def test_feather_edge_component(self):
         """Test FeatherEdge gradient canvas initialization and color updates."""
-        from ui.components.feather_edge import FeatherEdge
+        from ui.components.feather_edge import FeatherEdge, FeatherEdgeConfig
         fe = FeatherEdge(self.mock_parent, width=24, side="left")
         self.assertEqual(fe.feather_width, 24)
         self.assertEqual(fe.side, "left")
@@ -519,6 +519,15 @@ class TestUIComponents(unittest.TestCase):
         self.assertEqual(fe.client_color, "#000000")
         self.assertEqual(fe.app_color, "#101010")
         self.assertEqual(fe.seam_color, "#C8AA6E")
+
+        # Test initialization with FeatherEdgeConfig
+        cfg = FeatherEdgeConfig(width=32, side="right", client_color="#111111", app_color="#222222", seam_color="#333333")
+        fe_cfg = FeatherEdge(self.mock_parent, config=cfg)
+        self.assertEqual(fe_cfg.feather_width, 32)
+        self.assertEqual(fe_cfg.side, "right")
+        self.assertEqual(fe_cfg.client_color, "#111111")
+        self.assertEqual(fe_cfg.app_color, "#222222")
+        self.assertEqual(fe_cfg.seam_color, "#333333")
 
     def test_sidebar_minimize_button_and_dock_styling(self):
         """Test minimize button and dock styling updates on SidebarWidget."""
