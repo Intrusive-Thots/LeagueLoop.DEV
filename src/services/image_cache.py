@@ -29,7 +29,50 @@ class ImageCacheService:
         self._disk_scan_cache_hits: int = 0
         self._disk_scan_total_latency_ms: float = 0.0
 
+        self._cached_dir_mtime: float = -1.0
+        self._cached_dir_entries: Optional[list] = None
+
         os.makedirs(self.cache_dir, exist_ok=True)
+
+    def _get_dir_entries(self, force: bool = False) -> list:
+        """Helper to return directory entries, cached by directory mtime."""
+        try:
+            current_mtime = os.stat(self.cache_dir).st_mtime
+        except OSError:
+            current_mtime = -1.0
+
+        with self._lock:
+            if (
+                not force
+                and self._cached_dir_entries is not None
+                and current_mtime != -1.0
+                and current_mtime == self._cached_dir_mtime
+            ):
+                return self._cached_dir_entries
+
+        entries = []
+        if os.path.exists(self.cache_dir):
+            try:
+                for entry in os.scandir(self.cache_dir):
+                    if entry.is_file():
+                        try:
+                            st = entry.stat(follow_symlinks=False)
+                            entries.append({
+                                "name": entry.name,
+                                "path": entry.path,
+                                "size": st.st_size,
+                                "mtime": st.st_mtime,
+                            })
+                        except OSError:
+                            pass
+            except OSError:
+                pass
+
+        with self._lock:
+            self._cached_dir_mtime = current_mtime
+            self._cached_dir_entries = entries
+
+        return entries
 
     def get_disk_cache_stats(self, force_scan: bool = False) -> Dict[str, Any]:
         """Benchmark and optimize disk cache subfolder scanning performance with TTL caching."""
@@ -46,18 +89,15 @@ class ImageCacheService:
         processed_count = 0
         raw_image_count = 0
 
-        if os.path.exists(self.cache_dir):
-            for entry in os.scandir(self.cache_dir):
-                if entry.is_file():
-                    total_files += 1
-                    try:
-                        total_bytes += entry.stat().st_size
-                    except OSError:
-                        pass
-                    if entry.name.startswith("processed_"):
-                        processed_count += 1
-                    elif entry.name.endswith((".png", ".jpg", ".jpeg", ".webp")):
-                        raw_image_count += 1
+        entries = self._get_dir_entries(force=force_scan)
+        for entry in entries:
+            total_files += 1
+            total_bytes += entry["size"]
+            name = entry["name"]
+            if name.startswith("processed_"):
+                processed_count += 1
+            elif name.endswith((".png", ".jpg", ".jpeg", ".webp")):
+                raw_image_count += 1
 
         scan_dur_ms = (time.perf_counter() - t_start) * 1000.0
 
@@ -174,6 +214,8 @@ class ImageCacheService:
         duration_ms = round((time.perf_counter() - t_start) * 1000, 2)
         with self._lock:
             self._cached_disk_stats = None
+            self._cached_dir_entries = None
+            self._cached_dir_mtime = -1.0
 
         return {
             "removed_files": removed_count,
