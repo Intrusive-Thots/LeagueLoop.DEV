@@ -39,12 +39,13 @@ class RunningStats:
         term1 = delta * delta_n * n1
         
         self.mean += delta_n
+        n = self.n
         self.M4 += (
-            term1 * delta_n2 * (n1 * n1 - 3 * n1 + 3) +
+            term1 * delta_n2 * (n * n - 3 * n + 3) +
             6 * delta_n2 * self.M2 -
             4 * delta_n * self.M3
         )
-        self.M3 += term1 * delta_n * (n1 - 2) - 3 * delta_n * self.M2
+        self.M3 += term1 * delta_n * (n - 2) - 3 * delta_n * self.M2
         self.M2 += term1
         
         # Track min/max
