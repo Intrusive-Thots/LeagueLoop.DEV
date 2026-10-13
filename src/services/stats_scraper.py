@@ -4,6 +4,7 @@ Provides static and dynamic data related to champions and game stats.
 import time
 import requests
 from concurrent.futures import ThreadPoolExecutor
+from services.http_session_factory import get_shared_session
 from utils.logger import Logger
 
 try:
@@ -144,7 +145,8 @@ class StatsScraper:
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Accept-Language": "en-US,en;q=0.9",
             }
-            resp = requests.get(url, timeout=12, headers=headers)
+            session = get_shared_session()
+            resp = session.get(url, timeout=12, headers=headers)
             if resp.status_code != 200:
                 Logger.debug("StatsScraper", f"Scrape failed (HTTP {resp.status_code}) for {mode}")
                 return
