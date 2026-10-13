@@ -114,6 +114,31 @@ class TestDatabaseService(unittest.TestCase):
         self.assertEqual(recent[0]["phase"], "InProgress")
         self.assertEqual(recent[0]["latency_avg_ms"], 12.5)
 
+    def test_record_match_sql_injection_resilience(self):
+        sql_payload = "'; DROP TABLE matches; --"
+        match_data = {
+            "game_id": 99999,
+            "champion_id": 1,
+            "champion_name": sql_payload,
+            "role": sql_payload,
+            "win": True,
+            "kills": 5,
+            "deaths": 0,
+            "assists": 5,
+            "queue_id": 420,
+        }
+        success = self.db.record_match(match_data)
+        self.assertTrue(success)
+
+        retrieved = self.db.get_match(99999)
+        self.assertIsNotNone(retrieved)
+        self.assertEqual(retrieved["champion_name"], sql_payload)
+        self.assertEqual(retrieved["role"], sql_payload)
+
+        # Confirm matches table was not dropped
+        matches = self.db.get_recent_matches(limit=10)
+        self.assertGreaterEqual(len(matches), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
