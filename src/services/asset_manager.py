@@ -3165,7 +3165,24 @@ class AssetManager:
                         self._pending_downloads.remove(path)
         self._download_queue.put((priority, counter, _target))
 
-    def _download_and_cache_image(self, url, path, cache_key, size=None, opacity=1.0):
+    def _download_and_cache_image(
+        self,
+        url: str,
+        path: str,
+        cache_key: str,
+        *,
+        size: Optional[Tuple[Optional[int], Optional[int]]] = None,
+        opacity: float = 1.0,
+    ) -> Optional[ctk.CTkImage]:
+        """Load and cache image from disk or trigger download.
+
+        Args:
+            url: Asset URL to fetch if missing.
+            path: Target disk path for caching.
+            cache_key: Unique in-memory LRU cache identifier.
+            size: Target size (width, height) for resizing. Keyword-only.
+            opacity: Opacity multiplier (0.0 to 1.0). Keyword-only.
+        """
         is_splash = cache_key.startswith("splash_")
         target_dict = self.splash_icons if is_splash else self.icons
         max_limit = self.max_splash_icons if is_splash else 300
