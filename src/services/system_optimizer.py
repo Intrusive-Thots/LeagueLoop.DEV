@@ -107,10 +107,11 @@ class SystemOptimizer:
 
         current_pid = os.getpid()
 
-        for proc in psutil.process_iter(["pid", "name", "memory_info"]):
+        for proc in psutil.process_iter(["pid", "name"]):
             try:
                 pid = proc.info.get("pid")
-                name = (proc.info.get("name") or "").lower()
+                raw_name = proc.info.get("name") or ""
+                name = raw_name.lower()
 
                 # Safety checks
                 if not name or pid == current_pid or pid <= 4:
@@ -120,10 +121,13 @@ class SystemOptimizer:
                     continue
 
                 if name in TARGET_PROCESS_NAMES:
-                    # Tally memory before terminating
-                    mem_info = proc.info.get("memory_info")
-                    if mem_info:
-                        freed_bytes += getattr(mem_info, "rss", 0)
+                    # Tally memory before terminating (lazy fetch memory_info only for matched target processes)
+                    try:
+                        mem_info = proc.info.get("memory_info") if (hasattr(proc, "info") and isinstance(proc.info, dict) and "memory_info" in proc.info) else proc.memory_info()
+                        if mem_info:
+                            freed_bytes += getattr(mem_info, "rss", 0)
+                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                        pass
 
                     proc.terminate()
                     killed_count += 1
