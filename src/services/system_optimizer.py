@@ -4,6 +4,7 @@ Provides low-latency network tweaks ('Fix Ping') and safe background process cle
 """
 from __future__ import annotations
 
+import base64
 import os
 import subprocess
 import sys
@@ -210,11 +211,11 @@ netsh int tcp set global autotuninglevel=normal 2>$null
                     "message": "Ping optimized: MTU 1428, Cloudflare DNS, & TCPNoDelay applied!",
                 }
             else:
-                # Launch via UAC elevation request
-                escaped_script = ps_script.replace('"', '`"')
-                cmd = f"Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -Command \"{escaped_script}\"' -Verb RunAs"
+                # Launch via UAC elevation request safely using base64 encoded command
+                encoded_script = base64.b64encode(ps_script.encode("utf-16le")).decode("ascii")
+                cmd = f"Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded_script}' -Verb RunAs"
                 subprocess.Popen(
-                    ["powershell", "-NoProfile", "-Command", cmd],
+                    ["powershell", "-NoProfile", "-NonInteractive", "-Command", cmd],
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 )
                 Logger.info("SystemOptimizer", "Launched elevated UAC prompt to apply ping optimizations.")
