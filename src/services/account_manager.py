@@ -66,7 +66,7 @@ class RiotClientAPI:
         self.auth_token: Optional[str] = None
         self.base_url: Optional[str] = None
         from services.http_session_factory import create_pooled_session
-        self.session = create_pooled_session(pool_connections=10, pool_maxsize=10, max_retries=1)
+        self.session = create_pooled_session(pool_connections=10, pool_maxsize=10, max_retries=1, verify_ssl=False)
         self.is_connected = False
         # Token-bucket rate limiter for Riot Client REST API
         self._tokens = 10.0
