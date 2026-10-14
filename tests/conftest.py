@@ -28,6 +28,14 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 # pystray has no usable backend in CI and raises at import without this.
 os.environ.setdefault("PYSTRAY_BACKEND", "dummy")
 
+# Isolate test suite logging to a temp directory so test runs never pollute
+# the user's real %LOCALAPPDATA%\LeagueLoop\logs (e.g. error.log, session.jsonl).
+import tempfile
+if "LEAGUELOOP_LOG_DIR" not in os.environ:
+    _test_log_dir = tempfile.mkdtemp(prefix="leagueloop_test_logs_")
+    os.environ["LEAGUELOOP_LOG_DIR"] = _test_log_dir
+
+
 
 def pytest_sessionfinish(session, exitstatus):
     """Report threads that will keep the interpreter alive after the run."""

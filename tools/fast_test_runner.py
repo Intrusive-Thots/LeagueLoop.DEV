@@ -69,9 +69,13 @@ def map_source_to_tests(modified_files: Set[str]) -> List[str]:
         p = Path(path_str)
         # Direct test modification
         if p.parts and p.parts[0] == "tests" and p.suffix == ".py":
-            full = PROJECT_ROOT / p
-            if full.exists():
-                test_targets.add(str(full))
+            if p.name == "conftest.py":
+                # conftest affects shared fixtures; trigger full test suite
+                return []
+            if p.name.startswith("test_"):
+                full = PROJECT_ROOT / p
+                if full.exists():
+                    test_targets.add(str(full))
             continue
 
         # Source code modification
