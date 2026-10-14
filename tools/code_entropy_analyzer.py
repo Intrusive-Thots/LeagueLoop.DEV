@@ -124,18 +124,21 @@ def run_entropy_summary(target_dir: str = "src") -> Dict[str, Any]:
     }
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Code Entropy & Static Audit Tool")
-    parser.add_argument("--target", default="src", help="File or directory path to analyze")
+    parser.add_argument("pos_target", nargs="?", default=None, help="File or directory path to analyze (positional)")
+    parser.add_argument("--target", default=None, help="File or directory path to analyze (flag)")
     parser.add_argument("--json", action="store_true", help="Output results in JSON format")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
-    if os.path.isfile(args.target):
-        res = [analyze_python_file(args.target)]
-    elif os.path.isdir(args.target):
-        res = analyze_directory(args.target)
+    target_path = args.target or args.pos_target or "src"
+
+    if os.path.isfile(target_path):
+        res = [analyze_python_file(target_path)]
+    elif os.path.isdir(target_path):
+        res = analyze_directory(target_path)
     else:
-        print(f"Error: Target path '{args.target}' does not exist.", file=sys.stderr)
+        print(f"Error: Target path '{target_path}' does not exist.", file=sys.stderr)
         sys.exit(1)
 
     if args.json:

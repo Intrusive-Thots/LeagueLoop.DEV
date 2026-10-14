@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from tools.code_entropy_analyzer import (
     analyze_python_file,
@@ -58,6 +59,19 @@ class TestCodeEntropyAnalyzer(unittest.TestCase):
         self.assertEqual(summary["bare_excepts_total"], 0)
         self.assertEqual(summary["syntax_errors"], 0)
         self.assertEqual(summary["status"], "PASS")
+
+    def test_main_cli_arguments(self):
+        from tools.code_entropy_analyzer import main
+        file_path = self.base / "cli_sample.py"
+        file_path.write_text("def ping(): return True\n", encoding="utf-8")
+
+        # Test positional argument with --json
+        with patch("sys.stdout") as mock_stdout:
+            main([str(file_path), "--json"])
+
+        # Test --target argument
+        with patch("sys.stdout") as mock_stdout:
+            main(["--target", str(file_path), "--json"])
 
 
 if __name__ == "__main__":

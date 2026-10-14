@@ -73,6 +73,47 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         self.assertTrue(res["tests"]["success"])
         self.assertFalse(res["memory"]["persisted"])
 
+    @patch("tools.autonomous_improvement_runner.run_diagnostics_check")
+    @patch("tools.autonomous_improvement_runner.run_entropy_check")
+    @patch("tools.autonomous_improvement_runner.run_tests_check")
+    @patch("tools.autonomous_improvement_runner.sync_mempalace")
+    def test_run_loop_feature_optimization(self, mock_mempalace, mock_tests, mock_entropy, mock_diag):
+        mock_diag.return_value = {"healthy": True}
+        mock_entropy.return_value = {"status": "PASS", "avg_entropy": 10.0, "bare_excepts_total": 0}
+        mock_tests.return_value = {
+            "exit_code": 0,
+            "success": True,
+            "duration_seconds": 1.0,
+            "passed": 807,
+            "failed": 0,
+            "skipped": 0,
+        }
+
+        res = run_loop(
+            all_tests=False,
+            dry_run=True,
+            feature="Dynamic Delta Baseline",
+            impact="Tracks baseline deltas cleanly across runs.",
+        )
+        self.assertEqual(res["tests"]["passed"], 807)
+
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 98,
+            "diagnostics": {"healthy": True},
+            "metrics": {"total_py_files": 174, "total_py_lines": 50000},
+            "entropy": {"status": "PASS", "avg_entropy": 10.0, "bare_excepts_total": 0},
+            "tests": {"passed": 807, "failed": 0, "duration_seconds": 1.2, "success": True},
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+        }
+
+        with patch("sys.stdout") as mock_stdout:
+            with self.assertRaises(SystemExit) as cm:
+                main(["--dry-run"])
+            self.assertEqual(cm.exception.code, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

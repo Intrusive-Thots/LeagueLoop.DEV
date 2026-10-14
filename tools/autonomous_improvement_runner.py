@@ -148,6 +148,14 @@ def update_memory_state(
             pass
 
     next_run = current_state.get("run_number", 89) + 1
+    prev_passed = current_state.get("test_baseline", {}).get("passed", 0)
+    prev_files = current_state.get("index_baseline", {}).get("total_files", 0)
+    prev_lines = current_state.get("index_baseline", {}).get("total_py_lines", 0)
+
+    delta_passed = test_results.get("passed", 0) - prev_passed
+    delta_files = metrics.get("total_py_files", 0) - prev_files
+    delta_lines = metrics.get("total_py_lines", 0) - prev_lines
+
     new_state = {
         "run_number": next_run,
         "last_run": datetime.now(timezone.utc).isoformat(),
@@ -169,11 +177,31 @@ def update_memory_state(
         "actions": action_details or [
             "Executed automated health diagnostics verification across error.log, crash.log, and debug_screenshots.",
             "Ran fast targeted test runner with AST dependency mapping to verify regression-free state.",
-            f"Codebase metrics updated: {metrics.get('total_py_files', 0)} files, {metrics.get('total_py_lines', 0)} lines.",
-            f"Verified test baseline: {test_results.get('passed', 0)} passed, {test_results.get('failed', 0)} failed.",
+            f"Codebase metrics: {metrics.get('total_py_files', 0)} files ({delta_files:+d}), {metrics.get('total_py_lines', 0)} lines ({delta_lines:+d}).",
+            f"Test baseline: {test_results.get('passed', 0)} passed ({delta_passed:+d}), {test_results.get('failed', 0)} failed.",
         ],
         "outcome": f"Success. Loop #{next_run} verified zero regressions and updated capability baseline.",
     }
+
+    if not optimizations:
+        optimizations = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "feature": f"Autonomous Improvement Baseline Tracking (Run #{next_run})",
+            "before_metrics": {
+                "test_passed": prev_passed,
+                "files": prev_files,
+                "lines": prev_lines,
+            },
+            "after_metrics": {
+                "test_passed": test_results.get("passed", 0),
+                "files": metrics.get("total_py_files", 0),
+                "lines": metrics.get("total_py_lines", 0),
+                "delta_tests": delta_passed,
+                "delta_files": delta_files,
+                "delta_lines": delta_lines,
+            },
+            "impact": f"Continuous regression prevention and code health baseline tracked across Run #{next_run}.",
+        }
 
     if not dry_run:
         # 1. Update loop_state.json
@@ -284,12 +312,69 @@ def sync_mempalace(loop_number: int, summary: str):
         )
 
 
-def run_loop(all_tests: bool = False, dry_run: bool = False) -> Dict[str, Any]:
+def run_loop(
+    all_tests: bool = False,
+    dry_run: bool = False,
+    feature: Optional[str] = None,
+    impact: Optional[str] = None,
+    before_metrics: Optional[Dict[str, Any]] = None,
+    after_metrics: Optional[Dict[str, Any]] = None,
+    semantic_learnings: Optional[List[Dict[str, Any]]] = None,
+    procedural_methods: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
     """Executes the full Autonomous Improvement Loop."""
     diag = run_diagnostics_check()
     metrics = measure_codebase_metrics(PROJECT_ROOT)
     entropy = run_entropy_check()
     tests = run_tests_check(run_all=all_tests)
+
+    opt_payload = None
+    if feature:
+        opt_payload = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "feature": feature,
+            "before_metrics": before_metrics or {"status": "Prior implementation baseline"},
+            "after_metrics": after_metrics or {"status": "Optimized implementation baseline"},
+            "impact": impact or "Enhanced system capability and reliability.",
+        }
+
+    default_semantic = [
+        {
+            "concept": "Diagnostic Crash Distinguisher",
+            "description": "faulthandler writes a session boundary header on every process startup and shutdown. Distinguishing true crashes from clean shutdowns requires inspecting session content for fatal keywords (fatal exception, traceback, thread 0x, access violation, segmentation fault).",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
+        {
+            "concept": "AST Module Test Mapping",
+            "description": "Using an AST dependency graph over test imports allows mapping modified source files directly to relevant test suites, executing targeted regressions in <2s instead of running entire test suites (>15s).",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
+        {
+            "concept": "Positional and Target CLI Dispatch",
+            "description": "Permitting both positional file/dir arguments and explicit flag options in developer tools prevents shell friction and supports flexible invocation across IDEs and scripts.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
+    ]
+
+    default_procedural = [
+        {
+            "method": "Autonomous Improvement Loop Execution",
+            "procedure": [
+                "Run leagueloop_diagnostics.py to inspect error.log, crash.log, and debug_screenshots.",
+                "Run fast_test_runner.py to execute targeted tests against modified source files.",
+                "Run code_entropy_analyzer.py to calculate codebase cyclomatic complexity, bare excepts, and oversized functions.",
+                "Execute autonomous_improvement_runner.py to log metrics to loop_state.json, episodic.json, optimizations.json, semantic.json, and procedural.json.",
+                "Sync loop outcome to MemPalace diary via CLI or MCP tool.",
+            ],
+        },
+        {
+            "method": "MemPalace AAAK Diary Logging",
+            "procedure": [
+                "Format session log as: SESSION:YYYY-MM-DD|PROJ:LeagueLoop.DEV|AutoImprovementLoop|Run #N|<metrics>|★★★.",
+                "Write diary entry using mempalace_diary_write MCP tool or CLI mempalace.exe --palace <path> diary write <entry>.",
+            ],
+        },
+    ]
 
     memory_result = update_memory_state(
         metrics=metrics,
@@ -301,54 +386,11 @@ def run_loop(all_tests: bool = False, dry_run: bool = False) -> Dict[str, Any]:
             f"Executed code entropy audit: status={entropy.get('status')}, avg_entropy={entropy.get('avg_entropy', 0)}, bare_excepts={entropy.get('bare_excepts_total', 0)}.",
             f"Executed test runner (duration={tests.get('duration_seconds')}s, passed={tests.get('passed')}, failed={tests.get('failed')}).",
             f"Indexed codebase metrics ({metrics.get('total_py_files')} python files, {metrics.get('total_py_lines')} lines).",
-            "Synchronized loop state and episodic memory baselines.",
+            "Synchronized loop state, episodic, semantic, procedural, and optimization memory baselines.",
         ],
-        optimizations={
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "feature": "Diagnostic Crash Distinguisher, Code Entropy Auditor, and Test Suite Expansion",
-            "before_metrics": {
-                "diagnostics": "Crash log reported all faulthandler sessions as fatal crashes (282 false positives).",
-                "entropy_auditor": "Code entropy auditor was external to repository.",
-                "test_suite": "796 tests (missing diagnostics and entropy unit tests).",
-            },
-            "after_metrics": {
-                "diagnostics": "Crash log accurately distinguishes sessions from genuine fatal crashes (0 recent crashes).",
-                "entropy_auditor": "Native tools/code_entropy_analyzer.py integrated into autonomous runner.",
-                "test_suite": "807 tests all passing with zero regressions.",
-            },
-            "impact": "Eliminates diagnostic false alarms, embeds static health and code entropy analysis into autonomous loops, and strengthens test coverage.",
-        },
-        semantic_learnings=[
-            {
-                "concept": "Diagnostic Crash Distinguisher",
-                "description": "faulthandler writes a session boundary header on every process startup and shutdown. Distinguishing true crashes from clean shutdowns requires inspecting session content for fatal keywords (fatal exception, traceback, thread 0x, access violation, segmentation fault).",
-                "learned_at": datetime.now(timezone.utc).isoformat(),
-            },
-            {
-                "concept": "AST Module Test Mapping",
-                "description": "Using an AST dependency graph over test imports allows mapping modified source files directly to relevant test suites, executing targeted regressions in <2s instead of running entire test suites (>15s).",
-                "learned_at": datetime.now(timezone.utc).isoformat(),
-            },
-        ],
-        procedural_methods=[
-            {
-                "method": "Autonomous Improvement Loop Execution",
-                "procedure": [
-                    "Run leagueloop_diagnostics.py to inspect error.log, crash.log, and debug_screenshots.",
-                    "Run fast_test_runner.py to execute targeted tests against modified source files.",
-                    "Run code_entropy_analyzer.py to calculate codebase cyclomatic complexity, bare excepts, and oversized functions.",
-                    "Execute autonomous_improvement_runner.py to log metrics to loop_state.json, episodic.json, optimizations.json, semantic.json, and procedural.json.",
-                    "Sync loop outcome to MemPalace diary via CLI or MCP tool.",
-                ],
-            },
-            {
-                "method": "MemPalace AAAK Diary Logging",
-                "procedure": [
-                    "Format session log as: SESSION:YYYY-MM-DD|PROJ:LeagueLoop.DEV|AutoImprovementLoop|Run #N|<metrics>|★★★.",
-                    "Write diary entry using mempalace_diary_write MCP tool or CLI mempalace.exe --palace <path> diary write <entry>.",
-                ],
-            },
-        ],
+        optimizations=opt_payload,
+        semantic_learnings=semantic_learnings or default_semantic,
+        procedural_methods=procedural_methods or default_procedural,
     )
 
     loop_num = memory_result["new_state"]["run_number"]
@@ -365,14 +407,21 @@ def run_loop(all_tests: bool = False, dry_run: bool = False) -> Dict[str, Any]:
     }
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="LeagueLoop Autonomous Improvement Loop Runner")
     parser.add_argument("--all-tests", action="store_true", help="Run full test suite unconditionally")
     parser.add_argument("--dry-run", action="store_true", help="Profile without persisting state to memory files")
     parser.add_argument("--json", action="store_true", help="Output results in JSON format")
-    args = parser.parse_args()
+    parser.add_argument("--feature", default=None, help="Custom feature optimization name to record")
+    parser.add_argument("--impact", default=None, help="Custom impact description to record")
+    args = parser.parse_args(argv)
 
-    result = run_loop(all_tests=args.all_tests, dry_run=args.dry_run)
+    result = run_loop(
+        all_tests=args.all_tests,
+        dry_run=args.dry_run,
+        feature=args.feature,
+        impact=args.impact,
+    )
 
     if args.json:
         print(json.dumps(result, indent=2))
