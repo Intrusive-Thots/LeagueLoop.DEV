@@ -647,6 +647,9 @@ class AutomationEngine:
             if endpoint == "/lol-matchmaking/v1/ready-check/accept" and code == 404:
                 Logger.debug("Automation", f"{label} — queue was already aborted or concluded (HTTP 404)")
                 return False
+            if "bench/swap" in endpoint and code == 500:
+                Logger.info("Automation", f"{label} — bench champion no longer available (HTTP 500)")
+                return False
             Logger.error(
                 "Automation",
                 f"{label} — the client refused it (HTTP {code}) {body}".strip(),

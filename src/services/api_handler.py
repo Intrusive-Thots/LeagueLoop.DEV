@@ -2449,6 +2449,9 @@ class LCUClient:
                     if not silent:
                         Logger.warning("LCU", f"HTTP 429 Rate Limit response on {endpoint} (cooldown: {retry_after_s:.1f}s)")
                 elif 500 <= response.status_code <= 599:
+                    # Non-retryable business failure endpoints (e.g. bench swap race conditions)
+                    if "bench/swap" in endpoint:
+                        return response
                     if attempt < max_attempts - 1:
                         with self._req_diag_lock:
                             self._http_retry_count += 1
@@ -2511,6 +2514,12 @@ class LCUClient:
         # each one turned "download recent replays" into a warning per game.
         "/lol-replays/v1/metadata",
         "/lol-replays/v1/rofls",
+        # Exploratory reward & pass claim endpoints that 404 when inactive or already claimed
+        "/lol-battle-pass/v1/rewards/claim",
+        "/lol-champion-mastery/v1/milestones/claim",
+        "/lol-rewards/v1/grants/claim",
+        "/lol-ranked/v1/split-rewards/claim",
+        "/lol-ranked/v1/rewards/claim",
     )
 
     @classmethod

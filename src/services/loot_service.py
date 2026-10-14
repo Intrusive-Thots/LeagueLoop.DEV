@@ -220,11 +220,26 @@ class LootService:
 
     # ── inventory ──────────────────────────────────────────────
 
+    def is_ready(self) -> bool:
+        """Check if LCU loot subsystem is ready (false while client is booting/loading)."""
+        data = self._get_json("/lol-loot/v1/ready")
+        if data is False or (isinstance(data, dict) and data.get("ready") is False):
+            return False
+        return True
+
     def fetch_loot(self) -> List[LootItem]:
+        if not self.is_ready():
+            self.log("Loot subsystem is not ready yet.")
+            return []
         data = self._get_json("/lol-loot/v1/player-loot")
         if not isinstance(data, list):
-            self.log("Failed to fetch player loot.")
-            return []
+            # Fallback to player-loot-map if array endpoint fails (e.g. HTTP 405 Method Not Allowed)
+            map_data = self._get_json("/lol-loot/v1/player-loot-map")
+            if isinstance(map_data, dict):
+                data = list(map_data.values())
+            else:
+                self.log("Failed to fetch player loot.")
+                return []
         items = [LootItem.from_api(x) for x in data if isinstance(x, dict)]
         items = [i for i in items if i.count > 0]
         items.sort(key=lambda i: (i.display_categories, i.name.lower()))

@@ -193,6 +193,24 @@ class TestRiotClientAPIPerformance(unittest.TestCase):
 
         _, kwargs = api.session.request.call_args
         self.assertNotIn("verify", kwargs)
+        self.assertEqual(kwargs.get("timeout"), 3.0)
+
+    def test_riot_client_request_custom_timeout(self):
+        """Test that RiotClientAPI.request accepts a custom timeout."""
+        api = RiotClientAPI()
+        api.is_connected = True
+        api.port = "5555"
+        api.base_url = "https://127.0.0.1:5555"
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        api.session = MagicMock()
+        api.session.request.return_value = mock_resp
+
+        api.request("GET", "/rso-auth/v1/session", silent=True, timeout=1.5)
+
+        _, kwargs = api.session.request.call_args
+        self.assertEqual(kwargs.get("timeout"), 1.5)
 
 
 class TestClientStateInGameSynchronization(unittest.TestCase):

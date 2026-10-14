@@ -104,7 +104,14 @@ class RiotClientAPI:
         self.is_connected = True
         Logger.debug("RiotClientAPI", f"Connected to Riot Client on port {port}")
 
-    def request(self, method: str, endpoint: str, data=None, silent=False) -> Optional[requests.Response]:
+    def request(
+        self,
+        method: str,
+        endpoint: str,
+        data=None,
+        silent: bool = False,
+        timeout: float = 3.0,
+    ) -> Optional[requests.Response]:
         """Make a request to the Riot Client API with rate-limiting and exponential back-off."""
         if not self.is_connected:
             if not self.connect():
@@ -137,7 +144,7 @@ class RiotClientAPI:
                         method=method,
                         url=url,
                         json=data,
-                        timeout=10,
+                        timeout=timeout,
                     )
 
                 if response.status_code == 429:

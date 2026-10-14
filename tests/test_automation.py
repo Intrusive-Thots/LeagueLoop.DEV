@@ -1144,6 +1144,35 @@ class TestAutomationEngineAutoJoinAndSkin(unittest.TestCase):
         self.assertTrue(recorded["win"])
 
 
+class TestAutomationAct(unittest.TestCase):
+    def test_act_handles_bench_swap_500_cleanly(self):
+        engine = _engine()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 500
+        mock_resp.text = '{"message":"Unable to swap with ChampionBench"}'
+        engine.lcu.request.return_value = mock_resp
+
+        with patch("utils.logger.Logger.error") as mock_err, patch("utils.logger.Logger.info") as mock_info:
+            success = engine._act("POST", "/lol-champ-select/v1/session/bench/swap/115", what="ARAM swap")
+            self.assertFalse(success)
+            mock_err.assert_not_called()
+            mock_info.assert_called_once()
+            self.assertIn("bench champion no longer available", mock_info.call_args[0][1])
+
+    def test_act_handles_ready_check_404_cleanly(self):
+        engine = _engine()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 404
+        mock_resp.text = '{"message":"Not found"}'
+        engine.lcu.request.return_value = mock_resp
+
+        with patch("utils.logger.Logger.error") as mock_err, patch("utils.logger.Logger.debug") as mock_debug:
+            success = engine._act("POST", "/lol-matchmaking/v1/ready-check/accept", what="Accept match")
+            self.assertFalse(success)
+            mock_err.assert_not_called()
+            mock_debug.assert_called_once()
+
+
 if __name__ == '__main__':
     unittest.main()
 
