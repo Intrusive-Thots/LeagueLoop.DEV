@@ -63,9 +63,10 @@ def inspect_error_log(path: Path, max_lines: int = 30) -> Dict[str, Any]:
                 result["ws_anomalies_count"] += 1
             if "[LCU_NETWORK_THROTTLE]" in sline:
                 result["network_throttles_count"] += 1
-            if " ERROR " in sline or " CRITICAL " in sline:
+            import re
+            if re.search(r"\b(ERROR|CRITICAL)\b", sline):
                 result["recent_errors"].append(sline)
-            elif " WARNING " in sline and "[LCU_WS_ANOMALY]" not in sline and "[LCU_NETWORK_THROTTLE]" not in sline:
+            elif re.search(r"\bWARNING\b", sline) and "[LCU_WS_ANOMALY]" not in sline and "[LCU_NETWORK_THROTTLE]" not in sline:
                 result["recent_warnings"].append(sline)
     except Exception as e:
         result["error_reading"] = str(e)
@@ -77,17 +78,47 @@ def inspect_crash_log(path: Path, max_sessions: int = 5) -> Dict[str, Any]:
     result: Dict[str, Any] = {
         "exists": path.exists(),
         "recent_crashes": [],
+        "total_sessions_tracked": 0,
+        "total_actual_crashes": 0,
         "total_crash_sessions": 0,
     }
     if not path.exists():
         return result
 
     try:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
-            lines = f.readlines()
-        session_lines = [l.strip() for l in lines if l.strip().startswith("--- session ")]
-        result["total_crash_sessions"] = len(session_lines)
-        result["recent_crashes"] = session_lines[-max_sessions:]
+        content = path.read_text(encoding="utf-8", errors="replace")
+        import re
+        parts = re.split(r"(--- session [^\n]+ ---)", content)
+        sessions: List[str] = []
+        crashes: List[Dict[str, Any]] = []
+
+        current_header = ""
+        for part in parts:
+            part_stripped = part.strip()
+            if not part_stripped:
+                continue
+            if part_stripped.startswith("--- session "):
+                current_header = part_stripped
+                sessions.append(current_header)
+            elif current_header:
+                lower_body = part_stripped.lower()
+                if any(k in lower_body for k in ("fatal exception", "traceback", "thread 0x", "access violation", "segmentation fault")):
+                    lines = [l.strip() for l in part_stripped.splitlines() if l.strip()]
+                    summary = lines[0] if lines else "Fatal exception detected"
+                    crashes.append({
+                        "session": current_header,
+                        "summary": summary,
+                        "details": lines[:5],
+                    })
+
+        result["total_sessions_tracked"] = len(sessions)
+        result["total_actual_crashes"] = len(crashes)
+        recent_headers = set(sessions[-max_sessions:]) if sessions else set()
+        recent_crashes = [c for c in crashes if c["session"] in recent_headers]
+        result["recent_crashes"] = recent_crashes
+        result["total_crash_sessions"] = len(recent_crashes)
+        if crashes:
+            result["latest_historical_crash"] = crashes[-1]
     except Exception as e:
         result["error_reading"] = str(e)
 
@@ -166,9 +197,14 @@ def main():
 
     ca = diag["crash_analysis"]
     print(f"\n[Crash Inspection]")
-    print(f"  Total Crash Sessions Logged: {ca.get('total_crash_sessions', 0)}")
-    if ca.get("recent_crashes"):
-        print(f"  Latest: {ca['recent_crashes'][-1]}")
+    print(f"  Sessions Tracked (faulthandler): {ca.get('total_sessions_tracked', 0)}")
+    print(f"  Historical Crashes: {ca.get('total_actual_crashes', 0)}")
+    print(f"  Recent Crashes (last 5 sessions): {len(ca.get('recent_crashes', []))}")
+    for c in ca.get("recent_crashes", []):
+        print(f"    - {c.get('session')}: {c.get('summary')}")
+    if ca.get("latest_historical_crash") and not ca.get("recent_crashes"):
+        lhc = ca["latest_historical_crash"]
+        print(f"  Last Historical Crash: {lhc.get('session')} ({lhc.get('summary')})")
 
     print(f"\n[Screenshots Inspection]")
     print(f"  Recent Captures: {len(diag['recent_screenshots'])}")
