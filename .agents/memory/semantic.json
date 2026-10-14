@@ -7,16 +7,16 @@
   {
     "concept": "Diagnostic Crash Distinguisher",
     "description": "faulthandler writes a session boundary header on every process startup and shutdown. Distinguishing true crashes from clean shutdowns requires inspecting session content for fatal keywords (fatal exception, traceback, thread 0x, access violation, segmentation fault).",
-    "learned_at": "2026-10-14T22:54:56.957311+00:00"
+    "learned_at": "2026-10-14T23:05:30.415401+00:00"
   },
   {
     "concept": "AST Module Test Mapping",
     "description": "Using an AST dependency graph over test imports allows mapping modified source files directly to relevant test suites, executing targeted regressions in <2s instead of running entire test suites (>15s).",
-    "learned_at": "2026-10-14T22:54:56.957311+00:00"
+    "learned_at": "2026-10-14T23:05:30.416401+00:00"
   },
   {
     "concept": "Positional and Target CLI Dispatch",
     "description": "Permitting both positional file/dir arguments and explicit flag options in developer tools prevents shell friction and supports flexible invocation across IDEs and scripts.",
-    "learned_at": "2026-10-14T22:54:56.957311+00:00"
+    "learned_at": "2026-10-14T23:05:30.416401+00:00"
   }
 ]
