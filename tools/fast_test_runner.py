@@ -264,6 +264,19 @@ def main():
         selected_targets = map_source_to_tests(modified, graph)
 
     if not selected_targets:
+        has_python_changes = any(
+            f.endswith(".py") for f in (explicit_files or modified)
+        )
+        if (explicit_files or modified) and not has_python_changes:
+            print("[Fast Runner] Only non-code/memory files modified. Running targeted regression guards...")
+            smoke_targets = []
+            for guard in ["test_regression_guards.py", "test_autonomous_improvement_runner.py", "test_leagueloop_diagnostics.py", "test_code_entropy_analyzer.py"]:
+                guard_path = TESTS_DIR / guard
+                if guard_path.exists():
+                    smoke_targets.append(str(guard_path.resolve()))
+            if smoke_targets:
+                sys.exit(run_tests(smoke_targets, pytest_extra))
+
         print("[Fast Runner] No targeted tests found for specified files. Running full test suite...")
         sys.exit(run_tests([], pytest_extra))
 

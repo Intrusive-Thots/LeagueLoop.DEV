@@ -128,6 +128,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Code Entropy & Static Audit Tool")
     parser.add_argument("pos_target", nargs="?", default=None, help="File or directory path to analyze (positional)")
     parser.add_argument("--target", default=None, help="File or directory path to analyze (flag)")
+    parser.add_argument("--top", "-n", type=int, default=None, help="Display only top N files sorted by entropy descending")
     parser.add_argument("--json", action="store_true", help="Output results in JSON format")
     args = parser.parse_args(argv)
 
@@ -140,6 +141,9 @@ def main(argv=None):
     else:
         print(f"Error: Target path '{target_path}' does not exist.", file=sys.stderr)
         sys.exit(1)
+
+    if args.top is not None and args.top > 0:
+        res = sorted(res, key=lambda x: x.get("entropy_score", 0), reverse=True)[:args.top]
 
     if args.json:
         print(json.dumps(res, indent=2))
