@@ -120,12 +120,18 @@ def update_memory_state(
     task_name: str = "Autonomous Improvement Loop Run",
     action_details: Optional[List[str]] = None,
     optimizations: Optional[Dict[str, Any]] = None,
+    semantic_learnings: Optional[List[Dict[str, Any]]] = None,
+    procedural_methods: Optional[List[Dict[str, Any]]] = None,
+    failures: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    """Updates loop_state.json, episodic.json, and optimizations.json."""
+    """Updates loop_state.json, episodic.json, optimizations.json, semantic.json, procedural.json, and failures.json."""
     MEMORY_DIR.mkdir(parents=True, exist_ok=True)
     loop_state_file = MEMORY_DIR / "loop_state.json"
     episodic_file = MEMORY_DIR / "episodic.json"
     optimizations_file = MEMORY_DIR / "optimizations.json"
+    semantic_file = MEMORY_DIR / "semantic.json"
+    procedural_file = MEMORY_DIR / "procedural.json"
+    failures_file = MEMORY_DIR / "failures.json"
 
     current_state: Dict[str, Any] = {
         "run_number": 89,
@@ -199,9 +205,68 @@ def update_memory_state(
             with open(optimizations_file, "w", encoding="utf-8") as f:
                 json.dump(opt_data, f, indent=2)
 
+        # 4. Append / update semantic.json
+        if semantic_learnings:
+            sem_data = []
+            if semantic_file.exists():
+                try:
+                    with open(semantic_file, "r", encoding="utf-8") as f:
+                        sem_data = json.load(f)
+                except Exception:
+                    sem_data = []
+            for item in semantic_learnings:
+                c_name = item.get("concept")
+                idx = next((i for i, x in enumerate(sem_data) if x.get("concept") == c_name), None)
+                if idx is not None:
+                    sem_data[idx] = item
+                else:
+                    sem_data.append(item)
+            with open(semantic_file, "w", encoding="utf-8") as f:
+                json.dump(sem_data, f, indent=2)
+
+        # 5. Append / update procedural.json
+        if procedural_methods:
+            proc_data = []
+            if procedural_file.exists():
+                try:
+                    with open(procedural_file, "r", encoding="utf-8") as f:
+                        proc_data = json.load(f)
+                except Exception:
+                    proc_data = []
+            for item in procedural_methods:
+                m_name = item.get("method")
+                idx = next((i for i, x in enumerate(proc_data) if x.get("method") == m_name), None)
+                if idx is not None:
+                    proc_data[idx] = item
+                else:
+                    proc_data.append(item)
+            with open(procedural_file, "w", encoding="utf-8") as f:
+                json.dump(proc_data, f, indent=2)
+
+        # 6. Append failures.json if supplied
+        if failures:
+            fail_data = []
+            if failures_file.exists():
+                try:
+                    with open(failures_file, "r", encoding="utf-8") as f:
+                        fail_data = json.load(f)
+                except Exception:
+                    fail_data = []
+            for item in failures:
+                p_name = item.get("error_pattern")
+                idx = next((i for i, x in enumerate(fail_data) if x.get("error_pattern") == p_name), None)
+                if idx is not None:
+                    fail_data[idx] = item
+                else:
+                    fail_data.append(item)
+            with open(failures_file, "w", encoding="utf-8") as f:
+                json.dump(fail_data, f, indent=2)
+
     return {
         "new_state": new_state,
         "episodic_entry": episodic_entry,
+        "semantic_learnings": semantic_learnings or [],
+        "procedural_methods": procedural_methods or [],
         "persisted": not dry_run,
     }
 
@@ -253,6 +318,37 @@ def run_loop(all_tests: bool = False, dry_run: bool = False) -> Dict[str, Any]:
             },
             "impact": "Eliminates diagnostic false alarms, embeds static health and code entropy analysis into autonomous loops, and strengthens test coverage.",
         },
+        semantic_learnings=[
+            {
+                "concept": "Diagnostic Crash Distinguisher",
+                "description": "faulthandler writes a session boundary header on every process startup and shutdown. Distinguishing true crashes from clean shutdowns requires inspecting session content for fatal keywords (fatal exception, traceback, thread 0x, access violation, segmentation fault).",
+                "learned_at": datetime.now(timezone.utc).isoformat(),
+            },
+            {
+                "concept": "AST Module Test Mapping",
+                "description": "Using an AST dependency graph over test imports allows mapping modified source files directly to relevant test suites, executing targeted regressions in <2s instead of running entire test suites (>15s).",
+                "learned_at": datetime.now(timezone.utc).isoformat(),
+            },
+        ],
+        procedural_methods=[
+            {
+                "method": "Autonomous Improvement Loop Execution",
+                "procedure": [
+                    "Run leagueloop_diagnostics.py to inspect error.log, crash.log, and debug_screenshots.",
+                    "Run fast_test_runner.py to execute targeted tests against modified source files.",
+                    "Run code_entropy_analyzer.py to calculate codebase cyclomatic complexity, bare excepts, and oversized functions.",
+                    "Execute autonomous_improvement_runner.py to log metrics to loop_state.json, episodic.json, optimizations.json, semantic.json, and procedural.json.",
+                    "Sync loop outcome to MemPalace diary via CLI or MCP tool.",
+                ],
+            },
+            {
+                "method": "MemPalace AAAK Diary Logging",
+                "procedure": [
+                    "Format session log as: SESSION:YYYY-MM-DD|PROJ:LeagueLoop.DEV|AutoImprovementLoop|Run #N|<metrics>|★★★.",
+                    "Write diary entry using mempalace_diary_write MCP tool or CLI mempalace.exe --palace <path> diary write <entry>.",
+                ],
+            },
+        ],
     )
 
     loop_num = memory_result["new_state"]["run_number"]

@@ -35,12 +35,20 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
     def test_update_memory_state_dry_run(self):
         metrics = {"total_py_files": 150, "total_py_lines": 45000}
         tests = {"passed": 787, "failed": 0, "duration_seconds": 17.5}
-        result = update_memory_state(metrics, tests, dry_run=True)
+        result = update_memory_state(
+            metrics,
+            tests,
+            dry_run=True,
+            semantic_learnings=[{"concept": "Test Concept", "description": "Desc"}],
+            procedural_methods=[{"method": "Test Method", "procedure": ["Step 1"]}],
+        )
 
         self.assertFalse(result["persisted"])
         self.assertIn("new_state", result)
         self.assertEqual(result["new_state"]["test_baseline"]["passed"], 787)
         self.assertEqual(result["new_state"]["index_baseline"]["total_files"], 150)
+        self.assertEqual(len(result["semantic_learnings"]), 1)
+        self.assertEqual(len(result["procedural_methods"]), 1)
 
     @patch("tools.autonomous_improvement_runner.run_diagnostics_check")
     @patch("tools.autonomous_improvement_runner.run_entropy_check")

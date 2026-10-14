@@ -3,5 +3,15 @@
     "concept": "PowerShell Profile Blocking",
     "description": "In automated environments, PowerShell profiles that contain interactive questions or output banners can block background tasks that wait for stdout stabilization or expect non-interactive environments.",
     "learned_at": "2026-06-02T11:04:00Z"
+  },
+  {
+    "concept": "Diagnostic Crash Distinguisher",
+    "description": "faulthandler writes a session boundary header on every process startup and shutdown. Distinguishing true crashes from clean shutdowns requires inspecting session content for fatal keywords (fatal exception, traceback, thread 0x, access violation, segmentation fault).",
+    "learned_at": "2026-10-14T22:38:31.848309+00:00"
+  },
+  {
+    "concept": "AST Module Test Mapping",
+    "description": "Using an AST dependency graph over test imports allows mapping modified source files directly to relevant test suites, executing targeted regressions in <2s instead of running entire test suites (>15s).",
+    "learned_at": "2026-10-14T22:38:31.848309+00:00"
   }
 ]

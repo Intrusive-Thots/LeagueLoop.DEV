@@ -11,5 +11,22 @@
     "procedure": [
       "When running on environments (like Windows) where grep/ripgrep are missing or fail, execute an os.walk-based Python inline one-liner or run a python scratch script."
     ]
+  },
+  {
+    "method": "Autonomous Improvement Loop Execution",
+    "procedure": [
+      "Run leagueloop_diagnostics.py to inspect error.log, crash.log, and debug_screenshots.",
+      "Run fast_test_runner.py to execute targeted tests against modified source files.",
+      "Run code_entropy_analyzer.py to calculate codebase cyclomatic complexity, bare excepts, and oversized functions.",
+      "Execute autonomous_improvement_runner.py to log metrics to loop_state.json, episodic.json, optimizations.json, semantic.json, and procedural.json.",
+      "Sync loop outcome to MemPalace diary via CLI or MCP tool."
+    ]
+  },
+  {
+    "method": "MemPalace AAAK Diary Logging",
+    "procedure": [
+      "Format session log as: SESSION:YYYY-MM-DD|PROJ:LeagueLoop.DEV|AutoImprovementLoop|Run #N|<metrics>|\u2605\u2605\u2605.",
+      "Write diary entry using mempalace_diary_write MCP tool or CLI mempalace.exe --palace <path> diary write <entry>."
+    ]
   }
 ]
