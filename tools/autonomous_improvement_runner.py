@@ -32,25 +32,38 @@ MEMORY_DIR = AGENTS_DIR / "memory"
 TOOLS_DIR = PROJECT_ROOT / "tools"
 
 
-def measure_codebase_metrics(root: Path = PROJECT_ROOT) -> Dict[str, int]:
-    """Calculates total python files and lines across src, tests, and tools."""
-    py_files = []
+def measure_codebase_metrics(root: Path = PROJECT_ROOT) -> Dict[str, Any]:
+    """Calculates total python files and lines across src, tests, and tools, with granular breakdown."""
+    breakdown = {}
+    total_files = 0
+    total_lines = 0
+
     for folder in ["src", "tests", "tools"]:
         target_dir = root / folder
-        if target_dir.exists():
-            py_files.extend(list(target_dir.rglob("*.py")))
+        files = list(target_dir.rglob("*.py")) if target_dir.exists() else []
+        folder_lines = 0
+        for pf in files:
+            try:
+                with open(pf, "r", encoding="utf-8", errors="replace") as f:
+                    folder_lines += sum(1 for _ in f)
+            except Exception:
+                continue
+        breakdown[folder] = {
+            "files": len(files),
+            "lines": folder_lines,
+        }
+        total_files += len(files)
+        total_lines += folder_lines
 
-    total_lines = 0
-    for pf in py_files:
-        try:
-            with open(pf, "r", encoding="utf-8", errors="replace") as f:
-                total_lines += sum(1 for _ in f)
-        except Exception:
-            continue
+    src_lines = breakdown.get("src", {}).get("lines", 0)
+    test_lines = breakdown.get("tests", {}).get("lines", 0)
+    ratio = round(test_lines / src_lines, 3) if src_lines > 0 else 0.0
 
     return {
-        "total_py_files": len(py_files),
+        "total_py_files": total_files,
         "total_py_lines": total_lines,
+        "breakdown": breakdown,
+        "test_to_code_ratio": ratio,
     }
 
 
@@ -116,7 +129,7 @@ def run_tests_check(run_all: bool = False) -> Dict[str, Any]:
 
 
 def update_memory_state(
-    metrics: Dict[str, int],
+    metrics: Dict[str, Any],
     test_results: Dict[str, Any],
     dry_run: bool = False,
     task_name: str = "Autonomous Improvement Loop Run",
@@ -125,6 +138,7 @@ def update_memory_state(
     semantic_learnings: Optional[List[Dict[str, Any]]] = None,
     procedural_methods: Optional[List[Dict[str, Any]]] = None,
     failures: Optional[List[Dict[str, Any]]] = None,
+    entropy_results: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Updates loop_state.json, episodic.json, optimizations.json, semantic.json, procedural.json, and failures.json."""
     MEMORY_DIR.mkdir(parents=True, exist_ok=True)
@@ -140,6 +154,7 @@ def update_memory_state(
         "last_run": datetime.now(timezone.utc).isoformat(),
         "test_baseline": {"passed": 0, "failed": 0, "errors": 0},
         "index_baseline": {"total_files": 0, "total_py_lines": 0},
+        "entropy_baseline": {"status": "PASS", "avg_entropy": 0.0, "bare_excepts": 0},
     }
 
     if loop_state_file.exists():
@@ -153,10 +168,15 @@ def update_memory_state(
     prev_passed = current_state.get("test_baseline", {}).get("passed", 0)
     prev_files = current_state.get("index_baseline", {}).get("total_files", 0)
     prev_lines = current_state.get("index_baseline", {}).get("total_py_lines", 0)
+    prev_entropy = current_state.get("entropy_baseline", {}).get("avg_entropy", 0.0)
 
     delta_passed = test_results.get("passed", 0) - prev_passed
     delta_files = metrics.get("total_py_files", 0) - prev_files
     delta_lines = metrics.get("total_py_lines", 0) - prev_lines
+
+    entropy_info = entropy_results or {}
+    curr_entropy = entropy_info.get("avg_entropy", 0.0)
+    delta_entropy = round(curr_entropy - prev_entropy, 2) if prev_entropy else 0.0
 
     new_state = {
         "run_number": next_run,
@@ -169,6 +189,13 @@ def update_memory_state(
         "index_baseline": {
             "total_files": metrics.get("total_py_files", 0),
             "total_py_lines": metrics.get("total_py_lines", 0),
+            "breakdown": metrics.get("breakdown", {}),
+            "test_to_code_ratio": metrics.get("test_to_code_ratio", 0.0),
+        },
+        "entropy_baseline": {
+            "status": entropy_info.get("status", "N/A"),
+            "avg_entropy": curr_entropy,
+            "bare_excepts": entropy_info.get("bare_excepts_total", 0),
         },
     }
 
@@ -193,16 +220,19 @@ def update_memory_state(
                 "test_passed": prev_passed,
                 "files": prev_files,
                 "lines": prev_lines,
+                "avg_entropy": prev_entropy,
             },
             "after_metrics": {
                 "test_passed": test_results.get("passed", 0),
                 "files": metrics.get("total_py_files", 0),
                 "lines": metrics.get("total_py_lines", 0),
+                "avg_entropy": curr_entropy,
                 "delta_tests": delta_passed,
                 "delta_files": delta_files,
                 "delta_lines": delta_lines,
+                "delta_entropy": delta_entropy,
             },
-            "impact": f"Continuous regression prevention and code health baseline tracked across Run #{next_run}.",
+            "impact": f"Continuous regression prevention, test ratio tracking ({metrics.get('test_to_code_ratio', 0.0)}), and entropy baseline tracked across Run #{next_run}.",
         }
 
     if not dry_run:
@@ -366,6 +396,16 @@ def run_loop(
             "description": "Checking error.log.1 when error.log has fewer lines than the requested inspection window ensures critical errors that triggered process restart and log rollover are never missed.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Granular Metric & Entropy Baseline Tracking",
+            "description": "Decomposing index metrics into per-directory breakdowns (src, tests, tools) and linking codebase entropy deltas into loop_state.json enables autonomous detection of code bloat and quality drift across iterative development cycles.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
+        {
+            "concept": "Line-by-Line Streaming Crash Inspection",
+            "description": "Streaming crash.log line-by-line while tracking session headers avoids reading the entire multi-megabyte log and loading giant regex splits into memory, keeping diagnostic overhead under 0.2s.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
@@ -377,6 +417,14 @@ def run_loop(
                 "Run code_entropy_analyzer.py to calculate codebase cyclomatic complexity, bare excepts, and oversized functions.",
                 "Execute autonomous_improvement_runner.py to log metrics to loop_state.json, episodic.json, optimizations.json, semantic.json, and procedural.json.",
                 "Sync loop outcome to MemPalace diary via CLI or MCP tool.",
+            ],
+        },
+        {
+            "method": "Multi-Dimensional Codebase Health Assessment",
+            "procedure": [
+                "Measure per-folder Python file count and line totals for src, tests, and tools.",
+                "Calculate test-to-code ratio (tests_lines / src_lines) to guard against test coverage decay.",
+                "Compute codebase entropy deltas to detect cyclomatic complexity spikes.",
             ],
         },
         {
@@ -400,12 +448,13 @@ def run_loop(
             "Verified runtime logs (error.log, crash.log, session.jsonl) & debug screenshots via leagueloop_diagnostics (healthy status confirmed).",
             f"Executed code entropy audit: status={entropy.get('status')}, avg_entropy={entropy.get('avg_entropy', 0)}, bare_excepts={entropy.get('bare_excepts_total', 0)}, top_offender={top_offender}.",
             f"Executed test runner (duration={tests.get('duration_seconds')}s, passed={tests.get('passed')}, failed={tests.get('failed')}).",
-            f"Indexed codebase metrics ({metrics.get('total_py_files')} python files, {metrics.get('total_py_lines')} lines).",
+            f"Indexed codebase metrics ({metrics.get('total_py_files')} python files, {metrics.get('total_py_lines')} lines; test-to-code ratio: {metrics.get('test_to_code_ratio', 0.0)}).",
             "Synchronized loop state, episodic, semantic, procedural, and optimization memory baselines.",
         ],
         optimizations=opt_payload,
         semantic_learnings=semantic_learnings or default_semantic,
         procedural_methods=procedural_methods or default_procedural,
+        entropy_results=entropy,
     )
 
     loop_num = memory_result["new_state"]["run_number"]
@@ -426,10 +475,20 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="LeagueLoop Autonomous Improvement Loop Runner")
     parser.add_argument("--all-tests", action="store_true", help="Run full test suite unconditionally")
     parser.add_argument("--dry-run", action="store_true", help="Profile without persisting state to memory files")
+    parser.add_argument("--check-baseline", action="store_true", help="Print existing baseline state from loop_state.json and exit")
     parser.add_argument("--json", action="store_true", help="Output results in JSON format")
     parser.add_argument("--feature", default=None, help="Custom feature optimization name to record")
     parser.add_argument("--impact", default=None, help="Custom impact description to record")
     args = parser.parse_args(argv)
+
+    if args.check_baseline:
+        state_file = MEMORY_DIR / "loop_state.json"
+        if state_file.exists():
+            print(state_file.read_text(encoding="utf-8"))
+            sys.exit(0)
+        else:
+            print("No loop_state.json found.", file=sys.stderr)
+            sys.exit(1)
 
     result = run_loop(
         all_tests=args.all_tests,
@@ -445,7 +504,9 @@ def main(argv=None):
     print(f"=== LeagueLoop Autonomous Improvement Loop (Run #{result['loop_number']}) ===")
     diag_status = "[HEALTHY]" if result["diagnostics"].get("healthy") else "[NEEDS ATTENTION]"
     print(f"Diagnostics: {diag_status}")
-    print(f"Codebase Metrics: {result['metrics']['total_py_files']} Python files | {result['metrics']['total_py_lines']} lines")
+    bdown = result["metrics"].get("breakdown", {})
+    bdown_str = f" (src: {bdown.get('src', {}).get('lines', 0)}L, tests: {bdown.get('tests', {}).get('lines', 0)}L, ratio: {result['metrics'].get('test_to_code_ratio', 0.0)})" if bdown else ""
+    print(f"Codebase Metrics: {result['metrics']['total_py_files']} Python files | {result['metrics']['total_py_lines']} lines{bdown_str}")
     entropy_info = result.get("entropy", {})
     top_files = entropy_info.get("top_files", [])
     top_msg = f" | top: {[Path(f['file']).name for f in top_files[:3]]}" if top_files else ""

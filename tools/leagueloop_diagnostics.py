@@ -112,30 +112,40 @@ def inspect_crash_log(path: Path, max_sessions: int = 5) -> Dict[str, Any]:
         return result
 
     try:
-        content = path.read_text(encoding="utf-8", errors="replace")
-        import re
-        parts = re.split(r"(--- session [^\n]+ ---)", content)
         sessions: List[str] = []
         crashes: List[Dict[str, Any]] = []
-
         current_header = ""
-        for part in parts:
-            part_stripped = part.strip()
-            if not part_stripped:
-                continue
-            if part_stripped.startswith("--- session "):
-                current_header = part_stripped
-                sessions.append(current_header)
-            elif current_header:
-                lower_body = part_stripped.lower()
-                if any(k in lower_body for k in ("fatal exception", "traceback", "thread 0x", "access violation", "segmentation fault")):
-                    lines = [l.strip() for l in part_stripped.splitlines() if l.strip()]
-                    summary = lines[0] if lines else "Fatal exception detected"
-                    crashes.append({
-                        "session": current_header,
-                        "summary": summary,
-                        "details": lines[:5],
-                    })
+        current_body: List[str] = []
+
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                sline = line.strip()
+                if sline.startswith("--- session ") and sline.endswith(" ---"):
+                    if current_header and current_body:
+                        body_text = " ".join(current_body).lower()
+                        if any(k in body_text for k in ("fatal exception", "traceback", "thread 0x", "access violation", "segmentation fault")):
+                            summary = current_body[0] if current_body else "Fatal exception detected"
+                            crashes.append({
+                                "session": current_header,
+                                "summary": summary,
+                                "details": current_body[:5],
+                            })
+                    current_header = sline
+                    sessions.append(current_header)
+                    current_body = []
+                elif current_header and sline:
+                    current_body.append(sline)
+
+        # Process the final session block
+        if current_header and current_body:
+            body_text = " ".join(current_body).lower()
+            if any(k in body_text for k in ("fatal exception", "traceback", "thread 0x", "access violation", "segmentation fault")):
+                summary = current_body[0] if current_body else "Fatal exception detected"
+                crashes.append({
+                    "session": current_header,
+                    "summary": summary,
+                    "details": current_body[:5],
+                })
 
         result["total_sessions_tracked"] = len(sessions)
         result["total_actual_crashes"] = len(crashes)

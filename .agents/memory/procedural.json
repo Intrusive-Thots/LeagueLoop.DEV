@@ -28,5 +28,13 @@
       "Format session log as: SESSION:YYYY-MM-DD|PROJ:LeagueLoop.DEV|AutoImprovementLoop|Run #N|<metrics>|\u2605\u2605\u2605.",
       "Write diary entry using mempalace_diary_write MCP tool or CLI mempalace.exe --palace <path> diary write <entry>."
     ]
+  },
+  {
+    "method": "Multi-Dimensional Codebase Health Assessment",
+    "procedure": [
+      "Measure per-folder Python file count and line totals for src, tests, and tools.",
+      "Calculate test-to-code ratio (tests_lines / src_lines) to guard against test coverage decay.",
+      "Compute codebase entropy deltas to detect cyclomatic complexity spikes."
+    ]
   }
 ]

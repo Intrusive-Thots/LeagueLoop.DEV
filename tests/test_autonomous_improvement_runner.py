@@ -17,8 +17,14 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         metrics = measure_codebase_metrics()
         self.assertIn("total_py_files", metrics)
         self.assertIn("total_py_lines", metrics)
+        self.assertIn("breakdown", metrics)
+        self.assertIn("test_to_code_ratio", metrics)
         self.assertGreater(metrics["total_py_files"], 0)
         self.assertGreater(metrics["total_py_lines"], 0)
+        self.assertIn("src", metrics["breakdown"])
+        self.assertIn("tests", metrics["breakdown"])
+        self.assertIn("tools", metrics["breakdown"])
+        self.assertIsInstance(metrics["test_to_code_ratio"], float)
 
     @patch("tools.leagueloop_diagnostics.run_diagnostics")
     def test_run_diagnostics_check(self, mock_diag):
@@ -36,20 +42,29 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         self.assertEqual(len(entropy["top_files"]), 1)
 
     def test_update_memory_state_dry_run(self):
-        metrics = {"total_py_files": 150, "total_py_lines": 45000}
+        metrics = {
+            "total_py_files": 150,
+            "total_py_lines": 45000,
+            "breakdown": {"src": {"files": 80, "lines": 30000}, "tests": {"files": 50, "lines": 10000}},
+            "test_to_code_ratio": 0.333,
+        }
         tests = {"passed": 787, "failed": 0, "duration_seconds": 17.5}
+        entropy = {"status": "PASS", "avg_entropy": 42.0, "bare_excepts_total": 0}
         result = update_memory_state(
             metrics,
             tests,
             dry_run=True,
             semantic_learnings=[{"concept": "Test Concept", "description": "Desc"}],
             procedural_methods=[{"method": "Test Method", "procedure": ["Step 1"]}],
+            entropy_results=entropy,
         )
 
         self.assertFalse(result["persisted"])
         self.assertIn("new_state", result)
         self.assertEqual(result["new_state"]["test_baseline"]["passed"], 787)
         self.assertEqual(result["new_state"]["index_baseline"]["total_files"], 150)
+        self.assertEqual(result["new_state"]["entropy_baseline"]["avg_entropy"], 42.0)
+        self.assertEqual(result["new_state"]["index_baseline"]["test_to_code_ratio"], 0.333)
         self.assertEqual(len(result["semantic_learnings"]), 1)
         self.assertEqual(len(result["procedural_methods"]), 1)
 
@@ -115,6 +130,18 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         with patch("sys.stdout") as mock_stdout:
             with self.assertRaises(SystemExit) as cm:
                 main(["--dry-run"])
+            self.assertEqual(cm.exception.code, 0)
+
+    @patch("pathlib.Path.exists")
+    @patch("pathlib.Path.read_text")
+    def test_main_cli_check_baseline(self, mock_read, mock_exists):
+        from tools.autonomous_improvement_runner import main
+        mock_exists.return_value = True
+        mock_read.return_value = '{"run_number": 109, "test_baseline": {"passed": 24}}'
+
+        with patch("sys.stdout") as mock_stdout:
+            with self.assertRaises(SystemExit) as cm:
+                main(["--check-baseline"])
             self.assertEqual(cm.exception.code, 0)
 
 
