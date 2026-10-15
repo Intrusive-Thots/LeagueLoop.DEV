@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from tools.leagueloop_diagnostics import (
     get_leagueloop_paths,
+    read_tail_bounded,
     inspect_error_log,
     inspect_crash_log,
     inspect_session_log,
@@ -149,6 +150,46 @@ class TestLeagueLoopDiagnostics(unittest.TestCase):
         self.paths["error_log"].write_text(log_lines, encoding="utf-8")
         diag = run_diagnostics(self.paths, max_lines=4)
         self.assertEqual(len(diag["error_analysis"]["recent_errors"]), 0)
+
+    def test_read_tail_bounded(self):
+        sample_file = self.base / "tail_test.txt"
+        count, tail = read_tail_bounded(sample_file, max_lines=5)
+        self.assertEqual(count, 0)
+        self.assertEqual(tail, [])
+
+        sample_file.write_text("\n".join([f"line_{i}" for i in range(20)]), encoding="utf-8")
+        count, tail = read_tail_bounded(sample_file, max_lines=5)
+        self.assertEqual(count, 20)
+        self.assertEqual(len(tail), 5)
+        self.assertEqual(tail[-1].strip(), "line_19")
+
+    def test_inspect_error_log_with_rotated_log(self):
+        # Current log has 2 lines, rotated has error
+        self.paths["error_log"].write_text("INFO Clean recent 1\nINFO Clean recent 2\n", encoding="utf-8")
+        rotated_log = self.logs_dir / "error.log.1"
+        rotated_log.write_text("ERROR Failure prior to rollover\n", encoding="utf-8")
+
+        res_without = inspect_error_log(self.paths["error_log"], max_lines=2, include_rotated=False)
+        self.assertFalse(res_without["rotated_log_inspected"])
+        self.assertEqual(len(res_without["recent_errors"]), 0)
+
+        # Asking for 5 lines triggers rotated fallback because total_lines (2) < max_lines (5)
+        res_with = inspect_error_log(self.paths["error_log"], max_lines=5)
+        self.assertTrue(res_with["rotated_log_inspected"])
+        self.assertEqual(len(res_with["recent_errors"]), 1)
+        self.assertIn("Failure prior to rollover", res_with["recent_errors"][0])
+
+    def test_main_cli_include_rotated(self):
+        from tools.leagueloop_diagnostics import main
+        self.paths["error_log"].write_text("INFO Clean", encoding="utf-8")
+        self.paths["crash_log"].write_text("--- session 1 ---\n", encoding="utf-8")
+
+        with patch("sys.stdout") as mock_stdout:
+            with patch("tools.leagueloop_diagnostics.get_leagueloop_paths", return_value=self.paths):
+                with patch("sys.argv", ["leagueloop_diagnostics.py", "--include-rotated", "--json"]):
+                    with self.assertRaises(SystemExit) as cm:
+                        main()
+                    self.assertEqual(cm.exception.code, 0)
 
 
 if __name__ == "__main__":

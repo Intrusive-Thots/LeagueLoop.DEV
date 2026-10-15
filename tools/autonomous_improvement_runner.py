@@ -356,6 +356,16 @@ def run_loop(
             "description": "Permitting both positional file/dir arguments and explicit flag options in developer tools prevents shell friction and supports flexible invocation across IDEs and scripts.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Bounded Log Tail Streaming",
+            "description": "Using collections.deque(maxlen=N) instead of reading full multi-megabyte log files into Python lists eliminates massive memory heap allocations and garbage collection overhead during rapid diagnostic iterations.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
+        {
+            "concept": "Rotated Log Rollover Fallback",
+            "description": "Checking error.log.1 when error.log has fewer lines than the requested inspection window ensures critical errors that triggered process restart and log rollover are never missed.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [

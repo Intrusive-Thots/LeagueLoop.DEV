@@ -7,16 +7,26 @@
   {
     "concept": "Diagnostic Crash Distinguisher",
     "description": "faulthandler writes a session boundary header on every process startup and shutdown. Distinguishing true crashes from clean shutdowns requires inspecting session content for fatal keywords (fatal exception, traceback, thread 0x, access violation, segmentation fault).",
-    "learned_at": "2026-10-15T00:42:06.273887+00:00"
+    "learned_at": "2026-10-15T01:03:47.434575+00:00"
   },
   {
     "concept": "AST Module Test Mapping",
     "description": "Using an AST dependency graph over test imports allows mapping modified source files directly to relevant test suites, executing targeted regressions in <2s instead of running entire test suites (>15s).",
-    "learned_at": "2026-10-15T00:42:06.273887+00:00"
+    "learned_at": "2026-10-15T01:03:47.434575+00:00"
   },
   {
     "concept": "Positional and Target CLI Dispatch",
     "description": "Permitting both positional file/dir arguments and explicit flag options in developer tools prevents shell friction and supports flexible invocation across IDEs and scripts.",
-    "learned_at": "2026-10-15T00:42:06.273887+00:00"
+    "learned_at": "2026-10-15T01:03:47.434575+00:00"
+  },
+  {
+    "concept": "Bounded Log Tail Streaming",
+    "description": "Using collections.deque(maxlen=N) instead of reading full multi-megabyte log files into Python lists eliminates massive memory heap allocations and garbage collection overhead during rapid diagnostic iterations.",
+    "learned_at": "2026-10-15T01:03:47.434575+00:00"
+  },
+  {
+    "concept": "Rotated Log Rollover Fallback",
+    "description": "Checking error.log.1 when error.log has fewer lines than the requested inspection window ensures critical errors that triggered process restart and log rollover are never missed.",
+    "learned_at": "2026-10-15T01:03:47.434575+00:00"
   }
 ]

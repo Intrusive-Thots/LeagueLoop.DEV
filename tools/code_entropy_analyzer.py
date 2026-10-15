@@ -137,6 +137,7 @@ def main(argv=None):
     parser.add_argument("--target", default=None, help="File or directory path to analyze (flag)")
     parser.add_argument("--top", "-n", type=int, default=None, help="Display only top N files sorted by entropy descending")
     parser.add_argument("--summary", action="store_true", help="Display aggregate codebase entropy summary")
+    parser.add_argument("--max-entropy", type=float, default=None, help="Fail if average entropy exceeds this threshold")
     parser.add_argument("--json", action="store_true", help="Output results in JSON format")
     args = parser.parse_args(argv)
 
@@ -147,6 +148,9 @@ def main(argv=None):
             print(f"Error: Target path '{target_path}' is not a valid directory for summary.", file=sys.stderr)
             sys.exit(1)
         summary = run_entropy_summary(target_path)
+        if args.max_entropy is not None and summary["avg_entropy"] > args.max_entropy:
+            summary["status"] = "FAIL"
+            summary["threshold_exceeded"] = True
         if args.json:
             print(json.dumps(summary, indent=2))
         else:
@@ -157,6 +161,8 @@ def main(argv=None):
             print(f"Average Entropy: {summary['avg_entropy']}")
             print(f"Bare Excepts: {summary['bare_excepts_total']}")
             print(f"Syntax Errors: {summary['syntax_errors']}")
+            if summary.get("threshold_exceeded"):
+                print(f"Threshold Exceeded: Average entropy {summary['avg_entropy']} > {args.max_entropy}")
         sys.exit(0 if summary["status"] != "FAIL" else 1)
 
     if not os.path.exists(target_path):

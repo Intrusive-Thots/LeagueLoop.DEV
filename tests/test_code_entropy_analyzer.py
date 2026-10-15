@@ -100,6 +100,18 @@ class TestCodeEntropyAnalyzer(unittest.TestCase):
                 main(["--target", str(self.base), "--summary", "--json"])
             self.assertEqual(cm.exception.code, 0)
 
+        # Test --max-entropy passing threshold
+        with patch("sys.stdout") as mock_stdout:
+            with self.assertRaises(SystemExit) as cm:
+                main(["--target", str(self.base), "--summary", "--max-entropy", "100.0"])
+            self.assertEqual(cm.exception.code, 0)
+
+        # Test --max-entropy failing threshold
+        with patch("sys.stderr") as mock_stderr:
+            with self.assertRaises(SystemExit) as cm:
+                main(["--target", str(self.base), "--summary", "--max-entropy", "-1.0"])
+            self.assertEqual(cm.exception.code, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

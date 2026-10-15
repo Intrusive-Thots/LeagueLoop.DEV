@@ -18,9 +18,27 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
+from collections import deque
+
 if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
+
+
+def read_tail_bounded(path: Path, max_lines: int = 30) -> tuple[int, List[str]]:
+    """Memory-bounded line counter and tail reader using collections.deque."""
+    if not path.exists():
+        return 0, []
+    count = 0
+    q: deque = deque(maxlen=max_lines)
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                count += 1
+                q.append(line)
+    except Exception:
+        return 0, []
+    return count, list(q)
 
 
 def get_leagueloop_paths() -> Dict[str, Path]:
@@ -37,7 +55,7 @@ def get_leagueloop_paths() -> Dict[str, Path]:
     }
 
 
-def inspect_error_log(path: Path, max_lines: int = 30) -> Dict[str, Any]:
+def inspect_error_log(path: Path, max_lines: int = 30, include_rotated: bool = False) -> Dict[str, Any]:
     result: Dict[str, Any] = {
         "exists": path.exists(),
         "recent_errors": [],
@@ -45,15 +63,23 @@ def inspect_error_log(path: Path, max_lines: int = 30) -> Dict[str, Any]:
         "ws_anomalies_count": 0,
         "network_throttles_count": 0,
         "total_lines_inspected": 0,
+        "rotated_log_inspected": False,
     }
     if not path.exists():
         return result
 
     try:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
-            lines = f.readlines()
-        result["total_lines_inspected"] = len(lines)
-        tail = lines[-max_lines:] if len(lines) > max_lines else lines
+        total_count, tail = read_tail_bounded(path, max_lines=max_lines)
+        result["total_lines_inspected"] = total_count
+
+        if (include_rotated or total_count < max_lines):
+            rotated_path = path.parent / f"{path.name}.1"
+            if rotated_path.exists():
+                needed = max_lines - len(tail)
+                if needed > 0:
+                    _, rot_tail = read_tail_bounded(rotated_path, max_lines=needed)
+                    tail = rot_tail + tail
+                    result["rotated_log_inspected"] = True
 
         for line in tail:
             sline = line.strip()
@@ -138,10 +164,8 @@ def inspect_session_log(path: Path, max_entries: int = 20) -> Dict[str, Any]:
         return result
 
     try:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
-            lines = [l.strip() for l in f if l.strip()]
-        result["total_entries"] = len(lines)
-        tail = lines[-max_entries:] if len(lines) > max_entries else lines
+        total_count, tail = read_tail_bounded(path, max_lines=max_entries)
+        result["total_entries"] = total_count
 
         parsed_entries = []
         sessions_seen = set()
@@ -149,8 +173,11 @@ def inspect_session_log(path: Path, max_entries: int = 20) -> Dict[str, Any]:
         anomalies = []
 
         for line in tail:
+            sline = line.strip()
+            if not sline:
+                continue
             try:
-                entry = json.loads(line)
+                entry = json.loads(sline)
                 parsed_entries.append(entry)
                 lvl = entry.get("level", "UNKNOWN")
                 level_counts[lvl] = level_counts.get(lvl, 0) + 1
@@ -202,9 +229,10 @@ def run_diagnostics(
     max_lines: int = 30,
     max_sessions: int = 5,
     max_screenshots: int = 5,
+    include_rotated: bool = False,
 ) -> Dict[str, Any]:
     p = paths or get_leagueloop_paths()
-    errors_info = inspect_error_log(p["error_log"], max_lines=max_lines)
+    errors_info = inspect_error_log(p["error_log"], max_lines=max_lines, include_rotated=include_rotated)
     crashes_info = inspect_crash_log(p["crash_log"], max_sessions=max_sessions)
     session_info = inspect_session_log(p["session_log"], max_entries=max_lines)
     screenshots_info = inspect_screenshots(p["screenshots"], max_count=max_screenshots)
@@ -231,6 +259,7 @@ def main():
     parser = argparse.ArgumentParser(description="LeagueLoop Automated Diagnostics")
     parser.add_argument("--json", action="store_true", help="Output results in JSON format")
     parser.add_argument("--summary", action="store_true", default=True, help="Print human-readable summary")
+    parser.add_argument("--include-rotated", action="store_true", help="Include rotated log files (error.log.1) if error.log is truncated")
     parser.add_argument("--max-lines", "--lines", "-n", type=int, default=30, help="Number of error.log lines to inspect (default: 30)")
     parser.add_argument("--max-sessions", type=int, default=5, help="Number of crash sessions to inspect (default: 5)")
     parser.add_argument("--max-screenshots", type=int, default=5, help="Number of screenshots to inspect (default: 5)")
@@ -240,6 +269,7 @@ def main():
         max_lines=args.max_lines,
         max_sessions=args.max_sessions,
         max_screenshots=args.max_screenshots,
+        include_rotated=args.include_rotated,
     )
 
     if args.json:
