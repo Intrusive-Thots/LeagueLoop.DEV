@@ -163,6 +163,7 @@ def inspect_crash_log(path: Path, max_sessions: int = 5) -> Dict[str, Any]:
 
 
 def inspect_session_log(path: Path, max_entries: int = 20) -> Dict[str, Any]:
+    default_stats = {"count": 0, "min_ms": None, "max_ms": None, "avg_ms": None}
     result: Dict[str, Any] = {
         "exists": path.exists(),
         "total_entries": 0,
@@ -170,6 +171,16 @@ def inspect_session_log(path: Path, max_entries: int = 20) -> Dict[str, Any]:
         "level_counts": {},
         "active_sessions": [],
         "recent_anomalies_or_throttles": [],
+        "stability": {
+            "rating": "EXCELLENT",
+            "connection_drops_count": 0,
+            "drop_reasons": [],
+            "throttle_events_count": 0,
+            "latency_stats": dict(default_stats),
+        },
+        "latency_stats": dict(default_stats),
+        "connection_drops": [],
+        "throttle_events": [],
     }
     if not path.exists():
         return result
@@ -182,6 +193,15 @@ def inspect_session_log(path: Path, max_entries: int = 20) -> Dict[str, Any]:
         sessions_seen = set()
         level_counts: Dict[str, int] = {}
         anomalies = []
+        latency_values: List[float] = []
+        connection_drops: List[Dict[str, Any]] = []
+        throttle_events: List[Dict[str, Any]] = []
+        drop_reasons: List[str] = []
+
+        import re
+        latency_re = re.compile(r"Latency anomaly detected on event:\s*([\d\.]+)ms", re.IGNORECASE)
+        drop_re = re.compile(r"Connection drop recorded:\s*(.*?)(?:\s*\(Total drops:\s*(\d+)\))?$", re.IGNORECASE)
+        throttle_re = re.compile(r"Rapid connection drops detected.*?backoff floor=([\d\.]+)s", re.IGNORECASE)
 
         for line in tail:
             sline = line.strip()
@@ -195,20 +215,78 @@ def inspect_session_log(path: Path, max_entries: int = 20) -> Dict[str, Any]:
                 if "session" in entry:
                     sessions_seen.add(entry["session"])
                 tag = entry.get("tag", "")
+                msg = entry.get("msg", "")
+
+                m_lat = latency_re.search(msg)
+                if m_lat:
+                    try:
+                        latency_values.append(float(m_lat.group(1)))
+                    except ValueError:
+                        pass
+
+                if tag == "LCU_DIAGNOSTICS" or "Connection drop recorded" in msg:
+                    m_drop = drop_re.search(msg)
+                    if m_drop:
+                        reason = m_drop.group(1).strip()
+                        drop_reasons.append(reason)
+                        connection_drops.append({
+                            "ts": entry.get("ts"),
+                            "reason": reason,
+                            "total_drops": int(m_drop.group(2)) if m_drop.group(2) else 1,
+                        })
+
+                if tag == "LCU_NETWORK_THROTTLE" or "reconnect rate throttling" in msg:
+                    m_thr = throttle_re.search(msg)
+                    throttle_events.append({
+                        "ts": entry.get("ts"),
+                        "msg": msg,
+                        "backoff_floor": float(m_thr.group(1)) if m_thr else None,
+                    })
+
                 if "THROTTLE" in tag or "ANOMALY" in tag or lvl in ("WARNING", "ERROR", "CRITICAL"):
                     anomalies.append({
                         "ts": entry.get("ts"),
                         "level": lvl,
                         "tag": tag,
-                        "msg": entry.get("msg", ""),
+                        "msg": msg,
                     })
             except Exception:
                 continue
+
+        lat_stats = {
+            "count": len(latency_values),
+            "min_ms": round(min(latency_values), 2) if latency_values else None,
+            "max_ms": round(max(latency_values), 2) if latency_values else None,
+            "avg_ms": round(sum(latency_values) / len(latency_values), 2) if latency_values else None,
+        }
+
+        drop_count = len(connection_drops)
+        thr_count = len(throttle_events)
+        lat_count = len(latency_values)
+
+        if drop_count == 0 and thr_count == 0 and lat_count == 0:
+            rating = "EXCELLENT"
+        elif drop_count == 0 and thr_count == 0 and lat_count <= 5:
+            rating = "GOOD"
+        else:
+            rating = "DEGRADED"
+
+        stability_summary = {
+            "rating": rating,
+            "connection_drops_count": drop_count,
+            "drop_reasons": list(dict.fromkeys(drop_reasons)),
+            "throttle_events_count": thr_count,
+            "latency_stats": lat_stats,
+        }
 
         result["recent_entries"] = parsed_entries
         result["level_counts"] = level_counts
         result["active_sessions"] = sorted(list(sessions_seen))
         result["recent_anomalies_or_throttles"] = anomalies
+        result["stability"] = stability_summary
+        result["latency_stats"] = lat_stats
+        result["connection_drops"] = connection_drops
+        result["throttle_events"] = throttle_events
     except Exception as e:
         result["error_reading"] = str(e)
 
@@ -483,6 +561,14 @@ def main():
         print(f"  Total Session Entries: {sa.get('total_entries', 0)}")
         print(f"  Levels (tail): {sa.get('level_counts', {})}")
         print(f"  Active Sessions: {sa.get('active_sessions', [])}")
+        stab = sa.get("stability", {})
+        if stab:
+            print(f"  Network Stability: [{stab.get('rating', 'UNKNOWN')}] (drops: {stab.get('connection_drops_count', 0)}, throttles: {stab.get('throttle_events_count', 0)})")
+            lat = stab.get("latency_stats", {})
+            if lat.get("count", 0) > 0:
+                print(f"  Latency Anomalies (tail): {lat['count']} events (min={lat['min_ms']}ms, avg={lat['avg_ms']}ms, max={lat['max_ms']}ms)")
+            if stab.get("drop_reasons"):
+                print(f"  Drop Reasons: {stab['drop_reasons']}")
         if sa.get("recent_anomalies_or_throttles"):
             print(f"  Recent Anomalies/Throttles: {len(sa['recent_anomalies_or_throttles'])}")
             for a in sa["recent_anomalies_or_throttles"][:3]:

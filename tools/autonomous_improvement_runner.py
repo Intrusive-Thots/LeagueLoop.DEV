@@ -421,6 +421,11 @@ def run_loop(
             "description": "Inspecting capture byte-size (flagging 0-byte corruptions) and computing delta timestamps (human-readable age formatting, staleness thresholds) ensures broken or orphaned UI captures immediately surface in automated health checks.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Session WebSocket Latency and Network Stability Telemetry",
+            "description": "Extracting numeric WebSocket latency stats, connection drop counts, and network throttle backoffs from session.jsonl enables automated client responsiveness tracking and network flap detection.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
@@ -519,6 +524,12 @@ def main(argv=None):
     print(f"=== LeagueLoop Autonomous Improvement Loop (Run #{result['loop_number']}) ===")
     diag_status = "[HEALTHY]" if result["diagnostics"].get("healthy") else "[NEEDS ATTENTION]"
     print(f"Diagnostics: {diag_status}")
+    session_an = result["diagnostics"].get("session_analysis", {})
+    stab = session_an.get("stability", {})
+    if stab:
+        lat = stab.get("latency_stats", {})
+        lat_str = f", latency avg={lat['avg_ms']}ms (n={lat['count']})" if lat.get("count", 0) > 0 else ""
+        print(f"Session Stability: [{stab.get('rating', 'UNKNOWN')}]{lat_str} (drops={stab.get('connection_drops_count', 0)}, throttles={stab.get('throttle_events_count', 0)})")
     sc_analysis = result["diagnostics"].get("screenshot_analysis", {})
     if sc_analysis:
         fallback_tag = " (Desktop fallback)" if sc_analysis.get("used_fallback") else ""

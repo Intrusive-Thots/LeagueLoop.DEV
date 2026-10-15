@@ -347,6 +347,56 @@ class TestLeagueLoopDiagnostics(unittest.TestCase):
         self.assertEqual(diag_fresh["screenshot_analysis"]["stale_count"], 0)
         self.assertFalse(diag_fresh["screenshot_analysis"]["captures"][0]["is_stale"])
 
+    def test_inspect_session_log_latency_and_stability_extraction(self):
+        # 1. Clean log -> EXCELLENT
+        self.paths["session_log"].write_text(
+            '{"ts": "2026-10-14T10:00:00", "level": "INFO", "tag": "START", "msg": "Started"}\n',
+            encoding="utf-8",
+        )
+        res_clean = inspect_session_log(self.paths["session_log"])
+        self.assertEqual(res_clean["stability"]["rating"], "EXCELLENT")
+        self.assertEqual(res_clean["stability"]["connection_drops_count"], 0)
+        self.assertEqual(res_clean["stability"]["throttle_events_count"], 0)
+        self.assertEqual(res_clean["latency_stats"]["count"], 0)
+
+        # 2. Log with WS anomalies and drops -> DEGRADED
+        entries = [
+            '{"ts": "2026-10-14T10:00:00", "level": "WARNING", "tag": "LCU_WS_ANOMALY", "msg": "Latency anomaly detected on event: 150.00ms (threshold: 100.0ms)"}',
+            '{"ts": "2026-10-14T10:00:01", "level": "WARNING", "tag": "LCU_WS_ANOMALY", "msg": "Latency anomaly detected on event: 250.00ms (threshold: 100.0ms)"}',
+            '{"ts": "2026-10-14T10:00:02", "level": "INFO", "tag": "LCU_DIAGNOSTICS", "msg": "Connection drop recorded: WiFi to Ethernet flap (Total drops: 1)"}',
+            '{"ts": "2026-10-14T10:00:03", "level": "WARNING", "tag": "LCU_NETWORK_THROTTLE", "msg": "Rapid connection drops detected (3 drops in 15s). Enabling network adapter reconnect rate throttling (backoff floor=5.0s)."}',
+        ]
+        self.paths["session_log"].write_text("\n".join(entries), encoding="utf-8")
+        res_anomalies = inspect_session_log(self.paths["session_log"], max_entries=10)
+
+        self.assertEqual(res_anomalies["stability"]["rating"], "DEGRADED")
+        self.assertEqual(res_anomalies["stability"]["connection_drops_count"], 1)
+        self.assertIn("WiFi to Ethernet flap", res_anomalies["stability"]["drop_reasons"])
+        self.assertEqual(res_anomalies["stability"]["throttle_events_count"], 1)
+        self.assertEqual(res_anomalies["throttle_events"][0]["backoff_floor"], 5.0)
+
+        lat = res_anomalies["latency_stats"]
+        self.assertEqual(lat["count"], 2)
+        self.assertEqual(lat["min_ms"], 150.0)
+        self.assertEqual(lat["max_ms"], 250.0)
+        self.assertEqual(lat["avg_ms"], 200.0)
+
+    def test_main_cli_session_stability_display(self):
+        from tools.leagueloop_diagnostics import main
+        self.paths["error_log"].write_text("INFO Clean", encoding="utf-8")
+        self.paths["crash_log"].write_text("--- session 1 ---\n", encoding="utf-8")
+        self.paths["session_log"].write_text(
+            '{"ts": "2026-10-14T10:00:00", "level": "WARNING", "tag": "LCU_WS_ANOMALY", "msg": "Latency anomaly detected on event: 180.00ms (threshold: 100.0ms)"}\n',
+            encoding="utf-8",
+        )
+
+        with patch("sys.stdout"):
+            with patch("tools.leagueloop_diagnostics.get_leagueloop_paths", return_value=self.paths):
+                with patch("sys.argv", ["leagueloop_diagnostics.py", "--summary"]):
+                    with self.assertRaises(SystemExit) as cm:
+                        main()
+                    self.assertEqual(cm.exception.code, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
