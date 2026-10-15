@@ -13,6 +13,7 @@ from tools.leagueloop_diagnostics import (
     inspect_debug_log,
     inspect_screenshots,
     classify_screenshot_event,
+    format_human_age,
     run_diagnostics,
 )
 
@@ -259,6 +260,92 @@ class TestLeagueLoopDiagnostics(unittest.TestCase):
                     with self.assertRaises(SystemExit) as cm:
                         main()
                     self.assertEqual(cm.exception.code, 0)
+
+    def test_format_human_age(self):
+        self.assertEqual(format_human_age(-5), "in the future")
+        self.assertEqual(format_human_age(30), "30s ago")
+        self.assertEqual(format_human_age(125), "2m ago")
+        self.assertEqual(format_human_age(7200), "2.0h ago")
+        self.assertEqual(format_human_age(172800), "2.0d ago")
+
+    def test_inspect_screenshots_integrity_and_age(self):
+        import time
+        from datetime import datetime
+
+        now = datetime(2026, 10, 15, 12, 0, 0)
+        now_ts = now.timestamp()
+
+        # Valid screenshot with content
+        p1 = self.screenshots_dir / "20261015_115000_find_match_clicked.png"
+        p1.write_bytes(b"\x89PNG\r\n\x1a\nfakeimagecontent")
+        os.utime(p1, (now_ts - 600, now_ts - 600))  # 10 minutes ago
+
+        # Corrupted 0-byte screenshot
+        p2 = self.screenshots_dir / "20261015_110000_tab_switch.png"
+        p2.write_bytes(b"")
+        os.utime(p2, (now_ts - 3600, now_ts - 3600))  # 1 hour ago
+
+        captures = inspect_screenshots(self.screenshots_dir, max_count=5, now=now)
+        self.assertEqual(len(captures), 2)
+
+        # p1 should be intact and ~600s old
+        c1 = next(c for c in captures if c["filename"] == p1.name)
+        self.assertFalse(c1["is_corrupted"])
+        self.assertEqual(c1["size_bytes"], len(b"\x89PNG\r\n\x1a\nfakeimagecontent"))
+        self.assertEqual(c1["age_human"], "10m ago")
+
+        # p2 should be corrupted
+        c2 = next(c for c in captures if c["filename"] == p2.name)
+        self.assertTrue(c2["is_corrupted"])
+        self.assertEqual(c2["size_bytes"], 0)
+        self.assertEqual(c2["age_human"], "1.0h ago")
+
+    def test_inspect_screenshots_corrupted_flags_health(self):
+        from datetime import datetime
+        now = datetime(2026, 10, 15, 12, 0, 0)
+
+        # Write clean logs
+        self.paths["error_log"].write_text("INFO Clean", encoding="utf-8")
+        self.paths["crash_log"].write_text("--- session 1 ---\n", encoding="utf-8")
+
+        # 1 valid, 1 corrupted screenshot
+        p1 = self.screenshots_dir / "20261015_115000_find_match_clicked.png"
+        p1.write_bytes(b"content")
+        p2 = self.screenshots_dir / "20261015_115500_tab_switch.png"
+        p2.write_bytes(b"")
+
+        diag = run_diagnostics(paths=self.paths, now=now)
+        self.assertFalse(diag["healthy"])  # Must flag unhealthy due to corrupted screenshot!
+        meta = diag["screenshot_analysis"]
+        self.assertEqual(meta["corrupted_count"], 1)
+        self.assertFalse(meta["all_intact"])
+
+        # Fix corrupted screenshot
+        p2.write_bytes(b"fixedcontent")
+        diag_fixed = run_diagnostics(paths=self.paths, now=now)
+        self.assertTrue(diag_fixed["healthy"])
+        self.assertEqual(diag_fixed["screenshot_analysis"]["corrupted_count"], 0)
+        self.assertTrue(diag_fixed["screenshot_analysis"]["all_intact"])
+
+    def test_inspect_screenshots_staleness_threshold(self):
+        from datetime import datetime
+        now = datetime(2026, 10, 15, 12, 0, 0)
+        now_ts = now.timestamp()
+
+        # Screenshot modified 3 hours ago
+        p = self.screenshots_dir / "20261015_090000_queue_action.png"
+        p.write_bytes(b"content")
+        os.utime(p, (now_ts - 10800, now_ts - 10800))
+
+        # Check with max_age_hours=2.0 (should be stale)
+        diag_stale = run_diagnostics(paths=self.paths, now=now, max_screenshot_age_hours=2.0)
+        self.assertEqual(diag_stale["screenshot_analysis"]["stale_count"], 1)
+        self.assertTrue(diag_stale["screenshot_analysis"]["captures"][0]["is_stale"])
+
+        # Check with max_age_hours=4.0 (should not be stale)
+        diag_fresh = run_diagnostics(paths=self.paths, now=now, max_screenshot_age_hours=4.0)
+        self.assertEqual(diag_fresh["screenshot_analysis"]["stale_count"], 0)
+        self.assertFalse(diag_fresh["screenshot_analysis"]["captures"][0]["is_stale"])
 
 
 if __name__ == "__main__":

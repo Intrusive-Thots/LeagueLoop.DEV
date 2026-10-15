@@ -416,6 +416,11 @@ def run_loop(
             "description": "Classifying screenshot filenames into event categories (button clicks, tab transitions, champion hover/locks, game phase changes) and providing automatic desktop fallback capture inspection ensures immediate visual UI state auditing compliant with the LeagueLoop.DEV protocol.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Screenshot Integrity and Age Freshness Auditing",
+            "description": "Inspecting capture byte-size (flagging 0-byte corruptions) and computing delta timestamps (human-readable age formatting, staleness thresholds) ensures broken or orphaned UI captures immediately surface in automated health checks.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
@@ -518,7 +523,10 @@ def main(argv=None):
     if sc_analysis:
         fallback_tag = " (Desktop fallback)" if sc_analysis.get("used_fallback") else ""
         cats_str = f" {sc_analysis.get('category_counts', {})}" if sc_analysis.get('category_counts') else ""
-        print(f"Screenshots: {sc_analysis.get('total_returned', 0)} captures{fallback_tag}{cats_str}")
+        integrity_str = " (all intact)" if sc_analysis.get("all_intact", True) else f" ({sc_analysis.get('corrupted_count', 0)} corrupted)"
+        age_str = f", newest: {sc_analysis.get('newest_age_human')}" if sc_analysis.get("newest_age_human") else ""
+        stale_str = f" [{sc_analysis.get('stale_count', 0)} stale]" if sc_analysis.get("stale_count", 0) > 0 else ""
+        print(f"Screenshots: {sc_analysis.get('total_returned', 0)} captures{fallback_tag}{cats_str}{integrity_str}{stale_str}{age_str}")
     bdown = result["metrics"].get("breakdown", {})
     bdown_str = f" (src: {bdown.get('src', {}).get('lines', 0)}L, tests: {bdown.get('tests', {}).get('lines', 0)}L, ratio: {result['metrics'].get('test_to_code_ratio', 0.0)})" if bdown else ""
     print(f"Codebase Metrics: {result['metrics']['total_py_files']} Python files | {result['metrics']['total_py_lines']} lines{bdown_str}")

@@ -293,10 +293,28 @@ def classify_screenshot_event(filename: str) -> tuple[str, str]:
     return "general_ui", cleaned
 
 
+def format_human_age(seconds: float) -> str:
+    """Formats elapsed seconds into a compact human-readable duration."""
+    if seconds < 0:
+        return "in the future"
+    if seconds < 60:
+        return f"{int(seconds)}s ago"
+    minutes = seconds / 60
+    if minutes < 60:
+        return f"{int(minutes)}m ago"
+    hours = minutes / 60
+    if hours < 24:
+        return f"{hours:.1f}h ago"
+    days = hours / 24
+    return f"{days:.1f}d ago"
+
+
 def inspect_screenshots(
     path: Path,
     max_count: int = 5,
     fallback_path: Optional[Path] = None,
+    now: Optional[datetime] = None,
+    max_age_hours: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     files = []
     source = "primary"
@@ -309,17 +327,28 @@ def inspect_screenshots(
             files = fallback_files
             source = "fallback"
 
+    ref_now = now or datetime.now()
+    ref_ts = ref_now.timestamp()
+
     captures = []
     try:
         for f in files[:max_count]:
             stat = f.stat()
             cat, event_label = classify_screenshot_event(f.name)
+            is_corrupted = (stat.st_size == 0)
+            age_secs = max(0.0, round(ref_ts - stat.st_mtime, 1))
+            age_human = format_human_age(age_secs)
+            is_stale = (max_age_hours is not None and age_secs > (max_age_hours * 3600))
             captures.append({
                 "filename": f.name,
                 "category": cat,
                 "event_label": event_label,
                 "source": source,
                 "size_bytes": stat.st_size,
+                "is_corrupted": is_corrupted,
+                "age_seconds": age_secs,
+                "age_human": age_human,
+                "is_stale": is_stale,
                 "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
             })
     except Exception as e:
@@ -334,21 +363,38 @@ def run_diagnostics(
     max_sessions: int = 5,
     max_screenshots: int = 5,
     include_rotated: bool = False,
+    now: Optional[datetime] = None,
+    max_screenshot_age_hours: Optional[float] = None,
 ) -> Dict[str, Any]:
     p = paths or get_leagueloop_paths()
     errors_info = inspect_error_log(p["error_log"], max_lines=max_lines, include_rotated=include_rotated)
     crashes_info = inspect_crash_log(p["crash_log"], max_sessions=max_sessions)
     session_info = inspect_session_log(p["session_log"], max_entries=max_lines)
     fallback_dir = p.get("fallback_screenshots")
-    screenshots_info = inspect_screenshots(p["screenshots"], max_count=max_screenshots, fallback_path=fallback_dir)
+    screenshots_info = inspect_screenshots(
+        p["screenshots"],
+        max_count=max_screenshots,
+        fallback_path=fallback_dir,
+        now=now,
+        max_age_hours=max_screenshot_age_hours,
+    )
     debug_path = p.get("debug_log", p["base"] / "logs" / "debug.log")
     debug_info = inspect_debug_log(debug_path, max_lines=max_lines)
 
     category_counts: Dict[str, int] = {}
+    corrupted_count = 0
+    stale_count = 0
     used_fallback = any(c.get("source") == "fallback" for c in screenshots_info)
     for c in screenshots_info:
         cat = c.get("category", "general_ui")
         category_counts[cat] = category_counts.get(cat, 0) + 1
+        if c.get("is_corrupted"):
+            corrupted_count += 1
+        if c.get("is_stale"):
+            stale_count += 1
+
+    newest_age_sec = screenshots_info[0].get("age_seconds") if screenshots_info and "age_seconds" in screenshots_info[0] else None
+    newest_age_hum = screenshots_info[0].get("age_human") if screenshots_info and "age_human" in screenshots_info[0] else None
 
     screenshot_meta = {
         "captures": screenshots_info,
@@ -356,12 +402,18 @@ def run_diagnostics(
         "source_directory": str(fallback_dir if used_fallback else p["screenshots"]),
         "used_fallback": used_fallback,
         "category_counts": category_counts,
+        "corrupted_count": corrupted_count,
+        "stale_count": stale_count,
+        "all_intact": (corrupted_count == 0),
+        "newest_age_seconds": newest_age_sec,
+        "newest_age_human": newest_age_hum,
     }
 
     healthy = (
         len(errors_info.get("recent_errors", [])) == 0
         and errors_info.get("network_throttles_count", 0) == 0
         and not any(e.get("level") in ("ERROR", "CRITICAL") for e in session_info.get("recent_anomalies_or_throttles", []))
+        and corrupted_count == 0
     )
 
     return {
@@ -388,6 +440,7 @@ def main():
     parser.add_argument("--max-lines", "--lines", "-n", type=int, default=30, help="Number of error.log lines to inspect (default: 30)")
     parser.add_argument("--max-sessions", type=int, default=5, help="Number of crash sessions to inspect (default: 5)")
     parser.add_argument("--max-screenshots", type=int, default=5, help="Number of screenshots to inspect (default: 5)")
+    parser.add_argument("--max-screenshot-age-hours", type=float, default=None, help="Maximum allowed age of screenshots in hours before flagging as stale")
     parser.add_argument("--fallback-screenshots", type=str, default=None, help="Custom fallback screenshots directory path")
     args = parser.parse_args()
 
@@ -401,6 +454,7 @@ def main():
         max_sessions=args.max_sessions,
         max_screenshots=args.max_screenshots,
         include_rotated=args.include_rotated,
+        max_screenshot_age_hours=args.max_screenshot_age_hours,
     )
 
     if args.json:
@@ -457,11 +511,17 @@ def main():
     sa_screens = diag.get("screenshot_analysis", {})
     fallback_note = " (Desktop fallback)" if sa_screens.get("used_fallback") else ""
     categories_str = f" {sa_screens.get('category_counts', {})}" if sa_screens.get('category_counts') else ""
+    integrity_str = f" [{sa_screens.get('corrupted_count', 0)} corrupted]" if sa_screens.get("corrupted_count", 0) > 0 else " [all intact]"
+    newest_age_str = f" (newest: {sa_screens.get('newest_age_human')})" if sa_screens.get("newest_age_human") else ""
+    stale_str = f" [{sa_screens.get('stale_count', 0)} stale]" if sa_screens.get("stale_count", 0) > 0 else ""
     print(f"\n[Screenshots Inspection]")
-    print(f"  Recent Captures: {len(diag['recent_screenshots'])}{fallback_note}{categories_str}")
+    print(f"  Recent Captures: {len(diag['recent_screenshots'])}{fallback_note}{categories_str}{integrity_str}{stale_str}{newest_age_str}")
     for s in diag["recent_screenshots"]:
         cat_tag = f"[{s.get('category', 'ui')}] " if s.get("category") else ""
-        print(f"    - {cat_tag}{s.get('filename')} ({s.get('modified', '')})")
+        corrupted_tag = " [CORRUPTED/EMPTY]" if s.get("is_corrupted") else ""
+        stale_tag = " [STALE]" if s.get("is_stale") else ""
+        age_str = f" - {s.get('age_human')}" if s.get("age_human") else ""
+        print(f"    - {cat_tag}{s.get('filename')} ({s.get('modified', '')}{age_str}){corrupted_tag}{stale_tag}")
 
     sys.exit(0 if diag["healthy"] else 1)
 
