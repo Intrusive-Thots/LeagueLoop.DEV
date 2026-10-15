@@ -48,6 +48,7 @@ def get_leagueloop_paths() -> Dict[str, Path]:
         "base": base,
         "logs": base / "logs",
         "screenshots": base / "debug_screenshots",
+        "fallback_screenshots": Path.home() / "Desktop" / "Captures",
         "error_log": base / "logs" / "error.log",
         "crash_log": base / "logs" / "crash.log",
         "debug_log": base / "logs" / "debug.log",
@@ -259,17 +260,65 @@ def inspect_debug_log(path: Path, max_lines: int = 30) -> Dict[str, Any]:
     return result
 
 
-def inspect_screenshots(path: Path, max_count: int = 5) -> List[Dict[str, Any]]:
-    if not path.exists():
-        return []
+def classify_screenshot_event(filename: str) -> tuple[str, str]:
+    """Classifies screenshot filename according to LeagueLoop.DEV protocol.
+    
+    Returns (category, event_label).
+    Categories:
+      - 'button_click': UI button clicks (e.g. find_match_clicked)
+      - 'tab_transition': Tab switching (e.g. tab_switch)
+      - 'champion_action': Champion hover/lock attempts (e.g. champion_hover, champion_lock)
+      - 'game_phase_change': Phase changes (e.g. game_phase_change)
+      - 'queue_action': Queue search / matchmaking (e.g. queue_search_started)
+      - 'hotkey_setting': Hotkey interactions (e.g. setting_hotkey_find_match)
+      - 'general_ui': Other captures
+    """
+    stem = Path(filename).stem
+    import re
+    cleaned = re.sub(r"^\d{8}_\d{6}_?", "", stem)
+    cleaned_lower = cleaned.lower()
+
+    if "click" in cleaned_lower:
+        return "button_click", cleaned
+    elif "tab" in cleaned_lower:
+        return "tab_transition", cleaned
+    elif any(k in cleaned_lower for k in ("champ", "hover", "lock")):
+        return "champion_action", cleaned
+    elif any(k in cleaned_lower for k in ("phase", "game_phase")):
+        return "game_phase_change", cleaned
+    elif "queue" in cleaned_lower:
+        return "queue_action", cleaned
+    elif "hotkey" in cleaned_lower:
+        return "hotkey_setting", cleaned
+    return "general_ui", cleaned
+
+
+def inspect_screenshots(
+    path: Path,
+    max_count: int = 5,
+    fallback_path: Optional[Path] = None,
+) -> List[Dict[str, Any]]:
+    files = []
+    source = "primary"
+    if path.exists():
+        files = sorted(path.glob("*.png"), key=lambda p: p.stat().st_mtime, reverse=True)
+
+    if not files and fallback_path and fallback_path.exists():
+        fallback_files = sorted(fallback_path.glob("*.png"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if fallback_files:
+            files = fallback_files
+            source = "fallback"
 
     captures = []
     try:
-        files = sorted(path.glob("*.png"), key=lambda p: p.stat().st_mtime, reverse=True)
         for f in files[:max_count]:
             stat = f.stat()
+            cat, event_label = classify_screenshot_event(f.name)
             captures.append({
                 "filename": f.name,
+                "category": cat,
+                "event_label": event_label,
+                "source": source,
                 "size_bytes": stat.st_size,
                 "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
             })
@@ -290,9 +339,24 @@ def run_diagnostics(
     errors_info = inspect_error_log(p["error_log"], max_lines=max_lines, include_rotated=include_rotated)
     crashes_info = inspect_crash_log(p["crash_log"], max_sessions=max_sessions)
     session_info = inspect_session_log(p["session_log"], max_entries=max_lines)
-    screenshots_info = inspect_screenshots(p["screenshots"], max_count=max_screenshots)
+    fallback_dir = p.get("fallback_screenshots")
+    screenshots_info = inspect_screenshots(p["screenshots"], max_count=max_screenshots, fallback_path=fallback_dir)
     debug_path = p.get("debug_log", p["base"] / "logs" / "debug.log")
     debug_info = inspect_debug_log(debug_path, max_lines=max_lines)
+
+    category_counts: Dict[str, int] = {}
+    used_fallback = any(c.get("source") == "fallback" for c in screenshots_info)
+    for c in screenshots_info:
+        cat = c.get("category", "general_ui")
+        category_counts[cat] = category_counts.get(cat, 0) + 1
+
+    screenshot_meta = {
+        "captures": screenshots_info,
+        "total_returned": len(screenshots_info),
+        "source_directory": str(fallback_dir if used_fallback else p["screenshots"]),
+        "used_fallback": used_fallback,
+        "category_counts": category_counts,
+    }
 
     healthy = (
         len(errors_info.get("recent_errors", [])) == 0
@@ -305,10 +369,12 @@ def run_diagnostics(
         "healthy": healthy,
         "logs_path": str(p["logs"]),
         "screenshots_path": str(p["screenshots"]),
+        "fallback_screenshots_path": str(fallback_dir) if fallback_dir else "",
         "error_analysis": errors_info,
         "crash_analysis": crashes_info,
         "session_analysis": session_info,
         "debug_analysis": debug_info,
+        "screenshot_analysis": screenshot_meta,
         "recent_screenshots": screenshots_info,
     }
 
@@ -322,9 +388,15 @@ def main():
     parser.add_argument("--max-lines", "--lines", "-n", type=int, default=30, help="Number of error.log lines to inspect (default: 30)")
     parser.add_argument("--max-sessions", type=int, default=5, help="Number of crash sessions to inspect (default: 5)")
     parser.add_argument("--max-screenshots", type=int, default=5, help="Number of screenshots to inspect (default: 5)")
+    parser.add_argument("--fallback-screenshots", type=str, default=None, help="Custom fallback screenshots directory path")
     args = parser.parse_args()
 
+    paths = get_leagueloop_paths()
+    if args.fallback_screenshots:
+        paths["fallback_screenshots"] = Path(args.fallback_screenshots)
+
     diag = run_diagnostics(
+        paths=paths,
         max_lines=args.max_lines,
         max_sessions=args.max_sessions,
         max_screenshots=args.max_screenshots,
@@ -382,10 +454,14 @@ def main():
         lhc = ca["latest_historical_crash"]
         print(f"  Last Historical Crash: {lhc.get('session')} ({lhc.get('summary')})")
 
+    sa_screens = diag.get("screenshot_analysis", {})
+    fallback_note = " (Desktop fallback)" if sa_screens.get("used_fallback") else ""
+    categories_str = f" {sa_screens.get('category_counts', {})}" if sa_screens.get('category_counts') else ""
     print(f"\n[Screenshots Inspection]")
-    print(f"  Recent Captures: {len(diag['recent_screenshots'])}")
+    print(f"  Recent Captures: {len(diag['recent_screenshots'])}{fallback_note}{categories_str}")
     for s in diag["recent_screenshots"]:
-        print(f"    - {s.get('filename')} ({s.get('modified', '')})")
+        cat_tag = f"[{s.get('category', 'ui')}] " if s.get("category") else ""
+        print(f"    - {cat_tag}{s.get('filename')} ({s.get('modified', '')})")
 
     sys.exit(0 if diag["healthy"] else 1)
 

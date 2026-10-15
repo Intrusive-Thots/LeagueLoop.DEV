@@ -12,6 +12,7 @@ from tools.leagueloop_diagnostics import (
     inspect_session_log,
     inspect_debug_log,
     inspect_screenshots,
+    classify_screenshot_event,
     run_diagnostics,
 )
 
@@ -43,6 +44,7 @@ class TestLeagueLoopDiagnostics(unittest.TestCase):
         self.assertIn("error_log", p)
         self.assertIn("crash_log", p)
         self.assertIn("screenshots", p)
+        self.assertIn("fallback_screenshots", p)
 
     def test_inspect_error_log_empty_and_missing(self):
         missing_res = inspect_error_log(self.paths["error_log"])
@@ -105,11 +107,52 @@ class TestLeagueLoopDiagnostics(unittest.TestCase):
         self.assertIn("latest_historical_crash", res)
         self.assertEqual(res["latest_historical_crash"]["session"], "--- session 101 2026-08-24T00:56:16-04:00 ---")
 
+    def test_classify_screenshot_event(self):
+        cat, event = classify_screenshot_event("20261014_104444_setting_hotkey_find_match.png")
+        self.assertEqual(cat, "hotkey_setting")
+        self.assertEqual(event, "setting_hotkey_find_match")
+
+        cat, event = classify_screenshot_event("20261014_104339_find_match_clicked.png")
+        self.assertEqual(cat, "button_click")
+        self.assertEqual(event, "find_match_clicked")
+
+        cat, event = classify_screenshot_event("20261014_104328_tab_switch.png")
+        self.assertEqual(cat, "tab_transition")
+        self.assertEqual(event, "tab_switch")
+
+        cat, event = classify_screenshot_event("20261014_082013_game_phase_change.png")
+        self.assertEqual(cat, "game_phase_change")
+
+        cat, event = classify_screenshot_event("20261014_081942_queue_search_started.png")
+        self.assertEqual(cat, "queue_action")
+
+        cat, event = classify_screenshot_event("champion_hover_ahri.png")
+        self.assertEqual(cat, "champion_action")
+
     def test_inspect_screenshots(self):
         (self.screenshots_dir / "capture_1.png").write_bytes(b"image_data_1")
         (self.screenshots_dir / "capture_2.png").write_bytes(b"image_data_2")
         captures = inspect_screenshots(self.screenshots_dir, max_count=5)
         self.assertEqual(len(captures), 2)
+        self.assertEqual(captures[0]["source"], "primary")
+
+    def test_inspect_screenshots_with_fallback(self):
+        fallback_dir = self.base / "fallback_captures"
+        fallback_dir.mkdir(parents=True, exist_ok=True)
+        (fallback_dir / "20261014_100000_tab_switch.png").write_bytes(b"fallback_img")
+
+        # Primary screenshots dir is empty; should use fallback
+        captures = inspect_screenshots(self.screenshots_dir, max_count=5, fallback_path=fallback_dir)
+        self.assertEqual(len(captures), 1)
+        self.assertEqual(captures[0]["source"], "fallback")
+        self.assertEqual(captures[0]["category"], "tab_transition")
+
+        # When primary has images, it prefers primary
+        (self.screenshots_dir / "20261014_110000_find_match_clicked.png").write_bytes(b"primary_img")
+        captures_prim = inspect_screenshots(self.screenshots_dir, max_count=5, fallback_path=fallback_dir)
+        self.assertEqual(len(captures_prim), 1)
+        self.assertEqual(captures_prim[0]["source"], "primary")
+        self.assertEqual(captures_prim[0]["category"], "button_click")
 
     def test_inspect_session_log(self):
         # Missing file

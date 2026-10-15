@@ -321,5 +321,16 @@
       "status": "Optimized implementation baseline"
     },
     "impact": "Integrated bounded debug.log streaming into leagueloop_diagnostics.py to surface execution context and diagnostic tags without crashing on -v/--verbose, backed by unit tests."
+  },
+  {
+    "timestamp": "2026-10-15T01:40:35.605686+00:00",
+    "feature": "Fallback screenshot inspection & UI event categorization",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Added Desktop fallback capture discovery, categorized UI screenshot events into button_click, tab_transition, hotkey_setting, champion_action, and game_phase_change, and expanded diagnostic tests from 21 to 23 passing in <0.72s."
   }
 ]

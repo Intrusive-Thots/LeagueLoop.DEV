@@ -411,6 +411,11 @@ def run_loop(
             "description": "Reading the tail of %LOCALAPPDATA%\\LeagueLoop\\logs\\debug.log provides real-time thread activity, rate throttle triggers, and LCU event latency tracking without relying solely on error/crash thresholds.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Screenshot Event Categorization and Fallback Capture",
+            "description": "Classifying screenshot filenames into event categories (button clicks, tab transitions, champion hover/locks, game phase changes) and providing automatic desktop fallback capture inspection ensures immediate visual UI state auditing compliant with the LeagueLoop.DEV protocol.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
@@ -509,6 +514,11 @@ def main(argv=None):
     print(f"=== LeagueLoop Autonomous Improvement Loop (Run #{result['loop_number']}) ===")
     diag_status = "[HEALTHY]" if result["diagnostics"].get("healthy") else "[NEEDS ATTENTION]"
     print(f"Diagnostics: {diag_status}")
+    sc_analysis = result["diagnostics"].get("screenshot_analysis", {})
+    if sc_analysis:
+        fallback_tag = " (Desktop fallback)" if sc_analysis.get("used_fallback") else ""
+        cats_str = f" {sc_analysis.get('category_counts', {})}" if sc_analysis.get('category_counts') else ""
+        print(f"Screenshots: {sc_analysis.get('total_returned', 0)} captures{fallback_tag}{cats_str}")
     bdown = result["metrics"].get("breakdown", {})
     bdown_str = f" (src: {bdown.get('src', {}).get('lines', 0)}L, tests: {bdown.get('tests', {}).get('lines', 0)}L, ratio: {result['metrics'].get('test_to_code_ratio', 0.0)})" if bdown else ""
     print(f"Codebase Metrics: {result['metrics']['total_py_files']} Python files | {result['metrics']['total_py_lines']} lines{bdown_str}")
