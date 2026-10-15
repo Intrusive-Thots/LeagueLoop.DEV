@@ -136,6 +136,29 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
                 main(["--dry-run"])
             self.assertEqual(cm.exception.code, 0)
 
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_prune_storage(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 99,
+            "diagnostics": {"healthy": True, "storage_analysis": {"exists": True, "status": "OPTIMAL", "total_mb": 50.0, "logs": {"total_mb": 10.0}, "screenshots": {"total_mb": 40.0}}},
+            "metrics": {"total_py_files": 174, "total_py_lines": 50000},
+            "entropy": {"status": "PASS", "avg_entropy": 10.0, "bare_excepts_total": 0},
+            "tests": {"passed": 807, "failed": 0, "duration_seconds": 1.2, "success": True},
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+            "prune_results": {
+                "dry_run": False,
+                "total_freed_mb": 120.5,
+                "logs_pruned": {"mb": 50.0, "count": 3},
+                "screenshots_pruned": {"mb": 70.5, "count": 100},
+            },
+        }
+
+        with patch("sys.stdout") as mock_stdout:
+            with self.assertRaises(SystemExit) as cm:
+                main(["--prune-storage"])
+            self.assertEqual(cm.exception.code, 0)
+
     @patch("pathlib.Path.exists")
     @patch("pathlib.Path.read_text")
     def test_main_cli_check_baseline(self, mock_read, mock_exists):
