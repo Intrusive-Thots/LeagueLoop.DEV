@@ -12,6 +12,8 @@ from tools.leagueloop_diagnostics import (
     inspect_session_log,
     inspect_debug_log,
     inspect_screenshots,
+    inspect_saved_sessions,
+    inspect_storage_usage,
     classify_screenshot_event,
     format_human_age,
     run_diagnostics,
@@ -24,13 +26,16 @@ class TestLeagueLoopDiagnostics(unittest.TestCase):
         self.base = Path(self.temp_dir.name)
         self.logs_dir = self.base / "logs"
         self.screenshots_dir = self.base / "debug_screenshots"
+        self.sessions_dir = self.base / "sessions"
         self.logs_dir.mkdir(parents=True, exist_ok=True)
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
+        self.sessions_dir.mkdir(parents=True, exist_ok=True)
 
         self.paths = {
             "base": self.base,
             "logs": self.logs_dir,
             "screenshots": self.screenshots_dir,
+            "sessions": self.sessions_dir,
             "error_log": self.logs_dir / "error.log",
             "crash_log": self.logs_dir / "crash.log",
             "debug_log": self.logs_dir / "debug.log",
@@ -389,6 +394,153 @@ class TestLeagueLoopDiagnostics(unittest.TestCase):
             '{"ts": "2026-10-14T10:00:00", "level": "WARNING", "tag": "LCU_WS_ANOMALY", "msg": "Latency anomaly detected on event: 180.00ms (threshold: 100.0ms)"}\n',
             encoding="utf-8",
         )
+
+        with patch("sys.stdout"):
+            with patch("tools.leagueloop_diagnostics.get_leagueloop_paths", return_value=self.paths):
+                with patch("sys.argv", ["leagueloop_diagnostics.py", "--summary"]):
+                    with self.assertRaises(SystemExit) as cm:
+                        main()
+                    self.assertEqual(cm.exception.code, 0)
+
+    def test_inspect_saved_sessions_valid_and_missing(self):
+        import json
+        from datetime import datetime
+
+        now = datetime(2026, 10, 15, 12, 0, 0)
+        now_ts = now.timestamp()
+
+        # Slot 1: valid account
+        slot1 = self.sessions_dir / "user1"
+        slot1.mkdir(parents=True, exist_ok=True)
+        (slot1 / "session.json").write_text(
+            json.dumps({"account_id": "user1", "captured_at": now_ts - 86400}),
+            encoding="utf-8",
+        )
+        (slot1 / "RiotClientPrivateSettings.yaml").write_text("client: true\n", encoding="utf-8")
+        (slot1 / "RiotGamesPrivateSettings.yaml").write_text("games: true\n", encoding="utf-8")
+
+        # Slot 2: missing YAMLs
+        slot2 = self.sessions_dir / "user2"
+        slot2.mkdir(parents=True, exist_ok=True)
+        (slot2 / "session.json").write_text(
+            json.dumps({"account_id": "user2", "captured_at": now_ts - 100}),
+            encoding="utf-8",
+        )
+
+        res = inspect_saved_sessions(self.sessions_dir, now=now)
+        self.assertTrue(res["exists"])
+        self.assertEqual(res["total_accounts"], 2)
+        self.assertEqual(res["healthy_accounts"], 1)
+        self.assertEqual(res["corrupted_accounts"], 1)
+
+        acc1 = next(a for a in res["accounts"] if a["slot_name"] == "user1")
+        self.assertFalse(acc1["is_corrupted"])
+        self.assertEqual(acc1["age_days"], 1.0)
+        self.assertEqual(acc1["age_human"], "1.0d ago")
+
+        acc2 = next(a for a in res["accounts"] if a["slot_name"] == "user2")
+        self.assertTrue(acc2["is_corrupted"])
+        self.assertIn("RiotClientPrivateSettings.yaml", acc2["missing_files"])
+
+    def test_inspect_saved_sessions_corrupted_manifest_or_yaml(self):
+        # 0-byte manifest
+        slot1 = self.sessions_dir / "corrupted_slot"
+        slot1.mkdir(parents=True, exist_ok=True)
+        (slot1 / "session.json").write_text("", encoding="utf-8")
+        (slot1 / "RiotClientPrivateSettings.yaml").write_text("", encoding="utf-8")
+        (slot1 / "RiotGamesPrivateSettings.yaml").write_text("", encoding="utf-8")
+
+        res = inspect_saved_sessions(self.sessions_dir)
+        self.assertEqual(res["total_accounts"], 1)
+        self.assertEqual(res["corrupted_accounts"], 1)
+        acc = res["accounts"][0]
+        self.assertTrue(acc["is_corrupted"])
+        self.assertTrue(any("0-byte" in f for f in acc["corrupted_files"]))
+
+    def test_inspect_saved_sessions_staleness(self):
+        import json
+        from datetime import datetime
+
+        now = datetime(2026, 10, 15, 12, 0, 0)
+        now_ts = now.timestamp()
+
+        slot = self.sessions_dir / "stale_user"
+        slot.mkdir(parents=True, exist_ok=True)
+        (slot / "session.json").write_text(
+            json.dumps({"account_id": "stale_user", "captured_at": now_ts - (40 * 86400)}),
+            encoding="utf-8",
+        )
+        (slot / "RiotClientPrivateSettings.yaml").write_text("client: true\n", encoding="utf-8")
+        (slot / "RiotGamesPrivateSettings.yaml").write_text("games: true\n", encoding="utf-8")
+
+        res = inspect_saved_sessions(self.sessions_dir, max_age_days=30.0, now=now)
+        self.assertEqual(res["total_accounts"], 1)
+        self.assertEqual(res["stale_accounts"], 1)
+        self.assertTrue(res["accounts"][0]["is_stale"])
+        self.assertFalse(res["accounts"][0]["is_corrupted"])
+
+    def test_inspect_storage_usage_breakdown_and_warnings(self):
+        # Add files in logs
+        (self.logs_dir / "error.log").write_text("A" * 1024, encoding="utf-8")
+        (self.logs_dir / "debug.log.1").write_text("B" * 2048, encoding="utf-8")
+
+        # Add files in screenshots
+        (self.screenshots_dir / "test.png").write_bytes(b"C" * 1024)
+
+        # Add files in sessions
+        slot = self.sessions_dir / "test_user"
+        slot.mkdir(parents=True, exist_ok=True)
+        (slot / "session.json").write_text("{}", encoding="utf-8")
+
+        res = inspect_storage_usage(self.base, max_logs_mb=100.0, max_screenshots_mb=100.0)
+        self.assertTrue(res["exists"])
+        self.assertEqual(res["status"], "OPTIMAL")
+        self.assertFalse(res["is_warning"])
+        self.assertEqual(res["logs"]["file_count"], 2)
+        self.assertEqual(res["logs"]["rotated_file_count"], 1)
+        self.assertEqual(res["screenshots"]["file_count"], 1)
+        self.assertEqual(res["sessions"]["slot_count"], 1)
+
+        # Test warning trigger with tiny threshold
+        res_warn = inspect_storage_usage(self.base, max_logs_mb=0.0001)
+        self.assertTrue(res_warn["is_warning"])
+        self.assertEqual(res_warn["status"], "WARNING")
+        self.assertEqual(len(res_warn["warnings"]), 1)
+
+    def test_run_diagnostics_saved_sessions_integration(self):
+        import json
+        self.paths["error_log"].write_text("INFO Clean", encoding="utf-8")
+        self.paths["crash_log"].write_text("--- session 1 ---\n", encoding="utf-8")
+
+        # Corrupted session slot
+        slot = self.sessions_dir / "bad_slot"
+        slot.mkdir(parents=True, exist_ok=True)
+        (slot / "session.json").write_text("{bad json", encoding="utf-8")
+
+        diag = run_diagnostics(paths=self.paths)
+        self.assertFalse(diag["healthy"])
+        self.assertEqual(diag["sessions_analysis"]["corrupted_accounts"], 1)
+
+        # Fix corrupted session
+        (slot / "session.json").write_text(json.dumps({"account_id": "good"}), encoding="utf-8")
+        (slot / "RiotClientPrivateSettings.yaml").write_text("client: true\n", encoding="utf-8")
+        (slot / "RiotGamesPrivateSettings.yaml").write_text("games: true\n", encoding="utf-8")
+
+        diag_fixed = run_diagnostics(paths=self.paths)
+        self.assertTrue(diag_fixed["healthy"])
+        self.assertEqual(diag_fixed["sessions_analysis"]["corrupted_accounts"], 0)
+
+    def test_main_cli_sessions_and_storage_display(self):
+        from tools.leagueloop_diagnostics import main
+        import json
+        self.paths["error_log"].write_text("INFO Clean", encoding="utf-8")
+        self.paths["crash_log"].write_text("--- session 1 ---\n", encoding="utf-8")
+
+        slot = self.sessions_dir / "user_cli"
+        slot.mkdir(parents=True, exist_ok=True)
+        (slot / "session.json").write_text(json.dumps({"account_id": "user_cli"}), encoding="utf-8")
+        (slot / "RiotClientPrivateSettings.yaml").write_text("client: true\n", encoding="utf-8")
+        (slot / "RiotGamesPrivateSettings.yaml").write_text("games: true\n", encoding="utf-8")
 
         with patch("sys.stdout"):
             with patch("tools.leagueloop_diagnostics.get_leagueloop_paths", return_value=self.paths):

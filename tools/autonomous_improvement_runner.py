@@ -426,6 +426,16 @@ def run_loop(
             "description": "Extracting numeric WebSocket latency stats, connection drop counts, and network throttle backoffs from session.jsonl enables automated client responsiveness tracking and network flap detection.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Multi-Account Saved Session Vault Auditing",
+            "description": "Auditing account session manifests (session.json) and private YAML structures in %LOCALAPPDATA%\\LeagueLoop\\sessions verifies credential and token integrity before account switching operations execute, preventing silent login crashes.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
+        {
+            "concept": "Runtime Storage Footprint and Log Rotation Quota Auditing",
+            "description": "Auditing active vs rotated telemetry logs, debug screenshots, and session vaults against configurable MB thresholds guards production endpoints against silent disk exhaustion.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
@@ -538,6 +548,14 @@ def main(argv=None):
         age_str = f", newest: {sc_analysis.get('newest_age_human')}" if sc_analysis.get("newest_age_human") else ""
         stale_str = f" [{sc_analysis.get('stale_count', 0)} stale]" if sc_analysis.get("stale_count", 0) > 0 else ""
         print(f"Screenshots: {sc_analysis.get('total_returned', 0)} captures{fallback_tag}{cats_str}{integrity_str}{stale_str}{age_str}")
+    sess_vault = result["diagnostics"].get("sessions_analysis", {})
+    if sess_vault and sess_vault.get("total_accounts", 0) > 0:
+        corrupt_str = f" ({sess_vault.get('corrupted_accounts')} corrupted)" if sess_vault.get("corrupted_accounts", 0) > 0 else " (all intact)"
+        stale_str = f" [{sess_vault.get('stale_accounts')} stale]" if sess_vault.get("stale_accounts", 0) > 0 else ""
+        print(f"Saved Sessions: {sess_vault.get('total_accounts', 0)} accounts{corrupt_str}{stale_str}")
+    storage_an = result["diagnostics"].get("storage_analysis", {})
+    if storage_an and storage_an.get("exists"):
+        print(f"Storage Footprint: [{storage_an.get('status', 'OPTIMAL')}] total={storage_an.get('total_mb', 0.0)}MB (logs={storage_an.get('logs', {}).get('total_mb', 0.0)}MB, screenshots={storage_an.get('screenshots', {}).get('total_mb', 0.0)}MB)")
     bdown = result["metrics"].get("breakdown", {})
     bdown_str = f" (src: {bdown.get('src', {}).get('lines', 0)}L, tests: {bdown.get('tests', {}).get('lines', 0)}L, ratio: {result['metrics'].get('test_to_code_ratio', 0.0)})" if bdown else ""
     print(f"Codebase Metrics: {result['metrics']['total_py_files']} Python files | {result['metrics']['total_py_lines']} lines{bdown_str}")

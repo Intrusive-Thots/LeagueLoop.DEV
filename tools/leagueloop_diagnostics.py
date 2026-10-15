@@ -48,6 +48,7 @@ def get_leagueloop_paths() -> Dict[str, Path]:
         "base": base,
         "logs": base / "logs",
         "screenshots": base / "debug_screenshots",
+        "sessions": base / "sessions",
         "fallback_screenshots": Path.home() / "Desktop" / "Captures",
         "error_log": base / "logs" / "error.log",
         "crash_log": base / "logs" / "crash.log",
@@ -435,6 +436,210 @@ def inspect_screenshots(
     return captures
 
 
+
+def inspect_saved_sessions(
+    path: Path,
+    max_age_days: Optional[float] = None,
+    now: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Audits saved multi-account SessionVault slots in %LOCALAPPDATA%\\LeagueLoop\\sessions.
+
+    Each account slot folder should contain:
+      - session.json (manifest with account_id and captured_at)
+      - RiotClientPrivateSettings.yaml
+      - RiotGamesPrivateSettings.yaml
+    """
+    result: Dict[str, Any] = {
+        "exists": path.exists(),
+        "total_accounts": 0,
+        "healthy_accounts": 0,
+        "corrupted_accounts": 0,
+        "stale_accounts": 0,
+        "accounts": [],
+    }
+    if not path.exists():
+        return result
+
+    ref_now = now or datetime.now()
+    ref_ts = ref_now.timestamp()
+
+    try:
+        slots = [d for d in path.iterdir() if d.is_dir()]
+        result["total_accounts"] = len(slots)
+
+        for slot in sorted(slots, key=lambda d: d.name.lower()):
+            account_id = slot.name
+            manifest_file = slot / "session.json"
+            yaml_client = slot / "RiotClientPrivateSettings.yaml"
+            yaml_games = slot / "RiotGamesPrivateSettings.yaml"
+
+            missing_files: List[str] = []
+            corrupted_files: List[str] = []
+            captured_at: Optional[float] = None
+
+            # Check manifest
+            if not manifest_file.exists():
+                missing_files.append("session.json")
+            else:
+                if manifest_file.stat().st_size == 0:
+                    corrupted_files.append("session.json (0-byte)")
+                else:
+                    try:
+                        with open(manifest_file, "r", encoding="utf-8", errors="replace") as f:
+                            m_data = json.load(f)
+                            captured_at = float(m_data.get("captured_at") or 0.0)
+                            if m_data.get("account_id"):
+                                account_id = m_data["account_id"]
+                    except Exception:
+                        corrupted_files.append("session.json (invalid JSON)")
+
+            # Check YAML files
+            for yf in [yaml_client, yaml_games]:
+                if not yf.exists():
+                    missing_files.append(yf.name)
+                elif yf.stat().st_size == 0:
+                    corrupted_files.append(f"{yf.name} (0-byte)")
+
+            # Determine age
+            if not captured_at or captured_at <= 0.0:
+                try:
+                    target_cand = yaml_client if yaml_client.exists() else manifest_file
+                    captured_at = target_cand.stat().st_mtime if target_cand.exists() else slot.stat().st_mtime
+                except Exception:
+                    captured_at = ref_ts
+
+            age_secs = max(0.0, round(ref_ts - captured_at, 1))
+            age_days = round(age_secs / 86400.0, 2)
+            age_human = format_human_age(age_secs)
+            is_stale = bool(max_age_days is not None and age_days > max_age_days)
+            is_corrupted = len(corrupted_files) > 0 or len(missing_files) > 0
+
+            acc_info = {
+                "account_id": account_id,
+                "slot_name": slot.name,
+                "is_corrupted": is_corrupted,
+                "is_stale": is_stale,
+                "age_days": age_days,
+                "age_human": age_human,
+                "missing_files": missing_files,
+                "corrupted_files": corrupted_files,
+                "captured_at": captured_at,
+            }
+            result["accounts"].append(acc_info)
+
+            if is_corrupted:
+                result["corrupted_accounts"] += 1
+            else:
+                result["healthy_accounts"] += 1
+            if is_stale:
+                result["stale_accounts"] += 1
+
+    except Exception as e:
+        result["error_reading"] = str(e)
+
+    return result
+
+
+def inspect_storage_usage(
+    base_path: Path,
+    max_logs_mb: float = 100.0,
+    max_screenshots_mb: float = 100.0,
+) -> Dict[str, Any]:
+    """Audits disk footprint across logs, screenshots, and saved sessions in LeagueLoop AppData."""
+    result: Dict[str, Any] = {
+        "exists": base_path.exists(),
+        "total_mb": 0.0,
+        "logs": {
+            "total_mb": 0.0,
+            "active_mb": 0.0,
+            "rotated_mb": 0.0,
+            "file_count": 0,
+            "rotated_file_count": 0,
+        },
+        "screenshots": {
+            "total_mb": 0.0,
+            "file_count": 0,
+        },
+        "sessions": {
+            "total_mb": 0.0,
+            "slot_count": 0,
+        },
+        "is_warning": False,
+        "warnings": [],
+        "status": "OPTIMAL",
+    }
+    if not base_path.exists():
+        return result
+
+    try:
+        # Logs
+        logs_dir = base_path / "logs"
+        if logs_dir.exists():
+            active_names = {"error.log", "crash.log", "debug.log", "session.jsonl"}
+            for p in logs_dir.glob("*"):
+                if p.is_file():
+                    sz_mb = p.stat().st_size / (1024 * 1024)
+                    result["logs"]["total_mb"] += sz_mb
+                    result["logs"]["file_count"] += 1
+                    if p.name in active_names:
+                        result["logs"]["active_mb"] += sz_mb
+                    else:
+                        result["logs"]["rotated_mb"] += sz_mb
+                        result["logs"]["rotated_file_count"] += 1
+
+        # Screenshots
+        sc_dir = base_path / "debug_screenshots"
+        if sc_dir.exists():
+            for p in sc_dir.glob("*.png"):
+                if p.is_file():
+                    sz_mb = p.stat().st_size / (1024 * 1024)
+                    result["screenshots"]["total_mb"] += sz_mb
+                    result["screenshots"]["file_count"] += 1
+
+        # Sessions
+        sess_dir = base_path / "sessions"
+        if sess_dir.exists():
+            slots = [d for d in sess_dir.iterdir() if d.is_dir()]
+            result["sessions"]["slot_count"] = len(slots)
+            for p in sess_dir.rglob("*"):
+                if p.is_file():
+                    result["sessions"]["total_mb"] += p.stat().st_size / (1024 * 1024)
+
+        logs_mb_raw = result["logs"]["total_mb"]
+        screenshots_mb_raw = result["screenshots"]["total_mb"]
+
+        warnings = []
+        if logs_mb_raw > max_logs_mb:
+            warnings.append(f"Logs footprint ({round(logs_mb_raw, 2)} MB) exceeds threshold ({max_logs_mb} MB)")
+        if screenshots_mb_raw > max_screenshots_mb:
+            warnings.append(f"Screenshots footprint ({round(screenshots_mb_raw, 2)} MB) exceeds threshold ({max_screenshots_mb} MB)")
+
+        result["warnings"] = warnings
+        result["is_warning"] = len(warnings) > 0
+        if result["is_warning"]:
+            result["status"] = "WARNING"
+        elif (logs_mb_raw + screenshots_mb_raw) > (max_logs_mb + max_screenshots_mb) * 0.5:
+            result["status"] = "ELEVATED"
+        else:
+            result["status"] = "OPTIMAL"
+
+        # Rounding
+        result["logs"]["total_mb"] = round(result["logs"]["total_mb"], 2)
+        result["logs"]["active_mb"] = round(result["logs"]["active_mb"], 2)
+        result["logs"]["rotated_mb"] = round(result["logs"]["rotated_mb"], 2)
+        result["screenshots"]["total_mb"] = round(result["screenshots"]["total_mb"], 2)
+        result["sessions"]["total_mb"] = round(result["sessions"]["total_mb"], 2)
+        result["total_mb"] = round(
+            result["logs"]["total_mb"] + result["screenshots"]["total_mb"] + result["sessions"]["total_mb"],
+            2,
+        )
+
+    except Exception as e:
+        result["error_reading"] = str(e)
+
+    return result
+
+
 def run_diagnostics(
     paths: Optional[Dict[str, Path]] = None,
     max_lines: int = 30,
@@ -443,6 +648,10 @@ def run_diagnostics(
     include_rotated: bool = False,
     now: Optional[datetime] = None,
     max_screenshot_age_hours: Optional[float] = None,
+    max_session_age_days: Optional[float] = None,
+    max_logs_mb: float = 100.0,
+    max_screenshots_mb: float = 100.0,
+    strict_storage: bool = False,
 ) -> Dict[str, Any]:
     p = paths or get_leagueloop_paths()
     errors_info = inspect_error_log(p["error_log"], max_lines=max_lines, include_rotated=include_rotated)
@@ -458,6 +667,10 @@ def run_diagnostics(
     )
     debug_path = p.get("debug_log", p["base"] / "logs" / "debug.log")
     debug_info = inspect_debug_log(debug_path, max_lines=max_lines)
+
+    sessions_path = p.get("sessions", p["base"] / "sessions")
+    sessions_info = inspect_saved_sessions(sessions_path, max_age_days=max_session_age_days, now=now)
+    storage_info = inspect_storage_usage(p["base"], max_logs_mb=max_logs_mb, max_screenshots_mb=max_screenshots_mb)
 
     category_counts: Dict[str, int] = {}
     corrupted_count = 0
@@ -492,6 +705,8 @@ def run_diagnostics(
         and errors_info.get("network_throttles_count", 0) == 0
         and not any(e.get("level") in ("ERROR", "CRITICAL") for e in session_info.get("recent_anomalies_or_throttles", []))
         and corrupted_count == 0
+        and sessions_info.get("corrupted_accounts", 0) == 0
+        and (not strict_storage or not storage_info.get("is_warning", False))
     )
 
     return {
@@ -499,12 +714,15 @@ def run_diagnostics(
         "healthy": healthy,
         "logs_path": str(p["logs"]),
         "screenshots_path": str(p["screenshots"]),
+        "sessions_path": str(sessions_path),
         "fallback_screenshots_path": str(fallback_dir) if fallback_dir else "",
         "error_analysis": errors_info,
         "crash_analysis": crashes_info,
         "session_analysis": session_info,
         "debug_analysis": debug_info,
         "screenshot_analysis": screenshot_meta,
+        "sessions_analysis": sessions_info,
+        "storage_analysis": storage_info,
         "recent_screenshots": screenshots_info,
     }
 
@@ -519,6 +737,10 @@ def main():
     parser.add_argument("--max-sessions", type=int, default=5, help="Number of crash sessions to inspect (default: 5)")
     parser.add_argument("--max-screenshots", type=int, default=5, help="Number of screenshots to inspect (default: 5)")
     parser.add_argument("--max-screenshot-age-hours", type=float, default=None, help="Maximum allowed age of screenshots in hours before flagging as stale")
+    parser.add_argument("--max-session-age-days", type=float, default=None, help="Maximum allowed age of saved Riot account sessions in days before flagging as stale")
+    parser.add_argument("--max-logs-mb", type=float, default=100.0, help="Maximum allowed total size of logs in MB before warning (default: 100.0)")
+    parser.add_argument("--max-screenshots-mb", type=float, default=100.0, help="Maximum allowed total size of debug screenshots in MB before warning (default: 100.0)")
+    parser.add_argument("--strict-storage", action="store_true", help="Treat storage threshold warnings as fatal health failures")
     parser.add_argument("--fallback-screenshots", type=str, default=None, help="Custom fallback screenshots directory path")
     args = parser.parse_args()
 
@@ -533,6 +755,10 @@ def main():
         max_screenshots=args.max_screenshots,
         include_rotated=args.include_rotated,
         max_screenshot_age_hours=args.max_screenshot_age_hours,
+        max_session_age_days=args.max_session_age_days,
+        max_logs_mb=args.max_logs_mb,
+        max_screenshots_mb=args.max_screenshots_mb,
+        strict_storage=args.strict_storage,
     )
 
     if args.json:
@@ -543,6 +769,7 @@ def main():
     print(f"Status: {'[HEALTHY]' if diag['healthy'] else '[NEEDS ATTENTION]'}")
     print(f"Logs Path: {diag['logs_path']}")
     print(f"Screenshots Path: {diag['screenshots_path']}")
+    print(f"Sessions Path: {diag.get('sessions_path', '')}")
 
     ea = diag["error_analysis"]
     print(f"\n[Logs Inspection]")
@@ -608,6 +835,37 @@ def main():
         stale_tag = " [STALE]" if s.get("is_stale") else ""
         age_str = f" - {s.get('age_human')}" if s.get("age_human") else ""
         print(f"    - {cat_tag}{s.get('filename')} ({s.get('modified', '')}{age_str}){corrupted_tag}{stale_tag}")
+
+
+    sv = diag.get("sessions_analysis", {})
+    if sv.get("exists"):
+        corrupted_note = f" [{sv.get('corrupted_accounts', 0)} corrupted]" if sv.get("corrupted_accounts", 0) > 0 else " [all intact]"
+        stale_note = f" [{sv.get('stale_accounts', 0)} stale]" if sv.get("stale_accounts", 0) > 0 else ""
+        print(f"\n[Saved Sessions Vault]")
+        print(f"  Total Account Slots: {sv.get('total_accounts', 0)}{corrupted_note}{stale_note}")
+        for acc in sv.get("accounts", []):
+            corrupt_tag = " [CORRUPTED]" if acc.get("is_corrupted") else ""
+            stale_tag = " [STALE]" if acc.get("is_stale") else ""
+            print(f"    - {acc.get('account_id')} ({acc.get('slot_name')}): {acc.get('age_human')}{corrupt_tag}{stale_tag}")
+            if acc.get("missing_files"):
+                print(f"        missing: {acc.get('missing_files')}")
+            if acc.get("corrupted_files"):
+                print(f"        corrupted: {acc.get('corrupted_files')}")
+
+    st = diag.get("storage_analysis", {})
+    if st.get("exists"):
+        print(f"\n[Storage Footprint]")
+        print(f"  Total Disk Footprint: {st.get('total_mb', 0.0)} MB (Status: [{st.get('status', 'OPTIMAL')}])")
+        logs_st = st.get("logs", {})
+        print(f"  Logs: {logs_st.get('total_mb', 0.0)} MB ({logs_st.get('file_count', 0)} files, rotated: {logs_st.get('rotated_mb', 0.0)} MB across {logs_st.get('rotated_file_count', 0)} files)")
+        sc_st = st.get("screenshots", {})
+        print(f"  Screenshots: {sc_st.get('total_mb', 0.0)} MB ({sc_st.get('file_count', 0)} files)")
+        sess_st = st.get("sessions", {})
+        print(f"  Sessions: {sess_st.get('total_mb', 0.0)} MB ({sess_st.get('slot_count', 0)} slots)")
+        if st.get("warnings"):
+            print(f"  Storage Warnings:")
+            for w in st.get("warnings", []):
+                print(f"    - [WARNING] {w}")
 
     sys.exit(0 if diag["healthy"] else 1)
 
