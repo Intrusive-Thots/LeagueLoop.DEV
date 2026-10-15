@@ -99,3 +99,28 @@ def test_main_app_init_order_regression():
     assert ui_queue_pos != -1, "self._process_ui_queue() missing from LeagueLoopApp"
     assert running_pos < ui_queue_pos, "self.running must be initialized before calling _process_ui_queue"
 
+
+def test_client_window_tracker_invariants():
+    """DOCK-001: ClientWindowTracker recognizes both League titles and guards iconic windows."""
+    tracker_py = SRC / "services" / "client_window_tracker.py"
+    assert tracker_py.exists()
+    text = tracker_py.read_text(encoding="utf-8")
+    assert '"league of legends"' in text
+    assert '"league of legends (tm) client"' in text
+    assert "IsIconic" in text
+    assert "-30000" in text  # Guard against minimized off-screen coordinates
+
+
+def test_docking_loop_invariants():
+    """DOCK-002: Companion physical repositioning (0x0014) and multi-monitor work area handling."""
+    main_py = SRC / "core" / "main.py"
+    assert main_py.exists()
+    text = main_py.read_text(encoding="utf-8")
+    # Verify physical repositioning for borderless windows with SWP_NOZORDER | SWP_NOACTIVATE (0x0014)
+    assert "SetWindowPos" in text
+    assert "0x0014" in text
+    # Verify multi-monitor work area querying via MonitorFromRect and rcWork
+    assert "MonitorFromRect" in text
+    assert "rcWork" in text
+
+

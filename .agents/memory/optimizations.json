@@ -460,5 +460,79 @@
       "status": "Optimized implementation baseline"
     },
     "impact": "Added prune_storage CLI tool to safely eliminate rotated logs and stale debug screenshots, added rolling screenshot retention to DebugTracker (MAX_SCREENSHOTS_DEFAULT), and tracked storage baseline across improvement loops."
+  },
+  {
+    "timestamp": "2026-10-15T03:52:27.705834+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #122)",
+    "before_metrics": {
+      "test_passed": 46,
+      "files": 175,
+      "lines": 52279,
+      "avg_entropy": 66.95
+    },
+    "after_metrics": {
+      "test_passed": 9,
+      "files": 175,
+      "lines": 52306,
+      "avg_entropy": 66.95,
+      "delta_tests": -37,
+      "delta_files": 0,
+      "delta_lines": 27,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.47), and entropy baseline tracked across Run #122."
+  },
+  {
+    "timestamp": "2026-10-15T04:04:29.207755+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #123)",
+    "before_metrics": {
+      "test_passed": 9,
+      "files": 175,
+      "lines": 52306,
+      "avg_entropy": 66.95
+    },
+    "after_metrics": {
+      "test_passed": 845,
+      "files": 175,
+      "lines": 52306,
+      "avg_entropy": 66.95,
+      "delta_tests": 836,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.47), and entropy baseline tracked across Run #123."
+  },
+  {
+    "timestamp": "2026-10-15T04:19:29.941749+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #124)",
+    "before_metrics": {
+      "test_passed": 845,
+      "files": 175,
+      "lines": 52306,
+      "avg_entropy": 66.95
+    },
+    "after_metrics": {
+      "test_passed": 59,
+      "files": 175,
+      "lines": 52306,
+      "avg_entropy": 66.95,
+      "delta_tests": -786,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.47), and entropy baseline tracked across Run #124."
+  },
+  {
+    "timestamp": "2026-10-15T04:24:15.767460+00:00",
+    "feature": "Window Docking and Tracker Architecture Invariant Regression Guards",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Added automated regression guards for Section 5 (Window Docking & Tracker Architecture Invariants): dual LEAGUE_TITLES, iconic coord guards, physical SetWindowPos (0x0014), and MonitorFromRect/rcWork."
   }
 ]
