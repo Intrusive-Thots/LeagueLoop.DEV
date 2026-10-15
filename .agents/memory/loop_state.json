@@ -1,8 +1,8 @@
 {
-  "run_number": 130,
-  "last_run": "2026-10-15T05:06:44.456538+00:00",
+  "run_number": 131,
+  "last_run": "2026-10-15T05:10:17.068328+00:00",
   "test_baseline": {
-    "passed": 852,
+    "passed": 63,
     "failed": 0,
     "errors": 0
   },
@@ -32,9 +32,9 @@
   },
   "storage_baseline": {
     "status": "WARNING",
-    "total_mb": 2279.08,
-    "logs_mb": 127.83,
-    "screenshots_mb": 2151.25,
-    "warnings_count": 2
+    "total_mb": 131.53,
+    "logs_mb": 13.83,
+    "screenshots_mb": 117.7,
+    "warnings_count": 1
   }
 }
