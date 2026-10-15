@@ -599,6 +599,10 @@ def main(argv=None):
     storage_an = result["diagnostics"].get("storage_analysis", {})
     if storage_an and storage_an.get("exists"):
         print(f"Storage Footprint: [{storage_an.get('status', 'OPTIMAL')}] total={storage_an.get('total_mb', 0.0)}MB (logs={storage_an.get('logs', {}).get('total_mb', 0.0)}MB, screenshots={storage_an.get('screenshots', {}).get('total_mb', 0.0)}MB)")
+    prune_res = result.get("prune_results")
+    if prune_res and not prune_res.get("error"):
+        action_tag = " [DRY RUN]" if prune_res.get("dry_run") else ""
+        print(f"Storage Pruning:{action_tag} freed {prune_res.get('total_freed_mb', 0.0)}MB (logs: {prune_res.get('logs_pruned', {}).get('mb', 0.0)}MB across {prune_res.get('logs_pruned', {}).get('count', 0)} files, screenshots: {prune_res.get('screenshots_pruned', {}).get('mb', 0.0)}MB across {prune_res.get('screenshots_pruned', {}).get('count', 0)} files)")
     bdown = result["metrics"].get("breakdown", {})
     bdown_str = f" (src: {bdown.get('src', {}).get('lines', 0)}L, tests: {bdown.get('tests', {}).get('lines', 0)}L, ratio: {result['metrics'].get('test_to_code_ratio', 0.0)})" if bdown else ""
     print(f"Codebase Metrics: {result['metrics']['total_py_files']} Python files | {result['metrics']['total_py_lines']} lines{bdown_str}")
