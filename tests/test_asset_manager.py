@@ -1199,6 +1199,33 @@ class TestAssetManager(unittest.TestCase):
         self.assets.clear_spell_ability_tree_search_slice_pool()
         self.assertEqual(len(self.assets._spell_ability_tree_search_slice_pool), 0)
 
+    def test_download_and_cache_image_kwargs(self):
+        """Test _download_and_cache_image handling of kwargs like size and opacity."""
+        mock_img = MagicMock()
+        self.assets.icons["test_cache_key"] = mock_img
+
+        # 1. LRU hit returning cached image
+        result = self.assets._download_and_cache_image(
+            "https://example.com/test.png",
+            "/fake/path.png",
+            "test_cache_key",
+            size=(50, 50),
+            opacity=0.8
+        )
+        self.assertEqual(result, mock_img)
+
+        # 2. Start download on missing cache/file
+        with patch.object(self.assets, '_start_download') as mock_start_download:
+            res = self.assets._download_and_cache_image(
+                "https://example.com/missing.png",
+                "/fake/missing.png",
+                "missing_key",
+                size=(30, 30),
+                opacity=0.5
+            )
+            self.assertIsNone(res)
+            mock_start_download.assert_called_once_with("https://example.com/missing.png", "/fake/missing.png")
+
 if __name__ == '__main__':
     unittest.main()
 

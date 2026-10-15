@@ -168,6 +168,7 @@ TabBar = None
 CTkTooltip = None
 Toast = None
 ToastManager = None
+ToastConfig = None
 
 def _purge_ui_modules():
     """Drop every already-imported UI module so the next import sees the mocks.
@@ -187,23 +188,25 @@ def _purge_ui_modules():
 
 
 def setUpModule():
-    global _patcher, LolToggle, TabBar, CTkTooltip, Toast, ToastManager
+    global _patcher, LolToggle, TabBar, CTkTooltip, Toast, ToastManager, ToastConfig
     _purge_ui_modules()
     _patcher = patch.dict(sys.modules, {
         'customtkinter': mock_ctk,
         'tkinter': mock_tk,
+        'keyboard': MagicMock(),
     })
     _patcher.start()
 
     from ui.components.lol_toggle import LolToggle as LT
     from ui.components.tab_bar import TabBar as TB
     from ui.components.tooltip import CTkTooltip as CT
-    from ui.components.toast import Toast as T, ToastManager as TM
+    from ui.components.toast import Toast as T, ToastManager as TM, ToastConfig as TC
     LolToggle = LT
     TabBar = TB
     CTkTooltip = CT
     Toast = T
     ToastManager = TM
+    ToastConfig = TC
 
 def tearDownModule():
     global _patcher
@@ -317,6 +320,44 @@ class TestUIComponents(unittest.TestCase):
         tm2 = ToastManager.get_instance()
         self.assertEqual(tm, tm2)
 
+    def test_toast_config_resolution(self):
+        """Test ToastConfig.resolve with direct config, kwargs, and positional args."""
+        # Defaults
+        cfg = ToastConfig.resolve()
+        self.assertEqual(cfg.icon, "✨")
+        self.assertEqual(cfg.duration, 3000)
+        self.assertEqual(cfg.theme, "primary")
+        self.assertFalse(cfg.confetti)
+
+        # Direct instance
+        custom_cfg = ToastConfig(icon="🔥", duration=1500, theme="error", confetti=True)
+        resolved = ToastConfig.resolve(custom_cfg)
+        self.assertEqual(resolved, custom_cfg)
+
+        # Kwargs
+        cfg_kw = ToastConfig.resolve(kwargs={"icon": "🎉", "theme": "success"})
+        self.assertEqual(cfg_kw.icon, "🎉")
+        self.assertEqual(cfg_kw.theme, "success")
+        self.assertEqual(cfg_kw.duration, 3000)
+
+        # Positional
+        cfg_pos = ToastConfig.resolve(config="🚀", args=(5000, "error", True))
+        self.assertEqual(cfg_pos.icon, "🚀")
+        self.assertEqual(cfg_pos.duration, 5000)
+        self.assertEqual(cfg_pos.theme, "error")
+        self.assertTrue(cfg_pos.confetti)
+
+        # Explicit None as first positional arg
+        cfg_none_first = ToastConfig.resolve(config=None, args=(5000, "error"))
+        self.assertEqual(cfg_none_first.icon, "✨")
+        self.assertEqual(cfg_none_first.duration, 5000)
+        self.assertEqual(cfg_none_first.theme, "error")
+
+        # Instance with kwarg overrides
+        cfg_override = ToastConfig.resolve(config=custom_cfg, kwargs={"theme": "success"})
+        self.assertEqual(cfg_override.icon, "🔥")
+        self.assertEqual(cfg_override.theme, "success")
+
     def test_toast_manager_show_and_eviction(self):
         """Test showing toasts and MAX_TOASTS eviction."""
         ToastManager._instance = None
@@ -327,6 +368,21 @@ class TestUIComponents(unittest.TestCase):
             tm.show(f"Toast {i}")
 
         self.assertLessEqual(len(tm._toasts), tm.MAX_TOASTS)
+
+    def test_toast_manager_show_flexible_signatures(self):
+        """Test showing toasts with ToastConfig or keyword arguments."""
+        ToastManager._instance = None
+        mock_root = DummyWidget()
+        tm = ToastManager.get_instance(mock_root)
+
+        # With kwargs
+        tm.show("Kwargs Toast", icon="✨", theme="success")
+        self.assertEqual(len(tm._toasts), 1)
+
+        # With ToastConfig
+        cfg = ToastConfig(icon="🔥", theme="error")
+        tm.show("Config Toast", config=cfg)
+        self.assertEqual(len(tm._toasts), 2)
 
     def test_automation_editor_save(self):
         """Test AutomationEditor parameter saving for various automation keys."""
@@ -505,7 +561,7 @@ class TestUIComponents(unittest.TestCase):
 
     def test_feather_edge_component(self):
         """Test FeatherEdge gradient canvas initialization and color updates."""
-        from ui.components.feather_edge import FeatherEdge
+        from ui.components.feather_edge import FeatherEdge, FeatherEdgeConfig
         fe = FeatherEdge(self.mock_parent, width=24, side="left")
         self.assertEqual(fe.feather_width, 24)
         self.assertEqual(fe.side, "left")
@@ -519,6 +575,15 @@ class TestUIComponents(unittest.TestCase):
         self.assertEqual(fe.client_color, "#000000")
         self.assertEqual(fe.app_color, "#101010")
         self.assertEqual(fe.seam_color, "#C8AA6E")
+
+        # Test initialization with FeatherEdgeConfig
+        cfg = FeatherEdgeConfig(width=32, side="right", client_color="#111111", app_color="#222222", seam_color="#333333")
+        fe_cfg = FeatherEdge(self.mock_parent, config=cfg)
+        self.assertEqual(fe_cfg.feather_width, 32)
+        self.assertEqual(fe_cfg.side, "right")
+        self.assertEqual(fe_cfg.client_color, "#111111")
+        self.assertEqual(fe_cfg.app_color, "#222222")
+        self.assertEqual(fe_cfg.seam_color, "#333333")
 
     def test_sidebar_minimize_button_and_dock_styling(self):
         """Test minimize button and dock styling updates on SidebarWidget."""

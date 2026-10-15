@@ -4,6 +4,7 @@ Provides low-latency network tweaks ('Fix Ping') and safe background process cle
 """
 from __future__ import annotations
 
+import base64
 import os
 import subprocess
 import sys
@@ -112,10 +113,11 @@ class SystemOptimizer:
 
         current_pid = os.getpid()
 
-        for proc in psutil.process_iter(["pid", "name", "memory_info"]):
+        for proc in psutil.process_iter(["pid", "name"]):
             try:
                 pid = proc.info.get("pid")
-                name = (proc.info.get("name") or "").lower()
+                raw_name = proc.info.get("name") or ""
+                name = raw_name.lower()
 
                 # Safety checks
                 if not name or pid == current_pid or pid <= 4:
@@ -124,11 +126,14 @@ class SystemOptimizer:
                 if name in PROTECTED_PROCESS_NAMES:
                     continue
 
-                if name in TARGET_PROCESS_NAMES:
+                    # Tally memory before terminating (lazy fetch memory_info only for matched target processes)
                     mem_rss = 0
-                    mem_info = proc.info.get("memory_info")
-                    if mem_info:
-                        mem_rss = getattr(mem_info, "rss", 0)
+                    try:
+                        mem_info = proc.info.get("memory_info") if (hasattr(proc, "info") and isinstance(proc.info, dict) and "memory_info" in proc.info) else proc.memory_info()
+                        if mem_info:
+                            mem_rss = getattr(mem_info, "rss", 0)
+                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                        pass
 
                     proc.terminate()
                     freed_bytes += mem_rss
@@ -247,11 +252,10 @@ netsh int tcp set global autotuninglevel=normal 2>$null
                 }
             else:
                 # Launch via UAC elevation request using EncodedCommand to ensure flawless multiline execution
-                import base64
                 b64_script = base64.b64encode(ps_script.encode("utf-16le")).decode("ascii")
                 cmd = f"Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand {b64_script}' -Verb RunAs"
                 subprocess.Popen(
-                    ["powershell", "-NoProfile", "-Command", cmd],
+                    ["powershell", "-NoProfile", "-NonInteractive", "-Command", cmd],
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 )
                 Logger.info("SystemOptimizer", f"Launched elevated UAC prompt to apply ping optimizations.{lat_suffix}")

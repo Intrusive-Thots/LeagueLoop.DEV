@@ -90,12 +90,24 @@ class TestSystemOptimizer(unittest.TestCase):
     @patch("services.system_optimizer.SystemOptimizer.is_admin", return_value=False)
     @patch("services.system_optimizer.subprocess.Popen")
     def test_fix_ping_requests_elevation(self, mock_popen, mock_admin, mock_win):
+        import base64
+
         result = SystemOptimizer.fix_ping()
         self.assertTrue(result["success"])
         self.assertFalse(result["elevated"])
         mock_popen.assert_called_once()
         call_args = mock_popen.call_args[0][0]
-        self.assertIn("-Verb RunAs", call_args[3])
+        self.assertEqual(call_args[0], "powershell")
+        self.assertIn("-NonInteractive", call_args)
+        cmd_str = call_args[-1]
+        self.assertIn("-Verb RunAs", cmd_str)
+        self.assertIn("-EncodedCommand", cmd_str)
+
+        # Verify encoded script can be decoded back and contains expected network parameters
+        encoded_part = cmd_str.split("-EncodedCommand ")[1].split("'")[0]
+        decoded_script = base64.b64decode(encoded_part.encode("ascii")).decode("utf-16le")
+        self.assertIn("1428", decoded_script)
+        self.assertIn("1.1.1.1", decoded_script)
 
     @patch("services.system_optimizer.psutil.process_iter")
     def test_kill_unnecessary_processes_access_denied_does_not_count_memory(self, mock_process_iter):

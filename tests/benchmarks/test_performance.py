@@ -7,8 +7,9 @@ from __future__ import annotations
 import time
 import tracemalloc
 import unittest
+import requests
 from utils.running_stats import RunningStats, RunningPercentile
-from services.http_session_factory import create_pooled_session
+from services.http_session_factory import create_pooled_session, get_shared_session
 
 
 class TestPerformanceBenchmarks(unittest.TestCase):
@@ -61,6 +62,13 @@ class TestPerformanceBenchmarks(unittest.TestCase):
 
         elapsed_ms = (time.perf_counter() - start) * 1000
         self.assertLess(elapsed_ms, 100.0, f"str.join log formatting took {elapsed_ms:.2f}ms (exceeded budget)")
+
+    def test_shared_session_connection_pooling_performance(self):
+        """Verify that get_shared_session enables connection pooling for scraper requests."""
+        session = get_shared_session()
+        self.assertIsInstance(session, requests.Session)
+        adapter = session.adapters.get("https://")
+        self.assertIsNotNone(adapter)
 
 
 
