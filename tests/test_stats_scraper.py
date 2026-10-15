@@ -170,8 +170,18 @@ class TestStatsScraperBackgroundFetching(BaseScraperTest):
 
 
 class TestStatsScraperScrapeWinrates(BaseScraperTest):
-    @patch("services.stats_scraper.requests.get")
-    def test_scrape_winrates_http_error(self, mock_get):
+    def setUp(self):
+        super().setUp()
+        self.mock_session = MagicMock()
+        self.patcher = patch("services.stats_scraper.get_shared_session", return_value=self.mock_session)
+        self.patcher.start()
+
+    def tearDown(self):
+        self.patcher.stop()
+        super().tearDown()
+
+    def test_scrape_winrates_http_error(self):
+        mock_get = self.mock_session.get
         mock_resp = MagicMock()
         mock_resp.status_code = 404
         mock_get.return_value = mock_resp
@@ -180,24 +190,24 @@ class TestStatsScraperScrapeWinrates(BaseScraperTest):
         scraper._scrape_winrates("ARAM")
         self.assertNotIn("ARAM", scraper.live_winrates)
 
-    @patch("services.stats_scraper.requests.get")
-    def test_scrape_winrates_network_exception(self, mock_get):
+    def test_scrape_winrates_network_exception(self):
+        mock_get = self.mock_session.get
         mock_get.side_effect = requests.RequestException("Connection error")
 
         scraper = self.create_scraper(mode="ARAM", fetch_live=False)
         scraper._scrape_winrates("ARAM")
         self.assertNotIn("ARAM", scraper.live_winrates)
 
-    @patch("services.stats_scraper.requests.get")
-    def test_scrape_winrates_general_exception(self, mock_get):
+    def test_scrape_winrates_general_exception(self):
+        mock_get = self.mock_session.get
         mock_get.side_effect = Exception("Unexpected error")
 
         scraper = self.create_scraper(mode="ARAM", fetch_live=False)
         scraper._scrape_winrates("ARAM")
         self.assertNotIn("ARAM", scraper.live_winrates)
 
-    @patch("services.stats_scraper.requests.get")
-    def test_scrape_winrates_successful_parsing(self, mock_get):
+    def test_scrape_winrates_successful_parsing(self):
+        mock_get = self.mock_session.get
         # Build a synthetic HTML table with 25 champion rows
         rows_html = ""
         champions = [f"champ{i}" for i in range(25)]
@@ -243,8 +253,8 @@ class TestStatsScraperScrapeWinrates(BaseScraperTest):
             headers=unittest.mock.ANY,
         )
 
-    @patch("services.stats_scraper.requests.get")
-    def test_scrape_winrates_too_few_results_discarded(self, mock_get):
+    def test_scrape_winrates_too_few_results_discarded(self):
+        mock_get = self.mock_session.get
         # Build synthetic HTML with only 5 champions (< 20 threshold)
         rows_html = ""
         for i in range(5):

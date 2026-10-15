@@ -126,6 +126,7 @@ class SystemOptimizer:
                 if name in PROTECTED_PROCESS_NAMES:
                     continue
 
+                if name in TARGET_PROCESS_NAMES:
                     # Tally memory before terminating (lazy fetch memory_info only for matched target processes)
                     mem_rss = 0
                     try:
