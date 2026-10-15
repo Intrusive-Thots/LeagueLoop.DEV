@@ -76,6 +76,16 @@ def run_diagnostics_check() -> Dict[str, Any]:
         return {"healthy": False, "error": str(e)}
 
 
+def run_version_alignment_check() -> Dict[str, Any]:
+    """Validates that src/core/version.py and installer.iss are strictly aligned."""
+    try:
+        from tools.bump_version import check_version_alignment
+        ok, msg = check_version_alignment()
+        return {"aligned": ok, "message": msg}
+    except Exception as e:
+        return {"aligned": False, "message": str(e)}
+
+
 def run_entropy_check(top_n: int = 5) -> Dict[str, Any]:
     """Runs static code entropy & quality audit via tools.code_entropy_analyzer."""
     try:
@@ -375,6 +385,7 @@ def run_loop(
             prune_res = {"error": str(e)}
 
     diag = run_diagnostics_check()
+    ver_check = run_version_alignment_check()
     metrics = measure_codebase_metrics(PROJECT_ROOT)
     entropy = run_entropy_check()
     tests = run_tests_check(run_all=all_tests)
@@ -390,6 +401,11 @@ def run_loop(
         }
 
     default_semantic = [
+        {
+            "concept": "Installer and Version Synchronization Invariant",
+            "description": "Enforcing automatic synchronization between src/core/version.py (__version__) and installer.iss (AppVersion and dot-separated VersionInfoVersion) eliminates installer compilation drift and guarantees PR version protocol compliance.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
         {
             "concept": "Diagnostic Crash Distinguisher",
             "description": "faulthandler writes a session boundary header on every process startup and shutdown. Distinguishing true crashes from clean shutdowns requires inspecting session content for fatal keywords (fatal exception, traceback, thread 0x, access violation, segmentation fault).",
@@ -497,6 +513,15 @@ def run_loop(
                 "Enforce rolling screenshot limits via DebugTracker.prune_old_screenshots() during live captures.",
             ],
         },
+        {
+            "method": "Installer Version Alignment Protocol",
+            "procedure": [
+                "Run python tools/bump_version.py to advance the timestamped version.",
+                "Verify automatic synchronization of #define AppVersion and #define VersionInfoVersion in installer.iss.",
+                "Run python tools/bump_version.py --check to validate zero version drift.",
+                "Execute test_version_and_installer_alignment_invariants in test_regression_guards.py.",
+            ],
+        },
     ]
 
     top_files = entropy.get("top_files", [])
@@ -505,6 +530,7 @@ def run_loop(
     storage_an = diag.get("storage_analysis", {})
     action_details = [
         "Verified runtime logs (error.log, crash.log, session.jsonl, debug.log) & debug screenshots via leagueloop_diagnostics (healthy status confirmed).",
+        f"Version alignment protocol: {'[ALIGNED]' if ver_check.get('aligned') else '[MISALIGNED]'} ({ver_check.get('message')}).",
         f"Executed code entropy audit: status={entropy.get('status')}, avg_entropy={entropy.get('avg_entropy', 0)}, bare_excepts={entropy.get('bare_excepts_total', 0)}, top_offender={top_offender}.",
         f"Executed test runner (duration={tests.get('duration_seconds')}s, passed={tests.get('passed')}, failed={tests.get('failed')}).",
         f"Indexed codebase metrics ({metrics.get('total_py_files')} python files, {metrics.get('total_py_lines')} lines; test-to-code ratio: {metrics.get('test_to_code_ratio', 0.0)}).",
@@ -534,6 +560,7 @@ def run_loop(
     return {
         "loop_number": loop_num,
         "diagnostics": diag,
+        "version_alignment": ver_check,
         "entropy": entropy,
         "metrics": metrics,
         "tests": tests,
@@ -577,6 +604,9 @@ def main(argv=None):
     print(f"=== LeagueLoop Autonomous Improvement Loop (Run #{result['loop_number']}) ===")
     diag_status = "[HEALTHY]" if result["diagnostics"].get("healthy") else "[NEEDS ATTENTION]"
     print(f"Diagnostics: {diag_status}")
+    ver_info = result.get("version_alignment", {})
+    ver_stat = "[ALIGNED]" if ver_info.get("aligned") else "[MISALIGNED]"
+    print(f"Version Alignment: {ver_stat} ({ver_info.get('message', 'N/A')})")
     session_an = result["diagnostics"].get("session_analysis", {})
     stab = session_an.get("stability", {})
     if stab:

@@ -124,3 +124,20 @@ def test_docking_loop_invariants():
     assert "rcWork" in text
 
 
+def test_version_and_installer_alignment_invariants():
+    """VER-001: Version bumping protocol guarantees strict alignment between version.py and installer.iss."""
+    version_py = SRC / "core" / "version.py"
+    installer_iss = REPO_ROOT / "installer.iss"
+    assert version_py.exists(), "src/core/version.py must exist"
+    assert installer_iss.exists(), "installer.iss must exist"
+
+    from tools.bump_version import check_version_alignment, read_version, read_installer_versions, to_version_info
+    ok, msg = check_version_alignment(str(version_py), str(installer_iss))
+    assert ok, f"Version misalignment detected: {msg}"
+
+    app_ver, info_ver = read_installer_versions(str(installer_iss))
+    v = read_version(str(version_py))
+    assert app_ver == v, f"AppVersion '{app_ver}' does not match version.py '{v}'"
+    assert info_ver == to_version_info(v), f"VersionInfoVersion '{info_ver}' does not match '{to_version_info(v)}'"
+
+

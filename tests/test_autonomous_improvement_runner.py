@@ -6,6 +6,7 @@ from unittest.mock import patch, MagicMock
 from tools.autonomous_improvement_runner import (
     measure_codebase_metrics,
     run_diagnostics_check,
+    run_version_alignment_check,
     run_entropy_check,
     update_memory_state,
     run_loop,
@@ -31,6 +32,13 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         mock_diag.return_value = {"healthy": True, "error_analysis": {}}
         diag = run_diagnostics_check()
         self.assertTrue(diag["healthy"])
+
+    @patch("tools.bump_version.check_version_alignment")
+    def test_run_version_alignment_check(self, mock_align):
+        mock_align.return_value = (True, "Versions aligned")
+        res = run_version_alignment_check()
+        self.assertTrue(res["aligned"])
+        self.assertEqual(res["message"], "Versions aligned")
 
     @patch("tools.code_entropy_analyzer.get_top_entropy_files")
     @patch("tools.code_entropy_analyzer.run_entropy_summary")

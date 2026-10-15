@@ -45,5 +45,14 @@
       "Verify active runtime logs (error.log, crash.log, debug.log, session.jsonl) remain untouched.",
       "Enforce rolling screenshot limits via DebugTracker.prune_old_screenshots() during live captures."
     ]
+  },
+  {
+    "method": "Installer Version Alignment Protocol",
+    "procedure": [
+      "Run python tools/bump_version.py to advance the timestamped version.",
+      "Verify automatic synchronization of #define AppVersion and #define VersionInfoVersion in installer.iss.",
+      "Run python tools/bump_version.py --check to validate zero version drift.",
+      "Execute test_version_and_installer_alignment_invariants in test_regression_guards.py."
+    ]
   }
 ]

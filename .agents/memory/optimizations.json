@@ -534,5 +534,37 @@
       "status": "Optimized implementation baseline"
     },
     "impact": "Added automated regression guards for Section 5 (Window Docking & Tracker Architecture Invariants): dual LEAGUE_TITLES, iconic coord guards, physical SetWindowPos (0x0014), and MonitorFromRect/rcWork."
+  },
+  {
+    "timestamp": "2026-10-15T04:35:38.218397+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #126)",
+    "before_metrics": {
+      "test_passed": 847,
+      "files": 175,
+      "lines": 52331,
+      "avg_entropy": 66.95
+    },
+    "after_metrics": {
+      "test_passed": 10,
+      "files": 175,
+      "lines": 52331,
+      "avg_entropy": 66.95,
+      "delta_tests": -837,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.471), and entropy baseline tracked across Run #126."
+  },
+  {
+    "timestamp": "2026-10-15T04:42:31.274908+00:00",
+    "feature": "Installer and Version Synchronization Invariant Protocol",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Automated strict alignment between src/core/version.py and installer.iss (AppVersion and VersionInfoVersion) in tools/bump_version.py, integrated version alignment check in autonomous_improvement_runner.py, and added VER-001 regression guards in tests/test_regression_guards.py."
   }
 ]
