@@ -26,11 +26,14 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         diag = run_diagnostics_check()
         self.assertTrue(diag["healthy"])
 
+    @patch("tools.code_entropy_analyzer.get_top_entropy_files")
     @patch("tools.code_entropy_analyzer.run_entropy_summary")
-    def test_run_entropy_check(self, mock_entropy):
+    def test_run_entropy_check(self, mock_entropy, mock_top):
         mock_entropy.return_value = {"status": "PASS", "avg_entropy": 12.5, "bare_excepts_total": 0}
+        mock_top.return_value = [{"file": "src/services/automation.py", "entropy_score": 800}]
         entropy = run_entropy_check()
         self.assertEqual(entropy["status"], "PASS")
+        self.assertEqual(len(entropy["top_files"]), 1)
 
     def test_update_memory_state_dry_run(self):
         metrics = {"total_py_files": 150, "total_py_lines": 45000}

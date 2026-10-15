@@ -63,13 +63,15 @@ def run_diagnostics_check() -> Dict[str, Any]:
         return {"healthy": False, "error": str(e)}
 
 
-def run_entropy_check() -> Dict[str, Any]:
+def run_entropy_check(top_n: int = 5) -> Dict[str, Any]:
     """Runs static code entropy & quality audit via tools.code_entropy_analyzer."""
     try:
-        from tools.code_entropy_analyzer import run_entropy_summary
-        return run_entropy_summary(str(PROJECT_ROOT / "src"))
+        from tools.code_entropy_analyzer import run_entropy_summary, get_top_entropy_files
+        summary = run_entropy_summary(str(PROJECT_ROOT / "src"))
+        summary["top_files"] = get_top_entropy_files(str(PROJECT_ROOT / "src"), top_n=top_n)
+        return summary
     except Exception as e:
-        return {"status": "ERROR", "error": str(e)}
+        return {"status": "ERROR", "error": str(e), "top_files": []}
 
 
 def run_tests_check(run_all: bool = False) -> Dict[str, Any]:
@@ -376,14 +378,17 @@ def run_loop(
         },
     ]
 
+    top_files = entropy.get("top_files", [])
+    top_offender = Path(top_files[0]["file"]).name if top_files else "none"
+
     memory_result = update_memory_state(
         metrics=metrics,
         test_results=tests,
         dry_run=dry_run,
         task_name="Autonomous Improvement Loop",
         action_details=[
-            "Verified runtime logs & debug screenshots via leagueloop_diagnostics (healthy status confirmed).",
-            f"Executed code entropy audit: status={entropy.get('status')}, avg_entropy={entropy.get('avg_entropy', 0)}, bare_excepts={entropy.get('bare_excepts_total', 0)}.",
+            "Verified runtime logs (error.log, crash.log, session.jsonl) & debug screenshots via leagueloop_diagnostics (healthy status confirmed).",
+            f"Executed code entropy audit: status={entropy.get('status')}, avg_entropy={entropy.get('avg_entropy', 0)}, bare_excepts={entropy.get('bare_excepts_total', 0)}, top_offender={top_offender}.",
             f"Executed test runner (duration={tests.get('duration_seconds')}s, passed={tests.get('passed')}, failed={tests.get('failed')}).",
             f"Indexed codebase metrics ({metrics.get('total_py_files')} python files, {metrics.get('total_py_lines')} lines).",
             "Synchronized loop state, episodic, semantic, procedural, and optimization memory baselines.",
@@ -432,7 +437,9 @@ def main(argv=None):
     print(f"Diagnostics: {diag_status}")
     print(f"Codebase Metrics: {result['metrics']['total_py_files']} Python files | {result['metrics']['total_py_lines']} lines")
     entropy_info = result.get("entropy", {})
-    print(f"Code Entropy: [{entropy_info.get('status', 'N/A')}] (avg={entropy_info.get('avg_entropy', 0)}, bare_excepts={entropy_info.get('bare_excepts_total', 0)})")
+    top_files = entropy_info.get("top_files", [])
+    top_msg = f" | top: {[Path(f['file']).name for f in top_files[:3]]}" if top_files else ""
+    print(f"Code Entropy: [{entropy_info.get('status', 'N/A')}] (avg={entropy_info.get('avg_entropy', 0)}, bare_excepts={entropy_info.get('bare_excepts_total', 0)}{top_msg})")
     print(f"Test Suite: {result['tests']['passed']} passed, {result['tests']['failed']} failed in {result['tests']['duration_seconds']}s")
     print(f"Memory Sync: {'Persisted' if result['memory']['persisted'] else 'Dry Run (Unsaved)'}")
     print(f"Outcome: {result['memory']['episodic_entry']['outcome']}")

@@ -124,6 +124,13 @@ def run_entropy_summary(target_dir: str = "src") -> Dict[str, Any]:
     }
 
 
+def get_top_entropy_files(target_dir: str = "src", top_n: int = 5) -> List[Dict[str, Any]]:
+    """Retrieves top N files sorted by entropy descending."""
+    results = analyze_directory(target_dir) if os.path.isdir(target_dir) else [analyze_python_file(target_dir)]
+    sorted_res = sorted(results, key=lambda x: x.get("entropy_score", 0), reverse=True)
+    return sorted_res[:top_n]
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Code Entropy & Static Audit Tool")
     parser.add_argument("pos_target", nargs="?", default=None, help="File or directory path to analyze (positional)")
@@ -152,16 +159,16 @@ def main(argv=None):
             print(f"Syntax Errors: {summary['syntax_errors']}")
         sys.exit(0 if summary["status"] != "FAIL" else 1)
 
-    if os.path.isfile(target_path):
-        res = [analyze_python_file(target_path)]
-    elif os.path.isdir(target_path):
-        res = analyze_directory(target_path)
-    else:
+    if not os.path.exists(target_path):
         print(f"Error: Target path '{target_path}' does not exist.", file=sys.stderr)
         sys.exit(1)
 
     if args.top is not None and args.top > 0:
-        res = sorted(res, key=lambda x: x.get("entropy_score", 0), reverse=True)[:args.top]
+        res = get_top_entropy_files(target_path, top_n=args.top)
+    elif os.path.isfile(target_path):
+        res = [analyze_python_file(target_path)]
+    else:
+        res = analyze_directory(target_path)
 
     if args.json:
         print(json.dumps(res, indent=2))

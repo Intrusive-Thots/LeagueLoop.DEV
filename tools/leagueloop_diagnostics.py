@@ -125,6 +125,58 @@ def inspect_crash_log(path: Path, max_sessions: int = 5) -> Dict[str, Any]:
     return result
 
 
+def inspect_session_log(path: Path, max_entries: int = 20) -> Dict[str, Any]:
+    result: Dict[str, Any] = {
+        "exists": path.exists(),
+        "total_entries": 0,
+        "recent_entries": [],
+        "level_counts": {},
+        "active_sessions": [],
+        "recent_anomalies_or_throttles": [],
+    }
+    if not path.exists():
+        return result
+
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            lines = [l.strip() for l in f if l.strip()]
+        result["total_entries"] = len(lines)
+        tail = lines[-max_entries:] if len(lines) > max_entries else lines
+
+        parsed_entries = []
+        sessions_seen = set()
+        level_counts: Dict[str, int] = {}
+        anomalies = []
+
+        for line in tail:
+            try:
+                entry = json.loads(line)
+                parsed_entries.append(entry)
+                lvl = entry.get("level", "UNKNOWN")
+                level_counts[lvl] = level_counts.get(lvl, 0) + 1
+                if "session" in entry:
+                    sessions_seen.add(entry["session"])
+                tag = entry.get("tag", "")
+                if "THROTTLE" in tag or "ANOMALY" in tag or lvl in ("WARNING", "ERROR", "CRITICAL"):
+                    anomalies.append({
+                        "ts": entry.get("ts"),
+                        "level": lvl,
+                        "tag": tag,
+                        "msg": entry.get("msg", ""),
+                    })
+            except Exception:
+                continue
+
+        result["recent_entries"] = parsed_entries
+        result["level_counts"] = level_counts
+        result["active_sessions"] = sorted(list(sessions_seen))
+        result["recent_anomalies_or_throttles"] = anomalies
+    except Exception as e:
+        result["error_reading"] = str(e)
+
+    return result
+
+
 def inspect_screenshots(path: Path, max_count: int = 5) -> List[Dict[str, Any]]:
     if not path.exists():
         return []
@@ -154,11 +206,13 @@ def run_diagnostics(
     p = paths or get_leagueloop_paths()
     errors_info = inspect_error_log(p["error_log"], max_lines=max_lines)
     crashes_info = inspect_crash_log(p["crash_log"], max_sessions=max_sessions)
+    session_info = inspect_session_log(p["session_log"], max_entries=max_lines)
     screenshots_info = inspect_screenshots(p["screenshots"], max_count=max_screenshots)
 
     healthy = (
         len(errors_info.get("recent_errors", [])) == 0
         and errors_info.get("network_throttles_count", 0) == 0
+        and not any(e.get("level") in ("ERROR", "CRITICAL") for e in session_info.get("recent_anomalies_or_throttles", []))
     )
 
     return {
@@ -168,6 +222,7 @@ def run_diagnostics(
         "screenshots_path": str(p["screenshots"]),
         "error_analysis": errors_info,
         "crash_analysis": crashes_info,
+        "session_analysis": session_info,
         "recent_screenshots": screenshots_info,
     }
 
@@ -206,6 +261,17 @@ def main():
         print(f"    - {warn}")
     print(f"  WS Anomalies (tail): {ea.get('ws_anomalies_count', 0)}")
     print(f"  Network Throttles (tail): {ea.get('network_throttles_count', 0)}")
+
+    sa = diag.get("session_analysis", {})
+    if sa.get("exists"):
+        print(f"\n[Session Log Inspection]")
+        print(f"  Total Session Entries: {sa.get('total_entries', 0)}")
+        print(f"  Levels (tail): {sa.get('level_counts', {})}")
+        print(f"  Active Sessions: {sa.get('active_sessions', [])}")
+        if sa.get("recent_anomalies_or_throttles"):
+            print(f"  Recent Anomalies/Throttles: {len(sa['recent_anomalies_or_throttles'])}")
+            for a in sa["recent_anomalies_or_throttles"][:3]:
+                print(f"    - [{a.get('level')}] {a.get('tag')}: {a.get('msg')}")
 
     ca = diag["crash_analysis"]
     print(f"\n[Crash Inspection]")

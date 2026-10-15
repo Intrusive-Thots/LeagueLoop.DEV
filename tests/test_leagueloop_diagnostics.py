@@ -8,6 +8,7 @@ from tools.leagueloop_diagnostics import (
     get_leagueloop_paths,
     inspect_error_log,
     inspect_crash_log,
+    inspect_session_log,
     inspect_screenshots,
     run_diagnostics,
 )
@@ -107,6 +108,29 @@ class TestLeagueLoopDiagnostics(unittest.TestCase):
         (self.screenshots_dir / "capture_2.png").write_bytes(b"image_data_2")
         captures = inspect_screenshots(self.screenshots_dir, max_count=5)
         self.assertEqual(len(captures), 2)
+
+    def test_inspect_session_log(self):
+        # Missing file
+        missing_res = inspect_session_log(self.paths["session_log"])
+        self.assertFalse(missing_res["exists"])
+
+        # Valid session log entries
+        entries = [
+            '{"ts": "2026-10-14T10:00:00", "level": "INFO", "tag": "START", "session": "s1", "msg": "Booted"}',
+            '{"ts": "2026-10-14T10:01:00", "level": "WARNING", "tag": "LCU_NETWORK_THROTTLE", "session": "s1", "msg": "Backoff"}',
+            '{"ts": "2026-10-14T10:02:00", "level": "INFO", "tag": "LOOP", "session": "s2", "msg": "Tick"}',
+        ]
+        self.paths["session_log"].write_text("\n".join(entries), encoding="utf-8")
+        res = inspect_session_log(self.paths["session_log"], max_entries=10)
+
+        self.assertTrue(res["exists"])
+        self.assertEqual(res["total_entries"], 3)
+        self.assertEqual(len(res["recent_entries"]), 3)
+        self.assertEqual(res["level_counts"].get("INFO"), 2)
+        self.assertEqual(res["level_counts"].get("WARNING"), 1)
+        self.assertIn("s1", res["active_sessions"])
+        self.assertIn("s2", res["active_sessions"])
+        self.assertEqual(len(res["recent_anomalies_or_throttles"]), 1)
 
     def test_run_diagnostics_healthy_and_unhealthy(self):
         # Clean state -> healthy

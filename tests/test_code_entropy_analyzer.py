@@ -60,6 +60,17 @@ class TestCodeEntropyAnalyzer(unittest.TestCase):
         self.assertEqual(summary["syntax_errors"], 0)
         self.assertEqual(summary["status"], "PASS")
 
+    def test_get_top_entropy_files(self):
+        from tools.code_entropy_analyzer import get_top_entropy_files
+        f1 = self.base / "file1.py"
+        f1.write_text("def a(): pass\n", encoding="utf-8")
+        f2 = self.base / "file2.py"
+        f2.write_text("def b(x):\n    if x:\n        for i in range(10):\n            pass\n", encoding="utf-8")
+
+        top = get_top_entropy_files(str(self.base), top_n=1)
+        self.assertEqual(len(top), 1)
+        self.assertEqual(top[0]["file"], str(f2))
+
     def test_main_cli_arguments(self):
         from tools.code_entropy_analyzer import main
         file_path = self.base / "cli_sample.py"
