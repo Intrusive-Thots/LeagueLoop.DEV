@@ -7,51 +7,51 @@
   {
     "concept": "Diagnostic Crash Distinguisher",
     "description": "faulthandler writes a session boundary header on every process startup and shutdown. Distinguishing true crashes from clean shutdowns requires inspecting session content for fatal keywords (fatal exception, traceback, thread 0x, access violation, segmentation fault).",
-    "learned_at": "2026-10-15T02:26:03.612350+00:00"
+    "learned_at": "2026-10-15T02:33:50.281134+00:00"
   },
   {
     "concept": "AST Module Test Mapping",
     "description": "Using an AST dependency graph over test imports allows mapping modified source files directly to relevant test suites, executing targeted regressions in <2s instead of running entire test suites (>15s).",
-    "learned_at": "2026-10-15T02:26:03.612350+00:00"
+    "learned_at": "2026-10-15T02:33:50.281134+00:00"
   },
   {
     "concept": "Positional and Target CLI Dispatch",
     "description": "Permitting both positional file/dir arguments and explicit flag options in developer tools prevents shell friction and supports flexible invocation across IDEs and scripts.",
-    "learned_at": "2026-10-15T02:26:03.612350+00:00"
+    "learned_at": "2026-10-15T02:33:50.281134+00:00"
   },
   {
     "concept": "Bounded Log Tail Streaming",
     "description": "Using collections.deque(maxlen=N) instead of reading full multi-megabyte log files into Python lists eliminates massive memory heap allocations and garbage collection overhead during rapid diagnostic iterations.",
-    "learned_at": "2026-10-15T02:26:03.612350+00:00"
+    "learned_at": "2026-10-15T02:33:50.281134+00:00"
   },
   {
     "concept": "Rotated Log Rollover Fallback",
     "description": "Checking error.log.1 when error.log has fewer lines than the requested inspection window ensures critical errors that triggered process restart and log rollover are never missed.",
-    "learned_at": "2026-10-15T02:26:03.612350+00:00"
+    "learned_at": "2026-10-15T02:33:50.281134+00:00"
   },
   {
     "concept": "Granular Metric & Entropy Baseline Tracking",
     "description": "Decomposing index metrics into per-directory breakdowns (src, tests, tools) and linking codebase entropy deltas into loop_state.json enables autonomous detection of code bloat and quality drift across iterative development cycles.",
-    "learned_at": "2026-10-15T02:26:03.612350+00:00"
+    "learned_at": "2026-10-15T02:33:50.281134+00:00"
   },
   {
     "concept": "Line-by-Line Streaming Crash Inspection",
     "description": "Streaming crash.log line-by-line while tracking session headers avoids reading the entire multi-megabyte log and loading giant regex splits into memory, keeping diagnostic overhead under 0.2s.",
-    "learned_at": "2026-10-15T02:26:03.612350+00:00"
+    "learned_at": "2026-10-15T02:33:50.281134+00:00"
   },
   {
     "concept": "Debug Log Execution Context Inspection",
     "description": "Reading the tail of %LOCALAPPDATA%\\LeagueLoop\\logs\\debug.log provides real-time thread activity, rate throttle triggers, and LCU event latency tracking without relying solely on error/crash thresholds.",
-    "learned_at": "2026-10-15T02:26:03.612350+00:00"
+    "learned_at": "2026-10-15T02:33:50.281134+00:00"
   },
   {
     "concept": "Screenshot Event Categorization and Fallback Capture",
     "description": "Classifying screenshot filenames into event categories (button clicks, tab transitions, champion hover/locks, game phase changes) and providing automatic desktop fallback capture inspection ensures immediate visual UI state auditing compliant with the LeagueLoop.DEV protocol.",
-    "learned_at": "2026-10-15T02:26:03.612350+00:00"
+    "learned_at": "2026-10-15T02:33:50.281134+00:00"
   },
   {
     "concept": "Screenshot Integrity and Age Freshness Auditing",
     "description": "Inspecting capture byte-size (flagging 0-byte corruptions) and computing delta timestamps (human-readable age formatting, staleness thresholds) ensures broken or orphaned UI captures immediately surface in automated health checks.",
-    "learned_at": "2026-10-15T02:26:03.612350+00:00"
+    "learned_at": "2026-10-15T02:33:50.281134+00:00"
   }
 ]
