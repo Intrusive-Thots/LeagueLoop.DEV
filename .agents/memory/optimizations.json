@@ -219,5 +219,16 @@
       "status": "Optimized implementation baseline"
     },
     "impact": "Eliminated all oversized functions in client_detector.py and session_log.py, reduced entropy from 103 to 88 and 75 to 70, precompiled credential regexes, verified regression-free status with AST fast test runner in 2.78s."
+  },
+  {
+    "timestamp": "2026-10-15T00:10:41.076804+00:00",
+    "feature": "CLI Code Entropy Summary Flag",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Added --summary flag to code_entropy_analyzer.py for rapid diagnostic reporting without terminal clutter"
   }
 ]

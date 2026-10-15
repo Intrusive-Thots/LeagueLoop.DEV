@@ -77,6 +77,18 @@ class TestCodeEntropyAnalyzer(unittest.TestCase):
         with patch("sys.stdout") as mock_stdout:
             main(["--target", str(self.base), "--top", "1"])
 
+        # Test --summary argument
+        with patch("sys.stdout") as mock_stdout:
+            with self.assertRaises(SystemExit) as cm:
+                main(["--target", str(self.base), "--summary"])
+            self.assertEqual(cm.exception.code, 0)
+
+        # Test --summary with --json argument
+        with patch("sys.stdout") as mock_stdout:
+            with self.assertRaises(SystemExit) as cm:
+                main(["--target", str(self.base), "--summary", "--json"])
+            self.assertEqual(cm.exception.code, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

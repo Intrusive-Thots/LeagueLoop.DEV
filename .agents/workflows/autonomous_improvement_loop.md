@@ -14,17 +14,22 @@ Executes diagnostics, AST-directed regression test checks, metric extraction, me
 .venv\Scripts\python.exe tools/leagueloop_diagnostics.py --summary
 ```
 
-2. Run targeted test verification using AST dependency graph mapping:
+2. Run code entropy audit summary across codebase:
+```powershell
+.venv\Scripts\python.exe tools/code_entropy_analyzer.py --summary
+```
+
+3. Run targeted test verification using AST dependency graph mapping:
 ```powershell
 .venv\Scripts\python.exe tools/fast_test_runner.py
 ```
 
-3. Execute full autonomous improvement loop orchestration (profiles metrics and updates loop_state.json):
+4. Execute full autonomous improvement loop orchestration (profiles metrics and updates loop_state.json):
 ```powershell
 .venv\Scripts\python.exe tools/autonomous_improvement_runner.py --all-tests
 ```
 
-4. Verify git changes:
+5. Verify git changes:
 ```powershell
 git status -s
 ```

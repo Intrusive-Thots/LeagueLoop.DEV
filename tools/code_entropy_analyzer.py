@@ -129,10 +129,28 @@ def main(argv=None):
     parser.add_argument("pos_target", nargs="?", default=None, help="File or directory path to analyze (positional)")
     parser.add_argument("--target", default=None, help="File or directory path to analyze (flag)")
     parser.add_argument("--top", "-n", type=int, default=None, help="Display only top N files sorted by entropy descending")
+    parser.add_argument("--summary", action="store_true", help="Display aggregate codebase entropy summary")
     parser.add_argument("--json", action="store_true", help="Output results in JSON format")
     args = parser.parse_args(argv)
 
     target_path = args.target or args.pos_target or "src"
+
+    if args.summary:
+        if not os.path.isdir(target_path):
+            print(f"Error: Target path '{target_path}' is not a valid directory for summary.", file=sys.stderr)
+            sys.exit(1)
+        summary = run_entropy_summary(target_path)
+        if args.json:
+            print(json.dumps(summary, indent=2))
+        else:
+            print("=== Code Entropy Summary ===")
+            print(f"Target: {target_path}")
+            print(f"Status: [{summary['status']}]")
+            print(f"Files Audited: {summary['total_files']}")
+            print(f"Average Entropy: {summary['avg_entropy']}")
+            print(f"Bare Excepts: {summary['bare_excepts_total']}")
+            print(f"Syntax Errors: {summary['syntax_errors']}")
+        sys.exit(0 if summary["status"] != "FAIL" else 1)
 
     if os.path.isfile(target_path):
         res = [analyze_python_file(target_path)]
