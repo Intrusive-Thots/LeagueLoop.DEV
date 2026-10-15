@@ -82,8 +82,8 @@ class ASTTestDependencyGraph:
         if dotted_full in self.module_to_tests:
             matching.update(self.module_to_tests[dotted_full])
 
-        # 2. Stripped "src." prefix
-        if parts[0] == "src" and len(parts) > 1:
+        # 2. Stripped "src." or "tools." prefix
+        if parts[0] in ("src", "tools") and len(parts) > 1:
             dotted_rel = ".".join(parts[1:])
             if dotted_rel in self.module_to_tests:
                 matching.update(self.module_to_tests[dotted_rel])
@@ -270,7 +270,13 @@ def main():
         if (explicit_files or modified) and not has_python_changes:
             print("[Fast Runner] Only non-code/memory files modified. Running targeted regression guards...")
             smoke_targets = []
-            for guard in ["test_regression_guards.py", "test_autonomous_improvement_runner.py", "test_leagueloop_diagnostics.py", "test_code_entropy_analyzer.py"]:
+            for guard in [
+                "test_regression_guards.py",
+                "test_autonomous_improvement_runner.py",
+                "test_leagueloop_diagnostics.py",
+                "test_code_entropy_analyzer.py",
+                "test_fast_test_runner.py",
+            ]:
                 guard_path = TESTS_DIR / guard
                 if guard_path.exists():
                     smoke_targets.append(str(guard_path.resolve()))

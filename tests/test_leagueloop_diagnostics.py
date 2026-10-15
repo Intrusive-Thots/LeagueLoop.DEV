@@ -120,6 +120,12 @@ class TestLeagueLoopDiagnostics(unittest.TestCase):
         diag_err = run_diagnostics(self.paths)
         self.assertFalse(diag_err["healthy"])
 
+    def test_run_diagnostics_custom_limits(self):
+        log_lines = "\n".join([f"2026-10-14 10:0{i}:00 INFO line {i}" for i in range(10)])
+        self.paths["error_log"].write_text(log_lines, encoding="utf-8")
+        diag = run_diagnostics(self.paths, max_lines=4)
+        self.assertEqual(len(diag["error_analysis"]["recent_errors"]), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

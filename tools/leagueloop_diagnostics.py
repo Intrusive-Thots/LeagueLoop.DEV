@@ -145,11 +145,16 @@ def inspect_screenshots(path: Path, max_count: int = 5) -> List[Dict[str, Any]]:
     return captures
 
 
-def run_diagnostics(paths: Optional[Dict[str, Path]] = None) -> Dict[str, Any]:
+def run_diagnostics(
+    paths: Optional[Dict[str, Path]] = None,
+    max_lines: int = 30,
+    max_sessions: int = 5,
+    max_screenshots: int = 5,
+) -> Dict[str, Any]:
     p = paths or get_leagueloop_paths()
-    errors_info = inspect_error_log(p["error_log"])
-    crashes_info = inspect_crash_log(p["crash_log"])
-    screenshots_info = inspect_screenshots(p["screenshots"])
+    errors_info = inspect_error_log(p["error_log"], max_lines=max_lines)
+    crashes_info = inspect_crash_log(p["crash_log"], max_sessions=max_sessions)
+    screenshots_info = inspect_screenshots(p["screenshots"], max_count=max_screenshots)
 
     healthy = (
         len(errors_info.get("recent_errors", [])) == 0
@@ -171,9 +176,16 @@ def main():
     parser = argparse.ArgumentParser(description="LeagueLoop Automated Diagnostics")
     parser.add_argument("--json", action="store_true", help="Output results in JSON format")
     parser.add_argument("--summary", action="store_true", default=True, help="Print human-readable summary")
+    parser.add_argument("--max-lines", "--lines", "-n", type=int, default=30, help="Number of error.log lines to inspect (default: 30)")
+    parser.add_argument("--max-sessions", type=int, default=5, help="Number of crash sessions to inspect (default: 5)")
+    parser.add_argument("--max-screenshots", type=int, default=5, help="Number of screenshots to inspect (default: 5)")
     args = parser.parse_args()
 
-    diag = run_diagnostics()
+    diag = run_diagnostics(
+        max_lines=args.max_lines,
+        max_sessions=args.max_sessions,
+        max_screenshots=args.max_screenshots,
+    )
 
     if args.json:
         print(json.dumps(diag, indent=2))
