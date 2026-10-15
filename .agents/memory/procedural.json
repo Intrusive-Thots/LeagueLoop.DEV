@@ -15,7 +15,7 @@
   {
     "method": "Autonomous Improvement Loop Execution",
     "procedure": [
-      "Run leagueloop_diagnostics.py to inspect error.log, crash.log, and debug_screenshots.",
+      "Run leagueloop_diagnostics.py to inspect error.log, crash.log, debug.log, and debug_screenshots.",
       "Run fast_test_runner.py to execute targeted tests against modified source files.",
       "Run code_entropy_analyzer.py to calculate codebase cyclomatic complexity, bare excepts, and oversized functions.",
       "Execute autonomous_improvement_runner.py to log metrics to loop_state.json, episodic.json, optimizations.json, semantic.json, and procedural.json.",

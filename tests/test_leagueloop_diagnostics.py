@@ -10,6 +10,7 @@ from tools.leagueloop_diagnostics import (
     inspect_error_log,
     inspect_crash_log,
     inspect_session_log,
+    inspect_debug_log,
     inspect_screenshots,
     run_diagnostics,
 )
@@ -179,14 +180,39 @@ class TestLeagueLoopDiagnostics(unittest.TestCase):
         self.assertEqual(len(res_with["recent_errors"]), 1)
         self.assertIn("Failure prior to rollover", res_with["recent_errors"][0])
 
-    def test_main_cli_include_rotated(self):
+    def test_inspect_debug_log(self):
+        # Missing file
+        missing_res = inspect_debug_log(self.paths["debug_log"])
+        self.assertFalse(missing_res["exists"])
+
+        debug_content = (
+            "2026-10-14 12:00:00 INFO [Main] Starting up\n"
+            "2026-10-14 12:00:01 DEBUG [Net] Initializing connection\n"
+            "2026-10-14 12:00:02 WARNING [WS] [LCU_WS_ANOMALY] Latency 150ms\n"
+            "2026-10-14 12:00:03 INFO [Diag] [LCU_DIAGNOSTICS] Connection drop recorded: Flap\n"
+            "2026-10-14 12:00:04 WARNING [Throttle] [LCU_NETWORK_THROTTLE] Rate backoff enabled\n"
+        )
+        self.paths["debug_log"].write_text(debug_content, encoding="utf-8")
+        res = inspect_debug_log(self.paths["debug_log"], max_lines=10)
+
+        self.assertTrue(res["exists"])
+        self.assertEqual(res["total_lines_inspected"], 5)
+        self.assertEqual(len(res["recent_entries"]), 5)
+        self.assertEqual(res["level_counts"].get("INFO"), 2)
+        self.assertEqual(res["level_counts"].get("DEBUG"), 1)
+        self.assertEqual(res["level_counts"].get("WARNING"), 2)
+        self.assertEqual(res["diagnostic_tags_count"], 3)
+        self.assertEqual(len(res["recent_diagnostics"]), 3)
+
+    def test_main_cli_verbose(self):
         from tools.leagueloop_diagnostics import main
         self.paths["error_log"].write_text("INFO Clean", encoding="utf-8")
         self.paths["crash_log"].write_text("--- session 1 ---\n", encoding="utf-8")
+        self.paths["debug_log"].write_text("2026-10-14 INFO [LCU_DIAGNOSTICS] Test event\n", encoding="utf-8")
 
-        with patch("sys.stdout") as mock_stdout:
+        with patch("sys.stdout"):
             with patch("tools.leagueloop_diagnostics.get_leagueloop_paths", return_value=self.paths):
-                with patch("sys.argv", ["leagueloop_diagnostics.py", "--include-rotated", "--json"]):
+                with patch("sys.argv", ["leagueloop_diagnostics.py", "-v", "--summary"]):
                     with self.assertRaises(SystemExit) as cm:
                         main()
                     self.assertEqual(cm.exception.code, 0)
@@ -194,3 +220,4 @@ class TestLeagueLoopDiagnostics(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

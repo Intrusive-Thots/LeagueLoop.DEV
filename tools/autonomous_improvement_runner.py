@@ -406,13 +406,18 @@ def run_loop(
             "description": "Streaming crash.log line-by-line while tracking session headers avoids reading the entire multi-megabyte log and loading giant regex splits into memory, keeping diagnostic overhead under 0.2s.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Debug Log Execution Context Inspection",
+            "description": "Reading the tail of %LOCALAPPDATA%\\LeagueLoop\\logs\\debug.log provides real-time thread activity, rate throttle triggers, and LCU event latency tracking without relying solely on error/crash thresholds.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
         {
             "method": "Autonomous Improvement Loop Execution",
             "procedure": [
-                "Run leagueloop_diagnostics.py to inspect error.log, crash.log, and debug_screenshots.",
+                "Run leagueloop_diagnostics.py to inspect error.log, crash.log, debug.log, and debug_screenshots.",
                 "Run fast_test_runner.py to execute targeted tests against modified source files.",
                 "Run code_entropy_analyzer.py to calculate codebase cyclomatic complexity, bare excepts, and oversized functions.",
                 "Execute autonomous_improvement_runner.py to log metrics to loop_state.json, episodic.json, optimizations.json, semantic.json, and procedural.json.",
@@ -445,7 +450,7 @@ def run_loop(
         dry_run=dry_run,
         task_name="Autonomous Improvement Loop",
         action_details=[
-            "Verified runtime logs (error.log, crash.log, session.jsonl) & debug screenshots via leagueloop_diagnostics (healthy status confirmed).",
+            "Verified runtime logs (error.log, crash.log, session.jsonl, debug.log) & debug screenshots via leagueloop_diagnostics (healthy status confirmed).",
             f"Executed code entropy audit: status={entropy.get('status')}, avg_entropy={entropy.get('avg_entropy', 0)}, bare_excepts={entropy.get('bare_excepts_total', 0)}, top_offender={top_offender}.",
             f"Executed test runner (duration={tests.get('duration_seconds')}s, passed={tests.get('passed')}, failed={tests.get('failed')}).",
             f"Indexed codebase metrics ({metrics.get('total_py_files')} python files, {metrics.get('total_py_lines')} lines; test-to-code ratio: {metrics.get('test_to_code_ratio', 0.0)}).",

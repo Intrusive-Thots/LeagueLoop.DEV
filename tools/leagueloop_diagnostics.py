@@ -214,6 +214,51 @@ def inspect_session_log(path: Path, max_entries: int = 20) -> Dict[str, Any]:
     return result
 
 
+def inspect_debug_log(path: Path, max_lines: int = 30) -> Dict[str, Any]:
+    """Inspects recent execution context from debug.log using bounded streaming."""
+    result: Dict[str, Any] = {
+        "exists": path.exists(),
+        "total_lines_inspected": 0,
+        "recent_entries": [],
+        "level_counts": {},
+        "diagnostic_tags_count": 0,
+        "recent_diagnostics": [],
+    }
+    if not path.exists():
+        return result
+
+    try:
+        total_count, tail = read_tail_bounded(path, max_lines=max_lines)
+        result["total_lines_inspected"] = total_count
+
+        level_counts: Dict[str, int] = {}
+        recent_entries = []
+        recent_diagnostics = []
+
+        import re
+        for line in tail:
+            sline = line.strip()
+            if not sline:
+                continue
+            recent_entries.append(sline)
+            m_level = re.search(r"\b(DEBUG|INFO|WARNING|ERROR|CRITICAL)\b", sline)
+            if m_level:
+                lvl = m_level.group(1)
+                level_counts[lvl] = level_counts.get(lvl, 0) + 1
+
+            if any(tag in sline for tag in ("[LCU_DIAGNOSTICS]", "[LCU_WS_ANOMALY]", "[LCU_NETWORK_THROTTLE]")):
+                result["diagnostic_tags_count"] += 1
+                recent_diagnostics.append(sline)
+
+        result["level_counts"] = level_counts
+        result["recent_entries"] = recent_entries
+        result["recent_diagnostics"] = recent_diagnostics
+    except Exception as e:
+        result["error_reading"] = str(e)
+
+    return result
+
+
 def inspect_screenshots(path: Path, max_count: int = 5) -> List[Dict[str, Any]]:
     if not path.exists():
         return []
@@ -246,6 +291,8 @@ def run_diagnostics(
     crashes_info = inspect_crash_log(p["crash_log"], max_sessions=max_sessions)
     session_info = inspect_session_log(p["session_log"], max_entries=max_lines)
     screenshots_info = inspect_screenshots(p["screenshots"], max_count=max_screenshots)
+    debug_path = p.get("debug_log", p["base"] / "logs" / "debug.log")
+    debug_info = inspect_debug_log(debug_path, max_lines=max_lines)
 
     healthy = (
         len(errors_info.get("recent_errors", [])) == 0
@@ -261,6 +308,7 @@ def run_diagnostics(
         "error_analysis": errors_info,
         "crash_analysis": crashes_info,
         "session_analysis": session_info,
+        "debug_analysis": debug_info,
         "recent_screenshots": screenshots_info,
     }
 
@@ -269,6 +317,7 @@ def main():
     parser = argparse.ArgumentParser(description="LeagueLoop Automated Diagnostics")
     parser.add_argument("--json", action="store_true", help="Output results in JSON format")
     parser.add_argument("--summary", action="store_true", default=True, help="Print human-readable summary")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Print verbose execution and debug context")
     parser.add_argument("--include-rotated", action="store_true", help="Include rotated log files (error.log.1) if error.log is truncated")
     parser.add_argument("--max-lines", "--lines", "-n", type=int, default=30, help="Number of error.log lines to inspect (default: 30)")
     parser.add_argument("--max-sessions", type=int, default=5, help="Number of crash sessions to inspect (default: 5)")
@@ -312,6 +361,15 @@ def main():
             print(f"  Recent Anomalies/Throttles: {len(sa['recent_anomalies_or_throttles'])}")
             for a in sa["recent_anomalies_or_throttles"][:3]:
                 print(f"    - [{a.get('level')}] {a.get('tag')}: {a.get('msg')}")
+
+    da = diag.get("debug_analysis", {})
+    if args.verbose and da.get("exists"):
+        print(f"\n[Debug Log Execution Context]")
+        print(f"  Total Debug Lines: {da.get('total_lines_inspected', 0)}")
+        print(f"  Levels (tail): {da.get('level_counts', {})}")
+        print(f"  Diagnostic Tags (tail): {da.get('diagnostic_tags_count', 0)}")
+        for d in da.get("recent_diagnostics", [])[:5]:
+            print(f"    - {d}")
 
     ca = diag["crash_analysis"]
     print(f"\n[Crash Inspection]")
