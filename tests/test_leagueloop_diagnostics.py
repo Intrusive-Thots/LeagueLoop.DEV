@@ -14,6 +14,7 @@ from tools.leagueloop_diagnostics import (
     inspect_screenshots,
     inspect_saved_sessions,
     inspect_storage_usage,
+    prune_storage,
     classify_screenshot_event,
     format_human_age,
     run_diagnostics,
@@ -548,6 +549,125 @@ class TestLeagueLoopDiagnostics(unittest.TestCase):
                     with self.assertRaises(SystemExit) as cm:
                         main()
                     self.assertEqual(cm.exception.code, 0)
+
+    def test_prune_storage_dry_run_preserves_files(self):
+        # Active logs
+        self.paths["error_log"].write_text("ERROR err\n", encoding="utf-8")
+        self.paths["crash_log"].write_text("crash\n", encoding="utf-8")
+        self.paths["debug_log"].write_text("debug\n", encoding="utf-8")
+        self.paths["session_log"].write_text("session\n", encoding="utf-8")
+
+        # Rotated logs
+        rot1 = self.logs_dir / "debug.log.1"
+        rot2 = self.logs_dir / "error.log.1"
+        rot3 = self.logs_dir / "session.jsonl.2"
+        rot1.write_text("rot1" * 100, encoding="utf-8")
+        rot2.write_text("rot2" * 100, encoding="utf-8")
+        rot3.write_text("rot3" * 100, encoding="utf-8")
+
+        # Screenshots
+        base_time = 1000000.0
+        sc_files = []
+        for i in range(5):
+            sc = self.screenshots_dir / f"20261014_10000{i}_test.png"
+            sc.write_text("png_bytes" * 50, encoding="utf-8")
+            os.utime(sc, (base_time + i * 10, base_time + i * 10))
+            sc_files.append(sc)
+
+        res = prune_storage(
+            self.base,
+            dry_run=True,
+            max_screenshots_keep=2,
+            prune_rotated_logs=True,
+        )
+
+        self.assertTrue(res["dry_run"])
+        self.assertGreater(res["logs_pruned"]["bytes"], 0)
+        self.assertGreater(res["screenshots_pruned"]["bytes"], 0)
+        self.assertGreaterEqual(res["total_freed_mb"], 0.0)
+
+        # Confirm all files still exist because dry_run=True
+        self.assertTrue(rot1.exists())
+        self.assertTrue(rot2.exists())
+        self.assertTrue(rot3.exists())
+        for sc in sc_files:
+            self.assertTrue(sc.exists())
+
+    def test_prune_storage_execution_deletes_rotated_and_preserves_active(self):
+        # Active logs
+        self.paths["error_log"].write_text("ERROR err\n", encoding="utf-8")
+        self.paths["crash_log"].write_text("crash\n", encoding="utf-8")
+        self.paths["debug_log"].write_text("debug\n", encoding="utf-8")
+        self.paths["session_log"].write_text("session\n", encoding="utf-8")
+
+        # Rotated logs
+        rot1 = self.logs_dir / "debug.log.1"
+        rot2 = self.logs_dir / "error.log.1"
+        rot1.write_text("rot1", encoding="utf-8")
+        rot2.write_text("rot2", encoding="utf-8")
+
+        # Screenshots
+        base_time = 1000000.0
+        sc_files = []
+        for i in range(4):
+            sc = self.screenshots_dir / f"20261014_10000{i}_test.png"
+            sc.write_text("png", encoding="utf-8")
+            os.utime(sc, (base_time + i * 10, base_time + i * 10))
+            sc_files.append(sc)
+
+        res = prune_storage(
+            self.base,
+            dry_run=False,
+            max_screenshots_keep=2,
+            prune_rotated_logs=True,
+        )
+
+        self.assertFalse(res["dry_run"])
+        self.assertEqual(res["logs_pruned"]["count"], 2)
+        self.assertEqual(res["screenshots_pruned"]["count"], 2)
+
+        # Active logs MUST still exist
+        self.assertTrue(self.paths["error_log"].exists())
+        self.assertTrue(self.paths["crash_log"].exists())
+        self.assertTrue(self.paths["debug_log"].exists())
+        self.assertTrue(self.paths["session_log"].exists())
+
+        # Rotated logs MUST be deleted
+        self.assertFalse(rot1.exists())
+        self.assertFalse(rot2.exists())
+
+        # Oldest screenshots deleted, newest 2 kept
+        self.assertFalse(sc_files[0].exists())
+        self.assertFalse(sc_files[1].exists())
+        self.assertTrue(sc_files[2].exists())
+        self.assertTrue(sc_files[3].exists())
+
+    def test_prune_storage_keep_rotated_logs(self):
+        rot1 = self.logs_dir / "debug.log.1"
+        rot1.write_text("rot1", encoding="utf-8")
+
+        res = prune_storage(
+            self.base,
+            dry_run=False,
+            prune_rotated_logs=False,
+        )
+
+        self.assertEqual(res["logs_pruned"]["count"], 0)
+        self.assertTrue(rot1.exists())
+
+    def test_main_cli_prune_storage_execution(self):
+        from tools.leagueloop_diagnostics import main
+        rot = self.logs_dir / "debug.log.1"
+        rot.write_text("rot", encoding="utf-8")
+        self.paths["error_log"].write_text("INFO Clean", encoding="utf-8")
+
+        with patch("sys.stdout"):
+            with patch("tools.leagueloop_diagnostics.get_leagueloop_paths", return_value=self.paths):
+                with patch("sys.argv", ["leagueloop_diagnostics.py", "--prune-storage", "--dry-run"]):
+                    with self.assertRaises(SystemExit) as cm:
+                        main()
+                    self.assertEqual(cm.exception.code, 0)
+        self.assertTrue(rot.exists())
 
 
 if __name__ == "__main__":

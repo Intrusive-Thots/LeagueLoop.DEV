@@ -9,7 +9,8 @@ import os
 import re
 import sys
 import time
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
 
 from utils.logger import Logger
 from utils.path_utils import get_data_dir
@@ -18,11 +19,17 @@ from utils.path_utils import get_data_dir
 class DebugTracker:
     """Tracks every user/system action and captures corresponding window screenshots."""
 
+    MAX_SCREENSHOTS_DEFAULT: int = 300
     _instance: Optional[DebugTracker] = None
     _app_window: Any = None
 
     def __init__(self, config=None):
         self.config = config
+        self.max_screenshots = (
+            int(self.config.get("max_debug_screenshots", self.MAX_SCREENSHOTS_DEFAULT))
+            if self.config
+            else self.MAX_SCREENSHOTS_DEFAULT
+        )
 
     @classmethod
     def set_app_window(cls, window) -> None:
@@ -58,6 +65,38 @@ class DebugTracker:
         path = os.path.join(get_data_dir(), "debug_screenshots")
         os.makedirs(path, exist_ok=True)
         return path
+
+    def prune_old_screenshots(self, max_keep: Optional[int] = None) -> int:
+        """
+        Safely prunes oldest screenshots if total count in debug_screenshots exceeds max_keep.
+        Guarantees that recent captures are preserved while preventing runaway disk usage.
+        Returns the number of files pruned.
+        """
+        keep_limit = max_keep if max_keep is not None else getattr(self, "max_screenshots", self.MAX_SCREENSHOTS_DEFAULT)
+        sc_dir = Path(self.get_screenshots_dir())
+        if not sc_dir.exists():
+            return 0
+        try:
+            files = sorted(
+                [p for p in sc_dir.glob("*.png") if p.is_file()],
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            if len(files) <= keep_limit:
+                return 0
+            pruned_count = 0
+            for f in files[keep_limit:]:
+                try:
+                    f.unlink(missing_ok=True)
+                    pruned_count += 1
+                except Exception:
+                    continue
+            if pruned_count > 0:
+                Logger.info("DebugTracker", f"Pruned {pruned_count} old debug screenshots (kept {keep_limit})")
+            return pruned_count
+        except Exception as exc:
+            Logger.debug("DebugTracker", f"Pruning old screenshots failed: {exc}", exc=exc)
+            return 0
 
     def _get_window_bbox(self, window) -> Optional[Tuple[int, int, int, int]]:
         """Computes screen bounding box (left, top, right, bottom) for a tkinter widget."""
@@ -277,12 +316,14 @@ class DebugTracker:
             )
             composite.save(filepath, "PNG")
             Logger.info("DebugTracker", f"Debug paired screenshot saved: {filepath}")
+            self.prune_old_screenshots()
             return filepath
         except Exception as exc:
             Logger.debug("DebugTracker", f"Composing paired screenshot failed: {exc}", exc=exc)
             # Fallback to single program image if compositing fails
             try:
                 prog_img.save(filepath, "PNG")
+                self.prune_old_screenshots()
                 return filepath
             except Exception as exc2:
                 Logger.debug("DebugTracker", f"Program image fallback save failed: {exc2}", exc=exc2)

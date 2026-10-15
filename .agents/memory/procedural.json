@@ -36,5 +36,14 @@
       "Calculate test-to-code ratio (tests_lines / src_lines) to guard against test coverage decay.",
       "Compute codebase entropy deltas to detect cyclomatic complexity spikes."
     ]
+  },
+  {
+    "method": "Automated Storage Footprint Pruning and Retention",
+    "procedure": [
+      "Inspect storage footprint across logs, screenshots, and sessions using inspect_storage_usage().",
+      "Execute safe pruning via prune_storage() targeting inactive rotated logs and oldest screenshots beyond retention limit.",
+      "Verify active runtime logs (error.log, crash.log, debug.log, session.jsonl) remain untouched.",
+      "Enforce rolling screenshot limits via DebugTracker.prune_old_screenshots() during live captures."
+    ]
   }
 ]

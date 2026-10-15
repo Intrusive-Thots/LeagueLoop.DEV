@@ -449,5 +449,16 @@
       "status": "Optimized implementation baseline"
     },
     "impact": "Added multi-account SessionVault validation, 0-byte/corrupted token detection, session freshness auditing, and active vs rotated log storage footprint tracking."
+  },
+  {
+    "timestamp": "2026-10-15T03:50:20.165468+00:00",
+    "feature": "Safe Storage Pruning and Rolling Retention Enforcement",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Added prune_storage CLI tool to safely eliminate rotated logs and stale debug screenshots, added rolling screenshot retention to DebugTracker (MAX_SCREENSHOTS_DEFAULT), and tracked storage baseline across improvement loops."
   }
 ]

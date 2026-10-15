@@ -11,6 +11,7 @@ protocol:
 """
 
 import os
+import re
 import sys
 import json
 import argparse
@@ -640,6 +641,115 @@ def inspect_storage_usage(
     return result
 
 
+def prune_storage(
+    base_path: Path,
+    dry_run: bool = False,
+    max_screenshots_keep: Optional[int] = 200,
+    max_screenshot_age_days: Optional[float] = 14.0,
+    prune_rotated_logs: bool = True,
+    now: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """
+    Safely prunes rotated logs and stale debug screenshots to keep disk usage bounded.
+    Guarantees active logs (error.log, crash.log, debug.log, session.jsonl) are NEVER deleted.
+    """
+    ref_dt = now or datetime.now()
+    ref_ts = ref_dt.timestamp()
+
+    result: Dict[str, Any] = {
+        "dry_run": dry_run,
+        "logs_pruned": {
+            "count": 0,
+            "bytes": 0,
+            "mb": 0.0,
+            "files": [],
+        },
+        "screenshots_pruned": {
+            "count": 0,
+            "bytes": 0,
+            "mb": 0.0,
+            "files": [],
+        },
+        "total_freed_mb": 0.0,
+        "remaining_storage": {},
+        "errors": [],
+    }
+
+    if not base_path.exists():
+        return result
+
+    # 1. Rotated logs pruning
+    if prune_rotated_logs:
+        logs_dir = base_path / "logs"
+        if logs_dir.exists():
+            active_names = {"error.log", "crash.log", "debug.log", "session.jsonl"}
+            for p in logs_dir.glob("*"):
+                if not p.is_file():
+                    continue
+                # Strictly skip active logs
+                if p.name in active_names:
+                    continue
+                # Target rotated logs e.g. debug.log.1, session.jsonl.2, error.log.1, etc.
+                if re.search(r"\.\d+$", p.name) or p.suffix in (".old", ".bak"):
+                    try:
+                        sz = p.stat().st_size
+                        if not dry_run:
+                            p.unlink(missing_ok=True)
+                        result["logs_pruned"]["count"] += 1
+                        result["logs_pruned"]["bytes"] += sz
+                        result["logs_pruned"]["files"].append(p.name)
+                    except Exception as e:
+                        result["errors"].append(f"Failed to prune log {p.name}: {e}")
+
+    # 2. Screenshots pruning
+    sc_dir = base_path / "debug_screenshots"
+    if sc_dir.exists():
+        png_files = []
+        for p in sc_dir.glob("*.png"):
+            if not p.is_file():
+                continue
+            try:
+                png_files.append((p, p.stat().st_mtime, p.stat().st_size))
+            except Exception:
+                continue
+
+        # Sort newest first
+        png_files.sort(key=lambda item: item[1], reverse=True)
+
+        for idx, (p, mtime, sz) in enumerate(png_files):
+            # Guarantee the newest captures up to max_screenshots_keep are preserved
+            if max_screenshots_keep is not None and idx < max_screenshots_keep:
+                continue
+
+            should_prune = False
+            # Check keep limit
+            if max_screenshots_keep is not None and idx >= max_screenshots_keep:
+                should_prune = True
+            # Check age limit
+            elif max_screenshot_age_days is not None:
+                age_days = (ref_ts - mtime) / 86400.0
+                if age_days > max_screenshot_age_days:
+                    should_prune = True
+
+            if should_prune:
+                try:
+                    if not dry_run:
+                        p.unlink(missing_ok=True)
+                    result["screenshots_pruned"]["count"] += 1
+                    result["screenshots_pruned"]["bytes"] += sz
+                    result["screenshots_pruned"]["files"].append(p.name)
+                except Exception as e:
+                    result["errors"].append(f"Failed to prune screenshot {p.name}: {e}")
+
+    total_bytes = result["logs_pruned"]["bytes"] + result["screenshots_pruned"]["bytes"]
+    result["logs_pruned"]["mb"] = round(result["logs_pruned"]["bytes"] / (1024 * 1024), 2)
+    result["screenshots_pruned"]["mb"] = round(result["screenshots_pruned"]["bytes"] / (1024 * 1024), 2)
+    result["total_freed_mb"] = round(total_bytes / (1024 * 1024), 2)
+    result["remaining_storage"] = inspect_storage_usage(base_path)
+
+    return result
+
+
 def run_diagnostics(
     paths: Optional[Dict[str, Path]] = None,
     max_lines: int = 30,
@@ -741,12 +851,27 @@ def main():
     parser.add_argument("--max-logs-mb", type=float, default=100.0, help="Maximum allowed total size of logs in MB before warning (default: 100.0)")
     parser.add_argument("--max-screenshots-mb", type=float, default=100.0, help="Maximum allowed total size of debug screenshots in MB before warning (default: 100.0)")
     parser.add_argument("--strict-storage", action="store_true", help="Treat storage threshold warnings as fatal health failures")
+    parser.add_argument("--prune-storage", action="store_true", help="Safely prune rotated logs and stale debug screenshots")
+    parser.add_argument("--dry-run", action="store_true", help="Preview storage pruning without deleting files")
+    parser.add_argument("--max-screenshots-keep", type=int, default=200, help="Maximum number of recent screenshots to keep during prune (default: 200)")
+    parser.add_argument("--max-screenshot-age-days", type=float, default=14.0, help="Maximum allowed age of screenshots in days before pruning (default: 14.0)")
+    parser.add_argument("--keep-rotated-logs", action="store_true", help="Do not prune rotated log files during storage pruning")
     parser.add_argument("--fallback-screenshots", type=str, default=None, help="Custom fallback screenshots directory path")
     args = parser.parse_args()
 
     paths = get_leagueloop_paths()
     if args.fallback_screenshots:
         paths["fallback_screenshots"] = Path(args.fallback_screenshots)
+
+    prune_res = None
+    if args.prune_storage or args.dry_run:
+        prune_res = prune_storage(
+            base_path=paths["base"],
+            dry_run=args.dry_run,
+            max_screenshots_keep=args.max_screenshots_keep,
+            max_screenshot_age_days=args.max_screenshot_age_days,
+            prune_rotated_logs=not args.keep_rotated_logs,
+        )
 
     diag = run_diagnostics(
         paths=paths,
@@ -761,6 +886,9 @@ def main():
         strict_storage=args.strict_storage,
     )
 
+    if prune_res:
+        diag["prune_results"] = prune_res
+
     if args.json:
         print(json.dumps(diag, indent=2))
         sys.exit(0 if diag["healthy"] else 1)
@@ -768,6 +896,14 @@ def main():
     print("=== LeagueLoop Diagnostics ===")
     print(f"Status: {'[HEALTHY]' if diag['healthy'] else '[NEEDS ATTENTION]'}")
     print(f"Logs Path: {diag['logs_path']}")
+    if prune_res:
+        action_tag = "[DRY RUN]" if prune_res["dry_run"] else "[EXECUTED]"
+        print(f"\n[Storage Pruning] {action_tag}")
+        print(f"  Freed: {prune_res['total_freed_mb']} MB (Logs: {prune_res['logs_pruned']['mb']} MB across {prune_res['logs_pruned']['count']} files, Screenshots: {prune_res['screenshots_pruned']['mb']} MB across {prune_res['screenshots_pruned']['count']} files)")
+        if prune_res.get("errors"):
+            print(f"  Errors during pruning: {len(prune_res['errors'])}")
+            for pe in prune_res["errors"]:
+                print(f"    - {pe}")
     print(f"Screenshots Path: {diag['screenshots_path']}")
     print(f"Sessions Path: {diag.get('sessions_path', '')}")
 

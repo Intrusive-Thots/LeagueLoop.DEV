@@ -139,6 +139,7 @@ def update_memory_state(
     procedural_methods: Optional[List[Dict[str, Any]]] = None,
     failures: Optional[List[Dict[str, Any]]] = None,
     entropy_results: Optional[Dict[str, Any]] = None,
+    storage_results: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Updates loop_state.json, episodic.json, optimizations.json, semantic.json, procedural.json, and failures.json."""
     MEMORY_DIR.mkdir(parents=True, exist_ok=True)
@@ -155,6 +156,7 @@ def update_memory_state(
         "test_baseline": {"passed": 0, "failed": 0, "errors": 0},
         "index_baseline": {"total_files": 0, "total_py_lines": 0},
         "entropy_baseline": {"status": "PASS", "avg_entropy": 0.0, "bare_excepts": 0},
+        "storage_baseline": {"status": "OPTIMAL", "total_mb": 0.0, "logs_mb": 0.0, "screenshots_mb": 0.0},
     }
 
     if loop_state_file.exists():
@@ -178,6 +180,7 @@ def update_memory_state(
     curr_entropy = entropy_info.get("avg_entropy", 0.0)
     delta_entropy = round(curr_entropy - prev_entropy, 2) if prev_entropy else 0.0
 
+    st_info = storage_results or {}
     new_state = {
         "run_number": next_run,
         "last_run": datetime.now(timezone.utc).isoformat(),
@@ -196,6 +199,13 @@ def update_memory_state(
             "status": entropy_info.get("status", "N/A"),
             "avg_entropy": curr_entropy,
             "bare_excepts": entropy_info.get("bare_excepts_total", 0),
+        },
+        "storage_baseline": {
+            "status": st_info.get("status", "OPTIMAL"),
+            "total_mb": st_info.get("total_mb", 0.0),
+            "logs_mb": st_info.get("logs", {}).get("total_mb", 0.0) if isinstance(st_info.get("logs"), dict) else 0.0,
+            "screenshots_mb": st_info.get("screenshots", {}).get("total_mb", 0.0) if isinstance(st_info.get("screenshots"), dict) else 0.0,
+            "warnings_count": len(st_info.get("warnings", [])),
         },
     }
 
@@ -353,8 +363,17 @@ def run_loop(
     after_metrics: Optional[Dict[str, Any]] = None,
     semantic_learnings: Optional[List[Dict[str, Any]]] = None,
     procedural_methods: Optional[List[Dict[str, Any]]] = None,
+    prune_storage_flag: bool = False,
 ) -> Dict[str, Any]:
     """Executes the full Autonomous Improvement Loop."""
+    prune_res = None
+    if prune_storage_flag:
+        try:
+            from tools.leagueloop_diagnostics import prune_storage as do_prune_storage, get_leagueloop_paths
+            prune_res = do_prune_storage(get_leagueloop_paths()["base"], dry_run=dry_run)
+        except Exception as e:
+            prune_res = {"error": str(e)}
+
     diag = run_diagnostics_check()
     metrics = measure_codebase_metrics(PROJECT_ROOT)
     entropy = run_entropy_check()
@@ -436,6 +455,11 @@ def run_loop(
             "description": "Auditing active vs rotated telemetry logs, debug screenshots, and session vaults against configurable MB thresholds guards production endpoints against silent disk exhaustion.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Safe Automated Storage Pruning and Rolling Retention Enforcement",
+            "description": "Pruning rotated log files (.1, .2) while strictly preserving active diagnostics, paired with automatic rolling screenshot retention limits, prevents multi-gigabyte disk exhaustion on production client machines.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
@@ -464,31 +488,47 @@ def run_loop(
                 "Write diary entry using mempalace_diary_write MCP tool or CLI mempalace.exe --palace <path> diary write <entry>.",
             ],
         },
+        {
+            "method": "Automated Storage Footprint Pruning and Retention",
+            "procedure": [
+                "Inspect storage footprint across logs, screenshots, and sessions using inspect_storage_usage().",
+                "Execute safe pruning via prune_storage() targeting inactive rotated logs and oldest screenshots beyond retention limit.",
+                "Verify active runtime logs (error.log, crash.log, debug.log, session.jsonl) remain untouched.",
+                "Enforce rolling screenshot limits via DebugTracker.prune_old_screenshots() during live captures.",
+            ],
+        },
     ]
 
     top_files = entropy.get("top_files", [])
     top_offender = Path(top_files[0]["file"]).name if top_files else "none"
+
+    storage_an = diag.get("storage_analysis", {})
+    action_details = [
+        "Verified runtime logs (error.log, crash.log, session.jsonl, debug.log) & debug screenshots via leagueloop_diagnostics (healthy status confirmed).",
+        f"Executed code entropy audit: status={entropy.get('status')}, avg_entropy={entropy.get('avg_entropy', 0)}, bare_excepts={entropy.get('bare_excepts_total', 0)}, top_offender={top_offender}.",
+        f"Executed test runner (duration={tests.get('duration_seconds')}s, passed={tests.get('passed')}, failed={tests.get('failed')}).",
+        f"Indexed codebase metrics ({metrics.get('total_py_files')} python files, {metrics.get('total_py_lines')} lines; test-to-code ratio: {metrics.get('test_to_code_ratio', 0.0)}).",
+        f"Storage footprint monitored: total={storage_an.get('total_mb', 0.0)}MB (status={storage_an.get('status', 'OPTIMAL')}).",
+        "Synchronized loop state, episodic, semantic, procedural, and optimization memory baselines.",
+    ]
+    if prune_res and not prune_res.get("error"):
+        action_details.append(f"Storage pruned: freed {prune_res.get('total_freed_mb', 0.0)}MB (logs: {prune_res.get('logs_pruned', {}).get('mb', 0.0)}MB, screenshots: {prune_res.get('screenshots_pruned', {}).get('mb', 0.0)}MB).")
 
     memory_result = update_memory_state(
         metrics=metrics,
         test_results=tests,
         dry_run=dry_run,
         task_name="Autonomous Improvement Loop",
-        action_details=[
-            "Verified runtime logs (error.log, crash.log, session.jsonl, debug.log) & debug screenshots via leagueloop_diagnostics (healthy status confirmed).",
-            f"Executed code entropy audit: status={entropy.get('status')}, avg_entropy={entropy.get('avg_entropy', 0)}, bare_excepts={entropy.get('bare_excepts_total', 0)}, top_offender={top_offender}.",
-            f"Executed test runner (duration={tests.get('duration_seconds')}s, passed={tests.get('passed')}, failed={tests.get('failed')}).",
-            f"Indexed codebase metrics ({metrics.get('total_py_files')} python files, {metrics.get('total_py_lines')} lines; test-to-code ratio: {metrics.get('test_to_code_ratio', 0.0)}).",
-            "Synchronized loop state, episodic, semantic, procedural, and optimization memory baselines.",
-        ],
+        action_details=action_details,
         optimizations=opt_payload,
         semantic_learnings=semantic_learnings or default_semantic,
         procedural_methods=procedural_methods or default_procedural,
         entropy_results=entropy,
+        storage_results=storage_an,
     )
 
     loop_num = memory_result["new_state"]["run_number"]
-    summary_str = f"Healthy={diag.get('healthy')}|Entropy={entropy.get('status')}|Tests={tests.get('passed')}/{tests.get('passed',0)+tests.get('failed',0)}|Files={metrics.get('total_py_files')}|Lines={metrics.get('total_py_lines')}"
+    summary_str = f"Healthy={diag.get('healthy')}|Entropy={entropy.get('status')}|Tests={tests.get('passed')}/{tests.get('passed',0)+tests.get('failed',0)}|Files={metrics.get('total_py_files')}|Lines={metrics.get('total_py_lines')}|Storage={storage_an.get('total_mb', 0.0)}MB"
     sync_mempalace(loop_num, summary_str)
 
     return {
@@ -498,6 +538,7 @@ def run_loop(
         "metrics": metrics,
         "tests": tests,
         "memory": memory_result,
+        "prune_results": prune_res,
     }
 
 
@@ -509,6 +550,7 @@ def main(argv=None):
     parser.add_argument("--json", action="store_true", help="Output results in JSON format")
     parser.add_argument("--feature", default=None, help="Custom feature optimization name to record")
     parser.add_argument("--impact", default=None, help="Custom impact description to record")
+    parser.add_argument("--prune-storage", action="store_true", help="Execute safe storage pruning during autonomous loop")
     args = parser.parse_args(argv)
 
     if args.check_baseline:
@@ -525,6 +567,7 @@ def main(argv=None):
         dry_run=args.dry_run,
         feature=args.feature,
         impact=args.impact,
+        prune_storage_flag=args.prune_storage,
     )
 
     if args.json:

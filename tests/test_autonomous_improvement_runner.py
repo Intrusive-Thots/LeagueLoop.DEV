@@ -50,6 +50,7 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         }
         tests = {"passed": 787, "failed": 0, "duration_seconds": 17.5}
         entropy = {"status": "PASS", "avg_entropy": 42.0, "bare_excepts_total": 0}
+        storage = {"status": "OPTIMAL", "total_mb": 45.2, "logs": {"total_mb": 12.0}, "screenshots": {"total_mb": 33.2}, "warnings": []}
         result = update_memory_state(
             metrics,
             tests,
@@ -57,6 +58,7 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
             semantic_learnings=[{"concept": "Test Concept", "description": "Desc"}],
             procedural_methods=[{"method": "Test Method", "procedure": ["Step 1"]}],
             entropy_results=entropy,
+            storage_results=storage,
         )
 
         self.assertFalse(result["persisted"])
@@ -65,6 +67,8 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         self.assertEqual(result["new_state"]["index_baseline"]["total_files"], 150)
         self.assertEqual(result["new_state"]["entropy_baseline"]["avg_entropy"], 42.0)
         self.assertEqual(result["new_state"]["index_baseline"]["test_to_code_ratio"], 0.333)
+        self.assertEqual(result["new_state"]["storage_baseline"]["total_mb"], 45.2)
+        self.assertEqual(result["new_state"]["storage_baseline"]["status"], "OPTIMAL")
         self.assertEqual(len(result["semantic_learnings"]), 1)
         self.assertEqual(len(result["procedural_methods"]), 1)
 
