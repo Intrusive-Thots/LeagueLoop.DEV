@@ -19,7 +19,7 @@ from utils.path_utils import get_data_dir
 class DebugTracker:
     """Tracks every user/system action and captures corresponding window screenshots."""
 
-    MAX_SCREENSHOTS_DEFAULT: int = 300
+    MAX_SCREENSHOTS_DEFAULT: int = 150
     _instance: Optional[DebugTracker] = None
     _app_window: Any = None
 

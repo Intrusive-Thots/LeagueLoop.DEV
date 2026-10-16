@@ -2529,18 +2529,28 @@ class LCUClient:
         "/lol-loot/v1/ready",
     )
 
+    EXPECTED_400_ENDPOINTS = (
+        "/lol-ranked/v1/rewards/claim",
+    )
+
     EXPECTED_405_ENDPOINTS = (
         "/lol-loot/v1/ready",
+        "/lol-loot/v1/player-loot",
     )
 
     @classmethod
     def _is_expected_absence(cls, status_code: int, endpoint: str) -> bool:
-        """True when a 404 or expected method variation means 'not currently / not supported', not 'something broke'."""
+        """True when a 404, 400, or 405 expected method variation means 'not currently / not supported', not 'something broke'."""
         path = (endpoint or "").split("?", 1)[0].rstrip("/")
         if status_code == 404:
             return any(
                 path == known or path.startswith(known + "/")
                 for known in cls.EXPECTED_404_ENDPOINTS
+            )
+        if status_code == 400:
+            return any(
+                path == known or path.startswith(known + "/")
+                for known in cls.EXPECTED_400_ENDPOINTS
             )
         if status_code == 405:
             return any(

@@ -644,7 +644,7 @@ def inspect_storage_usage(
 def prune_storage(
     base_path: Path,
     dry_run: bool = False,
-    max_screenshots_keep: Optional[int] = 200,
+    max_screenshots_keep: Optional[int] = 150,
     max_screenshot_age_days: Optional[float] = 14.0,
     prune_rotated_logs: bool = True,
     now: Optional[datetime] = None,
@@ -853,7 +853,7 @@ def main():
     parser.add_argument("--strict-storage", action="store_true", help="Treat storage threshold warnings as fatal health failures")
     parser.add_argument("--prune-storage", action="store_true", help="Safely prune rotated logs and stale debug screenshots")
     parser.add_argument("--dry-run", action="store_true", help="Preview storage pruning without deleting files")
-    parser.add_argument("--max-screenshots-keep", type=int, default=200, help="Maximum number of recent screenshots to keep during prune (default: 200)")
+    parser.add_argument("--max-screenshots-keep", type=int, default=150, help="Maximum number of recent screenshots to keep during prune (default: 150)")
     parser.add_argument("--max-screenshot-age-days", type=float, default=14.0, help="Maximum allowed age of screenshots in days before pruning (default: 14.0)")
     parser.add_argument("--keep-rotated-logs", action="store_true", help="Do not prune rotated log files during storage pruning")
     parser.add_argument("--fallback-screenshots", type=str, default=None, help="Custom fallback screenshots directory path")
