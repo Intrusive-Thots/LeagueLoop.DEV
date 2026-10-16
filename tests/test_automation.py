@@ -1173,6 +1173,21 @@ class TestAutomationAct(unittest.TestCase):
             mock_debug.assert_called_once()
 
 
+    def test_act_handles_champ_select_action_405_cleanly(self):
+        engine = _engine()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 405
+        mock_resp.text = '{"errorCode":"WRONG_METHOD","httpStatus":405,"message":"Wrong HTTP method for this URI"}'
+        engine.lcu.request.return_value = mock_resp
+
+        with patch("utils.logger.Logger.error") as mock_err, patch("utils.logger.Logger.debug") as mock_debug:
+            success = engine._act("PATCH", "/lol-champ-select/v1/session/actions/4", what="Draft: hovered TwistedFate")
+            self.assertFalse(success)
+            mock_err.assert_not_called()
+            mock_debug.assert_called_once()
+            self.assertIn("champ select action not yet open to modifications", mock_debug.call_args[0][1])
+
+
 if __name__ == '__main__':
     unittest.main()
 

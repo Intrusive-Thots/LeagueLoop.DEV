@@ -67,6 +67,8 @@ class ExpectedAbsenceTests(unittest.TestCase):
         self.assertTrue(c._is_expected_absence(405, "/lol-loot/v1/ready"))
         self.assertTrue(c._is_expected_absence(405, "/lol-loot/v1/ready?foo=bar"))
         self.assertTrue(c._is_expected_absence(405, "/lol-loot/v1/player-loot"))
+        self.assertTrue(c._is_expected_absence(405, "/lol-champ-select/v1/session/actions/4"))
+        self.assertTrue(c._is_expected_absence(405, "/lol-gameflow/v1/gameflow-phase"))
         self.assertFalse(c._is_expected_absence(405, "/lol-lobby/v2/lobby"))
 
     def test_expected_400_endpoint_is_excused(self):

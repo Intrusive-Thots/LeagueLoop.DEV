@@ -648,6 +648,9 @@ class AutomationEngine:
             if "bench/swap" in endpoint and code == 500:
                 Logger.info("Automation", f"{label} — bench champion no longer available (HTTP 500)")
                 return False
+            if "/lol-champ-select/v1/session/actions/" in endpoint and code == 405:
+                Logger.debug("Automation", f"{label} — champ select action not yet open to modifications (HTTP 405 transient)")
+                return False
             Logger.error(
                 "Automation",
                 f"{label} — the client refused it (HTTP {code}) {body}".strip(),

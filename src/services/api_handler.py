@@ -2536,6 +2536,8 @@ class LCUClient:
     EXPECTED_405_ENDPOINTS = (
         "/lol-loot/v1/ready",
         "/lol-loot/v1/player-loot",
+        "/lol-champ-select/v1/session/actions",
+        "/lol-gameflow/v1/gameflow-phase",
     )
 
     @classmethod
