@@ -143,3 +143,16 @@ def test_version_and_installer_alignment_invariants():
     assert info_ver == to_version_info(v), f"VersionInfoVersion '{info_ver}' does not match '{to_version_info(v)}'"
 
 
+def test_stats_scraper_daemon_executor_invariants():
+    """THREAD-001: StatsScraper background thread pool workers must be daemon threads to prevent pytest hangs."""
+    from services.stats_scraper import StatsScraper
+    scraper = StatsScraper(mode="ARAM", fetch_live=False)
+    try:
+        assert hasattr(scraper, "shutdown"), "StatsScraper must expose a shutdown() method"
+        scraper._executor.submit(lambda: None)
+        for t in scraper._executor._threads:
+            assert t.daemon is True, f"StatsScraper worker thread {t.name} must be daemon=True"
+    finally:
+        scraper.shutdown(wait=True)
+
+

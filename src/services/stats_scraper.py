@@ -2,10 +2,37 @@
 Provides static and dynamic data related to champions and game stats.
 """
 import time
+import threading
+import weakref
 import requests
 from concurrent.futures import ThreadPoolExecutor
+import concurrent.futures.thread as _cft
 from services.http_session_factory import get_shared_session
 from utils.logger import Logger
+
+
+class _DaemonThreadPoolExecutor(ThreadPoolExecutor):
+    """ThreadPoolExecutor whose workers are daemon threads so they never prevent process exit."""
+
+    def _adjust_thread_count(self):
+        if self._idle_semaphore.acquire(timeout=0):
+            return
+
+        def weakref_cb(_, q=self._work_queue):
+            q.put(None)
+
+        num_threads = len(self._threads)
+        if num_threads < self._max_workers:
+            prefix = self._thread_name_prefix or "StatsScraperWorker"
+            t = threading.Thread(
+                name=f"{prefix}_{num_threads}",
+                target=_cft._worker,
+                args=(weakref.ref(self, weakref_cb), self._work_queue, self._initializer, self._initargs),
+                daemon=True,
+            )
+            t.start()
+            self._threads.add(t)
+            _cft._threads_queues[t] = self._work_queue
 
 try:
     from bs4 import BeautifulSoup
@@ -107,7 +134,7 @@ class StatsScraper:
         self.win_rates = dict()
         self.live_winrates = dict()
         self._cache_timestamps = dict()
-        self._executor = ThreadPoolExecutor(max_workers=2)
+        self._executor = _DaemonThreadPoolExecutor(max_workers=2, thread_name_prefix="StatsScraperWorker")
         self.set_mode(mode)
 
     def _fetch_live_data_background(self, mode):
@@ -260,3 +287,11 @@ class StatsScraper:
     def is_offline(self) -> bool:
         """Dynamically returns True if operating on local fallback data."""
         return self.mode not in self.live_winrates
+
+    def shutdown(self, wait: bool = False) -> None:
+        """Shut down background worker thread pool and release resources."""
+        if self._executor is not None:
+            try:
+                self._executor.shutdown(wait=wait, cancel_futures=True)
+            except Exception as exc:
+                Logger.debug("StatsScraper", "shutdown suppressed an error", exc=exc)

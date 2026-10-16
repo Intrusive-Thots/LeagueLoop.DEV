@@ -28,7 +28,7 @@ class BaseScraperTest(unittest.TestCase):
     def tearDown(self):
         for scraper in self.scrapers:
             try:
-                scraper._executor.shutdown(wait=False)
+                scraper.shutdown(wait=False)
             except Exception:
                 pass
 
@@ -146,7 +146,8 @@ class TestStatsScraperBackgroundFetching(BaseScraperTest):
             mock_submit.assert_not_called()
 
     def test_fetch_live_data_background_cache_hit(self):
-        scraper = self.create_scraper(mode="ARAM", fetch_live=True)
+        with patch.object(StatsScraper, "_fetch_live_data_background"):
+            scraper = self.create_scraper(mode="ARAM", fetch_live=True)
         scraper.live_winrates["ARAM"] = {"ahri": 52.5}
         scraper._cache_timestamps["ARAM"] = time.time()
 
@@ -156,14 +157,16 @@ class TestStatsScraperBackgroundFetching(BaseScraperTest):
 
     @patch("services.stats_scraper._HAS_BS4", False)
     def test_fetch_live_data_background_no_bs4(self):
-        scraper = self.create_scraper(mode="ARAM", fetch_live=True)
+        with patch.object(StatsScraper, "_fetch_live_data_background"):
+            scraper = self.create_scraper(mode="ARAM", fetch_live=True)
         with patch.object(scraper._executor, "submit") as mock_submit:
             scraper._fetch_live_data_background("ARAM")
             mock_submit.assert_not_called()
 
     @patch("services.stats_scraper._HAS_BS4", True)
     def test_fetch_live_data_background_submits_task(self):
-        scraper = self.create_scraper(mode="ARAM", fetch_live=True)
+        with patch.object(StatsScraper, "_fetch_live_data_background"):
+            scraper = self.create_scraper(mode="ARAM", fetch_live=True)
         with patch.object(scraper._executor, "submit") as mock_submit:
             scraper._fetch_live_data_background("ARAM")
             mock_submit.assert_called_once_with(scraper._scrape_winrates, "ARAM")
