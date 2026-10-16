@@ -2526,18 +2526,28 @@ class LCUClient:
         "/lol-rewards/v1/grants/claim",
         "/lol-ranked/v1/split-rewards/claim",
         "/lol-ranked/v1/rewards/claim",
+        "/lol-loot/v1/ready",
+    )
+
+    EXPECTED_405_ENDPOINTS = (
+        "/lol-loot/v1/ready",
     )
 
     @classmethod
     def _is_expected_absence(cls, status_code: int, endpoint: str) -> bool:
-        """True when a 404 here means 'not currently', not 'something broke'."""
-        if status_code != 404:
-            return False
+        """True when a 404 or expected method variation means 'not currently / not supported', not 'something broke'."""
         path = (endpoint or "").split("?", 1)[0].rstrip("/")
-        return any(
-            path == known or path.startswith(known + "/")
-            for known in cls.EXPECTED_404_ENDPOINTS
-        )
+        if status_code == 404:
+            return any(
+                path == known or path.startswith(known + "/")
+                for known in cls.EXPECTED_404_ENDPOINTS
+            )
+        if status_code == 405:
+            return any(
+                path == known or path.startswith(known + "/")
+                for known in cls.EXPECTED_405_ENDPOINTS
+            )
+        return False
 
     def _record_http_status_code(self, status_code: int, method: str, endpoint: str) -> None:
         """Task 151 & 169: Records HTTP status codes; anomaly alerts use a sliding window (no 200 spam)."""

@@ -109,6 +109,8 @@ def test_client_window_tracker_invariants():
     assert '"league of legends (tm) client"' in text
     assert "IsIconic" in text
     assert "-30000" in text  # Guard against minimized off-screen coordinates
+    assert "MIN_CLIENT_WIDTH" in text
+    assert "MIN_CLIENT_HEIGHT" in text
 
 
 def test_docking_loop_invariants():

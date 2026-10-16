@@ -62,6 +62,12 @@ class ExpectedAbsenceTests(unittest.TestCase):
             c._is_expected_absence(404, "/lol-lobby/v2/lobby-other-thing")
         )
 
+    def test_expected_405_endpoint_is_excused(self):
+        c = self._client()
+        self.assertTrue(c._is_expected_absence(405, "/lol-loot/v1/ready"))
+        self.assertTrue(c._is_expected_absence(405, "/lol-loot/v1/ready?foo=bar"))
+        self.assertFalse(c._is_expected_absence(405, "/lol-lobby/v2/lobby"))
+
 
 if __name__ == "__main__":
     unittest.main()

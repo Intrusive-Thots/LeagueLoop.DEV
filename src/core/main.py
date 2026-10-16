@@ -562,12 +562,12 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
 
                 # Determine docked position
                 client_x, client_y, client_w, client_h = window.rect
-                if client_w <= 0 or client_h <= 0:
+                if client_w < 320 or client_h < 240:
                     time.sleep(DOCKING_IDLE_INTERVAL)
                     continue
 
                 app_w = SIDEBAR_WIDTH
-                target_h = client_h  # Match League Client exact height for seamless pairing
+                target_h = max(400, client_h)  # Match League Client exact height (floor at 400 for companion)
                 gap = 0  # Flush docking against client border
 
                 # Determine monitor work area containing the client

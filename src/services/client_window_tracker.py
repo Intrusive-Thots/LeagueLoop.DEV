@@ -51,6 +51,11 @@ LEAGUE_TITLES = ("league of legends", "league of legends (tm) client")
 #: the sign-in step, before League itself has a window.
 RIOT_TITLES = ("riot client", "riot client main")
 
+#: Minimum realistic dimensions for a real League / Riot client window.
+#: Transitional / dummy windows (like 1x1 DirectX placeholders) are ignored.
+MIN_CLIENT_WIDTH = 320
+MIN_CLIENT_HEIGHT = 240
+
 
 _IS_WINDOWS = sys.platform == "win32"
 
@@ -154,8 +159,11 @@ class ClientWindowTracker:
                     rect = ctypes.wintypes.RECT()
                     user32.GetWindowRect(hwnd, ctypes.byref(rect))
                     if rect.left > -30000 and rect.top > -30000:
-                        found = True
-                        return False
+                        w = rect.right - rect.left
+                        h = rect.bottom - rect.top
+                        if w >= MIN_CLIENT_WIDTH and h >= MIN_CLIENT_HEIGHT:
+                            found = True
+                            return False
             except Exception as exc:
                 Logger.debug(TAG, "_find_league_only enum callback error", exc=exc)
             return True
@@ -177,6 +185,10 @@ class ClientWindowTracker:
         rect = ctypes.wintypes.RECT()
         self._user32.GetWindowRect(hwnd, ctypes.byref(rect))
         if rect.left <= -30000 or rect.top <= -30000:
+            return False
+        w = rect.right - rect.left
+        h = rect.bottom - rect.top
+        if w < MIN_CLIENT_WIDTH or h < MIN_CLIENT_HEIGHT:
             return False
         # If currently tracking Riot Client, check if League window is now available
         if self._title and any(r in self._title.lower() for r in RIOT_TITLES):
@@ -222,6 +234,10 @@ class ClientWindowTracker:
                     is_iconic = True
 
                 if title in LEAGUE_TITLES:
+                    w = rect.right - rect.left
+                    h = rect.bottom - rect.top
+                    if w < MIN_CLIENT_WIDTH or h < MIN_CLIENT_HEIGHT:
+                        return True
                     # Prefer non-iconic active League client over any minimized placeholder
                     if not league[0] or (not is_iconic and getattr(self, "_found_league_iconic", True)):
                         league[0], league[1] = hwnd, raw
@@ -229,8 +245,11 @@ class ClientWindowTracker:
                         if not is_iconic and title == "league of legends":
                             return False  # stop: nothing beats active League main client window
                 elif title in RIOT_TITLES and not riot[0] and not is_iconic:
-                    # Only accept Riot Client if not minimized or off-screen
-                    riot[0], riot[1] = hwnd, raw
+                    w = rect.right - rect.left
+                    h = rect.bottom - rect.top
+                    if w >= MIN_CLIENT_WIDTH and h >= MIN_CLIENT_HEIGHT:
+                        # Only accept Riot Client if not minimized or off-screen
+                        riot[0], riot[1] = hwnd, raw
             except Exception as exc:
                 # A window can vanish mid-enumeration. Never let one bad
                 # handle abort the search for the rest.
@@ -273,12 +292,12 @@ class ClientWindowTracker:
         visible = bool(user32.IsWindowVisible(hwnd))
         rect = self._rect_of(hwnd)
 
-        # A minimised window reports a rect off the bottom of the screen.
-        # Passing that on would fling the companion off with it, so report the
+        # A minimised or dummy window reports a rect off the screen or 1x1.
+        # Passing that on would fling or collapse the companion, so report the
         # last good geometry and let the caller act on `minimized` instead.
-        if minimized and self._last_rect:
+        if (minimized or rect[2] < MIN_CLIENT_WIDTH or rect[3] < MIN_CLIENT_HEIGHT) and self._last_rect:
             rect = self._last_rect
-        elif not minimized:
+        elif not minimized and rect[2] >= MIN_CLIENT_WIDTH and rect[3] >= MIN_CLIENT_HEIGHT:
             if rect != self._last_rect:
                 Logger.debug(TAG, "Client window geometry: {}".format(rect))
             self._last_rect = rect

@@ -148,6 +148,7 @@ class LootService:
         self.lcu = lcu
         self._log = log or (lambda m: Logger.info("Loot", m))
         self._recipe_cache: Dict[str, List[Dict[str, Any]]] = {}
+        self._ready_endpoint_available: bool = True
 
     def log(self, msg: str) -> None:
         self._log(msg)
@@ -222,9 +223,26 @@ class LootService:
 
     def is_ready(self) -> bool:
         """Check if LCU loot subsystem is ready (false while client is booting/loading)."""
-        data = self._get_json("/lol-loot/v1/ready")
-        if data is False or (isinstance(data, dict) and data.get("ready") is False):
+        if not getattr(self, "_ready_endpoint_available", True):
+            return True
+        if not getattr(self.lcu, "is_connected", False):
+            if hasattr(self.lcu, "connect"):
+                self.lcu.connect(silent=True)
+        r = self.lcu.request("GET", "/lol-loot/v1/ready", silent=True)
+        if r is None:
             return False
+        if r.status_code in (404, 405):
+            # Endpoint missing or method not allowed in this client version: bypass
+            self._ready_endpoint_available = False
+            return True
+        if r.status_code != 200:
+            return False
+        try:
+            data = r.json()
+            if data is False or (isinstance(data, dict) and data.get("ready") is False):
+                return False
+        except (ValueError, AttributeError):
+            pass
         return True
 
     def fetch_loot(self) -> List[LootItem]:
