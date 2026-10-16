@@ -498,6 +498,11 @@ def run_loop(
             "description": "Distinguishing targeted regression tests (<2s) from full-suite runs (~15-18s) in memory baselines prevents test count oscillations in loop_state.json and preserves the true coverage baseline while maintaining fast iteration velocity.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Multi-Target Positional Code Entropy Audit",
+            "description": "Allowing arbitrary positional files and directories (nargs='*') in code_entropy_analyzer with multi-file aggregation, top-N sorting, and max-entropy threshold enforcement allows developers and automated scripts to audit subsets of components without encountering unrecognized argument CLI errors.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
@@ -542,6 +547,13 @@ def run_loop(
                 "Verify automatic synchronization of #define AppVersion and #define VersionInfoVersion in installer.iss.",
                 "Run python tools/bump_version.py --check to validate zero version drift.",
                 "Execute test_version_and_installer_alignment_invariants in test_regression_guards.py.",
+            ],
+        },
+        {
+            "method": "Multi-Target Static Entropy Inspection",
+            "procedure": [
+                "Execute python tools/code_entropy_analyzer.py file1.py file2.py dir1/ --top N to rank high-complexity modules across subsystems.",
+                "Execute python tools/code_entropy_analyzer.py --summary <targets...> --max-entropy <limit> to enforce aggregate code quality thresholds in CI/CD pipelines.",
             ],
         },
     ]

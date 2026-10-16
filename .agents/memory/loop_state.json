@@ -1,16 +1,16 @@
 {
-  "run_number": 147,
-  "last_run": "2026-10-16T23:26:52.447214+00:00",
+  "run_number": 148,
+  "last_run": "2026-10-16T23:40:46.624496+00:00",
   "test_baseline": {
-    "passed": 966,
+    "passed": 969,
     "failed": 0,
     "skipped": 0,
-    "last_targeted_passed": 13,
+    "last_targeted_passed": 0,
     "errors": 0
   },
   "index_baseline": {
     "total_files": 185,
-    "total_py_lines": 54624,
+    "total_py_lines": 54708,
     "breakdown": {
       "src": {
         "files": 94,
@@ -18,14 +18,14 @@
       },
       "tests": {
         "files": 80,
-        "lines": 17589
+        "lines": 17618
       },
       "tools": {
         "files": 11,
-        "lines": 3540
+        "lines": 3595
       }
     },
-    "test_to_code_ratio": 0.525
+    "test_to_code_ratio": 0.526
   },
   "entropy_baseline": {
     "status": "WARN",

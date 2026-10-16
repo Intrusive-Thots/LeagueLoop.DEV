@@ -133,7 +133,7 @@ def get_top_entropy_files(target_dir: str = "src", top_n: int = 5) -> List[Dict[
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Code Entropy & Static Audit Tool")
-    parser.add_argument("pos_target", nargs="?", default=None, help="File or directory path to analyze (positional)")
+    parser.add_argument("pos_target", nargs="*", default=None, help="File or directory path(s) to analyze (positional)")
     parser.add_argument("--target", default=None, help="File or directory path to analyze (flag)")
     parser.add_argument("--top", "-n", type=int, default=None, help="Display only top N files sorted by entropy descending")
     parser.add_argument("--summary", action="store_true", help="Display aggregate codebase entropy summary")
@@ -141,13 +141,47 @@ def main(argv=None):
     parser.add_argument("--json", action="store_true", help="Output results in JSON format")
     args = parser.parse_args(argv)
 
-    target_path = args.target or args.pos_target or "src"
+    targets: List[str] = []
+    if args.target:
+        targets.append(args.target)
+    if args.pos_target:
+        if isinstance(args.pos_target, list):
+            targets.extend(args.pos_target)
+        else:
+            targets.append(str(args.pos_target))
+    if not targets:
+        targets = ["src"]
+
+    for tp in targets:
+        if not os.path.exists(tp):
+            print(f"Error: Target path '{tp}' does not exist.", file=sys.stderr)
+            sys.exit(1)
 
     if args.summary:
-        if not os.path.isdir(target_path):
-            print(f"Error: Target path '{target_path}' is not a valid directory for summary.", file=sys.stderr)
-            sys.exit(1)
-        summary = run_entropy_summary(target_path)
+        all_results = []
+        for tp in targets:
+            if os.path.isdir(tp):
+                all_results.extend(analyze_directory(tp))
+            else:
+                all_results.append(analyze_python_file(tp))
+
+        total_files = len(all_results)
+        if total_files == 0:
+            summary = {"total_files": 0, "avg_entropy": 0.0, "bare_excepts_total": 0, "syntax_errors": 0, "status": "PASS"}
+        else:
+            total_entropy = sum(r.get("entropy_score", 0) for r in all_results if "entropy_score" in r)
+            bare_excepts = sum(len(r.get("bare_excepts", [])) for r in all_results if "bare_excepts" in r)
+            errors = sum(1 for r in all_results if r.get("status") == "ERROR")
+            avg_entropy = round(total_entropy / total_files, 2)
+            status = "FAIL" if errors > 0 or bare_excepts > 0 else "PASS" if avg_entropy < 30 else "WARN"
+            summary = {
+                "total_files": total_files,
+                "avg_entropy": avg_entropy,
+                "bare_excepts_total": bare_excepts,
+                "syntax_errors": errors,
+                "status": status,
+            }
+
         if args.max_entropy is not None and summary["avg_entropy"] > args.max_entropy:
             summary["status"] = "FAIL"
             summary["threshold_exceeded"] = True
@@ -155,7 +189,7 @@ def main(argv=None):
             print(json.dumps(summary, indent=2))
         else:
             print("=== Code Entropy Summary ===")
-            print(f"Target: {target_path}")
+            print(f"Target: {', '.join(targets)}")
             print(f"Status: [{summary['status']}]")
             print(f"Files Audited: {summary['total_files']}")
             print(f"Average Entropy: {summary['avg_entropy']}")
@@ -165,16 +199,25 @@ def main(argv=None):
                 print(f"Threshold Exceeded: Average entropy {summary['avg_entropy']} > {args.max_entropy}")
         sys.exit(0 if summary["status"] != "FAIL" else 1)
 
-    if not os.path.exists(target_path):
-        print(f"Error: Target path '{target_path}' does not exist.", file=sys.stderr)
-        sys.exit(1)
+    res = []
+    for tp in targets:
+        if os.path.isfile(tp):
+            res.append(analyze_python_file(tp))
+        else:
+            res.extend(analyze_directory(tp))
 
     if args.top is not None and args.top > 0:
-        res = get_top_entropy_files(target_path, top_n=args.top)
-    elif os.path.isfile(target_path):
-        res = [analyze_python_file(target_path)]
-    else:
-        res = analyze_directory(target_path)
+        res = sorted(res, key=lambda x: x.get("entropy_score", 0), reverse=True)[:args.top]
+
+    if args.max_entropy is not None:
+        valid_res = [r for r in res if "entropy_score" in r]
+        avg_entropy = round(sum(r.get("entropy_score", 0) for r in valid_res) / len(valid_res), 2) if valid_res else 0.0
+        if avg_entropy > args.max_entropy:
+            if args.json:
+                print(json.dumps({"error": f"Average entropy {avg_entropy} > {args.max_entropy}", "results": res}, indent=2))
+            else:
+                print(f"Threshold Exceeded: Average entropy {avg_entropy} > {args.max_entropy}", file=sys.stderr)
+            sys.exit(1)
 
     if args.json:
         print(json.dumps(res, indent=2))

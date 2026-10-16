@@ -112,6 +112,35 @@ class TestCodeEntropyAnalyzer(unittest.TestCase):
                 main(["--target", str(self.base), "--summary", "--max-entropy", "-1.0"])
             self.assertEqual(cm.exception.code, 1)
 
+    def test_main_cli_multiple_positional_targets(self):
+        from tools.code_entropy_analyzer import main
+        f1 = self.base / "f1.py"
+        f1.write_text("def a(): return 1\n", encoding="utf-8")
+        f2 = self.base / "f2.py"
+        f2.write_text("def b(): return 2\n", encoding="utf-8")
+
+        # Multi-target positional with --json
+        with patch("sys.stdout") as mock_stdout:
+            main([str(f1), str(f2), "--json"])
+
+        # Multi-target positional with --summary
+        with patch("sys.stdout") as mock_stdout:
+            with self.assertRaises(SystemExit) as cm:
+                main([str(f1), str(f2), "--summary"])
+            self.assertEqual(cm.exception.code, 0)
+
+        # Multi-target with non-existent target raises SystemExit(1)
+        with patch("sys.stderr") as mock_stderr:
+            with self.assertRaises(SystemExit) as cm:
+                main([str(f1), "non_existent_file.py"])
+            self.assertEqual(cm.exception.code, 1)
+
+        # Multi-target with --max-entropy failing
+        with patch("sys.stderr") as mock_stderr:
+            with self.assertRaises(SystemExit) as cm:
+                main([str(f1), str(f2), "--max-entropy", "-1.0"])
+            self.assertEqual(cm.exception.code, 1)
+
 
 if __name__ == "__main__":
     unittest.main()
