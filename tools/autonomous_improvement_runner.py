@@ -117,15 +117,15 @@ def run_tests_check(run_all: bool = False) -> Dict[str, Any]:
     skipped = 0
 
     import re
-    m_pass = re.search(r"(\d+)\s+passed", output)
+    m_pass = re.findall(r"(\d+)\s+passed", output)
     if m_pass:
-        passed = int(m_pass.group(1))
-    m_fail = re.search(r"(\d+)\s+failed", output)
+        passed = int(m_pass[-1])
+    m_fail = re.findall(r"(\d+)\s+failed", output)
     if m_fail:
-        failed = int(m_fail.group(1))
-    m_skip = re.search(r"(\d+)\s+skipped", output)
+        failed = int(m_fail[-1])
+    m_skip = re.findall(r"(\d+)\s+skipped", output)
     if m_skip:
-        skipped = int(m_skip.group(1))
+        skipped = int(m_skip[-1])
 
     return {
         "exit_code": proc.returncode,

@@ -8,6 +8,7 @@ from tools.autonomous_improvement_runner import (
     run_diagnostics_check,
     run_version_alignment_check,
     run_entropy_check,
+    run_tests_check,
     update_memory_state,
     run_loop,
 )
@@ -48,6 +49,24 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         entropy = run_entropy_check()
         self.assertEqual(entropy["status"], "PASS")
         self.assertEqual(len(entropy["top_files"]), 1)
+
+    @patch("subprocess.run")
+    def test_run_tests_check_multi_match_parsing(self, mock_subproc):
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = (
+            "Progress: 50 passed\n"
+            "Progress: 200 passed\n"
+            "965 passed, 22 subtests passed, 2 skipped in 18.62s\n"
+        )
+        mock_proc.stderr = ""
+        mock_subproc.return_value = mock_proc
+
+        res = run_tests_check(run_all=True)
+        self.assertEqual(res["passed"], 965)
+        self.assertEqual(res["skipped"], 2)
+        self.assertEqual(res["failed"], 0)
+        self.assertTrue(res["success"])
 
     def test_update_memory_state_dry_run(self):
         metrics = {
