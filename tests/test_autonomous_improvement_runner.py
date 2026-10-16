@@ -66,7 +66,39 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         self.assertEqual(res["passed"], 965)
         self.assertEqual(res["skipped"], 2)
         self.assertEqual(res["failed"], 0)
+        self.assertEqual(res["errors"], 0)
         self.assertTrue(res["success"])
+
+    @patch("subprocess.run")
+    def test_run_tests_check_error_summary_parsing(self, mock_subproc):
+        mock_proc = MagicMock()
+        mock_proc.returncode = 1
+        mock_proc.stdout = (
+            "Progress: 10 passed\n"
+            "5 passed, 1 failed, 2 errors in 3.12s\n"
+        )
+        mock_proc.stderr = ""
+        mock_subproc.return_value = mock_proc
+
+        res = run_tests_check(run_all=False)
+        self.assertEqual(res["passed"], 5)
+        self.assertEqual(res["failed"], 1)
+        self.assertEqual(res["errors"], 2)
+        self.assertFalse(res["success"])
+
+    @patch("subprocess.run")
+    def test_run_tests_check_unparsed_failure_fallback(self, mock_subproc):
+        mock_proc = MagicMock()
+        mock_proc.returncode = 2
+        mock_proc.stdout = "INTERNALERROR: pytest encountered an unhandled exception\n"
+        mock_proc.stderr = ""
+        mock_subproc.return_value = mock_proc
+
+        res = run_tests_check(run_all=False)
+        self.assertEqual(res["passed"], 0)
+        self.assertEqual(res["failed"], 0)
+        self.assertEqual(res["errors"], 1)
+        self.assertFalse(res["success"])
 
     def test_update_memory_state_dry_run(self):
         metrics = {
@@ -91,6 +123,7 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         self.assertFalse(result["persisted"])
         self.assertIn("new_state", result)
         self.assertEqual(result["new_state"]["test_baseline"]["passed"], 787)
+        self.assertEqual(result["new_state"]["test_baseline"]["errors"], 0)
         self.assertEqual(result["new_state"]["index_baseline"]["total_files"], 150)
         self.assertEqual(result["new_state"]["entropy_baseline"]["avg_entropy"], 42.0)
         self.assertEqual(result["new_state"]["index_baseline"]["test_to_code_ratio"], 0.333)

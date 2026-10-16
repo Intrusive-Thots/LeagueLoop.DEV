@@ -115,6 +115,7 @@ def run_tests_check(run_all: bool = False) -> Dict[str, Any]:
     passed = 0
     failed = 0
     skipped = 0
+    errors = 0
 
     import re
     m_pass = re.findall(r"(\d+)\s+passed", output)
@@ -126,6 +127,13 @@ def run_tests_check(run_all: bool = False) -> Dict[str, Any]:
     m_skip = re.findall(r"(\d+)\s+skipped", output)
     if m_skip:
         skipped = int(m_skip[-1])
+    m_err = re.findall(r"(\d+)\s+error(?:s)?", output)
+    if m_err:
+        errors = int(m_err[-1])
+
+    # If the process exited non-zero but neither failed nor errors were parsed, ensure error count is at least 1
+    if proc.returncode != 0 and failed == 0 and errors == 0:
+        errors = 1
 
     return {
         "run_all": run_all,
@@ -135,6 +143,7 @@ def run_tests_check(run_all: bool = False) -> Dict[str, Any]:
         "passed": passed,
         "failed": failed,
         "skipped": skipped,
+        "errors": errors,
         "raw_output": output[-500:] if len(output) > 500 else output,
     }
 
@@ -209,7 +218,7 @@ def update_memory_state(
             "failed": test_results.get("failed", 0),
             "skipped": test_results.get("skipped", 0),
             "last_targeted_passed": last_targeted,
-            "errors": 0,
+            "errors": test_results.get("errors", 0),
         },
         "index_baseline": {
             "total_files": metrics.get("total_py_files", 0),
@@ -231,10 +240,12 @@ def update_memory_state(
         },
     }
 
+    err_count = test_results.get("errors", 0)
+    err_str = f", {err_count} errors" if err_count > 0 else ""
     if run_all:
-        test_action_line = f"Test baseline: {new_passed} full suite passed ({delta_passed:+d}), {test_results.get('failed', 0)} failed ({test_results.get('skipped', 0)} skipped) in {test_results.get('duration_seconds', 0)}s."
+        test_action_line = f"Test baseline: {new_passed} full suite passed ({delta_passed:+d}), {test_results.get('failed', 0)} failed ({test_results.get('skipped', 0)} skipped{err_str}) in {test_results.get('duration_seconds', 0)}s."
     else:
-        test_action_line = f"Test baseline: {new_passed} full suite passed (targeted suite: {last_targeted} passed, {test_results.get('failed', 0)} failed in {test_results.get('duration_seconds', 0)}s)."
+        test_action_line = f"Test baseline: {new_passed} full suite passed (targeted suite: {last_targeted} passed, {test_results.get('failed', 0)} failed{err_str} in {test_results.get('duration_seconds', 0)}s)."
 
     episodic_entry = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -562,11 +573,13 @@ def run_loop(
     top_offender = Path(top_files[0]["file"]).name if top_files else "none"
 
     storage_an = diag.get("storage_analysis", {})
+    err_cnt = tests.get("errors", 0)
+    err_tag = f", errors={err_cnt}" if err_cnt > 0 else ""
     action_details = [
         "Verified runtime logs (error.log, crash.log, session.jsonl, debug.log) & debug screenshots via leagueloop_diagnostics (healthy status confirmed).",
         f"Version alignment protocol: {'[ALIGNED]' if ver_check.get('aligned') else '[MISALIGNED]'} ({ver_check.get('message')}).",
         f"Executed code entropy audit: status={entropy.get('status')}, avg_entropy={entropy.get('avg_entropy', 0)}, bare_excepts={entropy.get('bare_excepts_total', 0)}, top_offender={top_offender}.",
-        f"Executed test runner (duration={tests.get('duration_seconds')}s, passed={tests.get('passed')}, failed={tests.get('failed')}).",
+        f"Executed test runner (duration={tests.get('duration_seconds')}s, passed={tests.get('passed')}, failed={tests.get('failed')}{err_tag}).",
         f"Indexed codebase metrics ({metrics.get('total_py_files')} python files, {metrics.get('total_py_lines')} lines; test-to-code ratio: {metrics.get('test_to_code_ratio', 0.0)}).",
         f"Storage footprint monitored: total={storage_an.get('total_mb', 0.0)}MB (status={storage_an.get('status', 'OPTIMAL')}).",
         "Synchronized loop state, episodic, semantic, procedural, and optimization memory baselines.",
@@ -676,11 +689,13 @@ def main(argv=None):
     print(f"Code Entropy: [{entropy_info.get('status', 'N/A')}] (avg={entropy_info.get('avg_entropy', 0)}, bare_excepts={entropy_info.get('bare_excepts_total', 0)}{top_msg})")
     test_mode = "Full suite" if result["tests"].get("run_all") else "Targeted"
     baseline_passed = result.get("memory", {}).get("new_state", {}).get("test_baseline", {}).get("passed", result["tests"]["passed"])
-    print(f"Test Suite: [{test_mode}] {result['tests']['passed']} passed, {result['tests']['failed']} failed ({result['tests'].get('skipped', 0)} skipped) in {result['tests']['duration_seconds']}s (baseline: {baseline_passed})")
+    err_cnt = result["tests"].get("errors", 0)
+    err_msg = f", {err_cnt} errors" if err_cnt > 0 else ""
+    print(f"Test Suite: [{test_mode}] {result['tests']['passed']} passed, {result['tests']['failed']} failed ({result['tests'].get('skipped', 0)} skipped{err_msg}) in {result['tests']['duration_seconds']}s (baseline: {baseline_passed})")
     print(f"Memory Sync: {'Persisted' if result['memory']['persisted'] else 'Dry Run (Unsaved)'}")
     print(f"Outcome: {result['memory']['episodic_entry']['outcome']}")
 
-    sys.exit(0 if result["diagnostics"].get("healthy") and result["tests"].get("success") else 1)
+    sys.exit(0 if result["diagnostics"].get("healthy") and result["tests"].get("success") and result["tests"].get("errors", 0) == 0 else 1)
 
 
 if __name__ == "__main__":
