@@ -1,7 +1,7 @@
 import json
 import unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, mock_open
 
 from tools.autonomous_improvement_runner import (
     measure_codebase_metrics,
@@ -98,6 +98,30 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         self.assertEqual(result["new_state"]["storage_baseline"]["status"], "OPTIMAL")
         self.assertEqual(len(result["semantic_learnings"]), 1)
         self.assertEqual(len(result["procedural_methods"]), 1)
+
+    def test_update_memory_state_targeted_preserves_baseline(self):
+        metrics = {"total_py_files": 150, "total_py_lines": 45000, "test_to_code_ratio": 0.33}
+        tests = {"run_all": False, "passed": 11, "failed": 0, "skipped": 0, "duration_seconds": 0.8}
+        
+        with patch("pathlib.Path.exists", return_value=True), \
+             patch("builtins.open", mock_open(read_data='{"run_number": 146, "test_baseline": {"passed": 966, "failed": 0, "errors": 0}}')):
+            result = update_memory_state(metrics, tests, dry_run=True)
+            
+        self.assertEqual(result["new_state"]["test_baseline"]["passed"], 966)
+        self.assertEqual(result["new_state"]["test_baseline"]["last_targeted_passed"], 11)
+        self.assertEqual(result["new_state"]["test_baseline"]["skipped"], 0)
+
+    def test_update_memory_state_full_suite_updates_baseline(self):
+        metrics = {"total_py_files": 150, "total_py_lines": 45000, "test_to_code_ratio": 0.33}
+        tests = {"run_all": True, "passed": 970, "failed": 0, "skipped": 2, "duration_seconds": 18.2}
+        
+        with patch("pathlib.Path.exists", return_value=True), \
+             patch("builtins.open", mock_open(read_data='{"run_number": 146, "test_baseline": {"passed": 966, "failed": 0, "errors": 0}}')):
+            result = update_memory_state(metrics, tests, dry_run=True)
+            
+        self.assertEqual(result["new_state"]["test_baseline"]["passed"], 970)
+        self.assertEqual(result["new_state"]["test_baseline"]["last_targeted_passed"], 0)
+        self.assertEqual(result["new_state"]["test_baseline"]["skipped"], 2)
 
     @patch("tools.autonomous_improvement_runner.run_diagnostics_check")
     @patch("tools.autonomous_improvement_runner.run_entropy_check")

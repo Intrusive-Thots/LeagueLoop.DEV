@@ -925,5 +925,16 @@
       "status": "Optimized implementation baseline"
     },
     "impact": "Uses re.findall to reliably extract the final summary counts of passed, failed, and skipped tests across multi-line progress output."
+  },
+  {
+    "timestamp": "2026-10-16T23:26:52.446709+00:00",
+    "feature": "Targeted Test Suite Baseline Preservation",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Prevents targeted test runs from clobbering full suite baseline (966) in loop_state.json, recording last_targeted_passed and avoiding false negative deltas."
   }
 ]

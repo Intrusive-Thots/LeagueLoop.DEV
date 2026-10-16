@@ -128,6 +128,7 @@ def run_tests_check(run_all: bool = False) -> Dict[str, Any]:
         skipped = int(m_skip[-1])
 
     return {
+        "run_all": run_all,
         "exit_code": proc.returncode,
         "success": proc.returncode == 0,
         "duration_seconds": round(duration, 2),
@@ -182,7 +183,16 @@ def update_memory_state(
     prev_lines = current_state.get("index_baseline", {}).get("total_py_lines", 0)
     prev_entropy = current_state.get("entropy_baseline", {}).get("avg_entropy", 0.0)
 
-    delta_passed = test_results.get("passed", 0) - prev_passed
+    run_all = test_results.get("run_all", True)
+    if run_all:
+        new_passed = test_results.get("passed", 0)
+        delta_passed = new_passed - prev_passed
+        last_targeted = 0
+    else:
+        last_targeted = test_results.get("passed", 0)
+        new_passed = prev_passed if prev_passed >= last_targeted else last_targeted
+        delta_passed = 0
+
     delta_files = metrics.get("total_py_files", 0) - prev_files
     delta_lines = metrics.get("total_py_lines", 0) - prev_lines
 
@@ -195,8 +205,10 @@ def update_memory_state(
         "run_number": next_run,
         "last_run": datetime.now(timezone.utc).isoformat(),
         "test_baseline": {
-            "passed": test_results.get("passed", 0),
+            "passed": new_passed,
             "failed": test_results.get("failed", 0),
+            "skipped": test_results.get("skipped", 0),
+            "last_targeted_passed": last_targeted,
             "errors": 0,
         },
         "index_baseline": {
@@ -219,6 +231,11 @@ def update_memory_state(
         },
     }
 
+    if run_all:
+        test_action_line = f"Test baseline: {new_passed} full suite passed ({delta_passed:+d}), {test_results.get('failed', 0)} failed ({test_results.get('skipped', 0)} skipped) in {test_results.get('duration_seconds', 0)}s."
+    else:
+        test_action_line = f"Test baseline: {new_passed} full suite passed (targeted suite: {last_targeted} passed, {test_results.get('failed', 0)} failed in {test_results.get('duration_seconds', 0)}s)."
+
     episodic_entry = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "task": f"{task_name} #{next_run}",
@@ -227,7 +244,7 @@ def update_memory_state(
             "Executed automated health diagnostics verification across error.log, crash.log, and debug_screenshots.",
             "Ran fast targeted test runner with AST dependency mapping to verify regression-free state.",
             f"Codebase metrics: {metrics.get('total_py_files', 0)} files ({delta_files:+d}), {metrics.get('total_py_lines', 0)} lines ({delta_lines:+d}).",
-            f"Test baseline: {test_results.get('passed', 0)} passed ({delta_passed:+d}), {test_results.get('failed', 0)} failed.",
+            test_action_line,
         ],
         "outcome": f"Success. Loop #{next_run} verified zero regressions and updated capability baseline.",
     }
@@ -243,7 +260,7 @@ def update_memory_state(
                 "avg_entropy": prev_entropy,
             },
             "after_metrics": {
-                "test_passed": test_results.get("passed", 0),
+                "test_passed": new_passed,
                 "files": metrics.get("total_py_files", 0),
                 "lines": metrics.get("total_py_lines", 0),
                 "avg_entropy": curr_entropy,
@@ -476,6 +493,11 @@ def run_loop(
             "description": "Pruning rotated log files (.1, .2) while strictly preserving active diagnostics, paired with automatic rolling screenshot retention limits, prevents multi-gigabyte disk exhaustion on production client machines.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Targeted Test Suite Baseline Preservation",
+            "description": "Distinguishing targeted regression tests (<2s) from full-suite runs (~15-18s) in memory baselines prevents test count oscillations in loop_state.json and preserves the true coverage baseline while maintaining fast iteration velocity.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
@@ -640,7 +662,9 @@ def main(argv=None):
     top_files = entropy_info.get("top_files", [])
     top_msg = f" | top: {[Path(f['file']).name for f in top_files[:3]]}" if top_files else ""
     print(f"Code Entropy: [{entropy_info.get('status', 'N/A')}] (avg={entropy_info.get('avg_entropy', 0)}, bare_excepts={entropy_info.get('bare_excepts_total', 0)}{top_msg})")
-    print(f"Test Suite: {result['tests']['passed']} passed, {result['tests']['failed']} failed in {result['tests']['duration_seconds']}s")
+    test_mode = "Full suite" if result["tests"].get("run_all") else "Targeted"
+    baseline_passed = result.get("memory", {}).get("new_state", {}).get("test_baseline", {}).get("passed", result["tests"]["passed"])
+    print(f"Test Suite: [{test_mode}] {result['tests']['passed']} passed, {result['tests']['failed']} failed ({result['tests'].get('skipped', 0)} skipped) in {result['tests']['duration_seconds']}s (baseline: {baseline_passed})")
     print(f"Memory Sync: {'Persisted' if result['memory']['persisted'] else 'Dry Run (Unsaved)'}")
     print(f"Outcome: {result['memory']['episodic_entry']['outcome']}")
 
