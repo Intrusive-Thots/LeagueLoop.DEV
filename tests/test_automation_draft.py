@@ -220,6 +220,14 @@ class PickTests(unittest.TestCase):
         self.assertIsInstance(body["championId"], int)
         self.assertEqual(body["championId"], AHRI)
 
+    def test_completed_action_is_not_acted_upon(self):
+        """Completed actions must not be PATCHed again (prevents HTTP 405 error)."""
+        eng = engine(**{PRIORITY_LIST: [AHRI], AUTO_HOVER: True})
+        sess = session("pick")
+        sess["actions"][0][0]["completed"] = True
+        calls = run_draft(eng, sess)
+        self.assertEqual(calls, [])
+
 
 if __name__ == "__main__":
     unittest.main()

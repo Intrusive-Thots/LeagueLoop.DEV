@@ -242,13 +242,18 @@ class TestLootServiceClaiming(unittest.TestCase):
         self.assertTrue(self.service.is_ready())
 
         # 5. Ready endpoint returns 405 (method not allowed / modern client)
+        LootService._ready_endpoint_available = True
         service2 = LootService(self.mock_lcu)
         self.mock_lcu.request.return_value = DummyResponse(405, {})
         self.assertTrue(service2.is_ready())
-        self.assertFalse(service2._ready_endpoint_available)
+        self.assertFalse(LootService._ready_endpoint_available)
         # Subsequent call should return True without querying LCU again
         self.mock_lcu.request.reset_mock()
         self.assertTrue(service2.is_ready())
+        self.mock_lcu.request.assert_not_called()
+        # Any new LootService instance also avoids calling LCU
+        service3 = LootService(self.mock_lcu)
+        self.assertTrue(service3.is_ready())
         self.mock_lcu.request.assert_not_called()
 
     def test_fetch_loot_fallback_to_player_loot_map(self):

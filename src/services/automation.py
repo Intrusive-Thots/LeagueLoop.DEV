@@ -1385,7 +1385,11 @@ class AutomationEngine:
         my_action = None
         for row in actions:
             for action in row:
-                if action.get("actorCellId") == me.get("cellId") and action.get("isInProgress"):
+                if (
+                    action.get("actorCellId") == me.get("cellId")
+                    and action.get("isInProgress")
+                    and not action.get("completed")
+                ):
                     my_action = action
                     break
             if my_action:

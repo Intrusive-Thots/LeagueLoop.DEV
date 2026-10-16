@@ -144,11 +144,12 @@ class LootService:
       - request(method, endpoint, data=None, silent=False) -> Response | None
     """
 
+    _ready_endpoint_available: bool = True
+
     def __init__(self, lcu: Any, log: Optional[LogFn] = None) -> None:
         self.lcu = lcu
         self._log = log or (lambda m: Logger.info("Loot", m))
         self._recipe_cache: Dict[str, List[Dict[str, Any]]] = {}
-        self._ready_endpoint_available: bool = True
 
     def log(self, msg: str) -> None:
         self._log(msg)
@@ -223,7 +224,7 @@ class LootService:
 
     def is_ready(self) -> bool:
         """Check if LCU loot subsystem is ready (false while client is booting/loading)."""
-        if not getattr(self, "_ready_endpoint_available", True):
+        if not LootService._ready_endpoint_available:
             return True
         if not getattr(self.lcu, "is_connected", False):
             if hasattr(self.lcu, "connect"):
@@ -233,7 +234,7 @@ class LootService:
             return False
         if r.status_code in (404, 405):
             # Endpoint missing or method not allowed in this client version: bypass
-            self._ready_endpoint_available = False
+            LootService._ready_endpoint_available = False
             return True
         if r.status_code != 200:
             return False
