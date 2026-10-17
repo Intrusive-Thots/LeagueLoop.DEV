@@ -63,7 +63,7 @@ def apply_acrylic_blur(tk_window, tint_color: int = 0x30000000, fallback_blur: b
         True if the effect was applied successfully.
     """
     if platform.system() != "Windows":
-        Logger.debug("SYS", "Acrylic blur skipped — not Windows")
+        Logger.debug("SYS", "Acrylic blur skipped - not Windows")
         return False
 
     try:

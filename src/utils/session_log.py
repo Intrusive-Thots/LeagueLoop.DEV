@@ -230,12 +230,12 @@ def session_banner(
         if services:
             info["services"] = ", ".join(services)
         elif container is None:
-            info["services"] = "(none — running without services)"
+            info["services"] = "(none - running without services)"
 
         Logger.info(TAG, _format_banner_box(info), **{"environment": info})
 
         for problem in Logger.handler_errors():
-            Logger.warning(TAG, f"Log file unavailable — {problem}")
+            Logger.warning(TAG, f"Log file unavailable - {problem}")
 
         _log_container_diagnostics(container)
     except Exception as exc:  # never block startup

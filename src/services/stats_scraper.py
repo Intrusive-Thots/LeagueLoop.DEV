@@ -152,7 +152,7 @@ class StatsScraper:
             return
 
         if not _HAS_BS4:
-            Logger.debug("StatsScraper", "bs4 not installed — using baseline win rates.")
+            Logger.debug("StatsScraper", "bs4 not installed - using baseline win rates.")
             return
 
         self._executor.submit(self._scrape_winrates, mode)
@@ -205,7 +205,7 @@ class StatsScraper:
                 self._cache_timestamps[mode] = time.time()
                 Logger.info("StatsScraper", f"Scraped {len(scraped)} live win rates for {mode}")
             else:
-                Logger.debug("StatsScraper", f"Scrape yielded too few results ({len(scraped)}) for {mode} — keeping baseline")
+                Logger.debug("StatsScraper", f"Scrape yielded too few results ({len(scraped)}) for {mode} - keeping baseline")
 
         except requests.RequestException as e:
             Logger.debug("StatsScraper", f"Network error during scrape: {e}")

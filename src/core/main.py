@@ -318,7 +318,7 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
             self._on_close()
 
     def _on_close(self):
-        Logger.info("SYS", "Exit requested — shutting down...")
+        Logger.info("SYS", "Exit requested - shutting down...")
         self.running = False
         self._stop_event.set()
         try:

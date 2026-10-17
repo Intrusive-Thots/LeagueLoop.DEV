@@ -1403,7 +1403,7 @@ class SidebarWidget(ctk.CTkFrame):
                     except Exception as exc:
                         Logger.debug("AppSidebar", f"DebugTracker queue start hook suppressed: {exc}", exc=exc)
                 else:
-                    self.update_action_log("Matchmaking failed — check client.")
+                    self.update_action_log("Matchmaking failed - check client.")
                     try:
                         from services.debug_tracker import DebugTracker
                         DebugTracker.get_instance(self.config).record_action(

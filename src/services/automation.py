@@ -620,7 +620,7 @@ class AutomationEngine:
         try:
             resp = self.lcu.request(method, endpoint, data)
         except Exception as exc:
-            Logger.error("Automation", f"{label} — request failed", exc=exc,
+            Logger.error("Automation", f"{label} - request failed", exc=exc,
                          endpoint=endpoint, **detail)
             self._log(f"{label} failed: {exc}")
             return False
@@ -628,7 +628,7 @@ class AutomationEngine:
         if resp is None:
             Logger.warning(
                 "Automation",
-                f"{label} — no response from the League Client "
+                f"{label} - no response from the League Client "
                 f"(not connected, or the request was queued)",
                 endpoint=endpoint, **detail,
             )
@@ -643,17 +643,17 @@ class AutomationEngine:
             except Exception as exc:
                 Logger.debug("Automation", "_act suppressed an error", exc=exc)
             if endpoint == "/lol-matchmaking/v1/ready-check/accept" and code == 404:
-                Logger.debug("Automation", f"{label} — queue was already aborted or concluded (HTTP 404)")
+                Logger.debug("Automation", f"{label} - queue was already aborted or concluded (HTTP 404)")
                 return False
             if "bench/swap" in endpoint and code == 500:
-                Logger.info("Automation", f"{label} — bench champion no longer available (HTTP 500)")
+                Logger.info("Automation", f"{label} - bench champion no longer available (HTTP 500)")
                 return False
             if "/lol-champ-select/v1/session/actions/" in endpoint and code == 405:
-                Logger.debug("Automation", f"{label} — champ select action not yet open to modifications (HTTP 405 transient)")
+                Logger.debug("Automation", f"{label} - champ select action not yet open to modifications (HTTP 405 transient)")
                 return False
             Logger.error(
                 "Automation",
-                f"{label} — the client refused it (HTTP {code}) {body}".strip(),
+                f"{label} - the client refused it (HTTP {code}) {body}".strip(),
                 endpoint=endpoint, status=code, **detail,
             )
             self._log(f"{label} was refused by the client (HTTP {code}).")

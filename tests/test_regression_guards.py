@@ -335,3 +335,19 @@ def test_account_switcher_logging_hygiene_invariants():
         assert "â€”" not in msg
         assert "—" not in msg
 
+
+def test_logger_no_em_dashes_in_log_statements():
+    """LOG-002: Ensure no Logger.<level>, update_action_log, or _log calls in src/ contain literal em dashes."""
+    offenders = []
+    log_patterns = ("Logger.", "update_action_log(", "self._log(")
+    for path in _python_files():
+        try:
+            content = path.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        for line_no, line in enumerate(content.splitlines(), 1):
+            if "—" in line and any(pattern in line for pattern in log_patterns):
+                offenders.append(f"{path.name}:{line_no}: {line.strip()}")
+    assert not offenders, f"Logging calls with literal em dashes found:\n" + "\n".join(offenders)
+
+
