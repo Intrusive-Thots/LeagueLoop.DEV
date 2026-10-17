@@ -7,91 +7,91 @@
   {
     "concept": "Diagnostic Crash Distinguisher",
     "description": "faulthandler writes a session boundary header on every process startup and shutdown. Distinguishing true crashes from clean shutdowns requires inspecting session content for fatal keywords (fatal exception, traceback, thread 0x, access violation, segmentation fault).",
-    "learned_at": "2026-10-17T01:18:22.978700+00:00"
+    "learned_at": "2026-10-17T01:35:14.563291+00:00"
   },
   {
     "concept": "AST Module Test Mapping",
     "description": "Using an AST dependency graph over test imports allows mapping modified source files directly to relevant test suites, executing targeted regressions in <2s instead of running entire test suites (>15s).",
-    "learned_at": "2026-10-17T01:18:22.978700+00:00"
+    "learned_at": "2026-10-17T01:35:14.563291+00:00"
   },
   {
     "concept": "Positional and Target CLI Dispatch",
     "description": "Permitting both positional file/dir arguments and explicit flag options in developer tools prevents shell friction and supports flexible invocation across IDEs and scripts.",
-    "learned_at": "2026-10-17T01:18:22.978700+00:00"
+    "learned_at": "2026-10-17T01:35:14.563291+00:00"
   },
   {
     "concept": "Bounded Log Tail Streaming",
     "description": "Using collections.deque(maxlen=N) instead of reading full multi-megabyte log files into Python lists eliminates massive memory heap allocations and garbage collection overhead during rapid diagnostic iterations.",
-    "learned_at": "2026-10-17T01:18:22.978700+00:00"
+    "learned_at": "2026-10-17T01:35:14.563291+00:00"
   },
   {
     "concept": "Rotated Log Rollover Fallback",
     "description": "Checking error.log.1 when error.log has fewer lines than the requested inspection window ensures critical errors that triggered process restart and log rollover are never missed.",
-    "learned_at": "2026-10-17T01:18:22.978700+00:00"
+    "learned_at": "2026-10-17T01:35:14.563291+00:00"
   },
   {
     "concept": "Granular Metric & Entropy Baseline Tracking",
     "description": "Decomposing index metrics into per-directory breakdowns (src, tests, tools) and linking codebase entropy deltas into loop_state.json enables autonomous detection of code bloat and quality drift across iterative development cycles.",
-    "learned_at": "2026-10-17T01:18:22.978700+00:00"
+    "learned_at": "2026-10-17T01:35:14.563291+00:00"
   },
   {
     "concept": "Line-by-Line Streaming Crash Inspection",
     "description": "Streaming crash.log line-by-line while tracking session headers avoids reading the entire multi-megabyte log and loading giant regex splits into memory, keeping diagnostic overhead under 0.2s.",
-    "learned_at": "2026-10-17T01:18:22.978700+00:00"
+    "learned_at": "2026-10-17T01:35:14.563291+00:00"
   },
   {
     "concept": "Debug Log Execution Context Inspection",
     "description": "Reading the tail of %LOCALAPPDATA%\\LeagueLoop\\logs\\debug.log provides real-time thread activity, rate throttle triggers, and LCU event latency tracking without relying solely on error/crash thresholds.",
-    "learned_at": "2026-10-17T01:18:22.978700+00:00"
+    "learned_at": "2026-10-17T01:35:14.563291+00:00"
   },
   {
     "concept": "Screenshot Event Categorization and Fallback Capture",
     "description": "Classifying screenshot filenames into event categories (button clicks, tab transitions, champion hover/locks, game phase changes) and providing automatic desktop fallback capture inspection ensures immediate visual UI state auditing compliant with the LeagueLoop.DEV protocol.",
-    "learned_at": "2026-10-17T01:18:22.978700+00:00"
+    "learned_at": "2026-10-17T01:35:14.563291+00:00"
   },
   {
     "concept": "Screenshot Integrity and Age Freshness Auditing",
     "description": "Inspecting capture byte-size (flagging 0-byte corruptions) and computing delta timestamps (human-readable age formatting, staleness thresholds) ensures broken or orphaned UI captures immediately surface in automated health checks.",
-    "learned_at": "2026-10-17T01:18:22.978700+00:00"
+    "learned_at": "2026-10-17T01:35:14.563291+00:00"
   },
   {
     "concept": "Session WebSocket Latency and Network Stability Telemetry",
     "description": "Extracting numeric WebSocket latency stats, connection drop counts, and network throttle backoffs from session.jsonl enables automated client responsiveness tracking and network flap detection.",
-    "learned_at": "2026-10-17T01:18:22.978700+00:00"
+    "learned_at": "2026-10-17T01:35:14.563291+00:00"
   },
   {
     "concept": "Multi-Account Saved Session Vault Auditing",
     "description": "Auditing account session manifests (session.json) and private YAML structures in %LOCALAPPDATA%\\LeagueLoop\\sessions verifies credential and token integrity before account switching operations execute, preventing silent login crashes.",
-    "learned_at": "2026-10-17T01:18:22.978700+00:00"
+    "learned_at": "2026-10-17T01:35:14.563291+00:00"
   },
   {
     "concept": "Runtime Storage Footprint and Log Rotation Quota Auditing",
     "description": "Auditing active vs rotated telemetry logs, debug screenshots, and session vaults against configurable MB thresholds guards production endpoints against silent disk exhaustion.",
-    "learned_at": "2026-10-17T01:18:22.978700+00:00"
+    "learned_at": "2026-10-17T01:35:14.563291+00:00"
   },
   {
     "concept": "Safe Automated Storage Pruning and Rolling Retention Enforcement",
     "description": "Pruning rotated log files (.1, .2) while strictly preserving active diagnostics, paired with automatic rolling screenshot retention limits, prevents multi-gigabyte disk exhaustion on production client machines.",
-    "learned_at": "2026-10-17T01:18:22.978700+00:00"
+    "learned_at": "2026-10-17T01:35:14.563291+00:00"
   },
   {
     "concept": "Installer and Version Synchronization Invariant",
     "description": "Enforcing automatic synchronization between src/core/version.py (__version__) and installer.iss (AppVersion and dot-separated VersionInfoVersion) eliminates installer compilation drift and guarantees PR version protocol compliance.",
-    "learned_at": "2026-10-17T01:18:22.978700+00:00"
+    "learned_at": "2026-10-17T01:35:14.563291+00:00"
   },
   {
     "concept": "Targeted Test Suite Baseline Preservation",
     "description": "Distinguishing targeted regression tests (<2s) from full-suite runs (~15-18s) in memory baselines prevents test count oscillations in loop_state.json and preserves the true coverage baseline while maintaining fast iteration velocity.",
-    "learned_at": "2026-10-17T01:18:22.978700+00:00"
+    "learned_at": "2026-10-17T01:35:14.563291+00:00"
   },
   {
     "concept": "Multi-Target Positional Code Entropy Audit",
     "description": "Allowing arbitrary positional files and directories (nargs='*') in code_entropy_analyzer with multi-file aggregation, top-N sorting, and max-entropy threshold enforcement allows developers and automated scripts to audit subsets of components without encountering unrecognized argument CLI errors.",
-    "learned_at": "2026-10-17T01:18:22.978700+00:00"
+    "learned_at": "2026-10-17T01:35:14.563291+00:00"
   },
   {
     "concept": "Pytest Node ID and Flag Passthrough Dispatch",
     "description": "Supporting granular pytest node selectors (path.py::TestClass::test_method) and arbitrary test flags (-k, -m, -s, -x) across fast_test_runner and autonomous_improvement_runner enables sub-second single-test execution and flexible test filtering without falling back to full-suite runs.",
-    "learned_at": "2026-10-17T01:18:22.978700+00:00"
+    "learned_at": "2026-10-17T01:35:14.563291+00:00"
   }
 ]

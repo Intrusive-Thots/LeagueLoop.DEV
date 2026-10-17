@@ -1,12 +1,12 @@
 {
-  "run_number": 157,
-  "last_run": "2026-10-17T01:18:22.979701+00:00",
+  "run_number": 158,
+  "last_run": "2026-10-17T01:35:14.563291+00:00",
   "test_baseline": {
     "passed": 979,
     "failed": 0,
     "skipped": 0,
     "warnings": 0,
-    "last_targeted_passed": 0,
+    "last_targeted_passed": 78,
     "errors": 0
   },
   "index_baseline": {
