@@ -168,10 +168,12 @@ class RiotClientAPI:
                 if not silent:
                     Logger.debug("RiotClientAPI", f"RES <- {response.status_code} {endpoint}")
                 return response
-            except requests.exceptions.ConnectionError:
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
                 if attempt < max_attempts - 1:
                     time.sleep(0.2)
                     continue
+                if not silent:
+                    Logger.warning("RiotClientAPI", f"Request failed ({type(exc).__name__}): {exc}")
                 self.is_connected = False
                 return None
             except Exception as e:

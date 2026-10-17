@@ -13,6 +13,7 @@ from services.client_state_service import ClientStateService
 from core.state import StateManager, ConnectionStateEnum, GameflowPhase
 from core.events import EventBus
 from utils.client_detector import scan_clients
+import requests
 
 
 class TestWebSocketListenerLifecycle(unittest.TestCase):
@@ -211,6 +212,45 @@ class TestRiotClientAPIPerformance(unittest.TestCase):
 
         _, kwargs = api.session.request.call_args
         self.assertEqual(kwargs.get("timeout"), 1.5)
+
+    def test_request_retries_on_timeout_and_succeeds(self):
+        """Test that RiotClientAPI.request retries on Timeout and returns successful response."""
+        api = RiotClientAPI()
+        api.is_connected = True
+        api.port = "5555"
+        api.base_url = "https://127.0.0.1:5555"
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        api.session = MagicMock()
+        api.session.request.side_effect = [
+            requests.exceptions.ReadTimeout("Read timed out"),
+            mock_resp,
+        ]
+
+        with patch("time.sleep"):
+            res = api.request("GET", "/product-launcher/v1/products/league_of_legends/patchlines/live", silent=True)
+
+        self.assertEqual(res, mock_resp)
+        self.assertEqual(api.session.request.call_count, 2)
+        self.assertTrue(api.is_connected)
+
+    def test_request_exhausts_timeouts_gracefully(self):
+        """Test that RiotClientAPI.request gracefully exhausts retries on continuous Timeout."""
+        api = RiotClientAPI()
+        api.is_connected = True
+        api.port = "5555"
+        api.base_url = "https://127.0.0.1:5555"
+
+        api.session = MagicMock()
+        api.session.request.side_effect = requests.exceptions.ConnectTimeout("Connect timed out")
+
+        with patch("time.sleep"):
+            res = api.request("GET", "/rso-auth/v1/session", silent=False)
+
+        self.assertIsNone(res)
+        self.assertEqual(api.session.request.call_count, 3)
+        self.assertFalse(api.is_connected)
 
 
 class TestClientStateInGameSynchronization(unittest.TestCase):

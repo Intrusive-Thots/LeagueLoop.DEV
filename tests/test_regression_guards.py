@@ -231,3 +231,71 @@ def test_lcu_http_5xx_sliding_window_threshold_invariants():
     assert tel["http_status_anomaly_active"] is True
     assert tel["http_status_anomaly_count"] == 1
     assert f"HTTP 5xx count {thresh} reached threshold" in tel["last_http_status_anomaly"]["reason"]
+
+
+def test_riot_client_api_timeout_retry_invariants():
+    """RCA-001: RiotClientAPI must retry transient timeouts and not raise unhandled errors."""
+    from unittest.mock import MagicMock, patch
+    import requests
+    from services.account_manager import RiotClientAPI
+
+    api = RiotClientAPI()
+    api.is_connected = True
+    api.port = "5555"
+    api.base_url = "https://127.0.0.1:5555"
+
+    # 1. Successful retry on ReadTimeout
+    mock_ok = MagicMock()
+    mock_ok.status_code = 200
+    api.session = MagicMock()
+    api.session.request.side_effect = [requests.exceptions.ReadTimeout("Timeout"), mock_ok]
+    with patch("time.sleep"):
+        res = api.request("GET", "/test", silent=True)
+    assert res == mock_ok
+    assert api.session.request.call_count == 2
+    assert api.is_connected is True
+
+    # 2. Graceful exhaustion on continuous timeouts
+    api_exhaust = RiotClientAPI()
+    api_exhaust.is_connected = True
+    api_exhaust.port = "5555"
+    api_exhaust.base_url = "https://127.0.0.1:5555"
+    api_exhaust.session = MagicMock()
+    api_exhaust.session.request.side_effect = requests.exceptions.ConnectTimeout("Connect timed out")
+    with patch("time.sleep"):
+        res = api_exhaust.request("GET", "/test", silent=False)
+    assert res is None
+    assert api_exhaust.session.request.call_count == 3
+    assert api_exhaust.is_connected is False
+
+
+def test_account_switcher_logging_hygiene_invariants():
+    """ACC-001: AccountSwitcher._finish must use ASCII hyphens and treat SESSION_EXPIRED as warning."""
+    from unittest.mock import MagicMock, patch
+    from services.accounts.results import SwitchOutcome, SwitchPhase, SwitchResult
+    from services.accounts.switcher import AccountSwitcher
+
+    switcher = AccountSwitcher(
+        session=MagicMock(),
+        accounts_provider=lambda: [{"username": "test_user"}],
+        vault=MagicMock(),
+    )
+
+    expired_result = SwitchResult(
+        SwitchOutcome.SESSION_EXPIRED,
+        SwitchPhase.VERIFYING,
+        0,
+        "test_user",
+        "The Riot Client did not accept the saved session.",
+    )
+
+    with patch("utils.logger.Logger.warning") as mock_warn, patch("utils.logger.Logger.error") as mock_err:
+        switcher._finish(expired_result)
+        mock_warn.assert_called_once()
+        mock_err.assert_not_called()
+        args, _ = mock_warn.call_args
+        msg = args[1]
+        assert "switch failed for test_user: SESSION_EXPIRED - The Riot Client did not accept" in msg
+        assert "â€”" not in msg
+        assert "—" not in msg
+

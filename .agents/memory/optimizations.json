@@ -1382,5 +1382,16 @@
       "status": "Optimized implementation baseline"
     },
     "impact": "Prevents single 500/503 errors from falsely tripping HTTP status anomaly alerts by strictly checking the configured count threshold (default 5)"
+  },
+  {
+    "timestamp": "2026-10-17T05:27:21.988646+00:00",
+    "feature": "RiotClientAPI Timeout Resilience and AccountSwitcher Logging Hygiene",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Adds automatic retry and graceful backoff for ReadTimeout/ConnectTimeout in RiotClientAPI, eliminates unicode em dash console mojibake in AccountSwitcher logging, treats recoverable session expiration as warning, and expands test baseline to 999 passing tests."
   }
 ]

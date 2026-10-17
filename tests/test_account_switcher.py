@@ -217,6 +217,45 @@ class TestAccountSwitcherUnit(unittest.TestCase):
         self.assertEqual(res.outcome, SwitchOutcome.SESSION_EXPIRED)
         self.assertEqual(res.phase, SwitchPhase.VERIFYING)
 
+    def test_finish_logging_session_expired_as_warning(self):
+        """SESSION_EXPIRED must log via Logger.warning with clean ASCII hyphen separator."""
+        from services.accounts.results import SwitchResult
+        result = SwitchResult(
+            SwitchOutcome.SESSION_EXPIRED,
+            SwitchPhase.VERIFYING,
+            0,
+            "smurf",
+            "The Riot Client did not accept the saved session. Sign in once by hand to refresh it.",
+        )
+        with patch("utils.logger.Logger.warning") as mock_warn, patch("utils.logger.Logger.error") as mock_err:
+            out = self.switcher._finish(result)
+            self.assertEqual(out, result)
+            mock_warn.assert_called_once()
+            mock_err.assert_not_called()
+            args, _ = mock_warn.call_args
+            self.assertIn("switch failed for smurf: SESSION_EXPIRED - The Riot Client did not accept", args[1])
+            self.assertNotIn("â€”", args[1])
+            self.assertNotIn("—", args[1])
+
+    def test_finish_logging_error_as_error(self):
+        """Unexpected ERROR outcomes must log via Logger.error."""
+        from services.accounts.results import SwitchResult
+        result = SwitchResult(
+            SwitchOutcome.ERROR,
+            SwitchPhase.SIGNING_OUT,
+            0,
+            "main",
+            "Hardware connection failure",
+        )
+        with patch("utils.logger.Logger.warning") as mock_warn, patch("utils.logger.Logger.error") as mock_err:
+            out = self.switcher._finish(result)
+            self.assertEqual(out, result)
+            mock_err.assert_called_once()
+            mock_warn.assert_not_called()
+            args, _ = mock_err.call_args
+            self.assertIn("switch failed for main: ERROR - Hardware connection failure", args[1])
+
 
 if __name__ == "__main__":
     unittest.main()
+
