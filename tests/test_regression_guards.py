@@ -99,3 +99,334 @@ def test_main_app_init_order_regression():
     assert ui_queue_pos != -1, "self._process_ui_queue() missing from LeagueLoopApp"
     assert running_pos < ui_queue_pos, "self.running must be initialized before calling _process_ui_queue"
 
+
+def test_client_window_tracker_invariants():
+    """DOCK-001: ClientWindowTracker recognizes both League titles and guards iconic windows."""
+    tracker_py = SRC / "services" / "client_window_tracker.py"
+    assert tracker_py.exists()
+    text = tracker_py.read_text(encoding="utf-8")
+    assert '"league of legends"' in text
+    assert '"league of legends (tm) client"' in text
+    assert "IsIconic" in text
+    assert "-30000" in text  # Guard against minimized off-screen coordinates
+    assert "MIN_CLIENT_WIDTH" in text
+    assert "MIN_CLIENT_HEIGHT" in text
+
+
+def test_docking_loop_invariants():
+    """DOCK-002: Companion physical repositioning (0x0014) and multi-monitor work area handling."""
+    main_py = SRC / "core" / "main.py"
+    assert main_py.exists()
+    text = main_py.read_text(encoding="utf-8")
+    # Verify physical repositioning for borderless windows with SWP_NOZORDER | SWP_NOACTIVATE (0x0014)
+    assert "SetWindowPos" in text
+    assert "0x0014" in text
+    # Verify multi-monitor work area querying via MonitorFromRect and rcWork
+    assert "MonitorFromRect" in text
+    assert "rcWork" in text
+
+
+def test_version_and_installer_alignment_invariants():
+    """VER-001: Version bumping protocol guarantees strict alignment between version.py and installer.iss."""
+    version_py = SRC / "core" / "version.py"
+    installer_iss = REPO_ROOT / "installer.iss"
+    assert version_py.exists(), "src/core/version.py must exist"
+    assert installer_iss.exists(), "installer.iss must exist"
+
+    from tools.bump_version import check_version_alignment, read_version, read_installer_versions, to_version_info
+    ok, msg = check_version_alignment(str(version_py), str(installer_iss))
+    assert ok, f"Version misalignment detected: {msg}"
+
+    app_ver, info_ver = read_installer_versions(str(installer_iss))
+    v = read_version(str(version_py))
+    assert app_ver == v, f"AppVersion '{app_ver}' does not match version.py '{v}'"
+    assert info_ver == to_version_info(v), f"VersionInfoVersion '{info_ver}' does not match '{to_version_info(v)}'"
+
+
+def test_stats_scraper_daemon_executor_invariants():
+    """THREAD-001: StatsScraper background thread pool workers must be daemon threads to prevent pytest hangs."""
+    from services.stats_scraper import StatsScraper
+    scraper = StatsScraper(mode="ARAM", fetch_live=False)
+    try:
+        assert hasattr(scraper, "shutdown"), "StatsScraper must expose a shutdown() method"
+        scraper._executor.submit(lambda: None)
+        for t in scraper._executor._threads:
+            assert t.daemon is True, f"StatsScraper worker thread {t.name} must be daemon=True"
+    finally:
+        scraper.shutdown(wait=True)
+
+
+def test_lcu_telemetry_expected_error_filtering_invariants():
+    """LCU-002: LCUClient must suppress benign 405, 404, and 400 status codes on expected polling/probing endpoints."""
+    from services.api_handler import LCUClient
+
+    assert hasattr(LCUClient, "EXPECTED_405_ENDPOINTS"), "LCUClient must define EXPECTED_405_ENDPOINTS"
+    assert hasattr(LCUClient, "EXPECTED_404_ENDPOINTS"), "LCUClient must define EXPECTED_404_ENDPOINTS"
+    assert hasattr(LCUClient, "EXPECTED_400_ENDPOINTS"), "LCUClient must define EXPECTED_400_ENDPOINTS"
+
+    # Verify key endpoints
+    assert "/lol-loot/v1/ready" in LCUClient.EXPECTED_405_ENDPOINTS
+    assert "/lol-champ-select/v1/session/actions" in LCUClient.EXPECTED_405_ENDPOINTS
+    assert "/lol-gameflow/v1/gameflow-phase" in LCUClient.EXPECTED_405_ENDPOINTS
+
+    # Verify _is_expected_absence filtering logic
+    assert LCUClient._is_expected_absence(405, "/lol-loot/v1/ready") is True
+    assert LCUClient._is_expected_absence(405, "/lol-champ-select/v1/session/actions/4") is True
+    assert LCUClient._is_expected_absence(405, "/lol-gameflow/v1/gameflow-phase?foo=bar") is True
+    assert LCUClient._is_expected_absence(404, "/lol-battle-pass/v1/rewards/claim") is True
+    assert LCUClient._is_expected_absence(400, "/lol-ranked/v1/rewards/claim") is True
+
+    # Verify unexpected endpoints are NOT suppressed
+    assert LCUClient._is_expected_absence(405, "/lol-summoner/v1/current-summoner") is False
+    assert LCUClient._is_expected_absence(404, "/lol-summoner/v1/current-summoner") is False
+    assert LCUClient._is_expected_absence(500, "/lol-loot/v1/ready") is False
+
+
+def test_lcu_telemetry_transient_retry_filtering_invariants():
+    """LCU-003: Transient 5xx retries must be recorded in telemetry without triggering false positive terminal error warnings."""
+    from services.api_handler import LCUClient
+
+    client = LCUClient()
+    assert hasattr(client, "_record_http_status_code")
+    assert hasattr(client, "_http_transient_retry_count")
+
+    initial_errors = len(client._recent_http_errors)
+    # Record transient retry
+    client._record_http_status_code(500, "POST", "/lol-lobby/v2/lobby", is_transient_retry=True)
+    assert len(client._recent_http_errors) == initial_errors
+    assert client._http_transient_retry_count == 1
+    assert client._http_5xx_count == 1
+
+    # Diagnostics and telemetry must expose http_transient_retry_count
+    req_diag = client.get_request_diagnostics()
+    assert "http_transient_retry_count" in req_diag
+    assert req_diag["http_transient_retry_count"] == 1
+
+    status_tel = client.get_http_status_telemetry()
+    assert "http_transient_retry_count" in status_tel
+    assert status_tel["http_transient_retry_count"] == 1
+
+
+
+
+
+def test_lcu_http_5xx_sliding_window_threshold_invariants():
+    """LCU-004: 5xx anomaly alert must not trip on isolated 1-4 failures; requires configured threshold."""
+    from services.api_handler import LCUClient
+
+    client = LCUClient()
+    thresh = client._http_anomaly_5xx_count_threshold
+    assert thresh >= 3
+
+    # Ensure count < threshold does not trip anomaly active
+    for _ in range(thresh - 1):
+        client._record_http_status_code(503, "GET", "/lol-chat/v1/friends")
+        tel = client.get_http_status_anomaly_telemetry()
+        assert tel["http_status_anomaly_active"] is False
+        assert tel["http_status_anomaly_count"] == 0
+
+    # Crossing threshold trips anomaly active
+    client._record_http_status_code(503, "GET", "/lol-chat/v1/friends")
+    tel = client.get_http_status_anomaly_telemetry()
+    assert tel["http_status_anomaly_active"] is True
+    assert tel["http_status_anomaly_count"] == 1
+    assert f"HTTP 5xx count {thresh} reached threshold" in tel["last_http_status_anomaly"]["reason"]
+
+
+def test_lcu_http_transport_failure_sliding_window_threshold_invariants():
+    """LCU-005: Transport failure (status 0) anomaly alert must not trip on isolated 1-2 failures; requires configured threshold."""
+    from services.api_handler import LCUClient
+
+    client = LCUClient()
+    thresh = client._http_anomaly_transport_count_threshold
+    assert thresh >= 3
+
+    # 1. Verify telemetry exposes http_anomaly_transport_count_threshold
+    tel = client.get_http_status_anomaly_telemetry()
+    assert tel["http_anomaly_transport_count_threshold"] == thresh
+    assert tel["http_status_anomaly_active"] is False
+
+    # 2. Ensure transport failure count < threshold does not trip anomaly active
+    for _ in range(thresh - 1):
+        client._record_http_transport_failure("GET", "/lol-chat/v1/friends", "connection")
+        tel = client.get_http_status_anomaly_telemetry()
+        assert tel["http_status_anomaly_active"] is False
+        assert tel["http_status_anomaly_count"] == 0
+
+    # 3. Crossing threshold trips anomaly active
+    client._record_http_transport_failure("GET", "/lol-chat/v1/friends", "connection")
+    tel = client.get_http_status_anomaly_telemetry()
+    assert tel["http_status_anomaly_active"] is True
+    assert tel["http_status_anomaly_count"] == 1
+    assert f"HTTP transport failure count {thresh} reached threshold" in tel["last_http_status_anomaly"]["reason"]
+    assert "connection" in tel["last_http_status_anomaly"]["reason"]
+
+    # 4. Success dilution or clearing window recovers anomaly state
+    client._http_status_window.clear()
+    with client._req_diag_lock:
+        client._evaluate_http_status_anomaly(is_error=False, status_code=200, method="GET", endpoint="/lol-chat/v1/friends")
+    tel_recovered = client.get_http_status_anomaly_telemetry()
+    assert tel_recovered["http_status_anomaly_active"] is False
+
+
+def test_riot_client_api_timeout_retry_invariants():
+    """RCA-001: RiotClientAPI must retry transient timeouts and not raise unhandled errors."""
+    from unittest.mock import MagicMock, patch
+    import requests
+    from services.account_manager import RiotClientAPI
+
+    api = RiotClientAPI()
+    api.is_connected = True
+    api.port = "5555"
+    api.base_url = "https://127.0.0.1:5555"
+
+    # 1. Successful retry on ReadTimeout
+    mock_ok = MagicMock()
+    mock_ok.status_code = 200
+    api.session = MagicMock()
+    api.session.request.side_effect = [requests.exceptions.ReadTimeout("Timeout"), mock_ok]
+    with patch("time.sleep"):
+        res = api.request("GET", "/test", silent=True)
+    assert res == mock_ok
+    assert api.session.request.call_count == 2
+    assert api.is_connected is True
+
+    # 2. Graceful exhaustion on continuous timeouts
+    api_exhaust = RiotClientAPI()
+    api_exhaust.is_connected = True
+    api_exhaust.port = "5555"
+    api_exhaust.base_url = "https://127.0.0.1:5555"
+    api_exhaust.session = MagicMock()
+    api_exhaust.session.request.side_effect = requests.exceptions.ConnectTimeout("Connect timed out")
+    with patch("time.sleep"):
+        res = api_exhaust.request("GET", "/test", silent=False)
+    assert res is None
+    assert api_exhaust.session.request.call_count == 3
+    assert api_exhaust.is_connected is False
+
+
+def test_account_switcher_logging_hygiene_invariants():
+    """ACC-001: AccountSwitcher._finish must use ASCII hyphens and treat SESSION_EXPIRED as warning."""
+    from unittest.mock import MagicMock, patch
+    from services.accounts.results import SwitchOutcome, SwitchPhase, SwitchResult
+    from services.accounts.switcher import AccountSwitcher
+
+    switcher = AccountSwitcher(
+        session=MagicMock(),
+        accounts_provider=lambda: [{"username": "test_user"}],
+        vault=MagicMock(),
+    )
+
+    expired_result = SwitchResult(
+        SwitchOutcome.SESSION_EXPIRED,
+        SwitchPhase.VERIFYING,
+        0,
+        "test_user",
+        "The Riot Client did not accept the saved session.",
+    )
+
+    with patch("utils.logger.Logger.warning") as mock_warn, patch("utils.logger.Logger.error") as mock_err:
+        switcher._finish(expired_result)
+        mock_warn.assert_called_once()
+        mock_err.assert_not_called()
+        args, _ = mock_warn.call_args
+        msg = args[1]
+        assert "switch failed for test_user: SESSION_EXPIRED - The Riot Client did not accept" in msg
+        assert "â€”" not in msg
+        assert "—" not in msg
+
+
+def test_logger_no_em_dashes_in_log_statements():
+    """LOG-002: Ensure no Logger.<level>, update_action_log, or _log calls in src/ contain literal em dashes."""
+    import ast
+    offenders = []
+    log_names = {"Logger.info", "Logger.warning", "Logger.error", "Logger.debug", "Logger.critical", "self._log", "update_action_log", "_log"}
+    for path in _python_files():
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                func_name = ""
+                if isinstance(node.func, ast.Attribute):
+                    if isinstance(node.func.value, ast.Name):
+                        func_name = f"{node.func.value.id}.{node.func.attr}"
+                    elif isinstance(node.func.value, ast.Attribute):
+                        func_name = f"{node.func.attr}"
+                elif isinstance(node.func, ast.Name):
+                    func_name = node.func.id
+                if func_name in log_names:
+                    for arg in node.args:
+                        for sub in ast.walk(arg):
+                            if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                                if "—" in sub.value:
+                                    offenders.append(f"{path.name}:{node.lineno} [em-dash]: {sub.value.strip()}")
+    assert not offenders, f"Logging calls with literal em dashes found:\n" + "\n".join(offenders)
+
+
+def test_logger_ascii_hygiene_invariants():
+    """LOG-003: Ensure all Logger.<level>, update_action_log, and _log string arguments in src/ are strict ASCII for CP1252 Windows terminal safety."""
+    import ast
+    offenders = []
+    log_names = {"Logger.info", "Logger.warning", "Logger.error", "Logger.debug", "Logger.critical", "self._log", "update_action_log", "_log"}
+    for path in _python_files():
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                func_name = ""
+                if isinstance(node.func, ast.Attribute):
+                    if isinstance(node.func.value, ast.Name):
+                        func_name = f"{node.func.value.id}.{node.func.attr}"
+                    elif isinstance(node.func.value, ast.Attribute):
+                        func_name = f"{node.func.attr}"
+                elif isinstance(node.func, ast.Name):
+                    func_name = node.func.id
+                if func_name in log_names:
+                    for arg in node.args:
+                        for sub in ast.walk(arg):
+                            if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                                non_ascii = [f"U+{ord(c):04X}" for c in sub.value if ord(c) > 127]
+                                if non_ascii:
+                                    offenders.append(f"{path.name}:{node.lineno} [{func_name}] {','.join(non_ascii)}: {ascii(sub.value.strip())}")
+    assert not offenders, f"Logging calls with non-ASCII strings found:\n" + "\n".join(offenders)
+
+
+def test_app_sidebar_queue_resolution_invariants():
+    """QUEUE-001: Ensure AppSidebar._get_queue_id_for_mode delegates to QueueManager and does not maintain duplicate hardcoded dictionaries."""
+    sidebar_file = SRC / "ui" / "app_sidebar.py"
+    assert sidebar_file.exists()
+    text = sidebar_file.read_text(encoding="utf-8")
+    assert "from services.queue_manager import resolve_queue_id" in text
+    assert "def _get_queue_id_for_mode" in text
+    # Ensure no duplicate hardcoded mode dictionary in _get_queue_id_for_mode
+    assert "mode_map = {" not in text
+
+
+def test_stats_scraper_queue_resolution_invariants():
+    """QUEUE-002: Ensure StatsScraper.set_mode_by_queue_id delegates to QueueManager and does not maintain duplicate hardcoded dictionaries."""
+    scraper_file = SRC / "services" / "stats_scraper.py"
+    assert scraper_file.exists()
+    text = scraper_file.read_text(encoding="utf-8")
+    assert "from services.queue_manager import resolve_mode_name" in text
+    assert "def set_mode_by_queue_id" in text
+    # Ensure no duplicate hardcoded mode dictionary in set_mode_by_queue_id
+    assert "_QUEUE_MODE_NAMES = {" not in text
+
+
+def test_app_sidebar_matchmaking_concurrency_invariants():
+    """LOBBY-001: Ensure AppSidebar._find_match enforces in-flight concurrency protection and graceful transport logging."""
+    sidebar_file = SRC / "ui" / "app_sidebar.py"
+    assert sidebar_file.exists()
+    text = sidebar_file.read_text(encoding="utf-8")
+    assert "_find_match_in_flight" in text
+    assert "getattr(self, \"_find_match_in_flight\", False)" in text
+    assert "self._find_match_in_flight = True" in text
+    assert "self._find_match_in_flight = False" in text
+    assert "transport connection failure (no response from client)" in text
+
+
+

@@ -224,15 +224,56 @@ class TestLootServiceClaiming(unittest.TestCase):
         self.assertEqual(result.rewards_claimed, 1)
         self.assertEqual(result.opened, 1)
 
-    def test_count_keys_and_fragments(self):
-        inventory = [
-            {"lootId": "MATERIAL_key_fragment", "localizedName": "Key Fragment", "count": 4, "type": "MATERIAL"},
-            {"lootId": "MATERIAL_key", "localizedName": "Hextech Key", "count": 2, "type": "MATERIAL"},
-            {"lootId": "CHEST_123", "localizedName": "Masterwork Chest", "count": 3, "type": "CHEST"},
-        ]
-        self.mock_lcu.request.return_value = DummyResponse(200, inventory)
-        self.assertEqual(self.service.count_key_fragments(), 4)
-        self.assertEqual(self.service.count_keys(), 2)
+    def test_is_ready_handling(self):
+        # 1. Ready returns true
+        self.mock_lcu.request.return_value = DummyResponse(200, True)
+        self.assertTrue(self.service.is_ready())
+
+        # 2. Ready returns false
+        self.mock_lcu.request.return_value = DummyResponse(200, False)
+        self.assertFalse(self.service.is_ready())
+
+        # 3. Ready returns dict {"ready": False}
+        self.mock_lcu.request.return_value = DummyResponse(200, {"ready": False})
+        self.assertFalse(self.service.is_ready())
+
+        # 4. Ready endpoint missing or 404 (defaults to true)
+        self.mock_lcu.request.return_value = DummyResponse(404, {})
+        self.assertTrue(self.service.is_ready())
+
+        # 5. Ready endpoint returns 405 (method not allowed / modern client)
+        LootService._ready_endpoint_available = True
+        service2 = LootService(self.mock_lcu)
+        self.mock_lcu.request.return_value = DummyResponse(405, {})
+        self.assertTrue(service2.is_ready())
+        self.assertFalse(LootService._ready_endpoint_available)
+        # Subsequent call should return True without querying LCU again
+        self.mock_lcu.request.reset_mock()
+        self.assertTrue(service2.is_ready())
+        self.mock_lcu.request.assert_not_called()
+        # Any new LootService instance also avoids calling LCU
+        service3 = LootService(self.mock_lcu)
+        self.assertTrue(service3.is_ready())
+        self.mock_lcu.request.assert_not_called()
+
+    def test_fetch_loot_fallback_to_player_loot_map(self):
+        # When /lol-loot/v1/player-loot returns 405 or None, should fallback to /lol-loot/v1/player-loot-map
+        def mock_request(method, endpoint, data=None, silent=False):
+            if endpoint == "/lol-loot/v1/ready":
+                return DummyResponse(200, True)
+            if endpoint == "/lol-loot/v1/player-loot":
+                return DummyResponse(405, {})  # Method Not Allowed
+            if endpoint == "/lol-loot/v1/player-loot-map":
+                return DummyResponse(200, {
+                    "CHEST_1": {"lootId": "CHEST_1", "localizedName": "Hextech Chest", "count": 2, "type": "CHEST", "displayCategories": "CHEST"}
+                })
+            return DummyResponse(404, {})
+
+        self.mock_lcu.request.side_effect = mock_request
+        items = self.service.fetch_loot()
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].loot_id, "CHEST_1")
+        self.assertEqual(items[0].count, 2)
 
 
 if __name__ == "__main__":

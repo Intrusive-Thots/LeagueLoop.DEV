@@ -97,6 +97,7 @@ class ReplaySaver:
         self._lock = threading.Lock()
         self._busy = False
         self._pending_auto = False
+        self._target_game_id: Optional[int] = None
         #: Game ids we already saved or confirmed on disk this session, so a
         #: second end-of-game tick cannot post the download again.
         self._handled: set = set()
@@ -135,7 +136,7 @@ class ReplaySaver:
                 Logger.debug("Replay", "Status listener failed.", exc=exc)
 
     # --------------------------------------------------------------- triggers
-    def on_match_ended(self) -> bool:
+    def on_match_ended(self, game_id: Optional[int] = None) -> bool:
         """Download the replay for the match that just finished.
 
         No-op when the setting is off. Returns False when nothing was started
@@ -145,6 +146,8 @@ class ReplaySaver:
         if not self.enabled:
             return False
         with self._lock:
+            if game_id:
+                self._target_game_id = _positive_int(game_id)
             if self._busy:
                 # The click-to-download job (or an earlier game) is still
                 # talking to the client. Pick this match up when it finishes
@@ -201,8 +204,9 @@ class ReplaySaver:
             self._busy = False
             pending = self._pending_auto
             self._pending_auto = False
+            target = self._target_game_id
         if pending:
-            self.on_match_ended()
+            self.on_match_ended(game_id=target)
 
     def _auto_job(self) -> None:
         if not self.enabled:
@@ -331,16 +335,30 @@ class ReplaySaver:
 
     # ------------------------------------------------------------------- reads
     def _resolve_current_game_id(self) -> Optional[int]:
-        """Game id from the post-game screen, retrying while it is still blank."""
+        """Game id from explicit target, the post-game screen, or match history."""
+        with self._lock:
+            target = self._target_game_id
+            self._target_game_id = None
+        if target:
+            return _positive_int(target)
+
         for attempt in range(1, self.max_attempts + 1):
             if self._in_game():
                 return None
-            game_id = self._game_id_from_eog() or self._game_id_from_session()
+            game_id = (
+                self._game_id_from_eog()
+                or self._game_id_from_session()
+                or self._game_id_from_recent()
+            )
             if game_id:
                 return game_id
             if attempt < self.max_attempts:
                 self._sleep(self.retry_delay_s)
         return None
+
+    def _game_id_from_recent(self) -> Optional[int]:
+        ids = self._recent_game_ids(1)
+        return ids[0] if ids else None
 
     def _game_id_from_eog(self) -> Optional[int]:
         _code, body = self._request("GET", EOG_ENDPOINT)

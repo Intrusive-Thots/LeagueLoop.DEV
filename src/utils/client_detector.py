@@ -9,8 +9,12 @@ import os
 import re
 import time
 import psutil
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from utils.logger import Logger
+
+# Precompiled credential regexes
+_PORT_REGEX = re.compile(r"--app-port=([0-9]+)")
+_TOKEN_REGEX = re.compile(r"--remoting-auth-token=([\w-]+)")
 
 # Scan cache configuration
 _CACHE_TTL = 2.0  # 2 seconds cache lifetime
@@ -25,6 +29,26 @@ _league_install_path: Optional[str] = None
 _riot_install_path: Optional[str] = None
 _paths_resolved = False
 
+
+def _select_best_league_path(assoc: Dict[str, Any], user_profile: str) -> Optional[str]:
+    """
+    Selects the best League install path from associated_client map.
+    Prefers paths that exist on disk and belong to the current user.
+    """
+    best_path: Optional[str] = None
+    best_is_user = False
+    for game_path in assoc.keys():
+        if "league of legends" not in game_path.lower():
+            continue
+        norm = os.path.normpath(game_path)
+        exists = os.path.isdir(norm)
+        is_user = bool(user_profile and game_path.replace("\\", "/").rstrip("/").lower().startswith(user_profile))
+        if best_path is None or (exists and (not best_is_user and is_user)):
+            best_path = norm
+            best_is_user = is_user
+    return best_path
+
+
 def resolve_installation_paths() -> Tuple[Optional[str], Optional[str]]:
     """
     Parses RiotClientInstalls.json to resolve installation directories.
@@ -34,7 +58,6 @@ def resolve_installation_paths() -> Tuple[Optional[str], Optional[str]]:
     if _paths_resolved:
         return _league_install_path, _riot_install_path
 
-    # Try standard paths for RiotClientInstalls.json
     paths_to_try = [
         os.path.join(os.environ.get("ProgramData", "C:\\ProgramData"), "Riot Games", "RiotClientInstalls.json"),
         os.path.join(os.environ.get("ALLUSERSPROFILE", "C:\\ProgramData"), "Riot Games", "RiotClientInstalls.json"),
@@ -46,33 +69,15 @@ def resolve_installation_paths() -> Tuple[Optional[str], Optional[str]]:
                 with open(p, "r", encoding="utf-8") as f:
                     data = json.load(f)
 
-                # Resolve Riot Client executable and its directory
                 rc_path = data.get("rc_default") or data.get("rc_live")
                 if rc_path:
-                    # Convert to standard Windows backslashes
                     rc_path = os.path.normpath(rc_path)
                     _riot_install_path = os.path.dirname(rc_path)
                     Logger.debug("Detector", f"Resolved Riot Client path: {_riot_install_path}")
 
-                # Resolve League of Legends install path
-                # Prefer paths that actually exist on disk and belong to the
-                # current user to avoid matching stale entries left by old
-                # installs, other user profiles, or disconnected drives.
                 assoc = data.get("associated_client", {})
                 user_profile = os.environ.get("USERPROFILE", "").replace("\\", "/").rstrip("/").lower()
-                best_path: Optional[str] = None
-                best_is_user = False
-                for game_path in assoc.keys():
-                    if "league of legends" not in game_path.lower():
-                        continue
-                    norm = os.path.normpath(game_path)
-                    exists = os.path.isdir(norm)
-                    is_user = user_profile and game_path.replace("\\", "/").rstrip("/").lower().startswith(user_profile)
-                    # Pick this path if it's the first valid one, or if it
-                    # belongs to the current user and the previous best didn't.
-                    if best_path is None or (exists and (not best_is_user and is_user)):
-                        best_path = norm
-                        best_is_user = is_user
+                best_path = _select_best_league_path(assoc, user_profile)
                 if best_path:
                     _league_install_path = best_path
                     Logger.debug("Detector", f"Resolved League path: {_league_install_path}")
@@ -82,7 +87,6 @@ def resolve_installation_paths() -> Tuple[Optional[str], Optional[str]]:
             except Exception as e:
                 Logger.error("Detector", f"Failed to parse installs JSON at {p}: {e}")
 
-    # Fallback to defaults if parsing fails
     _paths_resolved = True
     return _league_install_path, _riot_install_path
 
@@ -169,6 +173,60 @@ def get_riot_lockfile() -> Tuple[Optional[str], Optional[str]]:
 
     return None, None
 
+def _extract_credentials_from_proc(proc: psutil.Process) -> Tuple[Optional[str], Optional[str]]:
+    """Extracts port and token from a client process command line."""
+    try:
+        cmdline = " ".join(proc.cmdline())
+        port_match = _PORT_REGEX.search(cmdline)
+        token_match = _TOKEN_REGEX.search(cmdline)
+        if port_match and token_match:
+            return port_match.group(1), token_match.group(1)
+    except psutil.AccessDenied:
+        pass
+    return None, None
+
+
+def _apply_lockfile_fallbacks(
+    league_seen: bool,
+    riot_seen: bool,
+    league_data: Dict[str, Any],
+    riot_data: Dict[str, Any],
+) -> None:
+    """Fallback to lockfiles if command line parsing did not extract credentials."""
+    if league_seen and (not league_data["port"] or not league_data["token"]):
+        port, token = get_league_lockfile()
+        if port and token:
+            league_data["port"] = port
+            league_data["token"] = token
+
+    if riot_seen and (not riot_data["port"] or not riot_data["token"]):
+        port, token = get_riot_lockfile()
+        if port and token:
+            riot_data["port"] = port
+            riot_data["token"] = token
+
+
+def _inspect_process_credentials(
+    proc: psutil.Process,
+    name: str,
+    pid: Optional[int],
+    target_procs: Tuple[str, ...],
+    ux_name: str,
+    target_data: Dict[str, Any],
+) -> bool:
+    """Checks a process against target process names and extracts credentials if matched."""
+    if not (target_data["port"] and target_data["token"]) and name in target_procs:
+        if target_data["pid"] is None or name == ux_name:
+            target_data["pid"] = pid
+        port, token = _extract_credentials_from_proc(proc)
+        if port and token:
+            target_data["port"] = port
+            target_data["token"] = token
+            target_data["pid"] = pid
+        return True
+    return False
+
+
 def scan_clients(force: bool = False) -> Dict[str, Dict]:
     """
     Scans the running processes once per tick to extract ports and tokens.
@@ -181,86 +239,33 @@ def scan_clients(force: bool = False) -> Dict[str, Dict]:
 
     _last_scan_time = now
 
-    # Reset temp states
     league_seen = False
     riot_seen = False
     league_data = {"port": None, "token": None, "connected": False, "pid": None}
     riot_data = {"port": None, "token": None, "connected": False, "pid": None}
 
-    # Process lists we care about: prioritize UX processes containing credentials
-    league_procs = ["LeagueClientUx.exe", "LeagueClient.exe"]
-    riot_procs = ["RiotClientUx.exe", "RiotClientServices.exe"]
+    league_procs = ("LeagueClientUx.exe", "LeagueClient.exe")
+    riot_procs = ("RiotClientUx.exe", "RiotClientServices.exe")
 
     try:
-        # Perform single process iteration pass
         for proc in psutil.process_iter(attrs=["pid", "name"]):
             try:
                 name = proc.info.get("name", "")
                 pid = proc.info.get("pid")
-                
-                # Check for League of Legends client (continue checking until credentials found)
-                if not (league_data["port"] and league_data["token"]) and name in league_procs:
-                    if league_data["pid"] is None or name == "LeagueClientUx.exe":
-                        league_data["pid"] = pid
+
+                if _inspect_process_credentials(proc, name, pid, league_procs, "LeagueClientUx.exe", league_data):
                     league_seen = True
-
-                    # Try to extract credentials from command line
-                    try:
-                        cmdline = " ".join(proc.cmdline())
-
-                        # Use regex for more robust parsing
-                        port_match = re.search(r'--app-port=([0-9]+)', cmdline)
-                        token_match = re.search(r'--remoting-auth-token=([\w-]+)', cmdline)
-
-                        if port_match and token_match:
-                            league_data["port"] = port_match.group(1)
-                            league_data["token"] = token_match.group(1)
-                            league_data["pid"] = pid
-                    except psutil.AccessDenied:
-                        pass  # Handled below by lockfile fallback
-
-                # Check for Riot Client (continue checking until credentials found)
-                if not (riot_data["port"] and riot_data["token"]) and name in riot_procs:
-                    if riot_data["pid"] is None or name == "RiotClientUx.exe":
-                        riot_data["pid"] = pid
+                if _inspect_process_credentials(proc, name, pid, riot_procs, "RiotClientUx.exe", riot_data):
                     riot_seen = True
 
-                    # Try to extract credentials from command line
-                    try:
-                        cmdline = " ".join(proc.cmdline())
-
-                        port_match = re.search(r'--app-port=([0-9]+)', cmdline)
-                        token_match = re.search(r'--remoting-auth-token=([\w-]+)', cmdline)
-
-                        if port_match and token_match:
-                            riot_data["port"] = port_match.group(1)
-                            riot_data["token"] = token_match.group(1)
-                            riot_data["pid"] = pid
-                    except psutil.AccessDenied:
-                        pass
-
-                # Stop iteration early only if BOTH are fully resolved with credentials
                 if (league_data["port"] and league_data["token"]) and (riot_data["port"] and riot_data["token"]):
                     break
-
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 continue
     except Exception as e:
         Logger.error("Detector", f"Process scanning failed: {e}")
 
-    # Fallback 1: League Client credentials from lockfile
-    if league_seen and (not league_data["port"] or not league_data["token"]):
-        port, token = get_league_lockfile()
-        if port and token:
-            league_data["port"] = port
-            league_data["token"] = token
-
-    # Fallback 2: Riot Client credentials from lockfile
-    if riot_seen and (not riot_data["port"] or not riot_data["token"]):
-        port, token = get_riot_lockfile()
-        if port and token:
-            riot_data["port"] = port
-            riot_data["token"] = token
+    _apply_lockfile_fallbacks(league_seen, riot_seen, league_data, riot_data)
 
     # Verify connection status
     if league_data["port"] and league_data["token"]:
@@ -289,6 +294,19 @@ ALL_CLIENT_PROCESS_NAMES = {
 }
 
 
+def _collect_running_client_processes() -> List[psutil.Process]:
+    """Finds all active League of Legends and Riot Client processes."""
+    procs = []
+    for proc in psutil.process_iter(attrs=["pid", "name"]):
+        try:
+            name = (proc.info.get("name") or "").lower()
+            if name in ALL_CLIENT_PROCESS_NAMES:
+                procs.append(proc)
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+    return procs
+
+
 def terminate_all_client_instances(timeout: float = 3.0) -> int:
     """
     Terminates all running League of Legends and Riot Client processes
@@ -296,21 +314,12 @@ def terminate_all_client_instances(timeout: float = 3.0) -> int:
     Returns the number of terminated processes.
     """
     global _last_scan_time, _cached_results
-    killed_count = 0
-    matched_procs = []
+    matched_procs = _collect_running_client_processes()
+    if not matched_procs:
+        return 0
 
+    killed_count = len(matched_procs)
     try:
-        for proc in psutil.process_iter(attrs=["pid", "name"]):
-            try:
-                name = (proc.info.get("name") or "").lower()
-                if name in ALL_CLIENT_PROCESS_NAMES:
-                    matched_procs.append(proc)
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                continue
-
-        if not matched_procs:
-            return 0
-
         # Pass 1: Graceful termination
         for proc in matched_procs:
             try:
@@ -327,8 +336,6 @@ def terminate_all_client_instances(timeout: float = 3.0) -> int:
                 proc.kill()
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
-
-        killed_count = len(matched_procs)
 
         # Reset detector cache
         _last_scan_time = 0.0

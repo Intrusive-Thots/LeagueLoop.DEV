@@ -11,9 +11,15 @@ Improvements:
 """
 import threading
 import weakref
+import traceback
 from typing import Callable, Any, Optional, Dict, List
 from dataclasses import dataclass
 from enum import Enum
+
+try:
+    from utils.logger import Logger
+except ImportError:
+    Logger = None  # type: ignore
 
 
 class EventType(Enum):
@@ -161,9 +167,6 @@ class _EventBus:
         Uses copy-on-emit strategy to avoid mutation during dispatch.
         Listener exceptions are isolated and logged without stopping other listeners.
         """
-        from utils.logger import Logger
-        import traceback
-
         event_name = _channel(event_name)
 
         # Copy listeners under lock to avoid mutation during dispatch
@@ -177,7 +180,8 @@ class _EventBus:
             try:
                 cb(*args, **kwargs)
             except Exception as e:
-                Logger.error("EVENTBUS", f"Error in {event_name}: {e}\n{traceback.format_exc()}")
+                if Logger:
+                    Logger.error("EVENTBUS", f"Error in {event_name}: {e}\n{traceback.format_exc()}")
     
     def emit_typed(self, event: Event):
         """Emit a typed event with structured payload."""

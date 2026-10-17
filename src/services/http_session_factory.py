@@ -18,7 +18,7 @@ def create_pooled_session(
     pool_connections: int = 20,
     pool_maxsize: int = 20,
     max_retries: int = 1,
-    verify_ssl: bool = False,
+    verify_ssl: bool = True,
 ) -> requests.Session:
     """Create a new requests.Session configured with connection pooling and custom retry logic."""
     session = requests.Session()
@@ -39,5 +39,5 @@ def get_shared_session() -> requests.Session:
     """Returns a singleton shared requests.Session for general outbound HTTP requests."""
     global _shared_session
     if _shared_session is None:
-        _shared_session = create_pooled_session(pool_connections=20, pool_maxsize=20, max_retries=2, verify_ssl=False)
+        _shared_session = create_pooled_session(pool_connections=20, pool_maxsize=20, max_retries=2, verify_ssl=True)
     return _shared_session

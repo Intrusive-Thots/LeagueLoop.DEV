@@ -66,7 +66,7 @@ class RiotClientAPI:
         self.auth_token: Optional[str] = None
         self.base_url: Optional[str] = None
         from services.http_session_factory import create_pooled_session
-        self.session = create_pooled_session(pool_connections=10, pool_maxsize=10, max_retries=1)
+        self.session = create_pooled_session(pool_connections=10, pool_maxsize=10, max_retries=1, verify_ssl=False)
         self.is_connected = False
         # Token-bucket rate limiter for Riot Client REST API
         self._tokens = 10.0
@@ -104,7 +104,14 @@ class RiotClientAPI:
         self.is_connected = True
         Logger.debug("RiotClientAPI", f"Connected to Riot Client on port {port}")
 
-    def request(self, method: str, endpoint: str, data=None, silent=False) -> Optional[requests.Response]:
+    def request(
+        self,
+        method: str,
+        endpoint: str,
+        data=None,
+        silent: bool = False,
+        timeout: float = 3.0,
+    ) -> Optional[requests.Response]:
         """Make a request to the Riot Client API with rate-limiting and exponential back-off."""
         if not self.is_connected:
             if not self.connect():
@@ -137,7 +144,7 @@ class RiotClientAPI:
                         method=method,
                         url=url,
                         json=data,
-                        timeout=10,
+                        timeout=timeout,
                     )
 
                 if response.status_code == 429:
@@ -161,10 +168,12 @@ class RiotClientAPI:
                 if not silent:
                     Logger.debug("RiotClientAPI", f"RES <- {response.status_code} {endpoint}")
                 return response
-            except requests.exceptions.ConnectionError:
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
                 if attempt < max_attempts - 1:
                     time.sleep(0.2)
                     continue
+                if not silent:
+                    Logger.warning("RiotClientAPI", f"Request failed ({type(exc).__name__}): {exc}")
                 self.is_connected = False
                 return None
             except Exception as e:
@@ -624,24 +633,24 @@ class AccountManager:
             self._save()
             return idx
 
-    def edit_account(self, idx: int, label: str = None, username: str = None,
-                     password: str = None, tagline: str = None, region: str = None, is_default: bool = None):
+    def edit_account(self, idx: int, **fields):
         """Update fields of an existing account. Only non-None fields are changed."""
         with self._lock:
             if not (0 <= idx < len(self._accounts)):
                 return
             acct = self._accounts[idx]
-            if label is not None:
-                acct["label"] = label.strip()
-            if username is not None:
-                acct["username"] = username.strip()
-            if password is not None:
-                acct["password_enc"] = self._encrypt(password)
-            if tagline is not None:
-                acct["tagline"] = tagline.strip()
-            if region is not None:
-                acct["region"] = region.strip()
-            if is_default is not None:
+            if fields.get("label") is not None:
+                acct["label"] = fields["label"].strip()
+            if fields.get("username") is not None:
+                acct["username"] = fields["username"].strip()
+            if fields.get("password") is not None:
+                acct["password_enc"] = self._encrypt(fields["password"])
+            if fields.get("tagline") is not None:
+                acct["tagline"] = fields["tagline"].strip()
+            if fields.get("region") is not None:
+                acct["region"] = fields["region"].strip()
+            if fields.get("is_default") is not None:
+                is_default = fields["is_default"]
                 if is_default:
                     for i, a in enumerate(self._accounts):
                         a["is_default"] = (i == idx)

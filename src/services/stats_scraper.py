@@ -2,9 +2,37 @@
 Provides static and dynamic data related to champions and game stats.
 """
 import time
+import threading
+import weakref
 import requests
 from concurrent.futures import ThreadPoolExecutor
+import concurrent.futures.thread as _cft
+from services.http_session_factory import get_shared_session
 from utils.logger import Logger
+
+
+class _DaemonThreadPoolExecutor(ThreadPoolExecutor):
+    """ThreadPoolExecutor whose workers are daemon threads so they never prevent process exit."""
+
+    def _adjust_thread_count(self):
+        if self._idle_semaphore.acquire(timeout=0):
+            return
+
+        def weakref_cb(_, q=self._work_queue):
+            q.put(None)
+
+        num_threads = len(self._threads)
+        if num_threads < self._max_workers:
+            prefix = self._thread_name_prefix or "StatsScraperWorker"
+            t = threading.Thread(
+                name=f"{prefix}_{num_threads}",
+                target=_cft._worker,
+                args=(weakref.ref(self, weakref_cb), self._work_queue, self._initializer, self._initargs),
+                daemon=True,
+            )
+            t.start()
+            self._threads.add(t)
+            _cft._threads_queues[t] = self._work_queue
 
 try:
     from bs4 import BeautifulSoup
@@ -106,7 +134,7 @@ class StatsScraper:
         self.win_rates = dict()
         self.live_winrates = dict()
         self._cache_timestamps = dict()
-        self._executor = ThreadPoolExecutor(max_workers=2)
+        self._executor = _DaemonThreadPoolExecutor(max_workers=2, thread_name_prefix="StatsScraperWorker")
         self.set_mode(mode)
 
     def _fetch_live_data_background(self, mode):
@@ -124,7 +152,7 @@ class StatsScraper:
             return
 
         if not _HAS_BS4:
-            Logger.debug("StatsScraper", "bs4 not installed — using baseline win rates.")
+            Logger.debug("StatsScraper", "bs4 not installed - using baseline win rates.")
             return
 
         self._executor.submit(self._scrape_winrates, mode)
@@ -144,7 +172,8 @@ class StatsScraper:
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Accept-Language": "en-US,en;q=0.9",
             }
-            resp = requests.get(url, timeout=12, headers=headers)
+            session = get_shared_session()
+            resp = session.get(url, timeout=12, headers=headers)
             if resp.status_code != 200:
                 Logger.debug("StatsScraper", f"Scrape failed (HTTP {resp.status_code}) for {mode}")
                 return
@@ -176,7 +205,7 @@ class StatsScraper:
                 self._cache_timestamps[mode] = time.time()
                 Logger.info("StatsScraper", f"Scraped {len(scraped)} live win rates for {mode}")
             else:
-                Logger.debug("StatsScraper", f"Scrape yielded too few results ({len(scraped)}) for {mode} — keeping baseline")
+                Logger.debug("StatsScraper", f"Scrape yielded too few results ({len(scraped)}) for {mode} - keeping baseline")
 
         except requests.RequestException as e:
             Logger.debug("StatsScraper", f"Network error during scrape: {e}")
@@ -208,13 +237,7 @@ class StatsScraper:
             from services.queue_manager import resolve_mode_name
             self.mode = resolve_mode_name(queue_id)
         except Exception:
-            _QUEUE_MODE_NAMES = {
-                450: "ARAM", 2400: "ARAM Mayhem", 420: "Ranked Solo/Duo",
-                440: "Ranked Flex", 400: "Draft Pick", 1700: "Arena", 1710: "Arena 3v6",
-                490: "Quickplay", 900: "URF", 1010: "ARURF",
-                1300: "Nexus Blitz", 1020: "One For All", 1400: "Ultimate Spellbook",
-            }
-            self.mode = _QUEUE_MODE_NAMES.get(queue_id, self.mode)
+            self.mode = "ARAM"
         self._fetch_live_data_background(self.mode)
 
     def get_winrate(self, champ_name):
@@ -258,3 +281,11 @@ class StatsScraper:
     def is_offline(self) -> bool:
         """Dynamically returns True if operating on local fallback data."""
         return self.mode not in self.live_winrates
+
+    def shutdown(self, wait: bool = False) -> None:
+        """Shut down background worker thread pool and release resources."""
+        if self._executor is not None:
+            try:
+                self._executor.shutdown(wait=wait, cancel_futures=True)
+            except Exception as exc:
+                Logger.debug("StatsScraper", "shutdown suppressed an error", exc=exc)

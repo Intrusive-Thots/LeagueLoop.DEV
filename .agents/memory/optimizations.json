@@ -1,104 +1,1600 @@
 [
   {
-    "timestamp": "2026-04-19T13:17:00Z",
-    "feature": "AutomationEngine & LCUClient Optimization",
+    "timestamp": "2026-10-14T21:39:30.279213+00:00",
+    "feature": "Autonomous Improvement Loop Orchestrator & Fast Test Graph Integration",
     "before_metrics": {
-      "polling_overhead": "HTTP GET requests every 0.5s for Lobby, Session, and Gameflow Phase.",
-      "psutil_overhead": "3-second iteration throttling to prevent UI locking.",
-      "ui_overhead": "Unbounded cache dict causing memory to leak on long-running sessions."
+      "loop_execution": "Manual multi-command diagnostics and test verification (>30s).",
+      "memory_sync": "Ad-hoc manual updates to loop_state.json and episodic.json."
     },
     "after_metrics": {
-      "polling_overhead": "0.0 overhead. Fully event-driven via WAMP WebSockets instantly waking the loop.",
-      "psutil_overhead": "13ms attribute-only scan when LeagueClient is not found; O(1) PID cache otherwise.",
-      "ui_overhead": "Strict 300-item OrderedDict LRU Cache for the asset manager, eliminating long-term memory bloat."
+      "loop_execution": "Automated single-command orchestration (<2s targeted, ~18s full).",
+      "memory_sync": "Automated atomic updates to loop_state.json, episodic.json, and optimizations.json."
     },
-    "impact": "Eliminated all polling micro-stutters. CPU utilization dramatically reduced. Response time to lobby join invitations reduced from ~1s to 0ms."
+    "impact": "Unifies diagnostics, test regression verification, metric extraction, and memory persistence into a zero-prompt autonomous loop runner."
   },
   {
-    "timestamp": "2026-06-01T11:44:00Z",
-    "feature": "Mobile Remote Communication Optimization",
+    "timestamp": "2026-10-14T21:51:16.870354+00:00",
+    "feature": "Autonomous Improvement Loop Orchestrator & Fast Test Graph Integration",
     "before_metrics": {
-      "polling_overhead": "Static 2.0s HTTP polling interval across all phases."
+      "loop_execution": "Manual multi-command diagnostics and test verification (>30s).",
+      "memory_sync": "Ad-hoc manual updates to loop_state.json and episodic.json."
     },
     "after_metrics": {
-      "polling_overhead": "Adaptive dynamic polling: 500ms in ReadyCheck/ChampSelect (ultra fast responsiveness), 1500ms in Lobby/Idle, and 4000ms in In-Game (reduced network & battery drain)."
+      "loop_execution": "Automated single-command orchestration (<2s targeted, ~18s full).",
+      "memory_sync": "Automated atomic updates to loop_state.json, episodic.json, and optimizations.json."
     },
-    "impact": "Eliminated UI latency in time-sensitive draft screens while reducing mobile battery consumption by over 60% during active gameplay."
+    "impact": "Unifies diagnostics, test regression verification, metric extraction, and memory persistence into a zero-prompt autonomous loop runner."
   },
   {
-    "timestamp": "2026-08-01T00:48:30Z",
-    "feature": "LCU HTTP Diagnostics & Asset Memory Summary Engine",
+    "timestamp": "2026-10-14T22:18:08.308288+00:00",
+    "feature": "Diagnostic Crash Distinguisher, Code Entropy Auditor, and Test Suite Expansion",
     "before_metrics": {
-      "request_diagnostics": "No rate-limit, offline retry, or 429 status code tracking.",
-      "memory_diagnostics": "Only separate disk/splash counters, no holistic RAM footprint summary."
+      "diagnostics": "Crash log reported all faulthandler sessions as fatal crashes (282 false positives).",
+      "entropy_auditor": "Code entropy auditor was external to repository.",
+      "test_suite": "796 tests (missing diagnostics and entropy unit tests)."
     },
     "after_metrics": {
-      "request_diagnostics": "Thread-safe tracking of total requests, rate-limit throttles, throttle duration, offline retries, and HTTP 429 rate limit responses.",
-      "memory_diagnostics": "Integrated RAM and disk cache memory usage summary logging with estimated footprint calculation in get_memory_summary_diagnostics."
+      "diagnostics": "Crash log accurately distinguishes sessions from genuine fatal crashes (0 recent crashes).",
+      "entropy_auditor": "Native tools/code_entropy_analyzer.py integrated into autonomous runner.",
+      "test_suite": "806 tests all passing with zero regressions."
     },
-    "impact": "Provides full diagnostic visibility into network request rate limiting and RAM/disk cache utilization for local API clients and automated monitoring."
+    "impact": "Eliminates diagnostic false alarms, embeds static health and code entropy analysis into autonomous loops, and strengthens test coverage."
   },
   {
-    "timestamp": "2026-08-02T21:55:00Z",
-    "feature": "HTTP Latency Variance & Champion Search Slice Tuple Memory Pooling",
+    "timestamp": "2026-10-14T22:18:20.266561+00:00",
+    "feature": "Diagnostic Crash Distinguisher, Code Entropy Auditor, and Test Suite Expansion",
     "before_metrics": {
-      "http_latency_variance": "Only mean and percentiles (p50, p95, p99) computed.",
-      "search_slice_pooling": "Search result slice creation allocated fresh tuples and lists on every query repetition."
+      "diagnostics": "Crash log reported all faulthandler sessions as fatal crashes (282 false positives).",
+      "entropy_auditor": "Code entropy auditor was external to repository.",
+      "test_suite": "796 tests (missing diagnostics and entropy unit tests)."
     },
     "after_metrics": {
-      "http_latency_variance": "Automated variance (ms^2), standard deviation (ms), and coefficient of variation (CV) telemetry tracking.",
-      "search_slice_pooling": "Thread-safe search result slice tuple memory pool (_acquire_search_slice_tuple) with hit ratio and recycled memory telemetry."
+      "diagnostics": "Crash log accurately distinguishes sessions from genuine fatal crashes (0 recent crashes).",
+      "entropy_auditor": "Native tools/code_entropy_analyzer.py integrated into autonomous runner.",
+      "test_suite": "806 tests all passing with zero regressions."
     },
-    "impact": "Reduces heap object allocation overhead on repeated champion search queries while providing statistical dispersion metrics for network latency monitoring."
+    "impact": "Eliminates diagnostic false alarms, embeds static health and code entropy analysis into autonomous loops, and strengthens test coverage."
   },
   {
-    "timestamp": "2026-08-02T22:29:00Z",
-    "feature": "HTTP Latency Confidence Intervals/Skewness/Kurtosis & Skin/Splash Search Slice Tuple Memory Pooling",
+    "timestamp": "2026-10-14T22:18:44.575187+00:00",
+    "feature": "Diagnostic Crash Distinguisher, Code Entropy Auditor, and Test Suite Expansion",
     "before_metrics": {
-      "http_latency_stats": "Only variance and standard deviation tracked without confidence intervals, skewness, or kurtosis.",
-      "skin_splash_slice_pooling": "Skin preview and splash art filter searches allocated fresh result tuple objects on every query repetition."
+      "diagnostics": "Crash log reported all faulthandler sessions as fatal crashes (282 false positives).",
+      "entropy_auditor": "Code entropy auditor was external to repository.",
+      "test_suite": "796 tests (missing diagnostics and entropy unit tests)."
     },
     "after_metrics": {
-      "http_latency_stats": "Automated standard error, 95% confidence intervals, skewness, kurtosis, and excess kurtosis statistical telemetry.",
-      "skin_splash_slice_pooling": "Thread-safe memory pooling for skin preview (_acquire_skin_search_slice_tuple) and splash art filter (_acquire_splash_search_slice_tuple) result slice tuples."
+      "diagnostics": "Crash log accurately distinguishes sessions from genuine fatal crashes (0 recent crashes).",
+      "entropy_auditor": "Native tools/code_entropy_analyzer.py integrated into autonomous runner.",
+      "test_suite": "806 tests all passing with zero regressions."
     },
-    "impact": "Eliminates GC allocation overhead during frequent skin/splash query filtering and provides higher-order statistical shape analysis for LCU HTTP network latency distributions."
+    "impact": "Eliminates diagnostic false alarms, embeds static health and code entropy analysis into autonomous loops, and strengthens test coverage."
   },
   {
-    "timestamp": "2026-08-03T01:15:00Z",
-    "feature": "HTTP Retry Jitter Statistical Telemetry & Lane Matchups Search Slice Tuple Memory Pooling",
+    "timestamp": "2026-10-14T22:20:16.701541+00:00",
+    "feature": "Diagnostic Crash Distinguisher, Code Entropy Auditor, and Test Suite Expansion",
     "before_metrics": {
-      "retry_jitter_telemetry": "HTTP request retries occurred with unmonitored backoff jitter distributions.",
-      "lane_matchups_slice_pooling": "Lane matchups recommendation query filter searches allocated fresh result tuple objects on every query repetition."
+      "diagnostics": "Crash log reported all faulthandler sessions as fatal crashes (282 false positives).",
+      "entropy_auditor": "Code entropy auditor was external to repository.",
+      "test_suite": "796 tests (missing diagnostics and entropy unit tests)."
     },
     "after_metrics": {
-      "retry_jitter_telemetry": "Automated entropy (bits), percentiles (p25-p99), skewness/kurtosis, variance, range, confidence intervals, MOE, geometric mean, and harmonic mean telemetry.",
-      "lane_matchups_slice_pooling": "Thread-safe memory pooling for lane matchups recommendation search query result slice tuples (_acquire_lane_matchups_search_slice_tuple)."
+      "diagnostics": "Crash log accurately distinguishes sessions from genuine fatal crashes (0 recent crashes).",
+      "entropy_auditor": "Native tools/code_entropy_analyzer.py integrated into autonomous runner.",
+      "test_suite": "807 tests all passing with zero regressions."
     },
-    "impact": "Eliminates GC allocation overhead during repeated lane matchups query filtering and provides statistical characterization of network retry exponential backoff jitter."
+    "impact": "Eliminates diagnostic false alarms, embeds static health and code entropy analysis into autonomous loops, and strengthens test coverage."
   },
   {
-    "timestamp": "2026-08-03T01:22:00Z",
-    "feature": "HTTP Retry Jitter Skewness/Kurtosis CI & Summoner Spell Search Slice Tuple Memory Pooling",
+    "timestamp": "2026-10-14T22:33:21.939119+00:00",
+    "feature": "Diagnostic Crash Distinguisher, Code Entropy Auditor, and Test Suite Expansion",
     "before_metrics": {
-      "skewness_kurtosis_ci": "Skewness and kurtosis higher moments were measured without standard error bounds or margin of error confidence intervals.",
-      "summoner_spell_slice_pooling": "Summoner spell recommendation query filter searches allocated fresh result tuple objects on every query repetition."
+      "diagnostics": "Crash log reported all faulthandler sessions as fatal crashes (282 false positives).",
+      "entropy_auditor": "Code entropy auditor was external to repository.",
+      "test_suite": "796 tests (missing diagnostics and entropy unit tests)."
     },
     "after_metrics": {
-      "skewness_kurtosis_ci": "Automated standard error and confidence interval telemetry for skewness and kurtosis (get_http_retry_jitter_skewness_kurtosis_ci_telemetry).",
-    "impact": "Eliminates GC allocation overhead during repeated summoner spell query filtering and provides uncertainty bounds on higher-order shape parameters of retry backoff distributions."
+      "diagnostics": "Crash log accurately distinguishes sessions from genuine fatal crashes (0 recent crashes).",
+      "entropy_auditor": "Native tools/code_entropy_analyzer.py integrated into autonomous runner.",
+      "test_suite": "807 tests all passing with zero regressions."
+    },
+    "impact": "Eliminates diagnostic false alarms, embeds static health and code entropy analysis into autonomous loops, and strengthens test coverage."
   },
   {
-    "timestamp": "2026-08-07T17:14:00Z",
-    "feature": "HTTP Retry Jitter Palma & Decile Inequality Telemetry & Skill Priority Search Slice Memory Pooling",
+    "timestamp": "2026-10-14T22:38:31.848309+00:00",
+    "feature": "Diagnostic Crash Distinguisher, Code Entropy Auditor, and Test Suite Expansion",
     "before_metrics": {
-      "palma_decile_telemetry": "HTTP retry jitter backoff distributions were measured without Palma ratio or Decile ratio inequality metrics.",
-      "skill_priority_slice_pooling": "Skill priority recommendation query searches allocated fresh result tuple objects on every query repetition."
+      "diagnostics": "Crash log reported all faulthandler sessions as fatal crashes (282 false positives).",
+      "entropy_auditor": "Code entropy auditor was external to repository.",
+      "test_suite": "796 tests (missing diagnostics and entropy unit tests)."
     },
     "after_metrics": {
-      "palma_decile_telemetry": "Automated Palma ratio and Decile ratio inequality telemetry tracking (get_http_retry_jitter_palma_decile_telemetry).",
-      "skill_priority_slice_pooling": "Thread-safe memory pooling for skill priority recommendation search query result slice tuples (_acquire_skill_priority_search_slice_tuple)."
+      "diagnostics": "Crash log accurately distinguishes sessions from genuine fatal crashes (0 recent crashes).",
+      "entropy_auditor": "Native tools/code_entropy_analyzer.py integrated into autonomous runner.",
+      "test_suite": "807 tests all passing with zero regressions."
     },
-    "impact": "Eliminates heap allocation overhead during repeated skill priority recommendation queries and provides statistical inequality metrics for retry backoff jitter dispersion."
+    "impact": "Eliminates diagnostic false alarms, embeds static health and code entropy analysis into autonomous loops, and strengthens test coverage."
+  },
+  {
+    "timestamp": "2026-10-14T22:54:56.957311+00:00",
+    "feature": "Code Entropy Dual-Target Dispatch & Dynamic Baseline Delta Tracking",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Enables positional/flag target dispatch in code entropy auditor and automatically calculates metric deltas across improvement runs."
+  },
+  {
+    "timestamp": "2026-10-14T23:05:30.416401+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #99)",
+    "before_metrics": {
+      "test_passed": 11,
+      "files": 174,
+      "lines": 50480
+    },
+    "after_metrics": {
+      "test_passed": 810,
+      "files": 174,
+      "lines": 50480,
+      "delta_tests": 799,
+      "delta_files": 0,
+      "delta_lines": 0
+    },
+    "impact": "Continuous regression prevention and code health baseline tracked across Run #99."
+  },
+  {
+    "timestamp": "2026-10-14T23:18:40.751278+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #100)",
+    "before_metrics": {
+      "test_passed": 810,
+      "files": 174,
+      "lines": 50480
+    },
+    "after_metrics": {
+      "test_passed": 810,
+      "files": 174,
+      "lines": 50480,
+      "delta_tests": 0,
+      "delta_files": 0,
+      "delta_lines": 0
+    },
+    "impact": "Continuous regression prevention and code health baseline tracked across Run #100."
+  },
+  {
+    "timestamp": "2026-10-14T23:23:14.139070+00:00",
+    "feature": "AST Fast Test Runner Non-Code Optimization & Code Entropy Top Ranking",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Reduces non-code test cycles from >20s to <1.5s via targeted regression guard dispatch, and adds --top N ranking to Code Entropy Analyzer."
+  },
+  {
+    "timestamp": "2026-10-14T23:34:11.258913+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #102)",
+    "before_metrics": {
+      "test_passed": 4,
+      "files": 174,
+      "lines": 50501
+    },
+    "after_metrics": {
+      "test_passed": 810,
+      "files": 174,
+      "lines": 50501,
+      "delta_tests": 806,
+      "delta_files": 0,
+      "delta_lines": 0
+    },
+    "impact": "Continuous regression prevention and code health baseline tracked across Run #102."
+  },
+  {
+    "timestamp": "2026-10-14T23:50:04.678255+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #103)",
+    "before_metrics": {
+      "test_passed": 810,
+      "files": 174,
+      "lines": 50501
+    },
+    "after_metrics": {
+      "test_passed": 26,
+      "files": 174,
+      "lines": 50501,
+      "delta_tests": -784,
+      "delta_files": 0,
+      "delta_lines": 0
+    },
+    "impact": "Continuous regression prevention and code health baseline tracked across Run #103."
+  },
+  {
+    "timestamp": "2026-10-14T23:58:02.989689+00:00",
+    "feature": "Client Detector & Session Log Modularization",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Eliminated all oversized functions in client_detector.py and session_log.py, reduced entropy from 103 to 88 and 75 to 70, precompiled credential regexes, verified regression-free status with AST fast test runner in 2.78s."
+  },
+  {
+    "timestamp": "2026-10-15T00:10:41.076804+00:00",
+    "feature": "CLI Code Entropy Summary Flag",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Added --summary flag to code_entropy_analyzer.py for rapid diagnostic reporting without terminal clutter"
+  },
+  {
+    "timestamp": "2026-10-15T00:26:38.381537+00:00",
+    "feature": "Expand AST dependency mapping to tools/ modules and add test_fast_test_runner",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Enables instant targeted testing for developer and CI tooling, reducing feedback cycle to <2s while ensuring tooling regression guards."
+  },
+  {
+    "timestamp": "2026-10-15T00:33:36.012338+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #107)",
+    "before_metrics": {
+      "test_passed": 14,
+      "files": 175,
+      "lines": 50626
+    },
+    "after_metrics": {
+      "test_passed": 14,
+      "files": 175,
+      "lines": 50626,
+      "delta_tests": 0,
+      "delta_files": 0,
+      "delta_lines": 0
+    },
+    "impact": "Continuous regression prevention and code health baseline tracked across Run #107."
+  },
+  {
+    "timestamp": "2026-10-15T00:42:06.273887+00:00",
+    "feature": "Structured Session Log & Top Entropy Hotspot Diagnostics",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Integrated session.jsonl inspection (active sessions, level counts, throttle anomalies) and exported get_top_entropy_files for automated technical debt hotspot tracking across autonomous loops."
+  },
+  {
+    "timestamp": "2026-10-15T01:03:47.434575+00:00",
+    "feature": "Bounded Log Tail Streaming and Rotated Log Rollover",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Eliminates multi-megabyte heap allocation in log parsing using collections.deque and prevents missing rollover errors via error.log.1 fallback inspection."
+  },
+  {
+    "timestamp": "2026-10-15T01:07:31.116734+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #110)",
+    "before_metrics": {
+      "test_passed": 24,
+      "files": 175,
+      "lines": 50843
+    },
+    "after_metrics": {
+      "test_passed": 24,
+      "files": 175,
+      "lines": 50843,
+      "delta_tests": 0,
+      "delta_files": 0,
+      "delta_lines": 0
+    },
+    "impact": "Continuous regression prevention and code health baseline tracked across Run #110."
+  },
+  {
+    "timestamp": "2026-10-15T01:15:23.596006+00:00",
+    "feature": "Granular Code Breakdown, Entropy Baseline Tracking, and Streaming Crash Inspection",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Added per-folder (src, tests, tools) file/line counts, test-to-code ratio tracking, dynamic entropy delta calculation in loop_state.json, and line-by-line streaming in crash.log inspection."
+  },
+  {
+    "timestamp": "2026-10-15T01:25:05.105707+00:00",
+    "feature": "Debug Log Execution Context Diagnostic Inspection and Verbose CLI Dispatch",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Integrated bounded debug.log streaming into leagueloop_diagnostics.py to surface execution context and diagnostic tags without crashing on -v/--verbose, backed by unit tests."
+  },
+  {
+    "timestamp": "2026-10-15T01:40:35.605686+00:00",
+    "feature": "Fallback screenshot inspection & UI event categorization",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Added Desktop fallback capture discovery, categorized UI screenshot events into button_click, tab_transition, hotkey_setting, champion_action, and game_phase_change, and expanded diagnostic tests from 21 to 23 passing in <0.72s."
+  },
+  {
+    "timestamp": "2026-10-15T01:49:01.909126+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #114)",
+    "before_metrics": {
+      "test_passed": 23,
+      "files": 175,
+      "lines": 51160,
+      "avg_entropy": 66.86
+    },
+    "after_metrics": {
+      "test_passed": 23,
+      "files": 175,
+      "lines": 51160,
+      "avg_entropy": 66.86,
+      "delta_tests": 0,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.456), and entropy baseline tracked across Run #114."
+  },
+  {
+    "timestamp": "2026-10-15T02:05:15.478302+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #115)",
+    "before_metrics": {
+      "test_passed": 23,
+      "files": 175,
+      "lines": 51160,
+      "avg_entropy": 66.86
+    },
+    "after_metrics": {
+      "test_passed": 826,
+      "files": 175,
+      "lines": 51160,
+      "avg_entropy": 66.86,
+      "delta_tests": 803,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.456), and entropy baseline tracked across Run #115."
+  },
+  {
+    "timestamp": "2026-10-15T02:26:03.612350+00:00",
+    "feature": "feat(diagnostics): screenshot integrity inspection, staleness thresholding, and human age formatting",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Audits screenshot byte integrity (identifying corrupted 0-byte captures), evaluates staleness thresholds, formats delta human ages, and surfaces health alerts during diagnostic passes."
+  },
+  {
+    "timestamp": "2026-10-15T02:33:50.282134+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #117)",
+    "before_metrics": {
+      "test_passed": 27,
+      "files": 175,
+      "lines": 51315,
+      "avg_entropy": 66.86
+    },
+    "after_metrics": {
+      "test_passed": 27,
+      "files": 175,
+      "lines": 51315,
+      "avg_entropy": 66.86,
+      "delta_tests": 0,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.458), and entropy baseline tracked across Run #117."
+  },
+  {
+    "timestamp": "2026-10-15T02:54:48.126191+00:00",
+    "feature": "Session WebSocket Latency Telemetry & Connection Drop Anomaly Extraction",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Added numeric WebSocket latency distribution extraction (min, max, avg), connection drop tracking, and network stability grading to leagueloop_diagnostics and runner CLI."
+  },
+  {
+    "timestamp": "2026-10-15T03:03:10.220852+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #119)",
+    "before_metrics": {
+      "test_passed": 29,
+      "files": 175,
+      "lines": 51462,
+      "avg_entropy": 66.86
+    },
+    "after_metrics": {
+      "test_passed": 29,
+      "files": 175,
+      "lines": 51462,
+      "avg_entropy": 66.86,
+      "delta_tests": 0,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.46), and entropy baseline tracked across Run #119."
+  },
+  {
+    "timestamp": "2026-10-15T03:16:19.668323+00:00",
+    "feature": "Saved Sessions Vault Auditing and Storage Footprint Quotas",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Added multi-account SessionVault validation, 0-byte/corrupted token detection, session freshness auditing, and active vs rotated log storage footprint tracking."
+  },
+  {
+    "timestamp": "2026-10-15T03:50:20.165468+00:00",
+    "feature": "Safe Storage Pruning and Rolling Retention Enforcement",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Added prune_storage CLI tool to safely eliminate rotated logs and stale debug screenshots, added rolling screenshot retention to DebugTracker (MAX_SCREENSHOTS_DEFAULT), and tracked storage baseline across improvement loops."
+  },
+  {
+    "timestamp": "2026-10-15T03:52:27.705834+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #122)",
+    "before_metrics": {
+      "test_passed": 46,
+      "files": 175,
+      "lines": 52279,
+      "avg_entropy": 66.95
+    },
+    "after_metrics": {
+      "test_passed": 9,
+      "files": 175,
+      "lines": 52306,
+      "avg_entropy": 66.95,
+      "delta_tests": -37,
+      "delta_files": 0,
+      "delta_lines": 27,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.47), and entropy baseline tracked across Run #122."
+  },
+  {
+    "timestamp": "2026-10-15T04:04:29.207755+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #123)",
+    "before_metrics": {
+      "test_passed": 9,
+      "files": 175,
+      "lines": 52306,
+      "avg_entropy": 66.95
+    },
+    "after_metrics": {
+      "test_passed": 845,
+      "files": 175,
+      "lines": 52306,
+      "avg_entropy": 66.95,
+      "delta_tests": 836,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.47), and entropy baseline tracked across Run #123."
+  },
+  {
+    "timestamp": "2026-10-15T04:19:29.941749+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #124)",
+    "before_metrics": {
+      "test_passed": 845,
+      "files": 175,
+      "lines": 52306,
+      "avg_entropy": 66.95
+    },
+    "after_metrics": {
+      "test_passed": 59,
+      "files": 175,
+      "lines": 52306,
+      "avg_entropy": 66.95,
+      "delta_tests": -786,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.47), and entropy baseline tracked across Run #124."
+  },
+  {
+    "timestamp": "2026-10-15T04:24:15.767460+00:00",
+    "feature": "Window Docking and Tracker Architecture Invariant Regression Guards",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Added automated regression guards for Section 5 (Window Docking & Tracker Architecture Invariants): dual LEAGUE_TITLES, iconic coord guards, physical SetWindowPos (0x0014), and MonitorFromRect/rcWork."
+  },
+  {
+    "timestamp": "2026-10-15T04:35:38.218397+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #126)",
+    "before_metrics": {
+      "test_passed": 847,
+      "files": 175,
+      "lines": 52331,
+      "avg_entropy": 66.95
+    },
+    "after_metrics": {
+      "test_passed": 10,
+      "files": 175,
+      "lines": 52331,
+      "avg_entropy": 66.95,
+      "delta_tests": -837,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.471), and entropy baseline tracked across Run #126."
+  },
+  {
+    "timestamp": "2026-10-15T04:42:31.274908+00:00",
+    "feature": "Installer and Version Synchronization Invariant Protocol",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Automated strict alignment between src/core/version.py and installer.iss (AppVersion and VersionInfoVersion) in tools/bump_version.py, integrated version alignment check in autonomous_improvement_runner.py, and added VER-001 regression guards in tests/test_regression_guards.py."
+  },
+  {
+    "timestamp": "2026-10-15T04:49:48.036488+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #128)",
+    "before_metrics": {
+      "test_passed": 856,
+      "files": 176,
+      "lines": 52589,
+      "avg_entropy": 66.95
+    },
+    "after_metrics": {
+      "test_passed": 857,
+      "files": 176,
+      "lines": 52589,
+      "avg_entropy": 66.95,
+      "delta_tests": 1,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.475), and entropy baseline tracked across Run #128."
+  },
+  {
+    "timestamp": "2026-10-15T05:04:23.147209+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #129)",
+    "before_metrics": {
+      "test_passed": 857,
+      "files": 176,
+      "lines": 52589,
+      "avg_entropy": 66.95
+    },
+    "after_metrics": {
+      "test_passed": 63,
+      "files": 176,
+      "lines": 52589,
+      "avg_entropy": 66.95,
+      "delta_tests": -794,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.475), and entropy baseline tracked across Run #129."
+  },
+  {
+    "timestamp": "2026-10-15T05:06:44.456538+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #130)",
+    "before_metrics": {
+      "test_passed": 63,
+      "files": 176,
+      "lines": 52589,
+      "avg_entropy": 66.95
+    },
+    "after_metrics": {
+      "test_passed": 852,
+      "files": 176,
+      "lines": 52589,
+      "avg_entropy": 66.95,
+      "delta_tests": 789,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.475), and entropy baseline tracked across Run #130."
+  },
+  {
+    "timestamp": "2026-10-15T05:10:17.068328+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #131)",
+    "before_metrics": {
+      "test_passed": 852,
+      "files": 176,
+      "lines": 52589,
+      "avg_entropy": 66.95
+    },
+    "after_metrics": {
+      "test_passed": 63,
+      "files": 176,
+      "lines": 52589,
+      "avg_entropy": 66.95,
+      "delta_tests": -789,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.475), and entropy baseline tracked across Run #131."
+  },
+  {
+    "timestamp": "2026-10-15T10:41:34.201168+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #132)",
+    "before_metrics": {
+      "test_passed": 63,
+      "files": 176,
+      "lines": 52589,
+      "avg_entropy": 66.95
+    },
+    "after_metrics": {
+      "test_passed": 36,
+      "files": 185,
+      "lines": 54385,
+      "avg_entropy": 67.04,
+      "delta_tests": -27,
+      "delta_files": 9,
+      "delta_lines": 1796,
+      "delta_entropy": 0.09
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.523), and entropy baseline tracked across Run #132."
+  },
+  {
+    "timestamp": "2026-10-16T20:44:17.579899+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #133)",
+    "before_metrics": {
+      "test_passed": 36,
+      "files": 185,
+      "lines": 54385,
+      "avg_entropy": 67.04
+    },
+    "after_metrics": {
+      "test_passed": 957,
+      "files": 185,
+      "lines": 54468,
+      "avg_entropy": 67.28,
+      "delta_tests": 921,
+      "delta_files": 0,
+      "delta_lines": 83,
+      "delta_entropy": 0.24
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.523), and entropy baseline tracked across Run #133."
+  },
+  {
+    "timestamp": "2026-10-16T20:48:19.455032+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #134)",
+    "before_metrics": {
+      "test_passed": 957,
+      "files": 185,
+      "lines": 54468,
+      "avg_entropy": 67.28
+    },
+    "after_metrics": {
+      "test_passed": 150,
+      "files": 185,
+      "lines": 54468,
+      "avg_entropy": 67.28,
+      "delta_tests": -807,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.523), and entropy baseline tracked across Run #134."
+  },
+  {
+    "timestamp": "2026-10-16T20:56:09.466759+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #135)",
+    "before_metrics": {
+      "test_passed": 150,
+      "files": 185,
+      "lines": 54468,
+      "avg_entropy": 67.28
+    },
+    "after_metrics": {
+      "test_passed": 201,
+      "files": 185,
+      "lines": 54484,
+      "avg_entropy": 67.3,
+      "delta_tests": 51,
+      "delta_files": 0,
+      "delta_lines": 16,
+      "delta_entropy": 0.02
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.523), and entropy baseline tracked across Run #135."
+  },
+  {
+    "timestamp": "2026-10-16T20:57:38.735766+00:00",
+    "feature": "Bounded screenshot retention quota and LCU telemetry false-error suppression",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Capped screenshot retention to 150 captures, freed 85.07MB reducing storage footprint from 182.81MB [WARNING] to 97.75MB [OPTIMAL], and excused expected 400 and 405 statuses on reward claiming and uninitialized player loot endpoints."
+  },
+  {
+    "timestamp": "2026-10-16T21:05:36.236184+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #137)",
+    "before_metrics": {
+      "test_passed": 201,
+      "files": 185,
+      "lines": 54484,
+      "avg_entropy": 67.3
+    },
+    "after_metrics": {
+      "test_passed": 201,
+      "files": 185,
+      "lines": 54484,
+      "avg_entropy": 67.3,
+      "delta_tests": 0,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.523), and entropy baseline tracked across Run #137."
+  },
+  {
+    "timestamp": "2026-10-16T21:18:23.421481+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #138)",
+    "before_metrics": {
+      "test_passed": 201,
+      "files": 185,
+      "lines": 54484,
+      "avg_entropy": 67.3
+    },
+    "after_metrics": {
+      "test_passed": 63,
+      "files": 185,
+      "lines": 54484,
+      "avg_entropy": 67.3,
+      "delta_tests": -138,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.523), and entropy baseline tracked across Run #138."
+  },
+  {
+    "timestamp": "2026-10-16T21:46:31.278023+00:00",
+    "feature": "Daemon Thread Pool Executor & Clean Shutdown in StatsScraper",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Eliminated non-daemon ThreadPoolExecutor worker thread leaks and unmocked network scrapes in tests, guaranteeing zero pytest session-finish hangs."
+  },
+  {
+    "timestamp": "2026-10-16T21:48:56.055491+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #140)",
+    "before_metrics": {
+      "test_passed": 46,
+      "files": 185,
+      "lines": 54535,
+      "avg_entropy": 67.36
+    },
+    "after_metrics": {
+      "test_passed": 964,
+      "files": 185,
+      "lines": 54535,
+      "avg_entropy": 67.36,
+      "delta_tests": 918,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.523), and entropy baseline tracked across Run #140."
+  },
+  {
+    "timestamp": "2026-10-16T22:12:58.144395+00:00",
+    "feature": "Champ-Select Action 405 Handling",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Suppresses false-positive error.log logging when LCU returns transient 405 WRONG_METHOD on action endpoints during rapid phase initialization, and excuses gameflow-phase from telemetry warnings"
+  },
+  {
+    "timestamp": "2026-10-16T22:20:22.950362+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #142)",
+    "before_metrics": {
+      "test_passed": 965,
+      "files": 185,
+      "lines": 54557,
+      "avg_entropy": 67.38
+    },
+    "after_metrics": {
+      "test_passed": 965,
+      "files": 185,
+      "lines": 54557,
+      "avg_entropy": 67.38,
+      "delta_tests": 0,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.524), and entropy baseline tracked across Run #142."
+  },
+  {
+    "timestamp": "2026-10-16T22:37:48.514452+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #143)",
+    "before_metrics": {
+      "test_passed": 965,
+      "files": 185,
+      "lines": 54557,
+      "avg_entropy": 67.38
+    },
+    "after_metrics": {
+      "test_passed": 965,
+      "files": 185,
+      "lines": 54557,
+      "avg_entropy": 67.38,
+      "delta_tests": 0,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.524), and entropy baseline tracked across Run #143."
+  },
+  {
+    "timestamp": "2026-10-16T22:51:00.285527+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #144)",
+    "before_metrics": {
+      "test_passed": 965,
+      "files": 185,
+      "lines": 54557,
+      "avg_entropy": 67.38
+    },
+    "after_metrics": {
+      "test_passed": 965,
+      "files": 185,
+      "lines": 54557,
+      "avg_entropy": 67.38,
+      "delta_tests": 0,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.524), and entropy baseline tracked across Run #144."
+  },
+  {
+    "timestamp": "2026-10-16T23:06:15.732072+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #145)",
+    "before_metrics": {
+      "test_passed": 965,
+      "files": 185,
+      "lines": 54557,
+      "avg_entropy": 67.38
+    },
+    "after_metrics": {
+      "test_passed": 960,
+      "files": 185,
+      "lines": 54557,
+      "avg_entropy": 67.38,
+      "delta_tests": -5,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.524), and entropy baseline tracked across Run #145."
+  },
+  {
+    "timestamp": "2026-10-16T23:09:03.496830+00:00",
+    "feature": "Regex Test Count Robustness",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Uses re.findall to reliably extract the final summary counts of passed, failed, and skipped tests across multi-line progress output."
+  },
+  {
+    "timestamp": "2026-10-16T23:26:52.446709+00:00",
+    "feature": "Targeted Test Suite Baseline Preservation",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Prevents targeted test runs from clobbering full suite baseline (966) in loop_state.json, recording last_targeted_passed and avoiding false negative deltas."
+  },
+  {
+    "timestamp": "2026-10-16T23:40:46.623943+00:00",
+    "feature": "Multi-Target Positional Code Entropy Audit",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Enabled arbitrary positional file and directory paths with aggregated summary and threshold enforcement in code_entropy_analyzer."
+  },
+  {
+    "timestamp": "2026-10-16T23:55:26.752209+00:00",
+    "feature": "Pytest Error Extraction and Unparsed Failure Fallback",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Extracts explicit pytest error counts and enforces fallback error detection on unparsed non-zero returncodes in autonomous test runner."
+  },
+  {
+    "timestamp": "2026-10-17T00:11:25.217302+00:00",
+    "feature": "Targeted and Staged Test Dispatch with Dry-Run MemPalace Protection",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Added positional targets and --staged dispatch to autonomous loop runner and prevented MemPalace diary writes on dry-runs."
+  },
+  {
+    "timestamp": "2026-10-17T00:28:17.754941+00:00",
+    "feature": "Pytest node selector and flag passthrough in fast_test_runner and autonomous_improvement_runner",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Sub-second single test dispatch, accurate pytest warnings tracking, and transparent CLI flag passthrough without full test suite oscillation"
+  },
+  {
+    "timestamp": "2026-10-17T00:38:42.286740+00:00",
+    "feature": "fix_fast_test_runner_name_error",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Resolved NameError on args.staged in tools/fast_test_runner.py, ensuring targeted tests execute accurately across clean and staged working trees"
+  },
+  {
+    "timestamp": "2026-10-17T00:47:37.644666+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #153)",
+    "before_metrics": {
+      "test_passed": 977,
+      "files": 185,
+      "lines": 55015,
+      "avg_entropy": 67.38
+    },
+    "after_metrics": {
+      "test_passed": 977,
+      "files": 185,
+      "lines": 55015,
+      "avg_entropy": 67.38,
+      "delta_tests": 0,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.531), and entropy baseline tracked across Run #153."
+  },
+  {
+    "timestamp": "2026-10-17T00:49:20.201242+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #154)",
+    "before_metrics": {
+      "test_passed": 977,
+      "files": 185,
+      "lines": 55015,
+      "avg_entropy": 67.38
+    },
+    "after_metrics": {
+      "test_passed": 979,
+      "files": 185,
+      "lines": 55015,
+      "avg_entropy": 67.38,
+      "delta_tests": 2,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.531), and entropy baseline tracked across Run #154."
+  },
+  {
+    "timestamp": "2026-10-17T01:05:03.249570+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #155)",
+    "before_metrics": {
+      "test_passed": 979,
+      "files": 185,
+      "lines": 55015,
+      "avg_entropy": 67.38
+    },
+    "after_metrics": {
+      "test_passed": 974,
+      "files": 185,
+      "lines": 55015,
+      "avg_entropy": 67.38,
+      "delta_tests": -5,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.531), and entropy baseline tracked across Run #155."
+  },
+  {
+    "timestamp": "2026-10-17T01:17:36.196974+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #156)",
+    "before_metrics": {
+      "test_passed": 974,
+      "files": 185,
+      "lines": 55015,
+      "avg_entropy": 67.38
+    },
+    "after_metrics": {
+      "test_passed": 974,
+      "files": 185,
+      "lines": 55015,
+      "avg_entropy": 67.38,
+      "delta_tests": 0,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.531), and entropy baseline tracked across Run #156."
+  },
+  {
+    "timestamp": "2026-10-17T01:18:22.979701+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #157)",
+    "before_metrics": {
+      "test_passed": 974,
+      "files": 185,
+      "lines": 55015,
+      "avg_entropy": 67.38
+    },
+    "after_metrics": {
+      "test_passed": 979,
+      "files": 185,
+      "lines": 55015,
+      "avg_entropy": 67.38,
+      "delta_tests": 5,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.531), and entropy baseline tracked across Run #157."
+  },
+  {
+    "timestamp": "2026-10-17T01:35:14.563291+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #158)",
+    "before_metrics": {
+      "test_passed": 979,
+      "files": 185,
+      "lines": 55015,
+      "avg_entropy": 67.38
+    },
+    "after_metrics": {
+      "test_passed": 979,
+      "files": 185,
+      "lines": 55015,
+      "avg_entropy": 67.38,
+      "delta_tests": 0,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.531), and entropy baseline tracked across Run #158."
+  },
+  {
+    "timestamp": "2026-10-17T01:58:04.727532+00:00",
+    "feature": "hoisted_event_dispatch_and_ws_perf_threshold",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Eliminated repeated inner imports in EventBus.emit and api_handler while configurable ws_perf_warning_threshold_ms prevents false-positive warnings on large LCU payloads"
+  },
+  {
+    "timestamp": "2026-10-17T02:08:29.677132+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #160)",
+    "before_metrics": {
+      "test_passed": 979,
+      "files": 185,
+      "lines": 55058,
+      "avg_entropy": 67.4
+    },
+    "after_metrics": {
+      "test_passed": 982,
+      "files": 185,
+      "lines": 55058,
+      "avg_entropy": 67.4,
+      "delta_tests": 3,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.532), and entropy baseline tracked across Run #160."
+  },
+  {
+    "timestamp": "2026-10-17T02:19:45.487275+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #161)",
+    "before_metrics": {
+      "test_passed": 982,
+      "files": 185,
+      "lines": 55058,
+      "avg_entropy": 67.4
+    },
+    "after_metrics": {
+      "test_passed": 982,
+      "files": 185,
+      "lines": 55058,
+      "avg_entropy": 67.4,
+      "delta_tests": 0,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.532), and entropy baseline tracked across Run #161."
+  },
+  {
+    "timestamp": "2026-10-17T02:34:23.082984+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #162)",
+    "before_metrics": {
+      "test_passed": 982,
+      "files": 185,
+      "lines": 55058,
+      "avg_entropy": 67.4
+    },
+    "after_metrics": {
+      "test_passed": 982,
+      "files": 185,
+      "lines": 55058,
+      "avg_entropy": 67.4,
+      "delta_tests": 0,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.532), and entropy baseline tracked across Run #162."
+  },
+  {
+    "timestamp": "2026-10-17T02:50:04.670619+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #163)",
+    "before_metrics": {
+      "test_passed": 982,
+      "files": 185,
+      "lines": 55058,
+      "avg_entropy": 67.4
+    },
+    "after_metrics": {
+      "test_passed": 982,
+      "files": 185,
+      "lines": 55058,
+      "avg_entropy": 67.4,
+      "delta_tests": 0,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.532), and entropy baseline tracked across Run #163."
+  },
+  {
+    "timestamp": "2026-10-17T03:11:16.998603+00:00",
+    "feature": "MemPalace AAAK Diary & Fallback Sync Protocol",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Enhanced MemPalace diary sync with AAAK structured output formatting, shutil.which path discovery fallback, and full regression test coverage."
+  },
+  {
+    "timestamp": "2026-10-17T03:21:06.190094+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #165)",
+    "before_metrics": {
+      "test_passed": 986,
+      "files": 185,
+      "lines": 55134,
+      "avg_entropy": 67.4
+    },
+    "after_metrics": {
+      "test_passed": 981,
+      "files": 185,
+      "lines": 55134,
+      "avg_entropy": 67.4,
+      "delta_tests": -5,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.534), and entropy baseline tracked across Run #165."
+  },
+  {
+    "timestamp": "2026-10-17T03:43:22.416498+00:00",
+    "feature": "Telemetry Expected Error Invariant and MemPalace AAAK Sync",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Added LCU telemetry regression guards for 405/404/400 suppression and aligned MemPalace diary recording with AAAK specification"
+  },
+  {
+    "timestamp": "2026-10-17T03:48:20.549231+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #167)",
+    "before_metrics": {
+      "test_passed": 988,
+      "files": 185,
+      "lines": 55192,
+      "avg_entropy": 67.4
+    },
+    "after_metrics": {
+      "test_passed": 988,
+      "files": 185,
+      "lines": 55192,
+      "avg_entropy": 67.4,
+      "delta_tests": 0,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.536), and entropy baseline tracked across Run #167."
+  },
+  {
+    "timestamp": "2026-10-17T04:03:19.830963+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #168)",
+    "before_metrics": {
+      "test_passed": 988,
+      "files": 185,
+      "lines": 55192,
+      "avg_entropy": 67.4
+    },
+    "after_metrics": {
+      "test_passed": 988,
+      "files": 185,
+      "lines": 55192,
+      "avg_entropy": 67.4,
+      "delta_tests": 0,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.536), and entropy baseline tracked across Run #168."
+  },
+  {
+    "timestamp": "2026-10-17T04:06:27.337994+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #169)",
+    "before_metrics": {
+      "test_passed": 988,
+      "files": 185,
+      "lines": 55192,
+      "avg_entropy": 67.4
+    },
+    "after_metrics": {
+      "test_passed": 988,
+      "files": 185,
+      "lines": 55192,
+      "avg_entropy": 67.4,
+      "delta_tests": 0,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.536), and entropy baseline tracked across Run #169."
+  },
+  {
+    "timestamp": "2026-10-17T04:18:22.965703+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #170)",
+    "before_metrics": {
+      "test_passed": 988,
+      "files": 185,
+      "lines": 55192,
+      "avg_entropy": 67.4
+    },
+    "after_metrics": {
+      "test_passed": 988,
+      "files": 185,
+      "lines": 55192,
+      "avg_entropy": 67.4,
+      "delta_tests": 0,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.536), and entropy baseline tracked across Run #170."
+  },
+  {
+    "timestamp": "2026-10-17T04:38:24.866183+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #171)",
+    "before_metrics": {
+      "test_passed": 988,
+      "files": 185,
+      "lines": 55192,
+      "avg_entropy": 67.4
+    },
+    "after_metrics": {
+      "test_passed": 988,
+      "files": 185,
+      "lines": 55192,
+      "avg_entropy": 67.4,
+      "delta_tests": 0,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.536), and entropy baseline tracked across Run #171."
+  },
+  {
+    "timestamp": "2026-10-17T04:57:35.029716+00:00",
+    "feature": "LCU HTTP Transient Retry Telemetry and Error Suppression Guards (Run #172)",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Suppresses false-positive LCU_TELEMETRY warning logs and premature HTTP status anomaly flags during transient 5xx jitter backoff retries in LCUClient, adds http_transient_retry_count observability to request diagnostics, and advances test baseline to 991 passing tests."
+  },
+  {
+    "timestamp": "2026-10-17T05:10:22.472822+00:00",
+    "feature": "LCU 5xx Sliding Window Anomaly Threshold Enforcement",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Prevents single 500/503 errors from falsely tripping HTTP status anomaly alerts by strictly checking the configured count threshold (default 5)"
+  },
+  {
+    "timestamp": "2026-10-17T05:27:21.988646+00:00",
+    "feature": "RiotClientAPI Timeout Resilience and AccountSwitcher Logging Hygiene",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Adds automatic retry and graceful backoff for ReadTimeout/ConnectTimeout in RiotClientAPI, eliminates unicode em dash console mojibake in AccountSwitcher logging, treats recoverable session expiration as warning, and expands test baseline to 999 passing tests."
+  },
+  {
+    "timestamp": "2026-10-17T05:41:17.547396+00:00",
+    "feature": "LCU HTTP Transport Failure Sliding Window Threshold Enforcement (Run #175)",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Prevents isolated connection drops (status 0) from falsely triggering LCU_HTTP_STATUS_ANOMALY alerts by requiring _http_anomaly_transport_count_threshold (default 3) in the sliding window, adds regression guards and telemetry reporting, and crosses the milestone with 1003 passing tests."
+  },
+  {
+    "timestamp": "2026-10-17T05:51:02.780999+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #176)",
+    "before_metrics": {
+      "test_passed": 1003,
+      "files": 185,
+      "lines": 55594,
+      "avg_entropy": 67.51
+    },
+    "after_metrics": {
+      "test_passed": 998,
+      "files": 185,
+      "lines": 55594,
+      "avg_entropy": 67.51,
+      "delta_tests": -5,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.545), and entropy baseline tracked across Run #176."
+  },
+  {
+    "timestamp": "2026-10-17T06:03:14.074586+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #177)",
+    "before_metrics": {
+      "test_passed": 998,
+      "files": 185,
+      "lines": 55594,
+      "avg_entropy": 67.51
+    },
+    "after_metrics": {
+      "test_passed": 1003,
+      "files": 185,
+      "lines": 55594,
+      "avg_entropy": 67.51,
+      "delta_tests": 5,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.545), and entropy baseline tracked across Run #177."
+  },
+  {
+    "timestamp": "2026-10-17T06:27:46.630411+00:00",
+    "feature": "Log Statement ASCII Sanitization & LOG-002 Regression Guard",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Eliminated literal em dashes in Logger calls across src/, avoiding cp1252/mojibake errors on Windows consoles, and established LOG-002 regression guard test (advancing suite to 1004 passed)."
+  },
+  {
+    "timestamp": "2026-10-17T06:38:27.418014+00:00",
+    "feature": "CP1252-ASCII-Log-Hygiene",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Sanitize all non-ASCII unicode chars from logging calls and add AST-based LOG-002 and LOG-003 regression guards"
+  },
+  {
+    "timestamp": "2026-10-17T06:59:13.339745+00:00",
+    "feature": "QueueManager deduplication, QUEUE-001 regression guard, and test suite expansion",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Eliminated 50 lines of duplicate hardcoded queue resolution from AppSidebar, delegated directly to QueueManager with dynamic fallback, reduced sidebar complexity by 15, and added 10 unit tests in test_queue_manager.py."
+  },
+  {
+    "timestamp": "2026-10-17T07:08:36.501350+00:00",
+    "feature": "StatsScraper Queue Mode Resolution Deduplication and QUEUE-002 Guard",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Eliminated redundant 12-item _QUEUE_MODE_NAMES dictionary in StatsScraper.set_mode_by_queue_id, delegated mode resolution to QueueManager.resolve_mode_name, added QUEUE-002 regression guard, and achieved 1000 passed tests milestone."
+  },
+  {
+    "timestamp": "2026-10-17T07:27:03.206887+00:00",
+    "feature": "Offline Queue Deduplication & Flood Guard",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Prevents duplicate request queuing, serializes replay bursts, and guards UI against disconnected LCU matchmaking calls"
+  },
+  {
+    "timestamp": "2026-10-17T07:54:58.734935+00:00",
+    "feature": "Matchmaking In-Flight Debounce and LOBBY-001 Guard",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Eliminated concurrent race condition on duplicate Find Match triggers and refined HTTP None transport failure logging"
+  },
+  {
+    "timestamp": "2026-10-17T09:04:03.737866+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #184)",
+    "before_metrics": {
+      "test_passed": 1004,
+      "files": 185,
+      "lines": 55815,
+      "avg_entropy": 67.27
+    },
+    "after_metrics": {
+      "test_passed": 1004,
+      "files": 185,
+      "lines": 55815,
+      "avg_entropy": 67.27,
+      "delta_tests": 0,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.552), and entropy baseline tracked across Run #184."
+  },
+  {
+    "timestamp": "2026-10-17T09:05:09.242856+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #185)",
+    "before_metrics": {
+      "test_passed": 1004,
+      "files": 185,
+      "lines": 55815,
+      "avg_entropy": 67.27
+    },
+    "after_metrics": {
+      "test_passed": 999,
+      "files": 185,
+      "lines": 55815,
+      "avg_entropy": 67.27,
+      "delta_tests": -5,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.552), and entropy baseline tracked across Run #185."
+  },
+  {
+    "timestamp": "2026-10-17T09:22:27.660234+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #186)",
+    "before_metrics": {
+      "test_passed": 999,
+      "files": 185,
+      "lines": 55815,
+      "avg_entropy": 67.27
+    },
+    "after_metrics": {
+      "test_passed": 1004,
+      "files": 185,
+      "lines": 55815,
+      "avg_entropy": 67.27,
+      "delta_tests": 5,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.552), and entropy baseline tracked across Run #186."
+  },
+  {
+    "timestamp": "2026-10-17T09:35:59.016178+00:00",
+    "feature": "Autonomous Improvement Baseline Tracking (Run #187)",
+    "before_metrics": {
+      "test_passed": 1004,
+      "files": 185,
+      "lines": 55815,
+      "avg_entropy": 67.27
+    },
+    "after_metrics": {
+      "test_passed": 1004,
+      "files": 185,
+      "lines": 55815,
+      "avg_entropy": 67.27,
+      "delta_tests": 0,
+      "delta_files": 0,
+      "delta_lines": 0,
+      "delta_entropy": 0.0
+    },
+    "impact": "Continuous regression prevention, test ratio tracking (0.552), and entropy baseline tracked across Run #187."
   }
 ]

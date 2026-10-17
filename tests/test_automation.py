@@ -774,6 +774,108 @@ class TestAutomationEngineAutoHonor(unittest.TestCase):
         self.assertTrue(engine._honor_handled)
         engine._log.assert_any_call("Honored Faker#T1 (Ahri) (random)")
 
+    def test_end_of_game_triggers_replay_saver_before_skip_stats(self):
+        engine = self._make_engine()
+        engine.config.get.side_effect = lambda key, default=False: {
+            "auto_honor_enabled": False,
+            "skip_stats_enabled": True,
+            "auto_save_replays": True,
+        }.get(key, default)
+        engine.replay_saver = MagicMock()
+
+        def mock_request(method, endpoint, *args, **kwargs):
+            mock = MagicMock()
+            mock.status_code = 200
+            if endpoint == "/lol-end-of-game/v1/eog-stats-block":
+                mock.json.return_value = {
+                    "gameId": 9999,
+                    "localPlayer": {"puuid": "player-me"},
+                    "teams": [{"isPlayerTeam": True, "players": [{"puuid": "player-me"}, {"puuid": "player-other"}]}],
+                }
+            elif endpoint == "/lol-lobby/v2/play-again":
+                mock.status_code = 200
+            return mock
+
+        engine.lcu.request.side_effect = mock_request
+        engine._handle_end_of_game("EndOfGame")
+
+        engine.replay_saver.on_match_ended.assert_called_once_with(game_id=9999)
+        self.assertTrue(engine._honor_handled)
+
+    def test_end_of_game_waiting_for_stats_triggers_play_again_and_requeue(self):
+        engine = self._make_engine()
+        engine.config.get.side_effect = lambda key, default=False: {
+            "auto_honor_enabled": False,
+            "skip_stats_enabled": True,
+            "auto_save_replays": False,
+        }.get(key, default)
+
+        called_endpoints = []
+        def mock_request(method, endpoint, *args, **kwargs):
+            called_endpoints.append((method, endpoint))
+            mock = MagicMock()
+            mock.status_code = 200
+            return mock
+
+        engine.lcu.request.side_effect = mock_request
+        engine._handle_end_of_game("WaitingForStats")
+
+        self.assertIn(("POST", "/lol-lobby/v2/play-again"), called_endpoints)
+        self.assertTrue(engine._play_again_handled)
+        self.assertTrue(engine._post_game_requeue_pending)
+
+    def test_handle_post_game_requeue_starts_matchmaking_in_lobby(self):
+        engine = self._make_engine()
+        engine.config.get.side_effect = lambda key, default=False: {
+            "skip_stats_enabled": True,
+        }.get(key, default)
+        engine._post_game_requeue_pending = True
+
+        def mock_request(method, endpoint, *args, **kwargs):
+            mock = MagicMock()
+            mock.status_code = 200
+            if endpoint == "/lol-lobby/v2/lobby/matchmaking/search-state":
+                mock.json.return_value = {"searchState": "Invalid"}
+            elif endpoint == "/lol-lobby/v2/lobby":
+                mock.json.return_value = {
+                    "localMember": {"isLeader": True},
+                    "gameConfig": {"queueId": 450}
+                }
+            return mock
+
+        engine.lcu.request.side_effect = mock_request
+        engine._handle_post_game_requeue("Lobby", "WaitingForStats")
+
+        engine.lcu.request.assert_any_call("POST", "/lol-lobby/v2/lobby/matchmaking/search", None)
+        self.assertFalse(engine._post_game_requeue_pending)
+
+    def test_handle_post_game_requeue_non_leader_skips_cleanly(self):
+        engine = self._make_engine()
+        engine.config.get.side_effect = lambda key, default=False: {
+            "skip_stats_enabled": True,
+        }.get(key, default)
+        engine._post_game_requeue_pending = True
+
+        def mock_request(method, endpoint, *args, **kwargs):
+            mock = MagicMock()
+            mock.status_code = 200
+            if endpoint == "/lol-lobby/v2/lobby/matchmaking/search-state":
+                mock.json.return_value = {"searchState": "Invalid"}
+            elif endpoint == "/lol-lobby/v2/lobby":
+                mock.json.return_value = {
+                    "localMember": {"isLeader": False},
+                    "gameConfig": {"queueId": 450}
+                }
+            return mock
+
+        engine.lcu.request.side_effect = mock_request
+        engine._handle_post_game_requeue("Lobby", "WaitingForStats")
+
+        # Must not start search if not leader
+        search_calls = [c for c in engine.lcu.request.call_args_list if c[0] == ("POST", "/lol-lobby/v2/lobby/matchmaking/search")]
+        self.assertEqual(len(search_calls), 0)
+        self.assertFalse(engine._post_game_requeue_pending)
+
 
 
 class TestAutomationEngineDraftAssistantCoverage(unittest.TestCase):
@@ -1040,6 +1142,50 @@ class TestAutomationEngineAutoJoinAndSkin(unittest.TestCase):
         self.assertEqual(recorded["kills"], 9)
         self.assertEqual(recorded["deaths"], 3)
         self.assertTrue(recorded["win"])
+
+
+class TestAutomationAct(unittest.TestCase):
+    def test_act_handles_bench_swap_500_cleanly(self):
+        engine = _engine()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 500
+        mock_resp.text = '{"message":"Unable to swap with ChampionBench"}'
+        engine.lcu.request.return_value = mock_resp
+
+        with patch("utils.logger.Logger.error") as mock_err, patch("utils.logger.Logger.info") as mock_info:
+            success = engine._act("POST", "/lol-champ-select/v1/session/bench/swap/115", what="ARAM swap")
+            self.assertFalse(success)
+            mock_err.assert_not_called()
+            mock_info.assert_called_once()
+            self.assertIn("bench champion no longer available", mock_info.call_args[0][1])
+
+    def test_act_handles_ready_check_404_cleanly(self):
+        engine = _engine()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 404
+        mock_resp.text = '{"message":"Not found"}'
+        engine.lcu.request.return_value = mock_resp
+
+        with patch("utils.logger.Logger.error") as mock_err, patch("utils.logger.Logger.debug") as mock_debug:
+            success = engine._act("POST", "/lol-matchmaking/v1/ready-check/accept", what="Accept match")
+            self.assertFalse(success)
+            mock_err.assert_not_called()
+            mock_debug.assert_called_once()
+
+
+    def test_act_handles_champ_select_action_405_cleanly(self):
+        engine = _engine()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 405
+        mock_resp.text = '{"errorCode":"WRONG_METHOD","httpStatus":405,"message":"Wrong HTTP method for this URI"}'
+        engine.lcu.request.return_value = mock_resp
+
+        with patch("utils.logger.Logger.error") as mock_err, patch("utils.logger.Logger.debug") as mock_debug:
+            success = engine._act("PATCH", "/lol-champ-select/v1/session/actions/4", what="Draft: hovered TwistedFate")
+            self.assertFalse(success)
+            mock_err.assert_not_called()
+            mock_debug.assert_called_once()
+            self.assertIn("champ select action not yet open to modifications", mock_debug.call_args[0][1])
 
 
 if __name__ == '__main__':

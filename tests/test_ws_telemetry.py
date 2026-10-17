@@ -701,18 +701,15 @@ def test_lcu_client_http_retry_jitter_erst_esteban_polarization_telemetry():
     assert "http_retry_jitter_esteban_ray_index" in entropy_meta
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+def test_lcu_client_expected_404_claim_endpoints():
+    client = LCUClient()
+    # Exploratory claim endpoints should be recognized as expected absence when returning 404
+    assert client._is_expected_absence(404, "/lol-battle-pass/v1/rewards/claim") is True
+    assert client._is_expected_absence(404, "/lol-champion-mastery/v1/milestones/claim") is True
+    assert client._is_expected_absence(404, "/lol-rewards/v1/grants/claim") is True
+    assert client._is_expected_absence(404, "/lol-ranked/v1/split-rewards/claim") is True
+    assert client._is_expected_absence(404, "/lol-ranked/v1/rewards/claim") is True
+    assert client._is_expected_absence(404, "/lol-matchmaking/v1/search") is True
+    # Non-404 status codes should not be treated as expected absence
+    assert client._is_expected_absence(500, "/lol-battle-pass/v1/rewards/claim") is False
+    assert client._is_expected_absence(400, "/lol-battle-pass/v1/rewards/claim") is False

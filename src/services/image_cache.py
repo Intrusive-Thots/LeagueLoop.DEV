@@ -89,15 +89,22 @@ class ImageCacheService:
         processed_count = 0
         raw_image_count = 0
 
-        entries = self._get_dir_entries(force=force_scan)
-        for entry in entries:
-            total_files += 1
-            total_bytes += entry["size"]
-            name = entry["name"]
-            if name.startswith("processed_"):
-                processed_count += 1
-            elif name.endswith((".png", ".jpg", ".jpeg", ".webp")):
-                raw_image_count += 1
+        if os.path.exists(self.cache_dir):
+            try:
+                for entry in os.scandir(self.cache_dir):
+                    try:
+                        if entry.is_file():
+                            total_files += 1
+                            total_bytes += entry.stat().st_size
+                            name = entry.name
+                            if name.startswith("processed_"):
+                                processed_count += 1
+                            elif name.endswith((".png", ".jpg", ".jpeg", ".webp")):
+                                raw_image_count += 1
+                    except OSError:
+                        pass
+            except OSError:
+                pass
 
         scan_dur_ms = (time.perf_counter() - t_start) * 1000.0
 
