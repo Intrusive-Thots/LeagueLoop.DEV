@@ -395,3 +395,14 @@ def test_logger_ascii_hygiene_invariants():
     assert not offenders, f"Logging calls with non-ASCII strings found:\n" + "\n".join(offenders)
 
 
+def test_app_sidebar_queue_resolution_invariants():
+    """QUEUE-001: Ensure AppSidebar._get_queue_id_for_mode delegates to QueueManager and does not maintain duplicate hardcoded dictionaries."""
+    sidebar_file = SRC / "ui" / "app_sidebar.py"
+    assert sidebar_file.exists()
+    text = sidebar_file.read_text(encoding="utf-8")
+    assert "from services.queue_manager import resolve_queue_id" in text
+    assert "def _get_queue_id_for_mode" in text
+    # Ensure no duplicate hardcoded mode dictionary in _get_queue_id_for_mode
+    assert "mode_map = {" not in text
+
+

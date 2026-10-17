@@ -5,6 +5,7 @@ Dynamically discovers, categorizes, and maps available League of Legends lobby t
 and queue IDs via LCU API (with static offline fallback).
 """
 
+import time
 import threading
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -170,6 +171,7 @@ class QueueManager:
                 self._name_to_queue_id = new_name_map
                 if new_groups:
                     self._categorized_groups = new_groups
+                self._last_updated = time.time()
 
             Logger.info("QueueManager", f"Dynamically updated {len(available_queues)} lobby types from LCU.")
 
@@ -189,6 +191,13 @@ class QueueManager:
         """Resolve a mode string (e.g. 'ARAM', 'Ranked Solo/Duo') to a numeric Queue ID."""
         if not mode:
             return 450  # Default to ARAM
+
+        # Dynamically populate if connected and not yet fetched
+        if lcu and getattr(lcu, "is_connected", False) and self._last_updated == 0.0:
+            try:
+                self.update_available_lobby_types(lcu)
+            except Exception as exc:
+                Logger.debug("QueueManager", "update_available_lobby_types suppressed an error", exc=exc)
 
         with self._lock:
             if mode in self._name_to_queue_id:

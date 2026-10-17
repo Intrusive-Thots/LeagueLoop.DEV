@@ -1174,64 +1174,14 @@ class SidebarWidget(ctk.CTkFrame):
                         self.after(0, lambda: self.set_power_state(False))
             threading.Thread(target=_check_and_cancel, daemon=True).start()
 
-    def _get_queue_id_for_mode(self, mode: str):
-        """Dynamically resolve the queue ID from the client."""
-        mode_map = {
-            "Quickplay": 490,
-            "Draft Pick": 400,
-            "Ranked Solo/Duo": 420,
-            "Ranked Flex": 440,
-            "ARAM": 450,
-            "ARAM Mayhem": 2400,
-            "ARAM: Mayhem": 2400,
-            "Arena": 1700,
-            "Arena 3v6": 1710,
-            "Brawl": 2300,
-            "URF": 900,
-            "ARURF": 1010,
-            "Nexus Blitz": 1300,
-            "One For All": 1020,
-            "Ultimate Spellbook": 1400,
-            "TFT Normal": 1090,
-            "TFT Ranked": 1100,
-        }
-        if mode in mode_map:
-            return mode_map[mode]
-
+    def _get_queue_id_for_mode(self, mode: str) -> int:
+        """Dynamically resolve the queue ID from the client via QueueManager."""
         try:
-            queues_req = self.lcu.request("GET", "/lol-game-queues/v1/queues")
-            if queues_req and queues_req.status_code == 200:
-                queues = queues_req.json()
-                
-                if mode == "ARAM Mayhem":
-                    for q in queues:
-                        if q.get("isCustom"): continue
-                        name = q.get("name", "").lower()
-                        desc = q.get("description", "").lower()
-                        if "mayhem" in name or "mayhem" in desc:
-                            return int(q.get("id"))
-
-                if mode == "Brawl":
-                    for q in queues:
-                        if q.get("isCustom"): continue
-                        name = q.get("name", "").lower()
-                        desc = q.get("description", "").lower()
-                        if "brawl" in name or "brawl" in desc:
-                            return int(q.get("id"))
-
-                # ⚡ Bolt: Hoist the target string's normalization outside the loop
-                # to prevent redundant string allocations on every iteration.
-                if isinstance(mode, str):
-                    mode_lower = mode.lower()
-                    for q in queues:
-                        if q.get("isCustom"): continue
-                        q_name = q.get("name")
-                        if isinstance(q_name, str):
-                            if mode_lower in q_name.lower():
-                                return int(q.get("id"))
+            from services.queue_manager import resolve_queue_id
+            return resolve_queue_id(mode, self.lcu)
         except Exception as exc:
             Logger.debug("AppSidebar", "_get_queue_id_for_mode suppressed an error", exc=exc)
-        return 450 # Default to ARAM
+            return 450
 
     #: Gameflow phases in which the client owns the lobby and will refuse to
     #: make a new one. "Lobby" and "None" are the two it will accept.

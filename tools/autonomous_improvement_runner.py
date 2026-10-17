@@ -560,6 +560,11 @@ def run_loop(
             "description": "Enforcing sliding-window thresholding on transport failures (status 0) prevents isolated connection drops or client closing events from falsely triggering LCU_HTTP_STATUS_ANOMALY alerts, requiring repeated failures (default threshold 3) before flagging an anomaly.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Queue Resolution Consolidation and Invariant",
+            "description": "Consolidating queue ID and mode resolution into services.queue_manager.QueueManager and delegating from AppSidebar eliminates duplicate hardcoded mode dictionaries, prevents drift against dynamic LCU endpoints, and reduces UI component complexity.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
@@ -637,6 +642,14 @@ def run_loop(
                 "Verify single transport failures do not trip alert active or spam LCU_HTTP_STATUS_ANOMALY.",
                 "Enforce _http_anomaly_transport_count_threshold before logging LCU_HTTP_STATUS_ANOMALY.",
                 "Expose threshold in get_http_status_anomaly_telemetry and verify auto-recovery once failures expire from window.",
+            ],
+        },
+        {
+            "method": "Queue Resolution Delegation Protocol",
+            "procedure": [
+                "Delegate queue resolution from UI components directly to services.queue_manager.resolve_queue_id.",
+                "Ensure QueueManager dynamically queries /lol-game-queues/v1/queues when client is connected.",
+                "Maintain regression guard QUEUE-001 in test_regression_guards.py to prevent reintroduction of hardcoded mode maps in UI classes.",
             ],
         },
     ]
