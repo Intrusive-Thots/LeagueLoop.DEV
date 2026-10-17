@@ -208,3 +208,26 @@ def test_lcu_telemetry_transient_retry_filtering_invariants():
 
 
 
+
+
+def test_lcu_http_5xx_sliding_window_threshold_invariants():
+    """LCU-004: 5xx anomaly alert must not trip on isolated 1-4 failures; requires configured threshold."""
+    from services.api_handler import LCUClient
+
+    client = LCUClient()
+    thresh = client._http_anomaly_5xx_count_threshold
+    assert thresh >= 3
+
+    # Ensure count < threshold does not trip anomaly active
+    for _ in range(thresh - 1):
+        client._record_http_status_code(503, "GET", "/lol-chat/v1/friends")
+        tel = client.get_http_status_anomaly_telemetry()
+        assert tel["http_status_anomaly_active"] is False
+        assert tel["http_status_anomaly_count"] == 0
+
+    # Crossing threshold trips anomaly active
+    client._record_http_status_code(503, "GET", "/lol-chat/v1/friends")
+    tel = client.get_http_status_anomaly_telemetry()
+    assert tel["http_status_anomaly_active"] is True
+    assert tel["http_status_anomaly_count"] == 1
+    assert f"HTTP 5xx count {thresh} reached threshold" in tel["last_http_status_anomaly"]["reason"]

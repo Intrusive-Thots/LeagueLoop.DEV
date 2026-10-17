@@ -2656,8 +2656,10 @@ class LCUClient:
         is_5xx_anomaly = window_5xx >= self._http_anomaly_5xx_count_threshold
 
         # Only raise on a real failing sample, never on successful 2xx/3xx
-        hard_fail = status_code >= 500 or (status_code == 0 and is_error)
-        should_alert = hard_fail or (is_error and (is_rate_anomaly or is_5xx_anomaly))
+        is_failing_sample = is_error or (status_code >= 500)
+        should_alert = is_failing_sample and (
+            is_rate_anomaly or is_5xx_anomaly or bool(reason_override)
+        )
 
         if should_alert:
             was_active = self._http_status_anomaly_active

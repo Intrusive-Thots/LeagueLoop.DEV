@@ -1371,5 +1371,16 @@
       "status": "Optimized implementation baseline"
     },
     "impact": "Suppresses false-positive LCU_TELEMETRY warning logs and premature HTTP status anomaly flags during transient 5xx jitter backoff retries in LCUClient, adds http_transient_retry_count observability to request diagnostics, and advances test baseline to 991 passing tests."
+  },
+  {
+    "timestamp": "2026-10-17T05:10:22.472822+00:00",
+    "feature": "LCU 5xx Sliding Window Anomaly Threshold Enforcement",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Prevents single 500/503 errors from falsely tripping HTTP status anomaly alerts by strictly checking the configured count threshold (default 5)"
   }
 ]

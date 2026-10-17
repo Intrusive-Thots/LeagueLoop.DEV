@@ -1427,6 +1427,30 @@ class TestLCUClient(unittest.TestCase):
         client = LCUClient()
         self.assertFalse(client.session.verify)
 
+    def test_http_5xx_anomaly_threshold_requires_configured_count(self):
+        """Verify that HTTP 5xx anomaly alert respects _http_anomaly_5xx_count_threshold (default 5)."""
+        client = LCUClient()
+        thresh = client._http_anomaly_5xx_count_threshold
+        self.assertEqual(thresh, 5)
+
+        # 1 to 4 5xx errors must NOT trigger an anomaly alert
+        for i in range(1, thresh):
+            client._record_http_status_code(503, "GET", "/lol-chat/v1/friends")
+            tel = client.get_http_status_anomaly_telemetry()
+            self.assertFalse(
+                tel["http_status_anomaly_active"],
+                f"Anomaly should not be active at count {i} (< {thresh})"
+            )
+            self.assertEqual(tel["http_status_anomaly_count"], 0)
+
+        # 5th 5xx error meets threshold and activates anomaly alert
+        client._record_http_status_code(503, "GET", "/lol-chat/v1/friends")
+        tel = client.get_http_status_anomaly_telemetry()
+        self.assertTrue(tel["http_status_anomaly_active"])
+        self.assertEqual(tel["http_status_anomaly_count"], 1)
+        self.assertIn("reached threshold", tel["last_http_status_anomaly"]["reason"])
+        self.assertIn(f"HTTP 5xx count {thresh}", tel["last_http_status_anomaly"]["reason"])
+
 
 if __name__ == '__main__':
     unittest.main()
