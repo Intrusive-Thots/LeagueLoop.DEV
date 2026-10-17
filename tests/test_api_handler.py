@@ -332,6 +332,29 @@ class TestLCUClient(unittest.TestCase):
         self.assertIn("offline_retry_queued", diag)
         self.assertIn("offline_retry_success_count", diag)
 
+    def test_offline_retry_queue_deduplication_and_never_queue_endpoints(self):
+        """Test that offline retry queue deduplicates identical requests and blocks ephemeral prefixes."""
+        self.client.is_connected = False
+        self.client.connect = MagicMock(return_value=False)
+
+        # 1. Duplicate requests should be deduplicated
+        for _ in range(5):
+            self.client.request("POST", "/lol-lobby/v2/lobby", {"queueId": 2400}, silent=True)
+
+        telemetry = self.client.get_offline_retry_telemetry()
+        self.assertEqual(telemetry["current_queue_len"], 1)
+        self.assertEqual(telemetry["queued_count"], 1)
+
+        # 2. Ephemeral/irreversible endpoints should never be queued
+        self.client.request("POST", "/lol-loot/v1/recipes/craft", silent=True)
+        self.client.request("POST", "/lol-matchmaking/v1/ready-check/accept", silent=True)
+        self.client.request("POST", "/lol-champ-select/v1/session/actions/1/complete", silent=True)
+        self.client.request("POST", "/riotclient/kill-and-restart", silent=True)
+
+        telemetry2 = self.client.get_offline_retry_telemetry()
+        self.assertEqual(telemetry2["current_queue_len"], 1)
+        self.assertEqual(telemetry2["queued_count"], 1)
+
     def test_websocket_subscription_filter_and_dispatch_telemetry(self):
         """Test websocket subscription filter performance metrics & dispatch telemetry for Task 157."""
         dummy_cb1 = MagicMock()

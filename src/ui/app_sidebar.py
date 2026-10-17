@@ -1228,7 +1228,12 @@ class SidebarWidget(ctk.CTkFrame):
 
     def _find_match(self):
         """Aggressive matchmaking: Stay in the lobby tab, just change the queue."""
-        if not self.lcu: return
+        if not self.lcu:
+            return
+
+        if not getattr(self.lcu, "is_connected", False) and not self.lcu.connect(silent=True):
+            self.update_action_log("Can't queue: League Client is not connected.")
+            return
 
         mode = self.config.get("aram_mode", "ARAM")
         self.update_action_log(f"Initiating {mode}...")

@@ -264,10 +264,11 @@ class ClientWindowTracker:
         hwnd, title = (league if league[0] else riot)
         if hwnd:
             rect = self._rect_of(hwnd)
+            target_name = "League Client" if (league[0] and hwnd == league[0]) else "Riot Client"
             Logger.info(
                 TAG,
-                "Found the League Client window: {}x{} at ({}, {}) - {}".format(
-                    rect[2], rect[3], rect[0], rect[1], title
+                "Found the {} window: {}x{} at ({}, {}) - {}".format(
+                    target_name, rect[2], rect[3], rect[0], rect[1], title
                 ),
                 hwnd=hwnd,
             )

@@ -1490,5 +1490,16 @@
       "status": "Optimized implementation baseline"
     },
     "impact": "Eliminated redundant 12-item _QUEUE_MODE_NAMES dictionary in StatsScraper.set_mode_by_queue_id, delegated mode resolution to QueueManager.resolve_mode_name, added QUEUE-002 regression guard, and achieved 1000 passed tests milestone."
+  },
+  {
+    "timestamp": "2026-10-17T07:27:03.206887+00:00",
+    "feature": "Offline Queue Deduplication & Flood Guard",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Prevents duplicate request queuing, serializes replay bursts, and guards UI against disconnected LCU matchmaking calls"
   }
 ]

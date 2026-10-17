@@ -2343,6 +2343,7 @@ class LCUClient:
         "/lol-champ-select/v1/session/bench",
         "/lol-matchmaking/v1/ready-check",
         "/lol-honor-v2/v1/honor-player",
+        "/riotclient",
     )
 
     @classmethod
@@ -2363,14 +2364,17 @@ class LCUClient:
                 if method in ["POST", "PUT", "PATCH", "DELETE"] and \
                         self._may_queue_offline(endpoint):
                     # 3.5 Offline Retry Queue: save state mutations for when we reconnect
-                    # Item #179: Cap queue size to prevent unbounded growth
-                    if len(self._offline_queue) < self._offline_queue_max:
-                        self._offline_queue.append((method, endpoint, data))
-                        with self._req_diag_lock:
-                            self._offline_retry_queued_count += 1
-                    else:
-                        with self._req_diag_lock:
-                            self._offline_retry_dropped_count += 1
+                    # Item #179: Cap queue size to prevent unbounded growth and deduplicate identical requests
+                    item = (method, endpoint, data)
+                    with self._lock:
+                        if item not in self._offline_queue:
+                            if len(self._offline_queue) < self._offline_queue_max:
+                                self._offline_queue.append(item)
+                                with self._req_diag_lock:
+                                    self._offline_retry_queued_count += 1
+                            else:
+                                with self._req_diag_lock:
+                                    self._offline_retry_dropped_count += 1
                 return None
 
         # Flush 3.5 Offline Retry Queue on successful connection
@@ -2380,13 +2384,20 @@ class LCUClient:
         if oq:
             with self._req_diag_lock:
                 self._offline_retry_executed_count += len(oq)
-            # Item #177: Use bounded executor instead of spawning raw threads
-            for m, e, d in oq:
-                if self._ws_executor:
-                    self._ws_executor.submit(self._execute_offline_retry, m, e, d)
-                else:
-                    t = threading.Thread(target=self._execute_offline_retry, args=(m, e, d), daemon=True)
-                    t.start()
+            # Replay queued offline items sequentially in a background worker to avoid flooding LCU
+            def _flush_offline_worker(items):
+                for m, e, d in items:
+                    try:
+                        self._execute_offline_retry(m, e, d)
+                        time.sleep(0.05)
+                    except Exception as exc:
+                        Logger.debug("ApiHandler", f"Offline retry suppressed an error: {exc}", exc=exc)
+
+            if self._ws_executor:
+                self._ws_executor.submit(_flush_offline_worker, oq)
+            else:
+                t = threading.Thread(target=_flush_offline_worker, args=(oq,), daemon=True)
+                t.start()
 
         # 3.3 Strict Token Bucket Rate-Limiter
         # Item #178: Calculate sleep time inside lock, but sleep outside to prevent deadlock
