@@ -206,7 +206,7 @@ def _log_container_diagnostics(container: Any) -> None:
         for name, exc in errors:
             Logger.error(
                 TAG,
-                f"Service '{name}' did not start — the features that need "
+                f"Service '{name}' did not start - the features that need "
                 f"it will not work: {exc}",
                 service=name,
             )
@@ -293,7 +293,7 @@ def _handle_uncaught(exc_type, exc_value, exc_tb) -> None:
     else:
         Logger.critical(
             "Crash",
-            f"Unhandled {exc_type.__name__} on the main thread — the "
+            f"Unhandled {exc_type.__name__} on the main thread - the "
             f"application is stopping.",
             exc=exc_value,
         )

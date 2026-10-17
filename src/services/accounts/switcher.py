@@ -140,7 +140,7 @@ class AccountSwitcher:
             # sits disabled forever. That is worth a line.
             Logger.error(
                 TAG,
-                f"Could not publish '{channel}' — the interface will not be "
+                f"Could not publish '{channel}' - the interface will not be "
                 f"told about this step.",
                 exc=exc, channel=channel,
             )

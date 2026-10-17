@@ -338,16 +338,60 @@ def test_account_switcher_logging_hygiene_invariants():
 
 def test_logger_no_em_dashes_in_log_statements():
     """LOG-002: Ensure no Logger.<level>, update_action_log, or _log calls in src/ contain literal em dashes."""
+    import ast
     offenders = []
-    log_patterns = ("Logger.", "update_action_log(", "self._log(")
+    log_names = {"Logger.info", "Logger.warning", "Logger.error", "Logger.debug", "Logger.critical", "self._log", "update_action_log", "_log"}
     for path in _python_files():
         try:
-            content = path.read_text(encoding="utf-8")
+            tree = ast.parse(path.read_text(encoding="utf-8"))
         except Exception:
             continue
-        for line_no, line in enumerate(content.splitlines(), 1):
-            if "—" in line and any(pattern in line for pattern in log_patterns):
-                offenders.append(f"{path.name}:{line_no}: {line.strip()}")
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                func_name = ""
+                if isinstance(node.func, ast.Attribute):
+                    if isinstance(node.func.value, ast.Name):
+                        func_name = f"{node.func.value.id}.{node.func.attr}"
+                    elif isinstance(node.func.value, ast.Attribute):
+                        func_name = f"{node.func.attr}"
+                elif isinstance(node.func, ast.Name):
+                    func_name = node.func.id
+                if func_name in log_names:
+                    for arg in node.args:
+                        for sub in ast.walk(arg):
+                            if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                                if "—" in sub.value:
+                                    offenders.append(f"{path.name}:{node.lineno} [em-dash]: {sub.value.strip()}")
     assert not offenders, f"Logging calls with literal em dashes found:\n" + "\n".join(offenders)
+
+
+def test_logger_ascii_hygiene_invariants():
+    """LOG-003: Ensure all Logger.<level>, update_action_log, and _log string arguments in src/ are strict ASCII for CP1252 Windows terminal safety."""
+    import ast
+    offenders = []
+    log_names = {"Logger.info", "Logger.warning", "Logger.error", "Logger.debug", "Logger.critical", "self._log", "update_action_log", "_log"}
+    for path in _python_files():
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                func_name = ""
+                if isinstance(node.func, ast.Attribute):
+                    if isinstance(node.func.value, ast.Name):
+                        func_name = f"{node.func.value.id}.{node.func.attr}"
+                    elif isinstance(node.func.value, ast.Attribute):
+                        func_name = f"{node.func.attr}"
+                elif isinstance(node.func, ast.Name):
+                    func_name = node.func.id
+                if func_name in log_names:
+                    for arg in node.args:
+                        for sub in ast.walk(arg):
+                            if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                                non_ascii = [f"U+{ord(c):04X}" for c in sub.value if ord(c) > 127]
+                                if non_ascii:
+                                    offenders.append(f"{path.name}:{node.lineno} [{func_name}] {','.join(non_ascii)}: {ascii(sub.value.strip())}")
+    assert not offenders, f"Logging calls with non-ASCII strings found:\n" + "\n".join(offenders)
 
 

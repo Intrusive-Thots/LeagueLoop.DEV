@@ -3141,7 +3141,7 @@ class AssetManager:
                 time.sleep(self._REPLACE_BACKOFF_S * (attempt + 1))
         Logger.warning(
             "asset_manager.py",
-            "Could not update the cached copy of {} — it is open elsewhere. "
+            "Could not update the cached copy of {} - it is open elsewhere. "
             "The asset is fine for this run; it will be fetched again next "
             "launch.".format(os.path.basename(path)),
             exc=last,

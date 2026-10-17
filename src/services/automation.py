@@ -342,7 +342,7 @@ class AutomationEngine:
                 self._consecutive_errors += 1
                 if self._consecutive_errors >= 5:
                     Logger.error("AutoLoop", f"KILLSWITCH: {self._consecutive_errors} consecutive errors in 10s. Auto-pausing.")
-                    self._log("⚠ Automation paused (error killswitch).")
+                    self._log("[!] Automation paused (error killswitch).")
                     self.paused = True
                     self._consecutive_errors = 0
                     continue
@@ -2271,7 +2271,7 @@ class AutomationEngine:
             body = {"statusMessage": status_text}
             res = self.lcu.request("PUT", "/lol-chat/v1/me", body)
             if res and res.status_code in [200, 201]:
-                self._log(f"Status → \"{status_text}\"")
+                self._log(f"Status -> \"{status_text}\"")
             else:
                 self._log("Status update failed.")
         except Exception as e:
