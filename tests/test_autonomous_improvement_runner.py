@@ -359,5 +359,59 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
             )
 
 
+    @patch("subprocess.run")
+    @patch("pathlib.Path.exists")
+    def test_sync_mempalace_success(self, mock_exists, mock_subproc):
+        from tools.autonomous_improvement_runner import sync_mempalace
+        mock_exists.return_value = True
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_subproc.return_value = mock_proc
+
+        result = sync_mempalace(164, "Diagnostics: HEALTHY. Test baseline: 982 passed.")
+        self.assertTrue(result)
+        mock_subproc.assert_called_once()
+        args, kwargs = mock_subproc.call_args
+        cmd = args[0]
+        self.assertIn("diary", cmd)
+        self.assertIn("write", cmd)
+        self.assertIn("Run #164", cmd[-1])
+
+    @patch("shutil.which")
+    @patch("pathlib.Path.exists")
+    def test_sync_mempalace_exe_not_found(self, mock_exists, mock_which):
+        from tools.autonomous_improvement_runner import sync_mempalace
+        mock_exists.return_value = False
+        mock_which.return_value = None
+
+        result = sync_mempalace(164, "Summary")
+        self.assertFalse(result)
+
+    @patch("subprocess.run")
+    @patch("shutil.which")
+    @patch("pathlib.Path.exists")
+    def test_sync_mempalace_shutil_which_fallback(self, mock_exists, mock_which, mock_subproc):
+        from tools.autonomous_improvement_runner import sync_mempalace
+        mock_exists.return_value = True
+        mock_which.return_value = "C:\\Tools\\mempalace.exe"
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_subproc.return_value = mock_proc
+
+        result = sync_mempalace(164, "Summary text")
+        self.assertTrue(result)
+
+    @patch("subprocess.run")
+    @patch("pathlib.Path.exists")
+    def test_sync_mempalace_subprocess_failure(self, mock_exists, mock_subproc):
+        from tools.autonomous_improvement_runner import sync_mempalace
+        mock_exists.return_value = True
+        mock_subproc.side_effect = OSError("Execution failed")
+
+        result = sync_mempalace(164, "Summary")
+        self.assertFalse(result)
+
+
 if __name__ == "__main__":
     unittest.main()
+

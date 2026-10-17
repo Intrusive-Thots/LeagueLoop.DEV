@@ -394,17 +394,27 @@ def update_memory_state(
     }
 
 
-def sync_mempalace(loop_number: int, summary: str):
+def sync_mempalace(loop_number: int, summary: str) -> bool:
     """Optionally syncs record to MemPalace CLI if installed."""
+    import shutil
     mempalace_exe = Path(os.environ.get("USERPROFILE", "")) / "pipx" / "venvs" / "mempalace" / "Scripts" / "mempalace.exe"
+    if not mempalace_exe.exists():
+        which_path = shutil.which("mempalace.exe") or shutil.which("mempalace")
+        if which_path:
+            mempalace_exe = Path(which_path)
     palace_dir = Path(os.environ.get("USERPROFILE", "")) / ".mempalace" / "palace"
     if mempalace_exe.exists() and palace_dir.exists():
-        diary_text = f"SESSION:{datetime.now().strftime('%Y-%m-%d')}|PROJ:LeagueLoop.DEV|AutoImprovementLoop|Run #{loop_number}|{summary}"
-        subprocess.run(
-            [str(mempalace_exe), "--palace", str(palace_dir), "diary", "write", diary_text],
-            capture_output=True,
-            text=True,
-        )
+        diary_text = f"*warm* Completed LeagueLoop.DEV Autonomous Improvement Loop Run #{loop_number}. {summary}"
+        try:
+            res = subprocess.run(
+                [str(mempalace_exe), "--palace", str(palace_dir), "diary", "write", diary_text],
+                capture_output=True,
+                text=True,
+            )
+            return res.returncode == 0
+        except Exception:
+            return False
+    return False
 
 
 def run_loop(
@@ -631,9 +641,20 @@ def run_loop(
     )
 
     loop_num = memory_result["new_state"]["run_number"]
-    summary_str = f"Healthy={diag.get('healthy')}|Entropy={entropy.get('status')}|Tests={tests.get('passed')}/{tests.get('passed',0)+tests.get('failed',0)}|Files={metrics.get('total_py_files')}|Lines={metrics.get('total_py_lines')}|Storage={storage_an.get('total_mb', 0.0)}MB"
+    test_mode_str = "Full suite" if tests.get("run_all") else "Targeted"
+    diag_status_str = "HEALTHY" if diag.get("healthy") else "NEEDS ATTENTION"
+    entropy_status_str = entropy.get("status", "N/A")
+    summary_str = (
+        f"Diagnostics: {diag_status_str}. "
+        f"Test baseline: [{test_mode_str}] {tests.get('passed')} passed, {tests.get('failed', 0)} failed ({tests.get('skipped', 0)} skipped) in {tests.get('duration_seconds', 0)}s. "
+        f"Codebase metrics: {metrics.get('total_py_files')} files ({metrics.get('total_py_lines')} lines). "
+        f"Storage: {storage_an.get('total_mb', 0.0)}MB ({storage_an.get('status', 'OPTIMAL')}). "
+        f"Entropy: {entropy_status_str} (avg={entropy.get('avg_entropy', 0.0)}). "
+        "Baseline synchronized to loop_state.json and episodic.json."
+    )
+    mempalace_synced = False
     if not dry_run:
-        sync_mempalace(loop_num, summary_str)
+        mempalace_synced = sync_mempalace(loop_num, summary_str)
 
     return {
         "loop_number": loop_num,
@@ -644,6 +665,7 @@ def run_loop(
         "tests": tests,
         "memory": memory_result,
         "prune_results": prune_res,
+        "mempalace_synced": mempalace_synced,
     }
 
 
