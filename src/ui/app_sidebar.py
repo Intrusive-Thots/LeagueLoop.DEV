@@ -1264,6 +1264,10 @@ class SidebarWidget(ctk.CTkFrame):
                 self.after(0, lambda m=blocked: self.update_action_log(m))
                 return
 
+            if not getattr(self.lcu, "is_connected", False) and not self.lcu.connect(silent=True):
+                self.after(0, lambda: self.update_action_log("Can't queue: League Client is not connected."))
+                return
+
             # 0b. If in a friend's lobby or auto-joined lobby, leave it and apply 5-min cooldown
             left_friend = False
             if hasattr(self, "automation") and self.automation:
