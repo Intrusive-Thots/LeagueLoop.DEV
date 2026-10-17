@@ -61,5 +61,13 @@
       "Execute python tools/code_entropy_analyzer.py file1.py file2.py dir1/ --top N to rank high-complexity modules across subsystems.",
       "Execute python tools/code_entropy_analyzer.py --summary <targets...> --max-entropy <limit> to enforce aggregate code quality thresholds in CI/CD pipelines."
     ]
+  },
+  {
+    "method": "Granular Pytest Node ID Execution",
+    "procedure": [
+      "Target a specific test class or method using python tools/fast_test_runner.py tests/test_file.py::TestClass::test_method.",
+      "Target by keyword expression using python tools/fast_test_runner.py -k <expr>.",
+      "Execute the autonomous improvement runner with targeted flags via python tools/autonomous_improvement_runner.py -k <expr>."
+    ]
   }
 ]

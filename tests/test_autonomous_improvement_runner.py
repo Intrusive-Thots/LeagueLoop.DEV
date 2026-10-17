@@ -310,6 +310,54 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
                 prune_storage_flag=False,
             )
 
+    @patch("subprocess.run")
+    def test_run_tests_check_warning_summary_parsing(self, mock_subproc):
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = "965 passed, 4 warnings in 10.5s\n"
+        mock_proc.stderr = ""
+        mock_subproc.return_value = mock_proc
+
+        res = run_tests_check(run_all=True)
+        self.assertEqual(res["passed"], 965)
+        self.assertEqual(res["warnings"], 4)
+        self.assertTrue(res["success"])
+
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_unknown_flags_forwarding(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 150,
+            "diagnostics": {"healthy": True},
+            "metrics": {"total_py_files": 185, "total_py_lines": 54800},
+            "entropy": {"status": "PASS", "avg_entropy": 67.0, "bare_excepts_total": 0},
+            "tests": {
+                "passed": 5,
+                "failed": 0,
+                "warnings": 1,
+                "duration_seconds": 0.2,
+                "success": True,
+                "run_all": False,
+                "staged": False,
+                "targets": ["-k", "test_ast", "-x"],
+            },
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+        }
+
+        with patch("sys.stdout"):
+            with self.assertRaises(SystemExit) as cm:
+                main(["-k", "test_ast", "-x"])
+            self.assertEqual(cm.exception.code, 0)
+            mock_run_loop.assert_called_once_with(
+                all_tests=False,
+                targets=["-k", "test_ast", "-x"],
+                staged=False,
+                dry_run=False,
+                feature=None,
+                impact=None,
+                prune_storage_flag=False,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

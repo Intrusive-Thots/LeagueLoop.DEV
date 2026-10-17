@@ -149,6 +149,27 @@ def map_source_to_tests(target_files: Set[str], graph: Optional[ASTTestDependenc
     for path_str in target_files:
         p = Path(path_str)
 
+        # 0. Pytest node ID reference (e.g., tests/test_foo.py::TestClass::test_method)
+        if "::" in path_str:
+            file_part, *selector_parts = path_str.split("::")
+            fp = Path(file_part)
+            full_test_path = None
+            if fp.parts and fp.parts[0] == "tests":
+                cand = PROJECT_ROOT / fp
+                if cand.exists():
+                    full_test_path = cand
+            elif fp.name.startswith("test_") or fp.suffix == ".py":
+                cand = TESTS_DIR / fp.name
+                if cand.exists():
+                    full_test_path = cand
+            elif (PROJECT_ROOT / fp).exists():
+                full_test_path = PROJECT_ROOT / fp
+
+            if full_test_path:
+                selector = "::".join(selector_parts)
+                test_targets.add(f"{full_test_path.resolve()}::{selector}")
+                continue
+
         # 1. Direct test file reference
         if p.parts and p.parts[0] == "tests" and p.suffix == ".py":
             if p.name == "conftest.py":
@@ -222,34 +243,58 @@ def run_tests(targets: List[str], extra_args: List[str] = None) -> int:
     return res.returncode
 
 
-def main():
-    parser = argparse.ArgumentParser(description="LeagueLoop Fast Targeted Test Runner with AST Analysis")
-    parser.add_argument("--all", action="store_true", help="Run full test suite unconditionally")
-    parser.add_argument("--staged", action="store_true", help="Only map git staged changes")
-    parser.add_argument("--graph", action="store_true", help="Print module AST dependency summary")
-    parser.add_argument("targets", nargs="*", help="Optional source files, test files, or pytest flags")
-    args = parser.parse_args()
+def main(argv=None):
+    if argv is None:
+        argv = sys.argv[1:]
+
+    if "-h" in argv or "--help" in argv:
+        parser = argparse.ArgumentParser(description="LeagueLoop Fast Targeted Test Runner with AST Analysis")
+        parser.add_argument("--all", action="store_true", help="Run full test suite unconditionally")
+        parser.add_argument("--staged", action="store_true", help="Only map git staged changes")
+        parser.add_argument("--graph", action="store_true", help="Print module AST dependency summary")
+        parser.add_argument("targets", nargs="*", help="Optional source files, test files, or pytest flags")
+        parser.print_help()
+        sys.exit(0)
 
     graph = ASTTestDependencyGraph(TESTS_DIR)
 
-    if args.graph:
+    option_with_arg = {"-k", "-m", "-o", "-c", "-W", "--override-ini", "--ignore", "--capture"}
+
+    run_all = False
+    staged = False
+    show_graph = False
+    explicit_files = set()
+    pytest_extra = []
+
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--all":
+            run_all = True
+        elif arg == "--staged":
+            staged = True
+        elif arg == "--graph":
+            show_graph = True
+        elif arg in option_with_arg:
+            pytest_extra.append(arg)
+            if i + 1 < len(argv):
+                i += 1
+                pytest_extra.append(argv[i])
+        elif any(arg.startswith(f"{opt}=") for opt in option_with_arg) or arg.startswith("-"):
+            pytest_extra.append(arg)
+        else:
+            explicit_files.add(arg.replace("\\", "/"))
+        i += 1
+
+    if show_graph:
         print(f"[AST Graph] Indexed {len(graph.module_to_tests)} module keys across {len(list(TESTS_DIR.glob('test_*.py')))} test files.")
         for k in sorted(graph.module_to_tests.keys())[:20]:
             print(f"  {k} -> {len(graph.module_to_tests[k])} test suites")
         sys.exit(0)
 
-    if args.all:
+    if run_all:
         print("[Fast Runner] Running full test suite...")
-        sys.exit(run_tests([], args.targets))
-
-    # Check if explicit files were provided
-    explicit_files = set()
-    pytest_extra = []
-    for t in args.targets:
-        if t.startswith("-"):
-            pytest_extra.append(t)
-        else:
-            explicit_files.add(t.replace("\\", "/"))
+        sys.exit(run_tests([], pytest_extra))
 
     if explicit_files:
         print(f"[Fast Runner] Explicit targets requested ({len(explicit_files)}):")
@@ -265,7 +310,7 @@ def main():
 
     if not selected_targets:
         has_python_changes = any(
-            f.endswith(".py") for f in (explicit_files or modified)
+            f.endswith(".py") or ".py::" in f for f in (explicit_files or modified)
         )
         if (explicit_files or modified) and not has_python_changes:
             print("[Fast Runner] Only non-code/memory files modified. Running targeted regression guards...")
@@ -288,7 +333,7 @@ def main():
 
     print(f"\n[Fast Runner] Selected targeted test suites ({len(selected_targets)}):")
     for t in selected_targets:
-        print(f"  - {Path(t).name}")
+        print(f"  - {Path(t.split('::')[0]).name if '::' in t else Path(t).name}")
 
     sys.exit(run_tests(selected_targets, pytest_extra))
 

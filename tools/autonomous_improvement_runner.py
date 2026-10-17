@@ -136,6 +136,8 @@ def run_tests_check(
     m_skip = re.findall(r"(\d+)\s+skipped", output)
     if m_skip:
         skipped = int(m_skip[-1])
+    m_warn = re.findall(r"(\d+)\s+warning(?:s)?", output)
+    warnings = int(m_warn[-1]) if m_warn else 0
     m_err = re.findall(r"(\d+)\s+error(?:s)?", output)
     if m_err:
         errors = int(m_err[-1])
@@ -154,6 +156,7 @@ def run_tests_check(
         "passed": passed,
         "failed": failed,
         "skipped": skipped,
+        "warnings": warnings,
         "errors": errors,
         "raw_output": output[-500:] if len(output) > 500 else output,
     }
@@ -228,6 +231,7 @@ def update_memory_state(
             "passed": new_passed,
             "failed": test_results.get("failed", 0),
             "skipped": test_results.get("skipped", 0),
+            "warnings": test_results.get("warnings", 0),
             "last_targeted_passed": last_targeted,
             "errors": test_results.get("errors", 0),
         },
@@ -527,6 +531,11 @@ def run_loop(
             "description": "Allowing arbitrary positional files and directories (nargs='*') in code_entropy_analyzer with multi-file aggregation, top-N sorting, and max-entropy threshold enforcement allows developers and automated scripts to audit subsets of components without encountering unrecognized argument CLI errors.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Pytest Node ID and Flag Passthrough Dispatch",
+            "description": "Supporting granular pytest node selectors (path.py::TestClass::test_method) and arbitrary test flags (-k, -m, -s, -x) across fast_test_runner and autonomous_improvement_runner enables sub-second single-test execution and flexible test filtering without falling back to full-suite runs.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
@@ -578,6 +587,14 @@ def run_loop(
             "procedure": [
                 "Execute python tools/code_entropy_analyzer.py file1.py file2.py dir1/ --top N to rank high-complexity modules across subsystems.",
                 "Execute python tools/code_entropy_analyzer.py --summary <targets...> --max-entropy <limit> to enforce aggregate code quality thresholds in CI/CD pipelines.",
+            ],
+        },
+        {
+            "method": "Granular Pytest Node ID Execution",
+            "procedure": [
+                "Target a specific test class or method using python tools/fast_test_runner.py tests/test_file.py::TestClass::test_method.",
+                "Target by keyword expression using python tools/fast_test_runner.py -k <expr>.",
+                "Execute the autonomous improvement runner with targeted flags via python tools/autonomous_improvement_runner.py -k <expr>.",
             ],
         },
     ]
@@ -641,7 +658,7 @@ def main(argv=None):
     parser.add_argument("--feature", default=None, help="Custom feature optimization name to record")
     parser.add_argument("--impact", default=None, help="Custom impact description to record")
     parser.add_argument("--prune-storage", action="store_true", help="Execute safe storage pruning during autonomous loop")
-    args = parser.parse_args(argv)
+    args, unknown = parser.parse_known_args(argv)
 
     if args.check_baseline:
         state_file = MEMORY_DIR / "loop_state.json"
@@ -652,9 +669,31 @@ def main(argv=None):
             print("No loop_state.json found.", file=sys.stderr)
             sys.exit(1)
 
+    runner_flags_no_val = {
+        "--all-tests", "--staged", "--dry-run", "--check-baseline", "--json", "--prune-storage", "-h", "--help"
+    }
+    runner_flags_with_val = {"--feature", "--impact"}
+
+    targets_to_run = []
+    i = 0
+    raw_argv = list(argv) if argv is not None else sys.argv[1:]
+    while i < len(raw_argv):
+        tok = raw_argv[i]
+        if tok in runner_flags_no_val:
+            i += 1
+            continue
+        if tok in runner_flags_with_val:
+            i += 2  # skip flag and its value
+            continue
+        if any(tok.startswith(f"{rf}=") for rf in runner_flags_with_val):
+            i += 1
+            continue
+        targets_to_run.append(tok)
+        i += 1
+
     result = run_loop(
         all_tests=args.all_tests,
-        targets=args.targets if args.targets else None,
+        targets=targets_to_run if targets_to_run else None,
         staged=args.staged,
         dry_run=args.dry_run,
         feature=args.feature,
@@ -715,7 +754,9 @@ def main(argv=None):
     baseline_passed = result.get("memory", {}).get("new_state", {}).get("test_baseline", {}).get("passed", result["tests"]["passed"])
     err_cnt = result["tests"].get("errors", 0)
     err_msg = f", {err_cnt} errors" if err_cnt > 0 else ""
-    print(f"Test Suite: [{test_mode}] {result['tests']['passed']} passed, {result['tests']['failed']} failed ({result['tests'].get('skipped', 0)} skipped{err_msg}) in {result['tests']['duration_seconds']}s (baseline: {baseline_passed})")
+    warn_cnt = result["tests"].get("warnings", 0)
+    warn_msg = f", {warn_cnt} warnings" if warn_cnt > 0 else ""
+    print(f"Test Suite: [{test_mode}] {result['tests']['passed']} passed, {result['tests']['failed']} failed ({result['tests'].get('skipped', 0)} skipped{warn_msg}{err_msg}) in {result['tests']['duration_seconds']}s (baseline: {baseline_passed})")
     print(f"Memory Sync: {'Persisted' if result['memory']['persisted'] else 'Dry Run (Unsaved)'}")
     print(f"Outcome: {result['memory']['episodic_entry']['outcome']}")
 
