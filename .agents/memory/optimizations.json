@@ -1393,5 +1393,16 @@
       "status": "Optimized implementation baseline"
     },
     "impact": "Adds automatic retry and graceful backoff for ReadTimeout/ConnectTimeout in RiotClientAPI, eliminates unicode em dash console mojibake in AccountSwitcher logging, treats recoverable session expiration as warning, and expands test baseline to 999 passing tests."
+  },
+  {
+    "timestamp": "2026-10-17T05:41:17.547396+00:00",
+    "feature": "LCU HTTP Transport Failure Sliding Window Threshold Enforcement (Run #175)",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Prevents isolated connection drops (status 0) from falsely triggering LCU_HTTP_STATUS_ANOMALY alerts by requiring _http_anomaly_transport_count_threshold (default 3) in the sliding window, adds regression guards and telemetry reporting, and crosses the milestone with 1003 passing tests."
   }
 ]

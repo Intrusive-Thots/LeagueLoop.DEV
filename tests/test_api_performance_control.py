@@ -330,3 +330,39 @@ class TestWebSocketTelemetryLatency(unittest.TestCase):
             self.assertEqual(received, [{"status": "ok"}])
         finally:
             handle.dispose()
+
+
+class TestHttpStatusAnomalyTransportThreshold(unittest.TestCase):
+    def setUp(self):
+        self.client = LCUClient()
+
+    def test_transport_threshold_telemetry_reporting(self):
+        """Verify get_http_status_anomaly_telemetry reports transport threshold."""
+        tel = self.client.get_http_status_anomaly_telemetry()
+        self.assertIn("http_anomaly_transport_count_threshold", tel)
+        self.assertEqual(tel["http_anomaly_transport_count_threshold"], 3)
+        self.assertFalse(tel["http_status_anomaly_active"])
+
+    def test_single_transport_failure_suppresses_anomaly_alert(self):
+        """Verify 1-2 transport failures do not trip anomaly alerts."""
+        with patch("utils.logger.Logger.warning") as mock_warn:
+            self.client._record_http_transport_failure("GET", "/lol-chat/v1/friends", "connection")
+            self.client._record_http_transport_failure("GET", "/lol-game-queues/v1/queues", "connection")
+            tel = self.client.get_http_status_anomaly_telemetry()
+            self.assertFalse(tel["http_status_anomaly_active"])
+            self.assertEqual(tel["http_status_anomaly_count"], 0)
+            mock_warn.assert_not_called()
+
+    def test_transport_failure_threshold_crossing_trips_alert(self):
+        """Verify reaching 3 transport failures in sliding window trips anomaly alert."""
+        with patch("utils.logger.Logger.warning") as mock_warn:
+            for _ in range(3):
+                self.client._record_http_transport_failure("GET", "/lol-chat/v1/friends", "connection")
+            tel = self.client.get_http_status_anomaly_telemetry()
+            self.assertTrue(tel["http_status_anomaly_active"])
+            self.assertEqual(tel["http_status_anomaly_count"], 1)
+            mock_warn.assert_called_once()
+            args, _ = mock_warn.call_args
+            self.assertEqual(args[0], "LCU_HTTP_STATUS_ANOMALY")
+            self.assertIn("HTTP transport failure count 3 reached threshold", args[1])
+

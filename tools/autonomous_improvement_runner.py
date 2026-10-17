@@ -555,6 +555,11 @@ def run_loop(
             "description": "Distinguishing transient HTTP retry attempts (5xx with attempts remaining) from terminal request failures in LCUClient prevents intermediate retries from corrupting error rates, spamming false-positive LCU_TELEMETRY warnings, and prematurely triggering HTTP status anomalies during transient client/server hiccups.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "HTTP Transport Failure Sliding Window Anomaly Invariant",
+            "description": "Enforcing sliding-window thresholding on transport failures (status 0) prevents isolated connection drops or client closing events from falsely triggering LCU_HTTP_STATUS_ANOMALY alerts, requiring repeated failures (default threshold 3) before flagging an anomaly.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
@@ -623,6 +628,15 @@ def run_loop(
                 "Flag attempts with remaining retries via is_transient_retry=True.",
                 "Increment self._http_transient_retry_count without appending to _recent_http_errors or emitting LCU_TELEMETRY warnings.",
                 "Evaluate HTTP status anomalies and record terminal failure entries only on final attempt failure (is_transient_retry=False).",
+            ],
+        },
+        {
+            "method": "HTTP Transport Anomaly Threshold Protocol",
+            "procedure": [
+                "Track status 0 failures in sliding window via is_transport_sample=(status_code == 0).",
+                "Verify single transport failures do not trip alert active or spam LCU_HTTP_STATUS_ANOMALY.",
+                "Enforce _http_anomaly_transport_count_threshold before logging LCU_HTTP_STATUS_ANOMALY.",
+                "Expose threshold in get_http_status_anomaly_telemetry and verify auto-recovery once failures expire from window.",
             ],
         },
     ]

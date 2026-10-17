@@ -233,6 +233,42 @@ def test_lcu_http_5xx_sliding_window_threshold_invariants():
     assert f"HTTP 5xx count {thresh} reached threshold" in tel["last_http_status_anomaly"]["reason"]
 
 
+def test_lcu_http_transport_failure_sliding_window_threshold_invariants():
+    """LCU-005: Transport failure (status 0) anomaly alert must not trip on isolated 1-2 failures; requires configured threshold."""
+    from services.api_handler import LCUClient
+
+    client = LCUClient()
+    thresh = client._http_anomaly_transport_count_threshold
+    assert thresh >= 3
+
+    # 1. Verify telemetry exposes http_anomaly_transport_count_threshold
+    tel = client.get_http_status_anomaly_telemetry()
+    assert tel["http_anomaly_transport_count_threshold"] == thresh
+    assert tel["http_status_anomaly_active"] is False
+
+    # 2. Ensure transport failure count < threshold does not trip anomaly active
+    for _ in range(thresh - 1):
+        client._record_http_transport_failure("GET", "/lol-chat/v1/friends", "connection")
+        tel = client.get_http_status_anomaly_telemetry()
+        assert tel["http_status_anomaly_active"] is False
+        assert tel["http_status_anomaly_count"] == 0
+
+    # 3. Crossing threshold trips anomaly active
+    client._record_http_transport_failure("GET", "/lol-chat/v1/friends", "connection")
+    tel = client.get_http_status_anomaly_telemetry()
+    assert tel["http_status_anomaly_active"] is True
+    assert tel["http_status_anomaly_count"] == 1
+    assert f"HTTP transport failure count {thresh} reached threshold" in tel["last_http_status_anomaly"]["reason"]
+    assert "connection" in tel["last_http_status_anomaly"]["reason"]
+
+    # 4. Success dilution or clearing window recovers anomaly state
+    client._http_status_window.clear()
+    with client._req_diag_lock:
+        client._evaluate_http_status_anomaly(is_error=False, status_code=200, method="GET", endpoint="/lol-chat/v1/friends")
+    tel_recovered = client.get_http_status_anomaly_telemetry()
+    assert tel_recovered["http_status_anomaly_active"] is False
+
+
 def test_riot_client_api_timeout_retry_invariants():
     """RCA-001: RiotClientAPI must retry transient timeouts and not raise unhandled errors."""
     from unittest.mock import MagicMock, patch

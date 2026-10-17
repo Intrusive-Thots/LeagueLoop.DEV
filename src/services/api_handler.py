@@ -203,10 +203,11 @@ class LCUClient:
         self._recent_http_errors: list = []
         self._max_recent_http_errors: int = 50
 
-        # Task 169: Automated HTTP response status distribution anomaly threshold alerts
+        # Task 169 & 175: Automated HTTP response status distribution anomaly threshold alerts
         # Use a sliding time window so old lockfile/connect failures stop spamming forever.
         self._http_anomaly_error_rate_threshold_pct: float = 15.0
         self._http_anomaly_5xx_count_threshold: int = 5
+        self._http_anomaly_transport_count_threshold: int = 3
         self._http_anomaly_count: int = 0
         self._http_status_anomaly_active: bool = False
         self._http_status_anomaly_history: list = []
@@ -218,7 +219,7 @@ class LCUClient:
         except Exception:
             self._http_status_window_s = 120.0
             self._http_anomaly_log_cooldown_s = 60.0
-        # (timestamp, is_error, is_5xx) samples for sliding-window error rate
+        # (timestamp, is_error, is_5xx, is_transport) samples for sliding-window error rate
         self._http_status_window: list = []
         self._last_http_anomaly_log_ts: float = 0.0
 
@@ -2643,38 +2644,43 @@ class LCUClient:
         # Caller must hold _req_diag_lock
         now = time.time()
         is_5xx_sample = status_code >= 500
-        self._http_status_window.append((now, is_error, is_5xx_sample))
+        is_transport_sample = (status_code == 0)
+        self._http_status_window.append((now, is_error, is_5xx_sample, is_transport_sample))
         cutoff = now - self._http_status_window_s
         self._http_status_window = [s for s in self._http_status_window if s[0] >= cutoff]
 
         window_total = len(self._http_status_window)
-        window_errs = sum(1 for _, err, _ in self._http_status_window if err)
-        window_5xx = sum(1 for _, _, is5 in self._http_status_window if is5)
+        window_errs = sum(1 for s in self._http_status_window if s[1])
+        window_5xx = sum(1 for s in self._http_status_window if len(s) > 2 and s[2])
+        window_transport = sum(1 for s in self._http_status_window if len(s) > 3 and s[3])
         err_rate = round((window_errs / max(1, window_total)) * 100.0, 2)
 
         is_rate_anomaly = window_total >= 10 and err_rate > self._http_anomaly_error_rate_threshold_pct
         is_5xx_anomaly = window_5xx >= self._http_anomaly_5xx_count_threshold
+        is_transport_anomaly = window_transport >= self._http_anomaly_transport_count_threshold
 
         # Only raise on a real failing sample, never on successful 2xx/3xx
         is_failing_sample = is_error or (status_code >= 500)
         should_alert = is_failing_sample and (
-            is_rate_anomaly or is_5xx_anomaly or bool(reason_override)
+            is_rate_anomaly or is_5xx_anomaly or is_transport_anomaly
         )
 
         if should_alert:
             was_active = self._http_status_anomaly_active
             self._http_status_anomaly_active = True
             self._http_anomaly_count += 1
-            if reason_override:
-                reason = reason_override
+            if is_transport_anomaly:
+                reason = f"HTTP transport failure count {window_transport} reached threshold ({reason_override or 'transport'})"
             elif is_rate_anomaly:
                 reason = (
                     f"Sliding-window error rate {err_rate}% exceeded threshold "
                     f"{self._http_anomaly_error_rate_threshold_pct}% "
                     f"({window_errs}/{window_total} in {self._http_status_window_s:.0f}s)"
                 )
-            else:
+            elif is_5xx_anomaly:
                 reason = f"HTTP 5xx count {window_5xx} reached threshold"
+            else:
+                reason = reason_override or "Unknown anomaly"
 
             anomaly_entry = {
                 "timestamp": now,
@@ -2701,7 +2707,7 @@ class LCUClient:
                 self._http_status_anomaly_active = False
 
     def get_http_status_anomaly_telemetry(self) -> Dict[str, Any]:
-        """Task 169: Returns automated HTTP response status distribution anomaly threshold alert telemetry."""
+        """Task 169 & 175: Returns automated HTTP response status distribution anomaly threshold alert telemetry."""
         with self._req_diag_lock:
             anomalies = self._http_anomaly_count
             active = self._http_status_anomaly_active
@@ -2709,12 +2715,14 @@ class LCUClient:
             last_anomaly = dict(history[-1]) if history else None
             err_thresh = self._http_anomaly_error_rate_threshold_pct
             c5xx_thresh = self._http_anomaly_5xx_count_threshold
+            ctrans_thresh = self._http_anomaly_transport_count_threshold
 
         return {
             "http_status_anomaly_count": anomalies,
             "http_status_anomaly_active": active,
             "http_anomaly_error_rate_threshold_pct": err_thresh,
             "http_anomaly_5xx_count_threshold": c5xx_thresh,
+            "http_anomaly_transport_count_threshold": ctrans_thresh,
             "last_http_status_anomaly": last_anomaly,
             "recent_http_status_anomalies": history,
         }
