@@ -376,6 +376,8 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         self.assertIn("diary", cmd)
         self.assertIn("write", cmd)
         self.assertIn("Run #164", cmd[-1])
+        self.assertIn("PROJ:LeagueLoop.DEV", cmd[-1])
+        self.assertIn("★★★", cmd[-1])
 
     @patch("shutil.which")
     @patch("pathlib.Path.exists")

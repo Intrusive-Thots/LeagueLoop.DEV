@@ -1244,5 +1244,16 @@
       "delta_entropy": 0.0
     },
     "impact": "Continuous regression prevention, test ratio tracking (0.534), and entropy baseline tracked across Run #165."
+  },
+  {
+    "timestamp": "2026-10-17T03:43:22.416498+00:00",
+    "feature": "Telemetry Expected Error Invariant and MemPalace AAAK Sync",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Added LCU telemetry regression guards for 405/404/400 suppression and aligned MemPalace diary recording with AAAK specification"
   }
 ]

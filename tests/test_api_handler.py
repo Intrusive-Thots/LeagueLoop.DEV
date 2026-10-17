@@ -230,6 +230,32 @@ class TestLCUClient(unittest.TestCase):
         self.assertEqual(diag["http_2xx_count"], 2)
         self.assertEqual(diag["http_4xx_count"], 1)
 
+    def test_http_status_expected_method_absence_filtering(self):
+        """Test that expected absence endpoints (405, 404, 400) do not trigger warning spam or recent error logs."""
+        self.client.is_connected = True
+        self.client.port = "1234"
+        self.client.base_url = "https://127.0.0.1:1234"
+
+        # Direct verification of _is_expected_absence classmethod
+        self.assertTrue(self.client._is_expected_absence(405, "/lol-loot/v1/ready"))
+        self.assertTrue(self.client._is_expected_absence(405, "/lol-champ-select/v1/session/actions/4"))
+        self.assertTrue(self.client._is_expected_absence(405, "/lol-gameflow/v1/gameflow-phase"))
+        self.assertTrue(self.client._is_expected_absence(404, "/lol-battle-pass/v1/rewards/claim"))
+        self.assertTrue(self.client._is_expected_absence(400, "/lol-ranked/v1/rewards/claim"))
+        self.assertFalse(self.client._is_expected_absence(405, "/lol-summoner/v1/current-summoner"))
+
+        # Verify telemetry recording ignores expected absences
+        initial_error_count = len(self.client._recent_http_errors)
+        self.client._record_http_status_code(405, "GET", "/lol-loot/v1/ready")
+        self.client._record_http_status_code(405, "PATCH", "/lol-champ-select/v1/session/actions/4")
+        self.client._record_http_status_code(404, "POST", "/lol-battle-pass/v1/rewards/claim")
+        self.assertEqual(len(self.client._recent_http_errors), initial_error_count)
+
+        # Unexpected 405 or 404 should still be recorded
+        self.client._record_http_status_code(405, "GET", "/lol-chat/v1/unknown")
+        self.assertEqual(len(self.client._recent_http_errors), initial_error_count + 1)
+        self.assertEqual(self.client._recent_http_errors[-1]["endpoint"], "/lol-chat/v1/unknown")
+
     def test_offline_retry_queue_telemetry_and_diagnostics(self):
         """Test offline request retry queue telemetry & execution success diagnostics for Task 154."""
         self.client.is_connected = False

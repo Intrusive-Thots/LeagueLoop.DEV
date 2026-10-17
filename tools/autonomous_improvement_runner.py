@@ -404,7 +404,11 @@ def sync_mempalace(loop_number: int, summary: str) -> bool:
             mempalace_exe = Path(which_path)
     palace_dir = Path(os.environ.get("USERPROFILE", "")) / ".mempalace" / "palace"
     if mempalace_exe.exists() and palace_dir.exists():
-        diary_text = f"*warm* Completed LeagueLoop.DEV Autonomous Improvement Loop Run #{loop_number}. {summary}"
+        today_iso = datetime.now().strftime("%Y-%m-%d")
+        diary_text = (
+            f"SESSION:{today_iso}|PROJ:LeagueLoop.DEV|AutoImprovementLoop|Run #{loop_number}|"
+            f"*warm* Completed Autonomous Improvement Loop Run #{loop_number}. {summary}|★★★"
+        )
         try:
             res = subprocess.run(
                 [str(mempalace_exe), "--palace", str(palace_dir), "diary", "write", diary_text],

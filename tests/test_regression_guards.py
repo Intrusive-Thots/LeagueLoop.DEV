@@ -156,3 +156,29 @@ def test_stats_scraper_daemon_executor_invariants():
         scraper.shutdown(wait=True)
 
 
+def test_lcu_telemetry_expected_error_filtering_invariants():
+    """LCU-002: LCUClient must suppress benign 405, 404, and 400 status codes on expected polling/probing endpoints."""
+    from services.api_handler import LCUClient
+
+    assert hasattr(LCUClient, "EXPECTED_405_ENDPOINTS"), "LCUClient must define EXPECTED_405_ENDPOINTS"
+    assert hasattr(LCUClient, "EXPECTED_404_ENDPOINTS"), "LCUClient must define EXPECTED_404_ENDPOINTS"
+    assert hasattr(LCUClient, "EXPECTED_400_ENDPOINTS"), "LCUClient must define EXPECTED_400_ENDPOINTS"
+
+    # Verify key endpoints
+    assert "/lol-loot/v1/ready" in LCUClient.EXPECTED_405_ENDPOINTS
+    assert "/lol-champ-select/v1/session/actions" in LCUClient.EXPECTED_405_ENDPOINTS
+    assert "/lol-gameflow/v1/gameflow-phase" in LCUClient.EXPECTED_405_ENDPOINTS
+
+    # Verify _is_expected_absence filtering logic
+    assert LCUClient._is_expected_absence(405, "/lol-loot/v1/ready") is True
+    assert LCUClient._is_expected_absence(405, "/lol-champ-select/v1/session/actions/4") is True
+    assert LCUClient._is_expected_absence(405, "/lol-gameflow/v1/gameflow-phase?foo=bar") is True
+    assert LCUClient._is_expected_absence(404, "/lol-battle-pass/v1/rewards/claim") is True
+    assert LCUClient._is_expected_absence(400, "/lol-ranked/v1/rewards/claim") is True
+
+    # Verify unexpected endpoints are NOT suppressed
+    assert LCUClient._is_expected_absence(405, "/lol-summoner/v1/current-summoner") is False
+    assert LCUClient._is_expected_absence(404, "/lol-summoner/v1/current-summoner") is False
+    assert LCUClient._is_expected_absence(500, "/lol-loot/v1/ready") is False
+
+
