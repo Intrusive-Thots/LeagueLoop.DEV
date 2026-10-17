@@ -417,4 +417,16 @@ def test_stats_scraper_queue_resolution_invariants():
     assert "_QUEUE_MODE_NAMES = {" not in text
 
 
+def test_app_sidebar_matchmaking_concurrency_invariants():
+    """LOBBY-001: Ensure AppSidebar._find_match enforces in-flight concurrency protection and graceful transport logging."""
+    sidebar_file = SRC / "ui" / "app_sidebar.py"
+    assert sidebar_file.exists()
+    text = sidebar_file.read_text(encoding="utf-8")
+    assert "_find_match_in_flight" in text
+    assert "getattr(self, \"_find_match_in_flight\", False)" in text
+    assert "self._find_match_in_flight = True" in text
+    assert "self._find_match_in_flight = False" in text
+    assert "transport connection failure (no response from client)" in text
+
+
 

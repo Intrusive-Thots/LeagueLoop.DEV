@@ -59,6 +59,7 @@ class SidebarWidget(ctk.CTkFrame):
         self._body_expanded = True
         self._inline_subpanels = {}
         self._active_inline_key = None
+        self._find_match_in_flight = False
         
         EventBus.on("lobby_event", self._on_lobby_event)
 
@@ -1231,10 +1232,15 @@ class SidebarWidget(ctk.CTkFrame):
         if not self.lcu:
             return
 
+        if getattr(self, "_find_match_in_flight", False):
+            Logger.debug("AppSidebar", "Find match already in flight; ignoring duplicate trigger.")
+            return
+
         if not getattr(self.lcu, "is_connected", False) and not self.lcu.connect(silent=True):
             self.update_action_log("Can't queue: League Client is not connected.")
             return
 
+        self._find_match_in_flight = True
         mode = self.config.get("aram_mode", "ARAM")
         self.update_action_log(f"Initiating {mode}...")
 
@@ -1252,129 +1258,140 @@ class SidebarWidget(ctk.CTkFrame):
         def _execute_sync():
             import time
 
-            # 0. A lobby cannot exist during a draft or a live game, and asking
-            #    for one anyway is not a no-op: the client answers HTTP 500,
-            #    the transport treats 5xx as transient and retries it three
-            #    times, and the search that follows is then a guaranteed 400.
-            #    A live log shows that whole sequence repeating while a match
-            #    was in progress, with nothing on screen but "Matchmaking
-            #    failed - check client".
-            blocked = self._phase_blocking_a_lobby()
-            if blocked:
-                self.after(0, lambda m=blocked: self.update_action_log(m))
-                return
-
-            if not getattr(self.lcu, "is_connected", False) and not self.lcu.connect(silent=True):
-                self.after(0, lambda: self.update_action_log("Can't queue: League Client is not connected."))
-                return
-
-            # 0b. If in a friend's lobby or auto-joined lobby, leave it and apply 5-min cooldown
-            left_friend = False
-            if hasattr(self, "automation") and self.automation:
-                left_friend = self.automation.leave_friend_lobby_and_cooldown()
-
-            # 1. Check if already searching
-            state_req = self.lcu.request("GET", "/lol-lobby/v2/lobby/matchmaking/search-state")
-            state_data = state_req.json() if state_req and state_req.status_code == 200 else {}
-            
-            if state_data.get("searchState") == "Searching":
-                self.lcu.request("DELETE", "/lol-lobby/v2/lobby/matchmaking/search")
-                self.after(0, lambda: self.update_action_log("Matchmaking Cancelled."))
-                try:
-                    from services.debug_tracker import DebugTracker
-                    DebugTracker.get_instance(self.config).record_action(
-                        action_name="matchmaking_cancelled",
-                        outcome=f"Matchmaking cancelled for {mode}",
-                        details={"mode": mode},
-                        window=self
-                    )
-                except Exception as exc:
-                    Logger.debug("AppSidebar", f"DebugTracker cancel hook suppressed: {exc}", exc=exc)
-                if getattr(self, "power_state", False):
-                    self.after(0, self._on_power_click)
-                return
-
-            # 2. Resolve Queue ID
-            target_q_id = self._get_queue_id_for_mode(mode)
-
-            # 3. Check current lobby
-            lobby_req = self.lcu.request("GET", "/lol-lobby/v2/lobby")
-            in_lobby = lobby_req and lobby_req.status_code == 200
-
-            should_create = True
-
-            if in_lobby and not left_friend:
-                try:
-                    data = lobby_req.json()
-                    current_q = data.get("gameConfig", {}).get("queueId")
-                    local_member = data.get("localMember", {})
-                    is_leader = local_member.get("isLeader", True)
-                    members = data.get("members", [])
-
-                    # Only stay in current lobby if we are sole member / leader and queue matches
-                    if current_q == target_q_id and is_leader and len(members) <= 1:
-                        should_create = False
-                    else:
-                        self.lcu.request(
-                            "DELETE", "/lol-lobby/v2/lobby/matchmaking/search"
-                        )
-                        time.sleep(0.3)
-                        self.lcu.request("DELETE", "/lol-lobby/v2/lobby")
-                        time.sleep(0.3)
-                except Exception:
-                    should_create = True
-
-            if should_create:
-                created = self.lcu.request(
-                    "POST", "/lol-lobby/v2/lobby", {"queueId": target_q_id}
-                )
-                code = getattr(created, "status_code", None)
-                if code not in (200, 201, 204):
-                    # The response used to be discarded entirely, so a refused
-                    # lobby still fell through to the search below and the user
-                    # was told "check client" with nothing saying what to check.
-                    Logger.warning(
-                        "Lobby",
-                        "Could not create the {} lobby (queue {}): HTTP {}".format(
-                            mode, target_q_id, code
-                        ),
-                    )
-                    message = self._lobby_refusal_message(mode, code)
-                    self.after(0, lambda m=message: self.update_action_log(m))
+            try:
+                # 0. A lobby cannot exist during a draft or a live game, and asking
+                #    for one anyway is not a no-op: the client answers HTTP 500,
+                #    the transport treats 5xx as transient and retries it three
+                #    times, and the search that follows is then a guaranteed 400.
+                #    A live log shows that whole sequence repeating while a match
+                #    was in progress, with nothing on screen but "Matchmaking
+                #    failed - check client".
+                blocked = self._phase_blocking_a_lobby()
+                if blocked:
+                    self.after(0, lambda m=blocked: self.update_action_log(m))
                     return
-                time.sleep(0.8)
 
-            # 4. Start Search
-            res = self.lcu.request("POST", "/lol-lobby/v2/lobby/matchmaking/search")
-            
-            def _update_ui():
-                if res and res.status_code in [200, 204]:
-                    self.update_action_log(f"Searching ({mode})...")
-                    self.set_power_state(True)
+                if not getattr(self.lcu, "is_connected", False) and not self.lcu.connect(silent=True):
+                    self.after(0, lambda: self.update_action_log("Can't queue: League Client is not connected."))
+                    return
+
+                # 0b. If in a friend's lobby or auto-joined lobby, leave it and apply 5-min cooldown
+                left_friend = False
+                if hasattr(self, "automation") and self.automation:
+                    left_friend = self.automation.leave_friend_lobby_and_cooldown()
+
+                # 1. Check if already searching
+                state_req = self.lcu.request("GET", "/lol-lobby/v2/lobby/matchmaking/search-state")
+                state_data = state_req.json() if state_req and state_req.status_code == 200 else {}
+                
+                if state_data.get("searchState") == "Searching":
+                    self.lcu.request("DELETE", "/lol-lobby/v2/lobby/matchmaking/search")
+                    self.after(0, lambda: self.update_action_log("Matchmaking Cancelled."))
                     try:
                         from services.debug_tracker import DebugTracker
                         DebugTracker.get_instance(self.config).record_action(
-                            action_name="queue_search_started",
-                            outcome=f"Queue search started ({mode})",
-                            details={"mode": mode, "status_code": res.status_code},
+                            action_name="matchmaking_cancelled",
+                            outcome=f"Matchmaking cancelled for {mode}",
+                            details={"mode": mode},
                             window=self
                         )
                     except Exception as exc:
-                        Logger.debug("AppSidebar", f"DebugTracker queue start hook suppressed: {exc}", exc=exc)
-                else:
-                    self.update_action_log("Matchmaking failed - check client.")
-                    try:
-                        from services.debug_tracker import DebugTracker
-                        DebugTracker.get_instance(self.config).record_action(
-                            action_name="queue_search_failed",
-                            outcome="Matchmaking failed to start",
-                            details={"mode": mode, "status_code": getattr(res, "status_code", None)},
-                            window=self
-                        )
-                    except Exception as exc:
-                        Logger.debug("AppSidebar", f"DebugTracker queue fail hook suppressed: {exc}", exc=exc)
+                        Logger.debug("AppSidebar", f"DebugTracker cancel hook suppressed: {exc}", exc=exc)
+                    if getattr(self, "power_state", False):
+                        self.after(0, self._on_power_click)
+                    return
 
-            self.after(0, _update_ui)
+                # 2. Resolve Queue ID
+                target_q_id = self._get_queue_id_for_mode(mode)
+
+                # 3. Check current lobby
+                lobby_req = self.lcu.request("GET", "/lol-lobby/v2/lobby")
+                in_lobby = lobby_req and lobby_req.status_code == 200
+
+                should_create = True
+
+                if in_lobby and not left_friend:
+                    try:
+                        data = lobby_req.json()
+                        current_q = data.get("gameConfig", {}).get("queueId")
+                        local_member = data.get("localMember", {})
+                        is_leader = local_member.get("isLeader", True)
+                        members = data.get("members", [])
+
+                        # Only stay in current lobby if we are sole member / leader and queue matches
+                        if current_q == target_q_id and is_leader and len(members) <= 1:
+                            should_create = False
+                        else:
+                            self.lcu.request(
+                                "DELETE", "/lol-lobby/v2/lobby/matchmaking/search"
+                            )
+                            time.sleep(0.3)
+                            self.lcu.request("DELETE", "/lol-lobby/v2/lobby")
+                            time.sleep(0.3)
+                    except Exception:
+                        should_create = True
+
+                if should_create:
+                    created = self.lcu.request(
+                        "POST", "/lol-lobby/v2/lobby", {"queueId": target_q_id}
+                    )
+                    code = getattr(created, "status_code", None)
+                    if code not in (200, 201, 204):
+                        # The response used to be discarded entirely, so a refused
+                        # lobby still fell through to the search below and the user
+                        # was told "check client" with nothing saying what to check.
+                        if code is None:
+                            Logger.warning(
+                                "Lobby",
+                                "Could not create the {} lobby (queue {}): transport connection failure (no response from client)".format(
+                                    mode, target_q_id
+                                ),
+                            )
+                        else:
+                            Logger.warning(
+                                "Lobby",
+                                "Could not create the {} lobby (queue {}): HTTP {}".format(
+                                    mode, target_q_id, code
+                                ),
+                            )
+                        message = self._lobby_refusal_message(mode, code)
+                        self.after(0, lambda m=message: self.update_action_log(m))
+                        return
+                    time.sleep(0.8)
+
+                # 4. Start Search
+                res = self.lcu.request("POST", "/lol-lobby/v2/lobby/matchmaking/search")
+                
+                def _update_ui():
+                    if res and res.status_code in [200, 204]:
+                        self.update_action_log(f"Searching ({mode})...")
+                        self.set_power_state(True)
+                        try:
+                            from services.debug_tracker import DebugTracker
+                            DebugTracker.get_instance(self.config).record_action(
+                                action_name="queue_search_started",
+                                outcome=f"Queue search started ({mode})",
+                                details={"mode": mode, "status_code": res.status_code},
+                                window=self
+                            )
+                        except Exception as exc:
+                            Logger.debug("AppSidebar", f"DebugTracker queue start hook suppressed: {exc}", exc=exc)
+                    else:
+                        self.update_action_log("Matchmaking failed - check client.")
+                        try:
+                            from services.debug_tracker import DebugTracker
+                            DebugTracker.get_instance(self.config).record_action(
+                                action_name="queue_search_failed",
+                                outcome="Matchmaking failed to start",
+                                details={"mode": mode, "status_code": getattr(res, "status_code", None)},
+                                window=self
+                            )
+                        except Exception as exc:
+                            Logger.debug("AppSidebar", f"DebugTracker queue fail hook suppressed: {exc}", exc=exc)
+
+                self.after(0, _update_ui)
+            finally:
+                self._find_match_in_flight = False
 
         threading.Thread(target=_execute_sync, daemon=True).start()
 

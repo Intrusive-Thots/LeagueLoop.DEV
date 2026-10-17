@@ -218,6 +218,45 @@ class TheLobbyRefusalIsExplained(unittest.TestCase):
         )
         self.assertIn("game is still running", widget._phase_blocking_a_lobby())
 
+    def test_find_match_debounces_concurrent_triggers(self):
+        widget = self.cls.__new__(self.cls)
+        widget.lcu = SimpleNamespace(is_connected=True)
+        widget.config = {"aram_mode": "ARAM"}
+        widget.update_action_log = MagicMock()
+        widget._find_match_in_flight = True
+        with unittest.mock.patch("threading.Thread") as mock_thread:
+            widget._find_match()
+            mock_thread.assert_not_called()
+
+    def test_find_match_initiates_and_clears_in_flight_in_worker(self):
+        widget = self.cls.__new__(self.cls)
+        widget.lcu = SimpleNamespace(
+            is_connected=True,
+            request=lambda method, endpoint, *a, **k: SimpleNamespace(status_code=200, json=lambda: {}),
+        )
+        widget.config = {"aram_mode": "ARAM"}
+        widget.update_action_log = MagicMock()
+        widget.set_power_state = MagicMock()
+        widget._phase_blocking_a_lobby = lambda: None
+        widget._get_queue_id_for_mode = lambda m: 450
+        widget.after = lambda delay, cb: cb()
+        widget._find_match_in_flight = False
+
+        worker_func = None
+
+        def fake_thread(target=None, **kwargs):
+            nonlocal worker_func
+            worker_func = target
+            return SimpleNamespace(start=lambda: None)
+
+        with unittest.mock.patch("threading.Thread", side_effect=fake_thread):
+            widget._find_match()
+            self.assertTrue(widget._find_match_in_flight)
+            self.assertIsNotNone(worker_func)
+            worker_func()
+            self.assertFalse(widget._find_match_in_flight)
+
 
 if __name__ == "__main__":
     unittest.main()
+
