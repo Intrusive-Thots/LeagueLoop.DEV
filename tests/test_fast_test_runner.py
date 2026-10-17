@@ -73,6 +73,25 @@ class TestFastTestRunner(unittest.TestCase):
         self.assertEqual(cm.exception.code, 0)
         mock_run.assert_called_once_with([], ["-v"])
 
+    @patch("tools.fast_test_runner.run_tests")
+    def test_main_argv_default_empty(self, mock_run):
+        from tools.fast_test_runner import main as runner_main
+        mock_run.return_value = 0
+        with self.assertRaises(SystemExit) as cm:
+            runner_main([])
+        self.assertEqual(cm.exception.code, 0)
+        self.assertTrue(mock_run.called)
+
+    @patch("tools.fast_test_runner.run_tests")
+    def test_main_argv_staged(self, mock_run):
+        from tools.fast_test_runner import main as runner_main
+        mock_run.return_value = 0
+        with self.assertRaises(SystemExit) as cm:
+            runner_main(["--staged"])
+        self.assertEqual(cm.exception.code, 0)
+        self.assertTrue(mock_run.called)
+
 
 if __name__ == "__main__":
     unittest.main()
+

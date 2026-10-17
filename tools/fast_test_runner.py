@@ -302,7 +302,7 @@ def main(argv=None):
             print(f"  - {f}")
         selected_targets = map_source_to_tests(explicit_files, graph)
     else:
-        modified = get_git_modified_files(staged_only=args.staged)
+        modified = get_git_modified_files(staged_only=staged)
         print(f"[Fast Runner] Detected modified files in git ({len(modified)}):")
         for m in sorted(modified):
             print(f"  - {m}")
