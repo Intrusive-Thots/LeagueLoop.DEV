@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import threading
 import time
+from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from core.state import ConnectionStateEnum, GameflowPhase
@@ -41,6 +42,16 @@ from utils.logger import Logger
 DEFAULT_POLL_INTERVAL_S = 1.0
 #: How often to re-probe while it is not. Deliberately slower.
 DEFAULT_IDLE_INTERVAL_S = 3.0
+
+
+@dataclass
+class ClientStateConfig:
+    """Configuration options for `ClientStateService` polling and timing."""
+
+    poll_interval_s: float = DEFAULT_POLL_INTERVAL_S
+    idle_interval_s: float = DEFAULT_IDLE_INTERVAL_S
+    sleep: Callable[[float], None] = time.sleep
+    now: Callable[[], float] = time.monotonic
 
 PHASE_ENDPOINT = "/lol-gameflow/v1/gameflow-phase"
 SUMMONER_ENDPOINT = "/lol-summoner/v1/current-summoner"
@@ -83,20 +94,22 @@ class ClientStateService:
         lcu: Any,
         state_manager: Any,
         automation_controller: Any = None,
-        poll_interval_s: float = DEFAULT_POLL_INTERVAL_S,
-        idle_interval_s: float = DEFAULT_IDLE_INTERVAL_S,
-        sleep: Callable[[float], None] = time.sleep,
-        now: Callable[[], float] = time.monotonic,
+        config: Optional[ClientStateConfig] = None,
+        **kwargs: Any,
     ):
         self._lcu = lcu
         self._state = state_manager
         # The engine can stop itself (errors, game exit), so the UI cannot
         # rely on controller calls alone to stay truthful.
         self._automation = automation_controller
-        self._poll_interval_s = poll_interval_s
-        self._idle_interval_s = idle_interval_s
-        self._sleep = sleep
-        self._now = now
+
+        if config is None:
+            config = ClientStateConfig()
+
+        self._poll_interval_s = kwargs.get("poll_interval_s", config.poll_interval_s)
+        self._idle_interval_s = kwargs.get("idle_interval_s", config.idle_interval_s)
+        self._sleep = kwargs.get("sleep", config.sleep)
+        self._now = kwargs.get("now", config.now)
 
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
