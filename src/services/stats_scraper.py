@@ -237,13 +237,7 @@ class StatsScraper:
             from services.queue_manager import resolve_mode_name
             self.mode = resolve_mode_name(queue_id)
         except Exception:
-            _QUEUE_MODE_NAMES = {
-                450: "ARAM", 2400: "ARAM Mayhem", 420: "Ranked Solo/Duo",
-                440: "Ranked Flex", 400: "Draft Pick", 1700: "Arena", 1710: "Arena 3v6",
-                490: "Quickplay", 900: "URF", 1010: "ARURF",
-                1300: "Nexus Blitz", 1020: "One For All", 1400: "Ultimate Spellbook",
-            }
-            self.mode = _QUEUE_MODE_NAMES.get(queue_id, self.mode)
+            self.mode = "ARAM"
         self._fetch_live_data_background(self.mode)
 
     def get_winrate(self, champ_name):

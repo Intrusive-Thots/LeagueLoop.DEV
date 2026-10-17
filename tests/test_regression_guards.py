@@ -406,3 +406,15 @@ def test_app_sidebar_queue_resolution_invariants():
     assert "mode_map = {" not in text
 
 
+def test_stats_scraper_queue_resolution_invariants():
+    """QUEUE-002: Ensure StatsScraper.set_mode_by_queue_id delegates to QueueManager and does not maintain duplicate hardcoded dictionaries."""
+    scraper_file = SRC / "services" / "stats_scraper.py"
+    assert scraper_file.exists()
+    text = scraper_file.read_text(encoding="utf-8")
+    assert "from services.queue_manager import resolve_mode_name" in text
+    assert "def set_mode_by_queue_id" in text
+    # Ensure no duplicate hardcoded mode dictionary in set_mode_by_queue_id
+    assert "_QUEUE_MODE_NAMES = {" not in text
+
+
+
