@@ -184,6 +184,7 @@ class LCUClient:
         self._http_429_count = 0
         self._http_5xx_count = 0
         self._http_retry_count = 0
+        self._http_transient_retry_count: int = 0
         self._http_max_retries = 3
         self._http_error_count = 0
 
@@ -2438,7 +2439,15 @@ class LCUClient:
 
                 dur = time.time() - t_start
                 self._record_http_latency(dur * 1000.0)
-                self._record_http_status_code(response.status_code, method, endpoint)
+
+                will_retry = False
+                if 500 <= response.status_code <= 599:
+                    if "bench/swap" not in endpoint and attempt < max_attempts - 1:
+                        will_retry = True
+
+                self._record_http_status_code(
+                    response.status_code, method, endpoint, is_transient_retry=will_retry
+                )
 
                 if response.status_code == 429:
                     # Deplete token bucket and apply backoff cooldown to prevent cascade disconnections
@@ -2563,11 +2572,17 @@ class LCUClient:
             )
         return False
 
-    def _record_http_status_code(self, status_code: int, method: str, endpoint: str) -> None:
-        """Task 151 & 169: Records HTTP status codes; anomaly alerts use a sliding window (no 200 spam)."""
+    def _record_http_status_code(
+        self,
+        status_code: int,
+        method: str,
+        endpoint: str,
+        is_transient_retry: bool = False,
+    ) -> None:
+        """Task 151, 169 & 172: Records HTTP status codes; anomaly alerts use a sliding window (no 200 spam)."""
         is_error = status_code >= 400 and not self._is_expected_absence(
             status_code, endpoint
-        )
+        ) and not is_transient_retry
         with self._req_diag_lock:
             self._http_status_codes[status_code] = self._http_status_codes.get(status_code, 0) + 1
             if 200 <= status_code <= 299:
@@ -2580,6 +2595,10 @@ class LCUClient:
                     self._http_429_count += 1
             elif 500 <= status_code <= 599:
                 self._http_5xx_count += 1
+
+            if is_transient_retry:
+                self._http_transient_retry_count = getattr(self, "_http_transient_retry_count", 0) + 1
+                return
 
             if is_error:
                 err_entry = {
@@ -2717,6 +2736,7 @@ class LCUClient:
             "http_4xx_count": self._http_4xx_count,
             "http_5xx_count": self._http_5xx_count,
             "http_429_count": self._http_429_count,
+            "http_transient_retry_count": getattr(self, "_http_transient_retry_count", 0),
             "http_error_count": self._http_error_count,
             "http_error_rate_pct": err_rate,
             "recent_errors_count": len(recent_errs),
@@ -2785,6 +2805,7 @@ class LCUClient:
                 "offline_retry_success_rate_pct": success_rate_pct,
                 "http_429_count": self._http_429_count,
                 "http_retry_count": self._http_retry_count,
+                "http_transient_retry_count": getattr(self, "_http_transient_retry_count", 0),
                 "http_error_count": self._http_error_count,
                 "offline_queue_current_len": len(self._offline_queue),
                 "adaptive_timeout_s": self.get_adaptive_http_timeout(),

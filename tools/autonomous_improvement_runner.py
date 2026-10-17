@@ -550,6 +550,11 @@ def run_loop(
             "description": "Supporting granular pytest node selectors (path.py::TestClass::test_method) and arbitrary test flags (-k, -m, -s, -x) across fast_test_runner and autonomous_improvement_runner enables sub-second single-test execution and flexible test filtering without falling back to full-suite runs.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Transient Retry Telemetry and False-Positive Error Suppression",
+            "description": "Distinguishing transient HTTP retry attempts (5xx with attempts remaining) from terminal request failures in LCUClient prevents intermediate retries from corrupting error rates, spamming false-positive LCU_TELEMETRY warnings, and prematurely triggering HTTP status anomalies during transient client/server hiccups.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
@@ -609,6 +614,15 @@ def run_loop(
                 "Target a specific test class or method using python tools/fast_test_runner.py tests/test_file.py::TestClass::test_method.",
                 "Target by keyword expression using python tools/fast_test_runner.py -k <expr>.",
                 "Execute the autonomous improvement runner with targeted flags via python tools/autonomous_improvement_runner.py -k <expr>.",
+            ],
+        },
+        {
+            "method": "Transient HTTP Retry Telemetry Filtering",
+            "procedure": [
+                "Track raw status code distribution across all attempts in self._http_status_codes.",
+                "Flag attempts with remaining retries via is_transient_retry=True.",
+                "Increment self._http_transient_retry_count without appending to _recent_http_errors or emitting LCU_TELEMETRY warnings.",
+                "Evaluate HTTP status anomalies and record terminal failure entries only on final attempt failure (is_transient_retry=False).",
             ],
         },
     ]

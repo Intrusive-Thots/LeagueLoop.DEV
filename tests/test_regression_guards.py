@@ -182,3 +182,29 @@ def test_lcu_telemetry_expected_error_filtering_invariants():
     assert LCUClient._is_expected_absence(500, "/lol-loot/v1/ready") is False
 
 
+def test_lcu_telemetry_transient_retry_filtering_invariants():
+    """LCU-003: Transient 5xx retries must be recorded in telemetry without triggering false positive terminal error warnings."""
+    from services.api_handler import LCUClient
+
+    client = LCUClient()
+    assert hasattr(client, "_record_http_status_code")
+    assert hasattr(client, "_http_transient_retry_count")
+
+    initial_errors = len(client._recent_http_errors)
+    # Record transient retry
+    client._record_http_status_code(500, "POST", "/lol-lobby/v2/lobby", is_transient_retry=True)
+    assert len(client._recent_http_errors) == initial_errors
+    assert client._http_transient_retry_count == 1
+    assert client._http_5xx_count == 1
+
+    # Diagnostics and telemetry must expose http_transient_retry_count
+    req_diag = client.get_request_diagnostics()
+    assert "http_transient_retry_count" in req_diag
+    assert req_diag["http_transient_retry_count"] == 1
+
+    status_tel = client.get_http_status_telemetry()
+    assert "http_transient_retry_count" in status_tel
+    assert status_tel["http_transient_retry_count"] == 1
+
+
+

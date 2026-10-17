@@ -1360,5 +1360,16 @@
       "delta_entropy": 0.0
     },
     "impact": "Continuous regression prevention, test ratio tracking (0.536), and entropy baseline tracked across Run #171."
+  },
+  {
+    "timestamp": "2026-10-17T04:57:35.029716+00:00",
+    "feature": "LCU HTTP Transient Retry Telemetry and Error Suppression Guards (Run #172)",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Suppresses false-positive LCU_TELEMETRY warning logs and premature HTTP status anomaly flags during transient 5xx jitter backoff retries in LCUClient, adds http_transient_retry_count observability to request diagnostics, and advances test baseline to 991 passing tests."
   }
 ]

@@ -69,5 +69,14 @@
       "Target by keyword expression using python tools/fast_test_runner.py -k <expr>.",
       "Execute the autonomous improvement runner with targeted flags via python tools/autonomous_improvement_runner.py -k <expr>."
     ]
+  },
+  {
+    "method": "Transient HTTP Retry Telemetry Filtering",
+    "procedure": [
+      "Track raw status code distribution across all attempts in self._http_status_codes.",
+      "Flag attempts with remaining retries via is_transient_retry=True.",
+      "Increment self._http_transient_retry_count without appending to _recent_http_errors or emitting LCU_TELEMETRY warnings.",
+      "Evaluate HTTP status anomalies and record terminal failure entries only on final attempt failure (is_transient_retry=False)."
+    ]
   }
 ]

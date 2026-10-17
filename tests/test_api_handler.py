@@ -256,6 +256,53 @@ class TestLCUClient(unittest.TestCase):
         self.assertEqual(len(self.client._recent_http_errors), initial_error_count + 1)
         self.assertEqual(self.client._recent_http_errors[-1]["endpoint"], "/lol-chat/v1/unknown")
 
+    def test_transient_retry_status_code_suppression(self):
+        """Test that is_transient_retry=True tracks counts without triggering error warnings or anomaly flags (Task 172)."""
+        initial_error_count = len(self.client._recent_http_errors)
+        initial_transient_count = self.client.get_request_diagnostics().get("http_transient_retry_count", 0)
+
+        # Record transient 500 retry
+        self.client._record_http_status_code(500, "POST", "/lol-lobby/v2/lobby", is_transient_retry=True)
+
+        # Errors list and anomaly status must remain clean
+        self.assertEqual(len(self.client._recent_http_errors), initial_error_count)
+        self.assertFalse(self.client.get_http_status_anomaly_telemetry()["http_status_anomaly_active"])
+
+        # Raw status distribution and transient counter must reflect the attempt
+        diag = self.client.get_request_diagnostics()
+        self.assertEqual(diag["http_transient_retry_count"], initial_transient_count + 1)
+        self.assertGreaterEqual(diag["http_5xx_count"], 1)
+
+        tel = self.client.get_http_status_telemetry()
+        self.assertEqual(tel["http_transient_retry_count"], initial_transient_count + 1)
+
+        # Non-transient terminal 500 error must record as an error
+        self.client._record_http_status_code(500, "POST", "/lol-lobby/v2/lobby", is_transient_retry=False)
+        self.assertEqual(len(self.client._recent_http_errors), initial_error_count + 1)
+        self.assertEqual(self.client._recent_http_errors[-1]["status_code"], 500)
+
+    def test_execute_sync_transient_retry_integration(self):
+        """Test _execute_sync retries transient 500s with jitter backoff without logging terminal errors (Task 172)."""
+        resp_fail = MagicMock()
+        resp_fail.status_code = 500
+        resp_ok = MagicMock()
+        resp_ok.status_code = 200
+
+        self.client.session.request = MagicMock(side_effect=[resp_fail, resp_ok])
+        initial_error_count = len(self.client._recent_http_errors)
+        initial_transient_count = self.client.get_request_diagnostics().get("http_transient_retry_count", 0)
+
+        self.client.is_connected = True
+        with patch("time.sleep") as mock_sleep:
+            res = self.client.request("POST", "/lol-lobby/v2/lobby", {"queueId": 2400}, silent=True)
+
+        self.assertIsNotNone(res)
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(mock_sleep.called)
+        # Transient retry was recorded, but terminal error list stayed clean
+        self.assertEqual(len(self.client._recent_http_errors), initial_error_count)
+        self.assertEqual(self.client.get_request_diagnostics()["http_transient_retry_count"], initial_transient_count + 1)
+
     def test_offline_retry_queue_telemetry_and_diagnostics(self):
         """Test offline request retry queue telemetry & execution success diagnostics for Task 154."""
         self.client.is_connected = False
