@@ -1117,5 +1117,16 @@
       "delta_entropy": 0.0
     },
     "impact": "Continuous regression prevention, test ratio tracking (0.531), and entropy baseline tracked across Run #158."
+  },
+  {
+    "timestamp": "2026-10-17T01:58:04.727532+00:00",
+    "feature": "hoisted_event_dispatch_and_ws_perf_threshold",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Eliminated repeated inner imports in EventBus.emit and api_handler while configurable ws_perf_warning_threshold_ms prevents false-positive warnings on large LCU payloads"
   }
 ]

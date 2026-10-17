@@ -254,3 +254,39 @@ class TestClientDetectorPriority(unittest.TestCase):
             self.assertEqual(results["league"]["token"], "super-auth-token-123")
             self.assertEqual(results["league"]["pid"], 200)
             self.assertTrue(results["league"]["connected"])
+
+
+class TestWebSocketTelemetryLatency(unittest.TestCase):
+    def setUp(self):
+        self.client = LCUClient()
+
+    def test_telemetry_includes_perf_warning_threshold(self):
+        """Verify get_ws_telemetry reports the configured perf warning threshold."""
+        telemetry = self.client.get_ws_telemetry()
+        self.assertEqual(telemetry.get("perf_warning_threshold_ms"), 75.0)
+        self.assertEqual(telemetry.get("anomaly_threshold_ms"), 100.0)
+
+    def test_record_ws_telemetry_perf_warning(self):
+        """Verify Logger.warning on LCU_WS_PERF only fires when exceeding the threshold."""
+        with patch("utils.logger.Logger.warning") as mock_warn:
+            # Latency below threshold (60ms < 75ms)
+            self.client._record_ws_telemetry("test_event", 60.0)
+            mock_warn.assert_not_called()
+
+            # Latency exceeding threshold (80ms > 75ms), but below anomaly (100ms)
+            self.client._record_ws_telemetry("test_event", 80.0)
+            mock_warn.assert_called_once()
+            args, _ = mock_warn.call_args
+            self.assertEqual(args[0], "LCU_WS_PERF")
+            self.assertIn("80.00ms", args[1])
+            self.assertIn("75.0ms", args[1])
+
+    def test_event_bus_hoisted_dispatch(self):
+        """Verify EventBus dispatches events cleanly with module-level imports."""
+        received = []
+        handle = EventBus.on("test_telemetry_event", lambda data: received.append(data))
+        try:
+            EventBus.emit("test_telemetry_event", {"status": "ok"})
+            self.assertEqual(received, [{"status": "ok"}])
+        finally:
+            handle.dispose()

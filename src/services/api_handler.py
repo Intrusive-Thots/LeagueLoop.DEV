@@ -27,6 +27,7 @@ from utils.logger import Logger
 from utils.client_detector import scan_clients
 from utils.running_stats import RunningStats
 from core.state import ConnectionStateEnum
+from core.events import EventBus
 
 
 class LCUClient:
@@ -116,6 +117,7 @@ class LCUClient:
         self._ws_start_time = time.time()
         self._ws_anomaly_count = 0
         self._ws_anomaly_threshold_ms = 100.0
+        self._ws_perf_warning_threshold_ms = 75.0
         self._ws_burst_alert_active = False
 
         # Task 145: Automated WS payload compression analysis & memory footprint reporting
@@ -3063,7 +3065,6 @@ class LCUClient:
                                     Logger.debug("LCU_WS", f"WAMP payload normalization failed: {e}")
 
                                 # Emit to central EventBus (Phase 2 Rule)
-                                from core.events import EventBus
                                 EventBus.emit(event_name, payload)
 
                                 # Find callbacks and auto-prune dead weak references
@@ -3471,8 +3472,9 @@ class LCUClient:
                     f"Latency anomaly detected on {event_name}: {latency_ms:.2f}ms (threshold: {self._ws_anomaly_threshold_ms}ms)"
                 )
 
-        if latency_ms > 50.0 and not is_anomaly:
-            Logger.warning("LCU_WS_PERF", f"High event latency on {event_name}: {latency_ms:.2f}ms")
+        warning_thresh = getattr(self, "_ws_perf_warning_threshold_ms", 75.0)
+        if latency_ms > warning_thresh and not is_anomaly:
+            Logger.warning("LCU_WS_PERF", f"High event latency on {event_name}: {latency_ms:.2f}ms (threshold: {warning_thresh:.1f}ms)")
 
     def get_ws_telemetry(self) -> Dict[str, Any]:
         """Returns telemetry performance metrics and WAMP throughput for LCU websocket event processing."""
@@ -3513,6 +3515,7 @@ class LCUClient:
                 "throughput_window_s": 10.0,
                 "anomaly_count": self._ws_anomaly_count,
                 "anomaly_threshold_ms": self._ws_anomaly_threshold_ms,
+                "perf_warning_threshold_ms": getattr(self, "_ws_perf_warning_threshold_ms", 75.0),
                 "burst_alert_active": self._ws_burst_alert_active,
                 "reconnect_backoff_s": round(self._ws_reconnect_backoff, 2),
                 "last_msg_age_s": last_msg_age_s,
