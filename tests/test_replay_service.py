@@ -247,6 +247,21 @@ class DownloadTests(unittest.TestCase):
         saver.on_match_ended()
         self.assertEqual(lcu.posts[0][0], DOWNLOAD_ENDPOINT.format(game_id=55))
 
+    def test_explicit_game_id_in_on_match_ended(self):
+        lcu = _Lcu(states=["download", "watch"], eog_ids=[], session_id=None)
+        saver = _saver(lcu)
+        saver.on_match_ended(game_id=8888)
+        self.assertEqual(len(lcu.posts), 1)
+        self.assertEqual(lcu.posts[0][0], DOWNLOAD_ENDPOINT.format(game_id=8888))
+
+    def test_falls_back_to_recent_match_history_when_stats_screen_closed(self):
+        history = {"games": {"games": [{"gameId": 7777}]}}
+        lcu = _Lcu(states=["download", "watch"], eog_ids=[], session_id=None, history=history)
+        saver = _saver(lcu)
+        saver.on_match_ended()
+        self.assertEqual(len(lcu.posts), 1)
+        self.assertEqual(lcu.posts[0][0], DOWNLOAD_ENDPOINT.format(game_id=7777))
+
 
 class RecentAndFolderTests(unittest.TestCase):
     def test_recent_games_skip_what_is_missing_and_what_is_saved(self):

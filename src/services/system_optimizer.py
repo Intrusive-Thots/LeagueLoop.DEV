@@ -4,10 +4,11 @@ Provides low-latency network tweaks ('Fix Ping') and safe background process cle
 """
 from __future__ import annotations
 
+import base64
 import os
 import subprocess
 import sys
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 import psutil
 
@@ -38,6 +39,11 @@ TARGET_PROCESS_NAMES: Set[str] = {
     "battle.net.exe",
     "agent.exe",
     "spotify.exe",
+    # Additional background bloat/sync/updaters
+    "adobearm.exe",
+    "acrotray.exe",
+    "dropbox.exe",
+    "googledrivesync.exe",
 }
 
 #: Strict whitelist: processes that MUST NEVER be killed under any circumstances
@@ -107,10 +113,11 @@ class SystemOptimizer:
 
         current_pid = os.getpid()
 
-        for proc in psutil.process_iter(["pid", "name", "memory_info"]):
+        for proc in psutil.process_iter(["pid", "name"]):
             try:
                 pid = proc.info.get("pid")
-                name = (proc.info.get("name") or "").lower()
+                raw_name = proc.info.get("name") or ""
+                name = raw_name.lower()
 
                 # Safety checks
                 if not name or pid == current_pid or pid <= 4:
@@ -120,12 +127,17 @@ class SystemOptimizer:
                     continue
 
                 if name in TARGET_PROCESS_NAMES:
-                    # Tally memory before terminating
-                    mem_info = proc.info.get("memory_info")
-                    if mem_info:
-                        freed_bytes += getattr(mem_info, "rss", 0)
+                    # Tally memory before terminating (lazy fetch memory_info only for matched target processes)
+                    mem_rss = 0
+                    try:
+                        mem_info = proc.info.get("memory_info") if (hasattr(proc, "info") and isinstance(proc.info, dict) and "memory_info" in proc.info) else proc.memory_info()
+                        if mem_info:
+                            mem_rss = getattr(mem_info, "rss", 0)
+                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                        pass
 
                     proc.terminate()
+                    freed_bytes += mem_rss
                     killed_count += 1
                     killed_names.append(proc.info.get("name") or name)
                     Logger.info("SystemOptimizer", f"Terminated non-essential process: {name} (PID {pid})")
@@ -151,11 +163,26 @@ class SystemOptimizer:
         }
 
     @classmethod
+    def measure_ping(cls, host: str = "1.1.1.1", port: int = 53, timeout: float = 2.0) -> Optional[float]:
+        """
+        Measures round-trip TCP latency in milliseconds to a low-latency DNS host.
+        Returns float latency in ms, or None if unreachable.
+        """
+        import socket
+        import time
+        try:
+            t0 = time.perf_counter()
+            with socket.create_connection((host, port), timeout=timeout):
+                return round((time.perf_counter() - t0) * 1000, 1)
+        except Exception:
+            return None
+
+    @classmethod
     def fix_ping(cls) -> Dict[str, Any]:
         """
         Applies network and TCP latency optimizations:
-        - Sets MTU to 1428 (eliminates cellular/upstream packet fragmentation)
-        - Points DNS to Cloudflare (1.1.1.1) and Google (8.8.8.8) and flushes cache
+        - Sets MTU to 1428 (eliminates cellular/upstream packet fragmentation) on active adapters
+        - Points DNS to Cloudflare (1.1.1.1 & 1.0.0.1) and flushes cache
         - Enables TCPNoDelay (disables Nagle's algorithm) & sets TcpAckFrequency = 1
         - Disables Windows multimedia network throttling
         - Disables RSC (Receive Segment Coalescing) to prevent packet buffering delay
@@ -167,29 +194,47 @@ class SystemOptimizer:
             }
 
         ps_script = """
-# 1. MTU 1428 persistent
-netsh interface ipv4 set subinterface "Ethernet" mtu=1428 store=persistent 2>$null
-# 2. DNS servers
-netsh interface ipv4 set dnsservers name="Ethernet" source=static address="1.1.1.1" validate=no 2>$null
-netsh interface ipv4 add dnsservers name="Ethernet" address="1.0.0.1" index=2 validate=no 2>$null
+# 1. MTU 1428 persistent on all active physical network adapters
+$adapters = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' -and $_.InterfaceDescription -notmatch 'Virtual|VMware|Hyper-V|Loopback|TAP|Wintun' }
+if (-not $adapters) {
+    $adapters = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' }
+}
+if ($adapters) {
+    foreach ($adapter in $adapters) {
+        $name = $adapter.Name
+        netsh interface ipv4 set subinterface "$name" mtu=1428 store=persistent 2>$null
+        netsh interface ipv4 set dnsservers name="$name" source=static address="1.1.1.1" validate=no 2>$null
+        netsh interface ipv4 add dnsservers name="$name" address="1.0.0.1" index=2 validate=no 2>$null
+    }
+} else {
+    netsh interface ipv4 set subinterface "Ethernet" mtu=1428 store=persistent 2>$null
+    netsh interface ipv4 set dnsservers name="Ethernet" source=static address="1.1.1.1" validate=no 2>$null
+    netsh interface ipv4 add dnsservers name="Ethernet" address="1.0.0.1" index=2 validate=no 2>$null
+    netsh interface ipv4 set subinterface "Wi-Fi" mtu=1428 store=persistent 2>$null
+    netsh interface ipv4 set dnsservers name="Wi-Fi" source=static address="1.1.1.1" validate=no 2>$null
+    netsh interface ipv4 add dnsservers name="Wi-Fi" address="1.0.0.1" index=2 validate=no 2>$null
+}
 ipconfig /flushdns 2>$null
-# 3. Low latency TCP registry
+# 2. Low latency TCP registry
 $interfaces = Get-ChildItem "HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces" -ErrorAction SilentlyContinue
 foreach ($iface in $interfaces) {
     Set-ItemProperty -Path $iface.PSPath -Name "TcpAckFrequency" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
     Set-ItemProperty -Path $iface.PSPath -Name "TCPNoDelay" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
     Set-ItemProperty -Path $iface.PSPath -Name "TcpDelAckTicks" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
 }
-# 4. Remove network throttling
+# 3. Remove network throttling
 Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile" -Name "NetworkThrottlingIndex" -Value 0xffffffff -Type DWord -Force -ErrorAction SilentlyContinue
 Set-ItemProperty -Path "HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile" -Name "SystemResponsiveness" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
-# 5. TCP global tuning
+# 4. TCP global tuning
 netsh int tcp set global rsc=disabled 2>$null
 netsh int tcp set global timestamps=disabled 2>$null
 netsh int tcp set global autotuninglevel=normal 2>$null
 """
 
         try:
+            current_latency = cls.measure_ping()
+            lat_suffix = f" ({current_latency}ms latency)" if current_latency is not None else ""
+
             if cls.is_admin():
                 # Direct in-process execution since we are already elevated
                 proc = subprocess.run(
@@ -199,25 +244,27 @@ netsh int tcp set global autotuninglevel=normal 2>$null
                     timeout=15,
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 )
-                Logger.info("SystemOptimizer", f"Ping fix applied directly (code {proc.returncode}).")
+                Logger.info("SystemOptimizer", f"Ping fix applied directly (code {proc.returncode}).{lat_suffix}")
                 return {
                     "success": True,
                     "elevated": True,
-                    "message": "Ping optimized: MTU 1428, Cloudflare DNS, & TCPNoDelay applied!",
+                    "message": f"Ping optimized{lat_suffix}: MTU 1428, Cloudflare DNS, & TCPNoDelay applied!",
+                    "latency_ms": current_latency,
                 }
             else:
-                # Launch via UAC elevation request
-                escaped_script = ps_script.replace('"', '`"')
-                cmd = f"Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -Command \"{escaped_script}\"' -Verb RunAs"
+                # Launch via UAC elevation request using EncodedCommand to ensure flawless multiline execution
+                b64_script = base64.b64encode(ps_script.encode("utf-16le")).decode("ascii")
+                cmd = f"Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand {b64_script}' -Verb RunAs"
                 subprocess.Popen(
-                    ["powershell", "-NoProfile", "-Command", cmd],
+                    ["powershell", "-NoProfile", "-NonInteractive", "-Command", cmd],
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 )
-                Logger.info("SystemOptimizer", "Launched elevated UAC prompt to apply ping optimizations.")
+                Logger.info("SystemOptimizer", f"Launched elevated UAC prompt to apply ping optimizations.{lat_suffix}")
                 return {
                     "success": True,
                     "elevated": False,
                     "message": "Optimization requested! Click 'Yes' on the Windows permission prompt.",
+                    "latency_ms": current_latency,
                 }
         except Exception as exc:
             Logger.error("SystemOptimizer", f"Failed to execute ping optimization: {exc}")

@@ -144,6 +144,8 @@ class LootService:
       - request(method, endpoint, data=None, silent=False) -> Response | None
     """
 
+    _ready_endpoint_available: bool = True
+
     def __init__(self, lcu: Any, log: Optional[LogFn] = None) -> None:
         self.lcu = lcu
         self._log = log or (lambda m: Logger.info("Loot", m))
@@ -220,11 +222,43 @@ class LootService:
 
     # ── inventory ──────────────────────────────────────────────
 
+    def is_ready(self) -> bool:
+        """Check if LCU loot subsystem is ready (false while client is booting/loading)."""
+        if not LootService._ready_endpoint_available:
+            return True
+        if not getattr(self.lcu, "is_connected", False):
+            if hasattr(self.lcu, "connect"):
+                self.lcu.connect(silent=True)
+        r = self.lcu.request("GET", "/lol-loot/v1/ready", silent=True)
+        if r is None:
+            return False
+        if r.status_code in (404, 405):
+            # Endpoint missing or method not allowed in this client version: bypass
+            LootService._ready_endpoint_available = False
+            return True
+        if r.status_code != 200:
+            return False
+        try:
+            data = r.json()
+            if data is False or (isinstance(data, dict) and data.get("ready") is False):
+                return False
+        except (ValueError, AttributeError):
+            pass
+        return True
+
     def fetch_loot(self) -> List[LootItem]:
+        if not self.is_ready():
+            self.log("Loot subsystem is not ready yet.")
+            return []
         data = self._get_json("/lol-loot/v1/player-loot")
         if not isinstance(data, list):
-            self.log("Failed to fetch player loot.")
-            return []
+            # Fallback to player-loot-map if array endpoint fails (e.g. HTTP 405 Method Not Allowed)
+            map_data = self._get_json("/lol-loot/v1/player-loot-map")
+            if isinstance(map_data, dict):
+                data = list(map_data.values())
+            else:
+                self.log("Failed to fetch player loot.")
+                return []
         items = [LootItem.from_api(x) for x in data if isinstance(x, dict)]
         items = [i for i in items if i.count > 0]
         items.sort(key=lambda i: (i.display_categories, i.name.lower()))

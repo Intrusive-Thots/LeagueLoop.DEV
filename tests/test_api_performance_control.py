@@ -13,6 +13,7 @@ from services.client_state_service import ClientStateService
 from core.state import StateManager, ConnectionStateEnum, GameflowPhase
 from core.events import EventBus
 from utils.client_detector import scan_clients
+import requests
 
 
 class TestWebSocketListenerLifecycle(unittest.TestCase):
@@ -193,6 +194,63 @@ class TestRiotClientAPIPerformance(unittest.TestCase):
 
         _, kwargs = api.session.request.call_args
         self.assertNotIn("verify", kwargs)
+        self.assertEqual(kwargs.get("timeout"), 3.0)
+
+    def test_riot_client_request_custom_timeout(self):
+        """Test that RiotClientAPI.request accepts a custom timeout."""
+        api = RiotClientAPI()
+        api.is_connected = True
+        api.port = "5555"
+        api.base_url = "https://127.0.0.1:5555"
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        api.session = MagicMock()
+        api.session.request.return_value = mock_resp
+
+        api.request("GET", "/rso-auth/v1/session", silent=True, timeout=1.5)
+
+        _, kwargs = api.session.request.call_args
+        self.assertEqual(kwargs.get("timeout"), 1.5)
+
+    def test_request_retries_on_timeout_and_succeeds(self):
+        """Test that RiotClientAPI.request retries on Timeout and returns successful response."""
+        api = RiotClientAPI()
+        api.is_connected = True
+        api.port = "5555"
+        api.base_url = "https://127.0.0.1:5555"
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        api.session = MagicMock()
+        api.session.request.side_effect = [
+            requests.exceptions.ReadTimeout("Read timed out"),
+            mock_resp,
+        ]
+
+        with patch("time.sleep"):
+            res = api.request("GET", "/product-launcher/v1/products/league_of_legends/patchlines/live", silent=True)
+
+        self.assertEqual(res, mock_resp)
+        self.assertEqual(api.session.request.call_count, 2)
+        self.assertTrue(api.is_connected)
+
+    def test_request_exhausts_timeouts_gracefully(self):
+        """Test that RiotClientAPI.request gracefully exhausts retries on continuous Timeout."""
+        api = RiotClientAPI()
+        api.is_connected = True
+        api.port = "5555"
+        api.base_url = "https://127.0.0.1:5555"
+
+        api.session = MagicMock()
+        api.session.request.side_effect = requests.exceptions.ConnectTimeout("Connect timed out")
+
+        with patch("time.sleep"):
+            res = api.request("GET", "/rso-auth/v1/session", silent=False)
+
+        self.assertIsNone(res)
+        self.assertEqual(api.session.request.call_count, 3)
+        self.assertFalse(api.is_connected)
 
 
 class TestClientStateInGameSynchronization(unittest.TestCase):
@@ -236,3 +294,75 @@ class TestClientDetectorPriority(unittest.TestCase):
             self.assertEqual(results["league"]["token"], "super-auth-token-123")
             self.assertEqual(results["league"]["pid"], 200)
             self.assertTrue(results["league"]["connected"])
+
+
+class TestWebSocketTelemetryLatency(unittest.TestCase):
+    def setUp(self):
+        self.client = LCUClient()
+
+    def test_telemetry_includes_perf_warning_threshold(self):
+        """Verify get_ws_telemetry reports the configured perf warning threshold."""
+        telemetry = self.client.get_ws_telemetry()
+        self.assertEqual(telemetry.get("perf_warning_threshold_ms"), 75.0)
+        self.assertEqual(telemetry.get("anomaly_threshold_ms"), 100.0)
+
+    def test_record_ws_telemetry_perf_warning(self):
+        """Verify Logger.warning on LCU_WS_PERF only fires when exceeding the threshold."""
+        with patch("utils.logger.Logger.warning") as mock_warn:
+            # Latency below threshold (60ms < 75ms)
+            self.client._record_ws_telemetry("test_event", 60.0)
+            mock_warn.assert_not_called()
+
+            # Latency exceeding threshold (80ms > 75ms), but below anomaly (100ms)
+            self.client._record_ws_telemetry("test_event", 80.0)
+            mock_warn.assert_called_once()
+            args, _ = mock_warn.call_args
+            self.assertEqual(args[0], "LCU_WS_PERF")
+            self.assertIn("80.00ms", args[1])
+            self.assertIn("75.0ms", args[1])
+
+    def test_event_bus_hoisted_dispatch(self):
+        """Verify EventBus dispatches events cleanly with module-level imports."""
+        received = []
+        handle = EventBus.on("test_telemetry_event", lambda data: received.append(data))
+        try:
+            EventBus.emit("test_telemetry_event", {"status": "ok"})
+            self.assertEqual(received, [{"status": "ok"}])
+        finally:
+            handle.dispose()
+
+
+class TestHttpStatusAnomalyTransportThreshold(unittest.TestCase):
+    def setUp(self):
+        self.client = LCUClient()
+
+    def test_transport_threshold_telemetry_reporting(self):
+        """Verify get_http_status_anomaly_telemetry reports transport threshold."""
+        tel = self.client.get_http_status_anomaly_telemetry()
+        self.assertIn("http_anomaly_transport_count_threshold", tel)
+        self.assertEqual(tel["http_anomaly_transport_count_threshold"], 3)
+        self.assertFalse(tel["http_status_anomaly_active"])
+
+    def test_single_transport_failure_suppresses_anomaly_alert(self):
+        """Verify 1-2 transport failures do not trip anomaly alerts."""
+        with patch("utils.logger.Logger.warning") as mock_warn:
+            self.client._record_http_transport_failure("GET", "/lol-chat/v1/friends", "connection")
+            self.client._record_http_transport_failure("GET", "/lol-game-queues/v1/queues", "connection")
+            tel = self.client.get_http_status_anomaly_telemetry()
+            self.assertFalse(tel["http_status_anomaly_active"])
+            self.assertEqual(tel["http_status_anomaly_count"], 0)
+            mock_warn.assert_not_called()
+
+    def test_transport_failure_threshold_crossing_trips_alert(self):
+        """Verify reaching 3 transport failures in sliding window trips anomaly alert."""
+        with patch("utils.logger.Logger.warning") as mock_warn:
+            for _ in range(3):
+                self.client._record_http_transport_failure("GET", "/lol-chat/v1/friends", "connection")
+            tel = self.client.get_http_status_anomaly_telemetry()
+            self.assertTrue(tel["http_status_anomaly_active"])
+            self.assertEqual(tel["http_status_anomaly_count"], 1)
+            mock_warn.assert_called_once()
+            args, _ = mock_warn.call_args
+            self.assertEqual(args[0], "LCU_HTTP_STATUS_ANOMALY")
+            self.assertIn("HTTP transport failure count 3 reached threshold", args[1])
+

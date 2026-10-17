@@ -90,12 +90,56 @@ class TestSystemOptimizer(unittest.TestCase):
     @patch("services.system_optimizer.SystemOptimizer.is_admin", return_value=False)
     @patch("services.system_optimizer.subprocess.Popen")
     def test_fix_ping_requests_elevation(self, mock_popen, mock_admin, mock_win):
+        import base64
+
         result = SystemOptimizer.fix_ping()
         self.assertTrue(result["success"])
         self.assertFalse(result["elevated"])
         mock_popen.assert_called_once()
         call_args = mock_popen.call_args[0][0]
-        self.assertIn("-Verb RunAs", call_args[3])
+        self.assertEqual(call_args[0], "powershell")
+        self.assertIn("-NonInteractive", call_args)
+        cmd_str = call_args[-1]
+        self.assertIn("-Verb RunAs", cmd_str)
+        self.assertIn("-EncodedCommand", cmd_str)
+
+        # Verify encoded script can be decoded back and contains expected network parameters
+        encoded_part = cmd_str.split("-EncodedCommand ")[1].split("'")[0]
+        decoded_script = base64.b64decode(encoded_part.encode("ascii")).decode("utf-16le")
+        self.assertIn("1428", decoded_script)
+        self.assertIn("1.1.1.1", decoded_script)
+
+    @patch("services.system_optimizer.psutil.process_iter")
+    def test_kill_unnecessary_processes_access_denied_does_not_count_memory(self, mock_process_iter):
+        """Ensure failed terminations due to AccessDenied do not increment freed memory or killed count."""
+        import psutil
+        mock_proc = MagicMock()
+        mock_proc.info = {
+            "pid": 9999,
+            "name": "OneDrive.exe",
+            "memory_info": MagicMock(rss=100 * 1024 * 1024),
+        }
+        mock_proc.terminate.side_effect = psutil.AccessDenied()
+        mock_process_iter.return_value = [mock_proc]
+
+        result = SystemOptimizer.kill_unnecessary_processes()
+        self.assertTrue(result["success"])
+        self.assertEqual(result["killed_count"], 0)
+        self.assertEqual(result["freed_mb"], 0.0)
+        self.assertEqual(result["killed_names"], [])
+
+    @patch("socket.create_connection")
+    def test_measure_ping(self, mock_conn):
+        mock_sock = MagicMock()
+        mock_conn.return_value = mock_sock
+        lat = SystemOptimizer.measure_ping()
+        self.assertIsInstance(lat, float)
+        self.assertGreaterEqual(lat, 0.0)
+
+    @patch("socket.create_connection", side_effect=OSError("Unreachable"))
+    def test_measure_ping_unreachable(self, mock_conn):
+        lat = SystemOptimizer.measure_ping()
+        self.assertIsNone(lat)
 
 
 if __name__ == "__main__":

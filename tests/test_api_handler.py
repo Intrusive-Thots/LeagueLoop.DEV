@@ -67,6 +67,23 @@ class TestLCUClient(unittest.TestCase):
         _args, kwargs = self.client.session.request.call_args
         self.assertNotIn("verify", kwargs)
 
+    def test_request_enforces_ssl_verification_for_external_urls(self):
+        self.client.is_connected = True
+        self.client.port = "443"
+        self.client.base_url = "https://api.external-service.com"
+        self.client.headers = {"Authorization": "Basic xxx"}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        self.client.session = MagicMock()
+        self.client.session.request.return_value = mock_response
+
+        self.client.request("GET", "/v1/data", silent=True)
+        self.client.session.request.assert_called_once()
+        _args, kwargs = self.client.session.request.call_args
+        self.assertIn("verify", kwargs)
+        self.assertTrue(kwargs["verify"])
+
     def test_request_not_connected(self):
         self.client.is_connected = False
         with patch.object(self.client, 'connect', return_value=False) as mock_connect:
@@ -213,6 +230,79 @@ class TestLCUClient(unittest.TestCase):
         self.assertEqual(diag["http_2xx_count"], 2)
         self.assertEqual(diag["http_4xx_count"], 1)
 
+    def test_http_status_expected_method_absence_filtering(self):
+        """Test that expected absence endpoints (405, 404, 400) do not trigger warning spam or recent error logs."""
+        self.client.is_connected = True
+        self.client.port = "1234"
+        self.client.base_url = "https://127.0.0.1:1234"
+
+        # Direct verification of _is_expected_absence classmethod
+        self.assertTrue(self.client._is_expected_absence(405, "/lol-loot/v1/ready"))
+        self.assertTrue(self.client._is_expected_absence(405, "/lol-champ-select/v1/session/actions/4"))
+        self.assertTrue(self.client._is_expected_absence(405, "/lol-gameflow/v1/gameflow-phase"))
+        self.assertTrue(self.client._is_expected_absence(404, "/lol-battle-pass/v1/rewards/claim"))
+        self.assertTrue(self.client._is_expected_absence(400, "/lol-ranked/v1/rewards/claim"))
+        self.assertFalse(self.client._is_expected_absence(405, "/lol-summoner/v1/current-summoner"))
+
+        # Verify telemetry recording ignores expected absences
+        initial_error_count = len(self.client._recent_http_errors)
+        self.client._record_http_status_code(405, "GET", "/lol-loot/v1/ready")
+        self.client._record_http_status_code(405, "PATCH", "/lol-champ-select/v1/session/actions/4")
+        self.client._record_http_status_code(404, "POST", "/lol-battle-pass/v1/rewards/claim")
+        self.assertEqual(len(self.client._recent_http_errors), initial_error_count)
+
+        # Unexpected 405 or 404 should still be recorded
+        self.client._record_http_status_code(405, "GET", "/lol-chat/v1/unknown")
+        self.assertEqual(len(self.client._recent_http_errors), initial_error_count + 1)
+        self.assertEqual(self.client._recent_http_errors[-1]["endpoint"], "/lol-chat/v1/unknown")
+
+    def test_transient_retry_status_code_suppression(self):
+        """Test that is_transient_retry=True tracks counts without triggering error warnings or anomaly flags (Task 172)."""
+        initial_error_count = len(self.client._recent_http_errors)
+        initial_transient_count = self.client.get_request_diagnostics().get("http_transient_retry_count", 0)
+
+        # Record transient 500 retry
+        self.client._record_http_status_code(500, "POST", "/lol-lobby/v2/lobby", is_transient_retry=True)
+
+        # Errors list and anomaly status must remain clean
+        self.assertEqual(len(self.client._recent_http_errors), initial_error_count)
+        self.assertFalse(self.client.get_http_status_anomaly_telemetry()["http_status_anomaly_active"])
+
+        # Raw status distribution and transient counter must reflect the attempt
+        diag = self.client.get_request_diagnostics()
+        self.assertEqual(diag["http_transient_retry_count"], initial_transient_count + 1)
+        self.assertGreaterEqual(diag["http_5xx_count"], 1)
+
+        tel = self.client.get_http_status_telemetry()
+        self.assertEqual(tel["http_transient_retry_count"], initial_transient_count + 1)
+
+        # Non-transient terminal 500 error must record as an error
+        self.client._record_http_status_code(500, "POST", "/lol-lobby/v2/lobby", is_transient_retry=False)
+        self.assertEqual(len(self.client._recent_http_errors), initial_error_count + 1)
+        self.assertEqual(self.client._recent_http_errors[-1]["status_code"], 500)
+
+    def test_execute_sync_transient_retry_integration(self):
+        """Test _execute_sync retries transient 500s with jitter backoff without logging terminal errors (Task 172)."""
+        resp_fail = MagicMock()
+        resp_fail.status_code = 500
+        resp_ok = MagicMock()
+        resp_ok.status_code = 200
+
+        self.client.session.request = MagicMock(side_effect=[resp_fail, resp_ok])
+        initial_error_count = len(self.client._recent_http_errors)
+        initial_transient_count = self.client.get_request_diagnostics().get("http_transient_retry_count", 0)
+
+        self.client.is_connected = True
+        with patch("time.sleep") as mock_sleep:
+            res = self.client.request("POST", "/lol-lobby/v2/lobby", {"queueId": 2400}, silent=True)
+
+        self.assertIsNotNone(res)
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(mock_sleep.called)
+        # Transient retry was recorded, but terminal error list stayed clean
+        self.assertEqual(len(self.client._recent_http_errors), initial_error_count)
+        self.assertEqual(self.client.get_request_diagnostics()["http_transient_retry_count"], initial_transient_count + 1)
+
     def test_offline_retry_queue_telemetry_and_diagnostics(self):
         """Test offline request retry queue telemetry & execution success diagnostics for Task 154."""
         self.client.is_connected = False
@@ -241,6 +331,29 @@ class TestLCUClient(unittest.TestCase):
         diag = self.client.get_request_diagnostics()
         self.assertIn("offline_retry_queued", diag)
         self.assertIn("offline_retry_success_count", diag)
+
+    def test_offline_retry_queue_deduplication_and_never_queue_endpoints(self):
+        """Test that offline retry queue deduplicates identical requests and blocks ephemeral prefixes."""
+        self.client.is_connected = False
+        self.client.connect = MagicMock(return_value=False)
+
+        # 1. Duplicate requests should be deduplicated
+        for _ in range(5):
+            self.client.request("POST", "/lol-lobby/v2/lobby", {"queueId": 2400}, silent=True)
+
+        telemetry = self.client.get_offline_retry_telemetry()
+        self.assertEqual(telemetry["current_queue_len"], 1)
+        self.assertEqual(telemetry["queued_count"], 1)
+
+        # 2. Ephemeral/irreversible endpoints should never be queued
+        self.client.request("POST", "/lol-loot/v1/recipes/craft", silent=True)
+        self.client.request("POST", "/lol-matchmaking/v1/ready-check/accept", silent=True)
+        self.client.request("POST", "/lol-champ-select/v1/session/actions/1/complete", silent=True)
+        self.client.request("POST", "/riotclient/kill-and-restart", silent=True)
+
+        telemetry2 = self.client.get_offline_retry_telemetry()
+        self.assertEqual(telemetry2["current_queue_len"], 1)
+        self.assertEqual(telemetry2["queued_count"], 1)
 
     def test_websocket_subscription_filter_and_dispatch_telemetry(self):
         """Test websocket subscription filter performance metrics & dispatch telemetry for Task 157."""
@@ -1336,6 +1449,30 @@ class TestLCUClient(unittest.TestCase):
         """Verify that LCUClient session.verify defaults to False (local self-signed cert)."""
         client = LCUClient()
         self.assertFalse(client.session.verify)
+
+    def test_http_5xx_anomaly_threshold_requires_configured_count(self):
+        """Verify that HTTP 5xx anomaly alert respects _http_anomaly_5xx_count_threshold (default 5)."""
+        client = LCUClient()
+        thresh = client._http_anomaly_5xx_count_threshold
+        self.assertEqual(thresh, 5)
+
+        # 1 to 4 5xx errors must NOT trigger an anomaly alert
+        for i in range(1, thresh):
+            client._record_http_status_code(503, "GET", "/lol-chat/v1/friends")
+            tel = client.get_http_status_anomaly_telemetry()
+            self.assertFalse(
+                tel["http_status_anomaly_active"],
+                f"Anomaly should not be active at count {i} (< {thresh})"
+            )
+            self.assertEqual(tel["http_status_anomaly_count"], 0)
+
+        # 5th 5xx error meets threshold and activates anomaly alert
+        client._record_http_status_code(503, "GET", "/lol-chat/v1/friends")
+        tel = client.get_http_status_anomaly_telemetry()
+        self.assertTrue(tel["http_status_anomaly_active"])
+        self.assertEqual(tel["http_status_anomaly_count"], 1)
+        self.assertIn("reached threshold", tel["last_http_status_anomaly"]["reason"])
+        self.assertIn(f"HTTP 5xx count {thresh}", tel["last_http_status_anomaly"]["reason"])
 
 
 if __name__ == '__main__':

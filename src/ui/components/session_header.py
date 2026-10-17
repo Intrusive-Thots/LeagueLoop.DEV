@@ -96,33 +96,18 @@ class SessionHeader(ctk.CTkFrame):
         self.progress_bar.pack(fill="x", side="bottom")
 
     def update_available_modes(self, categorized_groups=None):
-        """Update the available mode groups for the menu."""
-        if categorized_groups:
-            self._mode_groups = categorized_groups
-        else:
-            try:
-                from services.queue_manager import get_categorized_lobby_types
-                self._mode_groups = get_categorized_lobby_types()
-            except Exception as exc:
-                Logger.debug("SessionHeader", "update_available_modes suppressed an error", exc=exc)
+        """Update the available mode groups for the menu, restricted to ARAM."""
+        self._mode_groups = [("ARAM", ["ARAM", "ARAM Mayhem"])]
 
     def _show_mode_menu(self, event):
         menu = tk.Menu(self, tearoff=0, bg="#1A2332", fg="#F0E6D2",
                        activebackground="#C8AA6E", activeforeground="#0A1428",
                        font=("Segoe UI", 9))
         
-        try:
-            from services.queue_manager import get_categorized_lobby_types
-            groups = getattr(self, "_mode_groups", None) or get_categorized_lobby_types()
-        except Exception:
-            groups = [
-                ("Ranked", ["Ranked Solo/Duo", "Ranked Flex"]),
-                ("Casual", ["Quickplay", "Draft Pick"]),
-                ("ARAM", ["ARAM", "ARAM Mayhem"]),
-                ("Arena", ["Arena", "Arena 3v6"]),
-                ("Rotating", ["Brawl", "URF", "ARURF", "Nexus Blitz", "One For All", "Ultimate Spellbook"]),
-                ("TFT", ["TFT Normal", "TFT Ranked"]),
-            ]
+        # Focused on ARAM: only show ARAM modes in the selector
+        groups = [
+            ("ARAM", ["ARAM", "ARAM Mayhem"]),
+        ]
         
         for i, (group_name, modes) in enumerate(groups):
             if i > 0:

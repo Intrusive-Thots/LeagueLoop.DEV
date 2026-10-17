@@ -140,7 +140,7 @@ class AccountSwitcher:
             # sits disabled forever. That is worth a line.
             Logger.error(
                 TAG,
-                f"Could not publish '{channel}' — the interface will not be "
+                f"Could not publish '{channel}' - the interface will not be "
                 f"told about this step.",
                 exc=exc, channel=channel,
             )
@@ -164,7 +164,7 @@ class AccountSwitcher:
     def _finish(self, result: SwitchResult) -> SwitchResult:
         outcome = getattr(result.outcome, "name", str(result.outcome))
         operation = getattr(result, "operation", "switch")
-        label = self._current_label or "account"
+        label = self._current_label or getattr(result, "account_label", "") or getattr(result, "label", "") or "account"
         if result.ok:
             Logger.action(
                 TAG, f"{operation} succeeded for {label}",
@@ -172,10 +172,12 @@ class AccountSwitcher:
                 account_index=getattr(result, "account_index", -1),
             )
         else:
-            Logger.error(
+            is_benign = result.outcome in (SwitchOutcome.SESSION_EXPIRED, SwitchOutcome.CLIENT_NOT_RUNNING)
+            log_fn = Logger.warning if is_benign else Logger.error
+            detail_str = f" - {result.detail}" if getattr(result, "detail", "") else ""
+            log_fn(
                 TAG,
-                f"{operation} failed for {label}: {outcome}"
-                + (f" — {result.detail}" if getattr(result, "detail", "") else ""),
+                f"{operation} failed for {label}: {outcome}{detail_str}",
                 outcome=outcome, operation=operation,
                 phase=getattr(self._phase, "name", str(self._phase)),
                 account_index=getattr(result, "account_index", -1),

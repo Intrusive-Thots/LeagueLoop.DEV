@@ -141,6 +141,51 @@ class TestDebugTracker(unittest.TestCase):
             lines = f.readlines()
             self.assertTrue(any("toggle:test_unit_toggle" in line for line in lines))
 
+    @patch("services.debug_tracker.get_data_dir")
+    def test_prune_old_screenshots_threshold(self, mock_get_data_dir):
+        """Screenshots beyond max_keep are safely pruned in order of age."""
+        from pathlib import Path
+        mock_get_data_dir.return_value = self.temp_dir
+        sc_dir = Path(self.temp_dir) / "debug_screenshots"
+        sc_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create 5 dummy screenshot files with spaced modification times
+        base_time = 1000000.0
+        files = []
+        for i in range(5):
+            p = sc_dir / f"shot_{i}.png"
+            p.write_text("fake_png", encoding="utf-8")
+            os.utime(p, (base_time + i * 10, base_time + i * 10))
+            files.append(p)
+
+        # Keep 3 most recent
+        pruned = self.tracker.prune_old_screenshots(max_keep=3)
+        self.assertEqual(pruned, 2)
+
+        # shot_0 and shot_1 should be pruned (oldest)
+        self.assertFalse(files[0].exists())
+        self.assertFalse(files[1].exists())
+        # shot_2, shot_3, shot_4 must remain
+        self.assertTrue(files[2].exists())
+        self.assertTrue(files[3].exists())
+        self.assertTrue(files[4].exists())
+
+    @patch("services.debug_tracker.get_data_dir")
+    def test_prune_old_screenshots_under_limit(self, mock_get_data_dir):
+        """When screenshots count <= max_keep, prune returns 0 and files remain intact."""
+        from pathlib import Path
+        mock_get_data_dir.return_value = self.temp_dir
+        sc_dir = Path(self.temp_dir) / "debug_screenshots"
+        sc_dir.mkdir(parents=True, exist_ok=True)
+
+        p = sc_dir / "shot_0.png"
+        p.write_text("data", encoding="utf-8")
+
+        pruned = self.tracker.prune_old_screenshots(max_keep=5)
+        self.assertEqual(pruned, 0)
+        self.assertTrue(p.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
+

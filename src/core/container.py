@@ -196,7 +196,7 @@ class ApplicationContainer:
         errors = []
         started: list = []
         began = time.time()
-        Logger.info("Container", "Bootstrapping services…")
+        Logger.info("Container", "Bootstrapping services...")
 
         if start_assets:
             try:
@@ -234,13 +234,13 @@ class ApplicationContainer:
         for name, exc in errors:
             Logger.error(
                 "Container",
-                f"Service '{name}' did not start — every feature that needs "
+                f"Service '{name}' did not start - every feature that needs "
                 f"it is unavailable for this run.",
                 exc=exc, service=name,
             )
         Logger.info(
             "Container",
-            "Bootstrap finished in {:.2f}s — started: {}; failed: {}".format(
+            "Bootstrap finished in {:.2f}s - started: {}; failed: {}".format(
                 time.time() - began,
                 ", ".join(started) or "nothing",
                 ", ".join(n for n, _ in errors) or "none",
@@ -266,7 +266,7 @@ class ApplicationContainer:
 
     def shutdown(self) -> None:
         """Best-effort teardown of long-lived services."""
-        Logger.info("Container", "Shutting services down…")
+        Logger.info("Container", "Shutting services down...")
         self.automation_controller = None
         # The asset manager starts a pool of download workers in its
         # constructor and nothing ever stopped them; every container built in

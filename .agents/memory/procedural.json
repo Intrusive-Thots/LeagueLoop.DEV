@@ -11,5 +11,89 @@
     "procedure": [
       "When running on environments (like Windows) where grep/ripgrep are missing or fail, execute an os.walk-based Python inline one-liner or run a python scratch script."
     ]
+  },
+  {
+    "method": "Autonomous Improvement Loop Execution",
+    "procedure": [
+      "Run leagueloop_diagnostics.py to inspect error.log, crash.log, debug.log, and debug_screenshots.",
+      "Run fast_test_runner.py to execute targeted tests against modified source files.",
+      "Run code_entropy_analyzer.py to calculate codebase cyclomatic complexity, bare excepts, and oversized functions.",
+      "Execute autonomous_improvement_runner.py to log metrics to loop_state.json, episodic.json, optimizations.json, semantic.json, and procedural.json.",
+      "Sync loop outcome to MemPalace diary via CLI or MCP tool."
+    ]
+  },
+  {
+    "method": "MemPalace AAAK Diary Logging",
+    "procedure": [
+      "Format session log as: SESSION:YYYY-MM-DD|PROJ:LeagueLoop.DEV|AutoImprovementLoop|Run #N|<metrics>|\u2605\u2605\u2605.",
+      "Write diary entry using mempalace_diary_write MCP tool or CLI mempalace.exe --palace <path> diary write <entry>."
+    ]
+  },
+  {
+    "method": "Multi-Dimensional Codebase Health Assessment",
+    "procedure": [
+      "Measure per-folder Python file count and line totals for src, tests, and tools.",
+      "Calculate test-to-code ratio (tests_lines / src_lines) to guard against test coverage decay.",
+      "Compute codebase entropy deltas to detect cyclomatic complexity spikes."
+    ]
+  },
+  {
+    "method": "Automated Storage Footprint Pruning and Retention",
+    "procedure": [
+      "Inspect storage footprint across logs, screenshots, and sessions using inspect_storage_usage().",
+      "Execute safe pruning via prune_storage() targeting inactive rotated logs and oldest screenshots beyond retention limit.",
+      "Verify active runtime logs (error.log, crash.log, debug.log, session.jsonl) remain untouched.",
+      "Enforce rolling screenshot limits via DebugTracker.prune_old_screenshots() during live captures."
+    ]
+  },
+  {
+    "method": "Installer Version Alignment Protocol",
+    "procedure": [
+      "Run python tools/bump_version.py to advance the timestamped version.",
+      "Verify automatic synchronization of #define AppVersion and #define VersionInfoVersion in installer.iss.",
+      "Run python tools/bump_version.py --check to validate zero version drift.",
+      "Execute test_version_and_installer_alignment_invariants in test_regression_guards.py."
+    ]
+  },
+  {
+    "method": "Multi-Target Static Entropy Inspection",
+    "procedure": [
+      "Execute python tools/code_entropy_analyzer.py file1.py file2.py dir1/ --top N to rank high-complexity modules across subsystems.",
+      "Execute python tools/code_entropy_analyzer.py --summary <targets...> --max-entropy <limit> to enforce aggregate code quality thresholds in CI/CD pipelines."
+    ]
+  },
+  {
+    "method": "Granular Pytest Node ID Execution",
+    "procedure": [
+      "Target a specific test class or method using python tools/fast_test_runner.py tests/test_file.py::TestClass::test_method.",
+      "Target by keyword expression using python tools/fast_test_runner.py -k <expr>.",
+      "Execute the autonomous improvement runner with targeted flags via python tools/autonomous_improvement_runner.py -k <expr>."
+    ]
+  },
+  {
+    "method": "Transient HTTP Retry Telemetry Filtering",
+    "procedure": [
+      "Track raw status code distribution across all attempts in self._http_status_codes.",
+      "Flag attempts with remaining retries via is_transient_retry=True.",
+      "Increment self._http_transient_retry_count without appending to _recent_http_errors or emitting LCU_TELEMETRY warnings.",
+      "Evaluate HTTP status anomalies and record terminal failure entries only on final attempt failure (is_transient_retry=False)."
+    ]
+  },
+  {
+    "method": "HTTP Transport Anomaly Threshold Protocol",
+    "procedure": [
+      "Track status 0 failures in sliding window via is_transport_sample=(status_code == 0).",
+      "Verify single transport failures do not trip alert active or spam LCU_HTTP_STATUS_ANOMALY.",
+      "Enforce _http_anomaly_transport_count_threshold before logging LCU_HTTP_STATUS_ANOMALY.",
+      "Expose threshold in get_http_status_anomaly_telemetry and verify auto-recovery once failures expire from window."
+    ]
+  },
+  {
+    "method": "Queue Resolution Delegation Protocol",
+    "procedure": [
+      "Delegate queue resolution from UI components directly to services.queue_manager.resolve_queue_id.",
+      "Ensure QueueManager dynamically queries /lol-game-queues/v1/queues when client is connected.",
+      "Maintain regression guard QUEUE-001 in test_regression_guards.py to prevent reintroduction of hardcoded mode maps in UI classes."
+    ]
   }
 ]

@@ -168,6 +168,52 @@ def _service_names(container: Any) -> List[str]:
     return names
 
 
+def _format_banner_box(info: Dict[str, Any]) -> str:
+    """Formats the ASCII session banner box."""
+    width = max(len(k) for k in info) + 2
+    lines = ["=" * 16 + " LeagueLoop session started " + "=" * 16]
+    for key in (
+        "session", "version", "started", "shell", "arguments", "python",
+        "platform", "executable", "cwd", "tk", "log level",
+        "log dir", "services",
+    ):
+        if key in info:
+            lines.append(f"  {key.ljust(width)}{info[key]}")
+    lines.append("=" * 59)
+    return "\n".join(lines)
+
+
+def _log_container_diagnostics(container: Any) -> None:
+    """Logs configuration snapshot and any service bootstrap errors."""
+    if container is None:
+        return
+
+    config = getattr(container, "config", None)
+    if config is not None:
+        snapshot = config_snapshot(config)
+        if snapshot:
+            Logger.info(
+                TAG,
+                "Configuration at startup ({} keys): {}".format(
+                    len(snapshot),
+                    " ".join(f"{k}={v}" for k, v in snapshot.items()),
+                ),
+                config=snapshot,
+            )
+
+    errors = list(getattr(container, "bootstrap_errors", []) or [])
+    if errors:
+        for name, exc in errors:
+            Logger.error(
+                TAG,
+                f"Service '{name}' did not start - the features that need "
+                f"it will not work: {exc}",
+                service=name,
+            )
+    else:
+        Logger.info(TAG, "All services started.")
+
+
 def session_banner(
     shell: str = "customtkinter",
     container: Any = None,
@@ -184,47 +230,14 @@ def session_banner(
         if services:
             info["services"] = ", ".join(services)
         elif container is None:
-            info["services"] = "(none — running without services)"
+            info["services"] = "(none - running without services)"
 
-        width = max(len(k) for k in info) + 2
-        lines = ["=" * 16 + " LeagueLoop session started " + "=" * 16]
-        for key in (
-            "session", "version", "started", "shell", "arguments", "python",
-            "platform", "executable", "cwd", "tk", "log level",
-            "log dir", "services",
-        ):
-            if key in info:
-                lines.append(f"  {key.ljust(width)}{info[key]}")
-        lines.append("=" * 59)
-        Logger.info(TAG, "\n".join(lines), **{"environment": info})
+        Logger.info(TAG, _format_banner_box(info), **{"environment": info})
 
         for problem in Logger.handler_errors():
-            Logger.warning(TAG, f"Log file unavailable — {problem}")
+            Logger.warning(TAG, f"Log file unavailable - {problem}")
 
-        config = getattr(container, "config", None) if container else None
-        if config is not None:
-            snapshot = config_snapshot(config)
-            if snapshot:
-                Logger.info(
-                    TAG,
-                    "Configuration at startup ({} keys): {}".format(
-                        len(snapshot),
-                        " ".join(f"{k}={v}" for k, v in snapshot.items()),
-                    ),
-                    config=snapshot,
-                )
-
-        errors = list(getattr(container, "bootstrap_errors", []) or [])
-        if errors:
-            for name, exc in errors:
-                Logger.error(
-                    TAG,
-                    f"Service '{name}' did not start — the features that need "
-                    f"it will not work: {exc}",
-                    service=name,
-                )
-        elif container is not None:
-            Logger.info(TAG, "All services started.")
+        _log_container_diagnostics(container)
     except Exception as exc:  # never block startup
         try:
             Logger.error(TAG, "Could not write the session banner", exc=exc)
@@ -280,7 +293,7 @@ def _handle_uncaught(exc_type, exc_value, exc_tb) -> None:
     else:
         Logger.critical(
             "Crash",
-            f"Unhandled {exc_type.__name__} on the main thread — the "
+            f"Unhandled {exc_type.__name__} on the main thread - the "
             f"application is stopping.",
             exc=exc_value,
         )

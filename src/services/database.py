@@ -17,6 +17,48 @@ from utils.path_utils import get_data_dir
 
 DB_PATH = os.path.join(get_data_dir(), "leagueloop.db")
 
+SQL_INSERT_MATCH = """
+    INSERT OR REPLACE INTO matches (
+        game_id, timestamp, queue_id, champion_id, champion_name,
+        role, win, kills, deaths, assists, duration_s, raw_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+"""
+
+SQL_SELECT_RECENT_MATCHES = "SELECT * FROM matches ORDER BY timestamp DESC LIMIT ?"
+
+SQL_SELECT_MATCH = "SELECT * FROM matches WHERE game_id = ?"
+
+SQL_SELECT_CHAMP_STATS = """
+    SELECT
+        COUNT(*) as games,
+        SUM(win) as wins,
+        AVG(kills) as avg_kills,
+        AVG(deaths) as avg_deaths,
+        AVG(assists) as avg_assists,
+        AVG(duration_s) as avg_duration_s
+    FROM matches
+    WHERE champion_id = ?
+"""
+
+SQL_SELECT_ALL_STATS = """
+    SELECT
+        COUNT(*) as games,
+        SUM(win) as wins,
+        AVG(kills) as avg_kills,
+        AVG(deaths) as avg_deaths,
+        AVG(assists) as avg_assists,
+        AVG(duration_s) as avg_duration_s
+    FROM matches
+"""
+
+SQL_INSERT_TELEMETRY = """
+    INSERT INTO telemetry_snapshots (
+        timestamp, phase, latency_avg_ms, latency_p95_ms, ws_events_total, raw_json
+    ) VALUES (?, ?, ?, ?, ?, ?)
+"""
+
+SQL_SELECT_RECENT_TELEMETRY = "SELECT * FROM telemetry_snapshots ORDER BY timestamp DESC LIMIT ?"
+
 
 class DatabaseService:
     """Thread-safe SQLite database service for match history and diagnostics."""
@@ -100,28 +142,26 @@ class DatabaseService:
             match_data["raw_json"] if isinstance(match_data["raw_json"], str) else json.dumps(match_data["raw_json"])
         )
 
+        queue_id = match_data.get("queue_id")
+        queue_id_val = int(queue_id) if queue_id is not None else None
+
         with self._lock:
             try:
                 conn = self._get_connection()
                 with conn:
-                    conn.execute("""
-                        INSERT OR REPLACE INTO matches (
-                            game_id, timestamp, queue_id, champion_id, champion_name,
-                            role, win, kills, deaths, assists, duration_s, raw_json
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
+                    conn.execute(SQL_INSERT_MATCH, (
                         int(game_id),
                         float(ts),
-                        match_data.get("queue_id"),
+                        queue_id_val,
                         int(champ_id),
-                        match_data.get("champion_name", ""),
-                        match_data.get("role", ""),
+                        str(match_data.get("champion_name", "")),
+                        str(match_data.get("role", "")),
                         1 if match_data.get("win") else 0,
                         int(match_data.get("kills", 0)),
                         int(match_data.get("deaths", 0)),
                         int(match_data.get("assists", 0)),
                         int(match_data.get("duration_s", 0)),
-                        raw_json_str,
+                        str(raw_json_str),
                     ))
                 return True
             except Exception as e:
@@ -134,8 +174,8 @@ class DatabaseService:
             try:
                 conn = self._get_connection()
                 cur = conn.execute(
-                    "SELECT * FROM matches ORDER BY timestamp DESC LIMIT ?",
-                    (max(1, limit),)
+                    SQL_SELECT_RECENT_MATCHES,
+                    (int(max(1, limit)),)
                 )
                 return [dict(row) for row in cur]
             except Exception as e:
@@ -147,7 +187,7 @@ class DatabaseService:
         with self._lock:
             try:
                 conn = self._get_connection()
-                cur = conn.execute("SELECT * FROM matches WHERE game_id = ?", (game_id,))
+                cur = conn.execute(SQL_SELECT_MATCH, (int(game_id),))
                 row = cur.fetchone()
                 return dict(row) if row else None
             except Exception as e:
@@ -160,28 +200,9 @@ class DatabaseService:
             try:
                 conn = self._get_connection()
                 if champion_id is not None:
-                    cur = conn.execute("""
-                        SELECT 
-                            COUNT(*) as games,
-                            SUM(win) as wins,
-                            AVG(kills) as avg_kills,
-                            AVG(deaths) as avg_deaths,
-                            AVG(assists) as avg_assists,
-                            AVG(duration_s) as avg_duration_s
-                        FROM matches
-                        WHERE champion_id = ?
-                    """, (champion_id,))
+                    cur = conn.execute(SQL_SELECT_CHAMP_STATS, (int(champion_id),))
                 else:
-                    cur = conn.execute("""
-                        SELECT 
-                            COUNT(*) as games,
-                            SUM(win) as wins,
-                            AVG(kills) as avg_kills,
-                            AVG(deaths) as avg_deaths,
-                            AVG(assists) as avg_assists,
-                            AVG(duration_s) as avg_duration_s
-                        FROM matches
-                    """)
+                    cur = conn.execute(SQL_SELECT_ALL_STATS)
                 row = cur.fetchone()
                 if not row or row["games"] == 0:
                     return {
@@ -231,11 +252,10 @@ class DatabaseService:
             try:
                 conn = self._get_connection()
                 with conn:
-                    conn.execute("""
-                        INSERT INTO telemetry_snapshots (
-                            timestamp, phase, latency_avg_ms, latency_p95_ms, ws_events_total, raw_json
-                        ) VALUES (?, ?, ?, ?, ?, ?)
-                    """, (float(ts), str(phase), float(lat_avg), float(lat_p95), int(ws_events), raw_json_str))
+                    conn.execute(
+                        SQL_INSERT_TELEMETRY,
+                        (float(ts), str(phase), float(lat_avg), float(lat_p95), int(ws_events), str(raw_json_str))
+                    )
                 return True
             except Exception as e:
                 Logger.error("DatabaseService", f"Failed to record telemetry snapshot: {e}")
@@ -247,8 +267,8 @@ class DatabaseService:
             try:
                 conn = self._get_connection()
                 cur = conn.execute(
-                    "SELECT * FROM telemetry_snapshots ORDER BY timestamp DESC LIMIT ?",
-                    (max(1, limit),)
+                    SQL_SELECT_RECENT_TELEMETRY,
+                    (int(max(1, limit)),)
                 )
                 return [dict(row) for row in cur]
             except Exception as e:

@@ -19,6 +19,7 @@ import urllib3
 import warnings
 import json
 import ssl
+from urllib.parse import urlparse
 from websockets.sync.client import connect as ws_connect
 from websockets.exceptions import ConnectionClosed
 
@@ -26,6 +27,7 @@ from utils.logger import Logger
 from utils.client_detector import scan_clients
 from utils.running_stats import RunningStats
 from core.state import ConnectionStateEnum
+from core.events import EventBus
 
 
 class LCUClient:
@@ -115,6 +117,7 @@ class LCUClient:
         self._ws_start_time = time.time()
         self._ws_anomaly_count = 0
         self._ws_anomaly_threshold_ms = 100.0
+        self._ws_perf_warning_threshold_ms = 75.0
         self._ws_burst_alert_active = False
 
         # Task 145: Automated WS payload compression analysis & memory footprint reporting
@@ -181,6 +184,7 @@ class LCUClient:
         self._http_429_count = 0
         self._http_5xx_count = 0
         self._http_retry_count = 0
+        self._http_transient_retry_count: int = 0
         self._http_max_retries = 3
         self._http_error_count = 0
 
@@ -199,10 +203,11 @@ class LCUClient:
         self._recent_http_errors: list = []
         self._max_recent_http_errors: int = 50
 
-        # Task 169: Automated HTTP response status distribution anomaly threshold alerts
+        # Task 169 & 175: Automated HTTP response status distribution anomaly threshold alerts
         # Use a sliding time window so old lockfile/connect failures stop spamming forever.
         self._http_anomaly_error_rate_threshold_pct: float = 15.0
         self._http_anomaly_5xx_count_threshold: int = 5
+        self._http_anomaly_transport_count_threshold: int = 3
         self._http_anomaly_count: int = 0
         self._http_status_anomaly_active: bool = False
         self._http_status_anomaly_history: list = []
@@ -214,7 +219,7 @@ class LCUClient:
         except Exception:
             self._http_status_window_s = 120.0
             self._http_anomaly_log_cooldown_s = 60.0
-        # (timestamp, is_error, is_5xx) samples for sliding-window error rate
+        # (timestamp, is_error, is_5xx, is_transport) samples for sliding-window error rate
         self._http_status_window: list = []
         self._last_http_anomaly_log_ts: float = 0.0
 
@@ -2338,6 +2343,7 @@ class LCUClient:
         "/lol-champ-select/v1/session/bench",
         "/lol-matchmaking/v1/ready-check",
         "/lol-honor-v2/v1/honor-player",
+        "/riotclient",
     )
 
     @classmethod
@@ -2358,14 +2364,17 @@ class LCUClient:
                 if method in ["POST", "PUT", "PATCH", "DELETE"] and \
                         self._may_queue_offline(endpoint):
                     # 3.5 Offline Retry Queue: save state mutations for when we reconnect
-                    # Item #179: Cap queue size to prevent unbounded growth
-                    if len(self._offline_queue) < self._offline_queue_max:
-                        self._offline_queue.append((method, endpoint, data))
-                        with self._req_diag_lock:
-                            self._offline_retry_queued_count += 1
-                    else:
-                        with self._req_diag_lock:
-                            self._offline_retry_dropped_count += 1
+                    # Item #179: Cap queue size to prevent unbounded growth and deduplicate identical requests
+                    item = (method, endpoint, data)
+                    with self._lock:
+                        if item not in self._offline_queue:
+                            if len(self._offline_queue) < self._offline_queue_max:
+                                self._offline_queue.append(item)
+                                with self._req_diag_lock:
+                                    self._offline_retry_queued_count += 1
+                            else:
+                                with self._req_diag_lock:
+                                    self._offline_retry_dropped_count += 1
                 return None
 
         # Flush 3.5 Offline Retry Queue on successful connection
@@ -2375,13 +2384,20 @@ class LCUClient:
         if oq:
             with self._req_diag_lock:
                 self._offline_retry_executed_count += len(oq)
-            # Item #177: Use bounded executor instead of spawning raw threads
-            for m, e, d in oq:
-                if self._ws_executor:
-                    self._ws_executor.submit(self._execute_offline_retry, m, e, d)
-                else:
-                    t = threading.Thread(target=self._execute_offline_retry, args=(m, e, d), daemon=True)
-                    t.start()
+            # Replay queued offline items sequentially in a background worker to avoid flooding LCU
+            def _flush_offline_worker(items):
+                for m, e, d in items:
+                    try:
+                        self._execute_offline_retry(m, e, d)
+                        time.sleep(0.05)
+                    except Exception as exc:
+                        Logger.debug("ApiHandler", f"Offline retry suppressed an error: {exc}", exc=exc)
+
+            if self._ws_executor:
+                self._ws_executor.submit(_flush_offline_worker, oq)
+            else:
+                t = threading.Thread(target=_flush_offline_worker, args=(oq,), daemon=True)
+                t.start()
 
         # 3.3 Strict Token Bucket Rate-Limiter
         # Item #178: Calculate sleep time inside lock, but sleep outside to prevent deadlock
@@ -2419,18 +2435,31 @@ class LCUClient:
                     Logger.debug("LCU_TRACE", f"DATA TYPE: {type(data)} | RAW: {data}")
                     
                 adaptive_timeout = self.get_adaptive_http_timeout()
+                parsed_url = urlparse(url)
+                req_kwargs = {
+                    "method": method,
+                    "url": url,
+                    "json": data,
+                    "timeout": adaptive_timeout,
+                }
+                if parsed_url.hostname and parsed_url.hostname.lower() not in ("127.0.0.1", "localhost", "::1"):
+                    req_kwargs["verify"] = True
+
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
-                    response = self.session.request(
-                        method=method,
-                        url=url,
-                        json=data,
-                        timeout=adaptive_timeout,
-                    )
+                    response = self.session.request(**req_kwargs)
 
                 dur = time.time() - t_start
                 self._record_http_latency(dur * 1000.0)
-                self._record_http_status_code(response.status_code, method, endpoint)
+
+                will_retry = False
+                if 500 <= response.status_code <= 599:
+                    if "bench/swap" not in endpoint and attempt < max_attempts - 1:
+                        will_retry = True
+
+                self._record_http_status_code(
+                    response.status_code, method, endpoint, is_transient_retry=will_retry
+                )
 
                 if response.status_code == 429:
                     # Deplete token bucket and apply backoff cooldown to prevent cascade disconnections
@@ -2449,6 +2478,9 @@ class LCUClient:
                     if not silent:
                         Logger.warning("LCU", f"HTTP 429 Rate Limit response on {endpoint} (cooldown: {retry_after_s:.1f}s)")
                 elif 500 <= response.status_code <= 599:
+                    # Non-retryable business failure endpoints (e.g. bench swap race conditions)
+                    if "bench/swap" in endpoint:
+                        return response
                     if attempt < max_attempts - 1:
                         with self._req_diag_lock:
                             self._http_retry_count += 1
@@ -2511,24 +2543,58 @@ class LCUClient:
         # each one turned "download recent replays" into a warning per game.
         "/lol-replays/v1/metadata",
         "/lol-replays/v1/rofls",
+        # Exploratory reward & pass claim endpoints that 404 when inactive or already claimed
+        "/lol-battle-pass/v1/rewards/claim",
+        "/lol-champion-mastery/v1/milestones/claim",
+        "/lol-rewards/v1/grants/claim",
+        "/lol-ranked/v1/split-rewards/claim",
+        "/lol-ranked/v1/rewards/claim",
+        "/lol-loot/v1/ready",
+    )
+
+    EXPECTED_400_ENDPOINTS = (
+        "/lol-ranked/v1/rewards/claim",
+    )
+
+    EXPECTED_405_ENDPOINTS = (
+        "/lol-loot/v1/ready",
+        "/lol-loot/v1/player-loot",
+        "/lol-champ-select/v1/session/actions",
+        "/lol-gameflow/v1/gameflow-phase",
     )
 
     @classmethod
     def _is_expected_absence(cls, status_code: int, endpoint: str) -> bool:
-        """True when a 404 here means 'not currently', not 'something broke'."""
-        if status_code != 404:
-            return False
+        """True when a 404, 400, or 405 expected method variation means 'not currently / not supported', not 'something broke'."""
         path = (endpoint or "").split("?", 1)[0].rstrip("/")
-        return any(
-            path == known or path.startswith(known + "/")
-            for known in cls.EXPECTED_404_ENDPOINTS
-        )
+        if status_code == 404:
+            return any(
+                path == known or path.startswith(known + "/")
+                for known in cls.EXPECTED_404_ENDPOINTS
+            )
+        if status_code == 400:
+            return any(
+                path == known or path.startswith(known + "/")
+                for known in cls.EXPECTED_400_ENDPOINTS
+            )
+        if status_code == 405:
+            return any(
+                path == known or path.startswith(known + "/")
+                for known in cls.EXPECTED_405_ENDPOINTS
+            )
+        return False
 
-    def _record_http_status_code(self, status_code: int, method: str, endpoint: str) -> None:
-        """Task 151 & 169: Records HTTP status codes; anomaly alerts use a sliding window (no 200 spam)."""
+    def _record_http_status_code(
+        self,
+        status_code: int,
+        method: str,
+        endpoint: str,
+        is_transient_retry: bool = False,
+    ) -> None:
+        """Task 151, 169 & 172: Records HTTP status codes; anomaly alerts use a sliding window (no 200 spam)."""
         is_error = status_code >= 400 and not self._is_expected_absence(
             status_code, endpoint
-        )
+        ) and not is_transient_retry
         with self._req_diag_lock:
             self._http_status_codes[status_code] = self._http_status_codes.get(status_code, 0) + 1
             if 200 <= status_code <= 299:
@@ -2541,6 +2607,10 @@ class LCUClient:
                     self._http_429_count += 1
             elif 500 <= status_code <= 599:
                 self._http_5xx_count += 1
+
+            if is_transient_retry:
+                self._http_transient_retry_count = getattr(self, "_http_transient_retry_count", 0) + 1
+                return
 
             if is_error:
                 err_entry = {
@@ -2585,36 +2655,43 @@ class LCUClient:
         # Caller must hold _req_diag_lock
         now = time.time()
         is_5xx_sample = status_code >= 500
-        self._http_status_window.append((now, is_error, is_5xx_sample))
+        is_transport_sample = (status_code == 0)
+        self._http_status_window.append((now, is_error, is_5xx_sample, is_transport_sample))
         cutoff = now - self._http_status_window_s
         self._http_status_window = [s for s in self._http_status_window if s[0] >= cutoff]
 
         window_total = len(self._http_status_window)
-        window_errs = sum(1 for _, err, _ in self._http_status_window if err)
-        window_5xx = sum(1 for _, _, is5 in self._http_status_window if is5)
+        window_errs = sum(1 for s in self._http_status_window if s[1])
+        window_5xx = sum(1 for s in self._http_status_window if len(s) > 2 and s[2])
+        window_transport = sum(1 for s in self._http_status_window if len(s) > 3 and s[3])
         err_rate = round((window_errs / max(1, window_total)) * 100.0, 2)
 
         is_rate_anomaly = window_total >= 10 and err_rate > self._http_anomaly_error_rate_threshold_pct
         is_5xx_anomaly = window_5xx >= self._http_anomaly_5xx_count_threshold
+        is_transport_anomaly = window_transport >= self._http_anomaly_transport_count_threshold
 
         # Only raise on a real failing sample, never on successful 2xx/3xx
-        hard_fail = status_code >= 500 or (status_code == 0 and is_error)
-        should_alert = hard_fail or (is_error and (is_rate_anomaly or is_5xx_anomaly))
+        is_failing_sample = is_error or (status_code >= 500)
+        should_alert = is_failing_sample and (
+            is_rate_anomaly or is_5xx_anomaly or is_transport_anomaly
+        )
 
         if should_alert:
             was_active = self._http_status_anomaly_active
             self._http_status_anomaly_active = True
             self._http_anomaly_count += 1
-            if reason_override:
-                reason = reason_override
+            if is_transport_anomaly:
+                reason = f"HTTP transport failure count {window_transport} reached threshold ({reason_override or 'transport'})"
             elif is_rate_anomaly:
                 reason = (
                     f"Sliding-window error rate {err_rate}% exceeded threshold "
                     f"{self._http_anomaly_error_rate_threshold_pct}% "
                     f"({window_errs}/{window_total} in {self._http_status_window_s:.0f}s)"
                 )
-            else:
+            elif is_5xx_anomaly:
                 reason = f"HTTP 5xx count {window_5xx} reached threshold"
+            else:
+                reason = reason_override or "Unknown anomaly"
 
             anomaly_entry = {
                 "timestamp": now,
@@ -2641,7 +2718,7 @@ class LCUClient:
                 self._http_status_anomaly_active = False
 
     def get_http_status_anomaly_telemetry(self) -> Dict[str, Any]:
-        """Task 169: Returns automated HTTP response status distribution anomaly threshold alert telemetry."""
+        """Task 169 & 175: Returns automated HTTP response status distribution anomaly threshold alert telemetry."""
         with self._req_diag_lock:
             anomalies = self._http_anomaly_count
             active = self._http_status_anomaly_active
@@ -2649,12 +2726,14 @@ class LCUClient:
             last_anomaly = dict(history[-1]) if history else None
             err_thresh = self._http_anomaly_error_rate_threshold_pct
             c5xx_thresh = self._http_anomaly_5xx_count_threshold
+            ctrans_thresh = self._http_anomaly_transport_count_threshold
 
         return {
             "http_status_anomaly_count": anomalies,
             "http_status_anomaly_active": active,
             "http_anomaly_error_rate_threshold_pct": err_thresh,
             "http_anomaly_5xx_count_threshold": c5xx_thresh,
+            "http_anomaly_transport_count_threshold": ctrans_thresh,
             "last_http_status_anomaly": last_anomaly,
             "recent_http_status_anomalies": history,
         }
@@ -2678,6 +2757,7 @@ class LCUClient:
             "http_4xx_count": self._http_4xx_count,
             "http_5xx_count": self._http_5xx_count,
             "http_429_count": self._http_429_count,
+            "http_transient_retry_count": getattr(self, "_http_transient_retry_count", 0),
             "http_error_count": self._http_error_count,
             "http_error_rate_pct": err_rate,
             "recent_errors_count": len(recent_errs),
@@ -2746,6 +2826,7 @@ class LCUClient:
                 "offline_retry_success_rate_pct": success_rate_pct,
                 "http_429_count": self._http_429_count,
                 "http_retry_count": self._http_retry_count,
+                "http_transient_retry_count": getattr(self, "_http_transient_retry_count", 0),
                 "http_error_count": self._http_error_count,
                 "offline_queue_current_len": len(self._offline_queue),
                 "adaptive_timeout_s": self.get_adaptive_http_timeout(),
@@ -3026,7 +3107,6 @@ class LCUClient:
                                     Logger.debug("LCU_WS", f"WAMP payload normalization failed: {e}")
 
                                 # Emit to central EventBus (Phase 2 Rule)
-                                from core.events import EventBus
                                 EventBus.emit(event_name, payload)
 
                                 # Find callbacks and auto-prune dead weak references
@@ -3434,8 +3514,9 @@ class LCUClient:
                     f"Latency anomaly detected on {event_name}: {latency_ms:.2f}ms (threshold: {self._ws_anomaly_threshold_ms}ms)"
                 )
 
-        if latency_ms > 50.0 and not is_anomaly:
-            Logger.warning("LCU_WS_PERF", f"High event latency on {event_name}: {latency_ms:.2f}ms")
+        warning_thresh = getattr(self, "_ws_perf_warning_threshold_ms", 75.0)
+        if latency_ms > warning_thresh and not is_anomaly:
+            Logger.warning("LCU_WS_PERF", f"High event latency on {event_name}: {latency_ms:.2f}ms (threshold: {warning_thresh:.1f}ms)")
 
     def get_ws_telemetry(self) -> Dict[str, Any]:
         """Returns telemetry performance metrics and WAMP throughput for LCU websocket event processing."""
@@ -3476,6 +3557,7 @@ class LCUClient:
                 "throughput_window_s": 10.0,
                 "anomaly_count": self._ws_anomaly_count,
                 "anomaly_threshold_ms": self._ws_anomaly_threshold_ms,
+                "perf_warning_threshold_ms": getattr(self, "_ws_perf_warning_threshold_ms", 75.0),
                 "burst_alert_active": self._ws_burst_alert_active,
                 "reconnect_backoff_s": round(self._ws_reconnect_backoff, 2),
                 "last_msg_age_s": last_msg_age_s,
