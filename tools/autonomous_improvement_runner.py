@@ -97,8 +97,12 @@ def run_entropy_check(top_n: int = 5) -> Dict[str, Any]:
         return {"status": "ERROR", "error": str(e), "top_files": []}
 
 
-def run_tests_check(run_all: bool = False) -> Dict[str, Any]:
-    """Executes fast targeted tests or full test suite."""
+def run_tests_check(
+    run_all: bool = False,
+    targets: Optional[List[str]] = None,
+    staged: bool = False,
+) -> Dict[str, Any]:
+    """Executes fast targeted tests, explicit targets, or full test suite."""
     venv_py = PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
     python_cmd = str(venv_py) if venv_py.exists() else sys.executable
     fast_runner = TOOLS_DIR / "fast_test_runner.py"
@@ -106,6 +110,11 @@ def run_tests_check(run_all: bool = False) -> Dict[str, Any]:
     cmd = [python_cmd, str(fast_runner)]
     if run_all:
         cmd.append("--all")
+    else:
+        if staged:
+            cmd.append("--staged")
+        if targets:
+            cmd.extend(targets)
 
     start_time = time.time()
     proc = subprocess.run(cmd, cwd=str(PROJECT_ROOT), capture_output=True, text=True)
@@ -137,6 +146,8 @@ def run_tests_check(run_all: bool = False) -> Dict[str, Any]:
 
     return {
         "run_all": run_all,
+        "targets": targets or [],
+        "staged": staged,
         "exit_code": proc.returncode,
         "success": proc.returncode == 0,
         "duration_seconds": round(duration, 2),
@@ -394,6 +405,8 @@ def sync_mempalace(loop_number: int, summary: str):
 
 def run_loop(
     all_tests: bool = False,
+    targets: Optional[List[str]] = None,
+    staged: bool = False,
     dry_run: bool = False,
     feature: Optional[str] = None,
     impact: Optional[str] = None,
@@ -416,7 +429,7 @@ def run_loop(
     ver_check = run_version_alignment_check()
     metrics = measure_codebase_metrics(PROJECT_ROOT)
     entropy = run_entropy_check()
-    tests = run_tests_check(run_all=all_tests)
+    tests = run_tests_check(run_all=all_tests, targets=targets, staged=staged)
 
     opt_payload = None
     if feature:
@@ -602,7 +615,8 @@ def run_loop(
 
     loop_num = memory_result["new_state"]["run_number"]
     summary_str = f"Healthy={diag.get('healthy')}|Entropy={entropy.get('status')}|Tests={tests.get('passed')}/{tests.get('passed',0)+tests.get('failed',0)}|Files={metrics.get('total_py_files')}|Lines={metrics.get('total_py_lines')}|Storage={storage_an.get('total_mb', 0.0)}MB"
-    sync_mempalace(loop_num, summary_str)
+    if not dry_run:
+        sync_mempalace(loop_num, summary_str)
 
     return {
         "loop_number": loop_num,
@@ -618,7 +632,9 @@ def run_loop(
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="LeagueLoop Autonomous Improvement Loop Runner")
+    parser.add_argument("targets", nargs="*", help="Optional test files, source files, or pytest flags")
     parser.add_argument("--all-tests", action="store_true", help="Run full test suite unconditionally")
+    parser.add_argument("--staged", action="store_true", help="Only map git staged changes for targeted tests")
     parser.add_argument("--dry-run", action="store_true", help="Profile without persisting state to memory files")
     parser.add_argument("--check-baseline", action="store_true", help="Print existing baseline state from loop_state.json and exit")
     parser.add_argument("--json", action="store_true", help="Output results in JSON format")
@@ -638,6 +654,8 @@ def main(argv=None):
 
     result = run_loop(
         all_tests=args.all_tests,
+        targets=args.targets if args.targets else None,
+        staged=args.staged,
         dry_run=args.dry_run,
         feature=args.feature,
         impact=args.impact,
@@ -686,8 +704,14 @@ def main(argv=None):
     entropy_info = result.get("entropy", {})
     top_files = entropy_info.get("top_files", [])
     top_msg = f" | top: {[Path(f['file']).name for f in top_files[:3]]}" if top_files else ""
-    print(f"Code Entropy: [{entropy_info.get('status', 'N/A')}] (avg={entropy_info.get('avg_entropy', 0)}, bare_excepts={entropy_info.get('bare_excepts_total', 0)}{top_msg})")
-    test_mode = "Full suite" if result["tests"].get("run_all") else "Targeted"
+    if result["tests"].get("run_all"):
+        test_mode = "Full suite"
+    elif result["tests"].get("staged"):
+        test_mode = "Staged"
+    elif result["tests"].get("targets"):
+        test_mode = f"Targeted ({len(result['tests']['targets'])} targets)"
+    else:
+        test_mode = "Targeted"
     baseline_passed = result.get("memory", {}).get("new_state", {}).get("test_baseline", {}).get("passed", result["tests"]["passed"])
     err_cnt = result["tests"].get("errors", 0)
     err_msg = f", {err_cnt} errors" if err_cnt > 0 else ""

@@ -178,6 +178,7 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         self.assertEqual(res["entropy"]["status"], "PASS")
         self.assertTrue(res["tests"]["success"])
         self.assertFalse(res["memory"]["persisted"])
+        mock_mempalace.assert_not_called()
 
     @patch("tools.autonomous_improvement_runner.run_diagnostics_check")
     @patch("tools.autonomous_improvement_runner.run_entropy_check")
@@ -254,6 +255,60 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
             with self.assertRaises(SystemExit) as cm:
                 main(["--check-baseline"])
             self.assertEqual(cm.exception.code, 0)
+
+    @patch("subprocess.run")
+    def test_run_tests_check_targets_and_staged(self, mock_subproc):
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = "4 passed in 0.25s\n"
+        mock_proc.stderr = ""
+        mock_subproc.return_value = mock_proc
+
+        res = run_tests_check(run_all=False, targets=["tests/test_fast_test_runner.py"], staged=True)
+        self.assertEqual(res["passed"], 4)
+        self.assertEqual(res["targets"], ["tests/test_fast_test_runner.py"])
+        self.assertTrue(res["staged"])
+        self.assertTrue(res["success"])
+
+        args, kwargs = mock_subproc.call_args
+        cmd = args[0]
+        self.assertIn("--staged", cmd)
+        self.assertIn("tests/test_fast_test_runner.py", cmd)
+        self.assertNotIn("--all", cmd)
+
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_targets_and_staged(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 150,
+            "diagnostics": {"healthy": True},
+            "metrics": {"total_py_files": 185, "total_py_lines": 54800},
+            "entropy": {"status": "PASS", "avg_entropy": 67.0, "bare_excepts_total": 0},
+            "tests": {
+                "passed": 12,
+                "failed": 0,
+                "duration_seconds": 0.4,
+                "success": True,
+                "run_all": False,
+                "staged": True,
+                "targets": ["tests/test_fast_test_runner.py"],
+            },
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+        }
+
+        with patch("sys.stdout") as mock_stdout:
+            with self.assertRaises(SystemExit) as cm:
+                main(["tests/test_fast_test_runner.py", "--staged"])
+            self.assertEqual(cm.exception.code, 0)
+            mock_run_loop.assert_called_once_with(
+                all_tests=False,
+                targets=["tests/test_fast_test_runner.py"],
+                staged=True,
+                dry_run=False,
+                feature=None,
+                impact=None,
+                prune_storage_flag=False,
+            )
 
 
 if __name__ == "__main__":
