@@ -87,6 +87,17 @@ def run_account_preflight(manager: Optional[Any] = None) -> Dict[str, Any]:
     accounts_report: List[Dict[str, Any]] = []
     default_idx = manager.get_default_account_index()
 
+    vault = getattr(manager, "vault", None)
+    if vault is None and switcher is not None:
+        vault = getattr(switcher, "vault", None)
+    if vault is None:
+        try:
+            from services.accounts.vault import SessionVault
+            from utils.path_utils import get_data_dir
+            vault = SessionVault(get_data_dir())
+        except Exception:
+            vault = None
+
     for i, acct in enumerate(raw_accounts):
         label = acct.get("label") or acct.get("username") or "?"
         username = acct.get("username") or ""
@@ -95,6 +106,27 @@ def run_account_preflight(manager: Optional[Any] = None) -> Dict[str, Any]:
             has_pw = bool(manager.get_password(i))
         except Exception:
             has_pw = False
+
+        account_key = str(acct.get("username") or acct.get("label") or "").strip().lower()
+        session_info = vault.info(account_key) if vault is not None else None
+        if session_info is not None:
+            session_exists = bool(session_info.exists)
+            session_usable = bool(session_info.usable)
+            session_freshness = str(session_info.freshness)
+            try:
+                session_age_days = round(float(session_info.age_days), 1) if session_info.dated else None
+            except Exception:
+                session_age_days = None
+            try:
+                session_desc = str(session_info.describe())
+            except Exception:
+                session_desc = ""
+        else:
+            session_exists = False
+            session_usable = False
+            session_freshness = "unknown"
+            session_age_days = None
+            session_desc = "Session vault unavailable"
 
         is_active = bool(username and current and username.lower() == current.lower())
         is_default = i == default_idx
@@ -108,7 +140,16 @@ def run_account_preflight(manager: Optional[Any] = None) -> Dict[str, Any]:
             "has_password": has_pw,
             "is_active": is_active,
             "is_default": is_default,
+            "session_exists": session_exists,
+            "session_usable": session_usable,
+            "session_freshness": session_freshness,
+            "session_age_days": session_age_days,
+            "session_description": session_desc,
         })
+
+    usable_sessions = sum(1 for a in accounts_report if a.get("session_usable"))
+    expired_sessions = sum(1 for a in accounts_report if a.get("session_freshness") == "expired")
+    missing_sessions = sum(1 for a in accounts_report if a.get("session_freshness") == "missing")
 
     return {
         "status": "HEALTHY" if problems == 0 else "ATTENTION_REQUIRED",
@@ -117,11 +158,15 @@ def run_account_preflight(manager: Optional[Any] = None) -> Dict[str, Any]:
         "switcher_wired": switcher_wired,
         "switcher_phase": switcher_phase,
         "switcher_busy": switcher_busy,
+        "vault_wired": vault is not None,
         "riot_client_running": running,
         "api_reachable": connected,
         "signed_in": signed_in,
         "current_user": current,
         "accounts_count": len(raw_accounts),
+        "usable_sessions_count": usable_sessions,
+        "expired_sessions_count": expired_sessions,
+        "missing_sessions_count": missing_sessions,
         "accounts": accounts_report,
     }
 
@@ -196,9 +241,24 @@ def preflight(as_json: bool = False, manager: Optional[Any] = None) -> int:
     # switch that will actually hit a live session.
     current = session.current_login_name() if connected else ""
     known = bool(connected)
+
+    vault = getattr(manager, "vault", None)
+    if vault is None and switcher is not None:
+        vault = getattr(switcher, "vault", None)
+    if vault is None:
+        try:
+            from services.accounts.vault import SessionVault
+            from utils.path_utils import get_data_dir
+            vault = SessionVault(get_data_dir())
+        except Exception:
+            vault = None
+
     for i, acct in enumerate(accounts):
         label = acct.get("label") or acct.get("username") or "?"
         username = acct.get("username") or ""
+        account_key = str(acct.get("username") or acct.get("label") or "").strip().lower()
+        session_info = vault.info(account_key) if vault is not None else None
+
         has_pw = False
         try:
             has_pw = bool(manager.get_password(i))
@@ -211,10 +271,24 @@ def preflight(as_json: bool = False, manager: Optional[Any] = None) -> int:
         if i == manager.get_default_account_index():
             marks.append("default")
 
+        sess_str = "no vault"
+        if session_info is not None:
+            if not session_info.exists:
+                sess_str = "NO SESSION"
+            elif not session_info.dated:
+                sess_str = "EXPIRED (undated)"
+            else:
+                try:
+                    age_val = float(session_info.age_days)
+                    sess_str = "{} ({:.1f}d)".format(str(session_info.freshness).upper(), age_val)
+                except Exception:
+                    sess_str = str(session_info.freshness).upper()
+
         line(OK if (username and has_pw) else WARN,
-             "[{}] {:<18} user={:<16} password={} {}".format(
-                 i, label[:18], (username or "(none)")[:16],
+             "[{}] {:<18} user={:<14} pw={:<7} session={:<18} {}".format(
+                 i, label[:18], (username or "(none)")[:14],
                  "saved" if has_pw else "MISSING",
+                 sess_str,
                  ("- " + ", ".join(marks)) if marks else ""))
         if not username or not has_pw:
             problems += 1
@@ -228,6 +302,9 @@ def preflight(as_json: bool = False, manager: Optional[Any] = None) -> int:
         for i, acct in enumerate(accounts):
             label = acct.get("label") or acct.get("username") or "?"
             username = (acct.get("username") or "").lower()
+            account_key = str(acct.get("username") or acct.get("label") or "").strip().lower()
+            session_info = vault.info(account_key) if vault is not None else None
+
             if not username:
                 line(WARN, "[{}] {} - cannot switch, no username".format(i, label))
                 continue
@@ -237,28 +314,50 @@ def preflight(as_json: bool = False, manager: Optional[Any] = None) -> int:
                            .format(i, label))
             elif current and username == current:
                 line(INFO, "[{}] {} - already active, would be a no-op".format(i, label))
+            elif session_info is not None and not session_info.exists:
+                line(WARN, "[{}] {} - cannot switch: no saved session in vault (sign in once to remember)".format(i, label))
+            elif session_info is not None and not session_info.usable:
+                try:
+                    age_val = float(session_info.age_days)
+                    age_txt = "{:.1f}d old".format(age_val)
+                except Exception:
+                    age_txt = "undated"
+                line(WARN, "[{}] {} - cannot switch: session is {} ({}, sign in once to refresh)".format(
+                    i, label, str(session_info.freshness).upper(), age_txt))
             elif current:
-                line(INFO, "[{}] {} - would close League, sign out {}, "
-                           "then sign in".format(i, label, current))
+                fresh_desc = session_info.freshness if session_info else "vault"
+                line(INFO, "[{}] {} - would close client, swap session files ({}), and launch client".format(i, label, fresh_desc))
             else:
-                line(INFO, "[{}] {} - would sign in directly "
-                           "(nobody signed in)".format(i, label))
+                line(INFO, "[{}] {} - would restore session files and launch client".format(i, label))
     print()
 
     # --- 5. the actual next step ------------------------------------------
     print("[5] How to test from here")
-    others = [
-        i for i, a in enumerate(accounts)
-        if (a.get("username") or "").lower() and (a.get("username") or "").lower() != current
-    ]
+    usable_others = []
+    unusable_others = []
+    for i, a in enumerate(accounts):
+        u = (a.get("username") or "").lower()
+        if not u or u == current:
+            continue
+        akey = str(a.get("username") or a.get("label") or "").strip().lower()
+        sinfo = vault.info(akey) if vault is not None else None
+        if sinfo is not None and sinfo.usable:
+            usable_others.append(i)
+        else:
+            unusable_others.append(i)
+
     if not accounts:
         line(INFO, "Add an account first - there is nothing to switch to.")
     elif not known:
         line(INFO, "Start the Riot Client, then run this again.")
-    elif others:
-        i = others[0]
+    elif usable_others:
+        i = usable_others[0]
         label = accounts[i].get("label") or accounts[i].get("username")
-        line(INFO, "--switch {}   switches into {}".format(i, label))
+        line(INFO, "--switch {}   switches into {} (session ready)".format(i, label))
+    elif unusable_others:
+        i = unusable_others[0]
+        label = accounts[i].get("label") or accounts[i].get("username")
+        line(WARN, "Account [{}] {} has no usable saved session. Sign in once by hand to capture it.".format(i, label))
     else:
         line(INFO, "Only one usable account, and it is the active one, so")
         line(INFO, "there is no *other* account to switch into.")

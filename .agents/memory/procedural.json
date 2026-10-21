@@ -111,5 +111,13 @@
       "Verify problems_count == 0 before triggering live account switches or test sign-outs.",
       "Review active user vs default account index to avoid redundant or conflicting switch requests."
     ]
+  },
+  {
+    "method": "Account Session Vault Preflight Protocol",
+    "procedure": [
+      "Execute python tools/check_accounts.py --json to audit account list against SessionVault slots.",
+      "Verify usable_sessions_count > 0 and inspect target account session_freshness before invoking --switch <id>.",
+      "If target session is marked EXPIRED or MISSING, prompt user to sign in once by hand to capture the fresh session."
+    ]
   }
 ]

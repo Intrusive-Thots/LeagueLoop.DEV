@@ -590,6 +590,11 @@ def run_loop(
             "description": "Exposing structured JSON preflight checks for Riot Client status, local API reachability, token validity, and saved password existence in tools.check_accounts allows automated tooling to verify account switching readiness without triggering credential lockouts or client sign-outs.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Multi-Account Session Vault Preflight Inspection",
+            "description": "Correlating stored user accounts with SessionVault freshness metadata (fresh, ageing, stale, expired, missing) in preflight inspection prevents attempting account switches into expired or absent session slots that would fail during the client verification phase.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
@@ -691,6 +696,14 @@ def run_loop(
                 "Execute python tools/check_accounts.py --json to inspect client process, API connectivity, and stored account credentials.",
                 "Verify problems_count == 0 before triggering live account switches or test sign-outs.",
                 "Review active user vs default account index to avoid redundant or conflicting switch requests.",
+            ],
+        },
+        {
+            "method": "Account Session Vault Preflight Protocol",
+            "procedure": [
+                "Execute python tools/check_accounts.py --json to audit account list against SessionVault slots.",
+                "Verify usable_sessions_count > 0 and inspect target account session_freshness before invoking --switch <id>.",
+                "If target session is marked EXPIRED or MISSING, prompt user to sign in once by hand to capture the fresh session.",
             ],
         },
     ]
@@ -822,7 +835,9 @@ def main(argv=None):
     print(f"Version Alignment: {ver_stat} ({ver_info.get('message', 'N/A')})")
     acct_info = result.get("accounts_preflight", {})
     acct_stat = f"[{acct_info.get('status', 'UNKNOWN')}]"
-    print(f"Accounts Preflight: {acct_stat} ({acct_info.get('accounts_count', 0)} accounts, problems={acct_info.get('problems_count', 0)})")
+    usable_sess = acct_info.get("usable_sessions_count")
+    sess_tag = f", usable_sessions={usable_sess}/{acct_info.get('accounts_count', 0)}" if usable_sess is not None else ""
+    print(f"Accounts Preflight: {acct_stat} ({acct_info.get('accounts_count', 0)} accounts{sess_tag}, problems={acct_info.get('problems_count', 0)})")
     session_an = result["diagnostics"].get("session_analysis", {})
     stab = session_an.get("stability", {})
     if stab:
