@@ -1961,5 +1961,16 @@
       "status": "Optimized implementation baseline"
     },
     "impact": "Exposes non-destructive --health/--preflight and --telemetry CLI switches in build_validator, enabling sub-5ms environment integrity and asset verification across CI and improvement loop runs without triggering 27s full test executions; adds BUILD-001 regression guards."
+  },
+  {
+    "timestamp": "2026-10-21T06:15:59.481112+00:00",
+    "feature": "AppSidebar Quick Actions Concurrency & Automation End-of-Game Play-Again Invariants",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Prevents multi-threaded concurrent request hammering on /lol-lobby/v2/play-again, /lol-lobby/v2/lobby/matchmaking/search, and /process-control/v1/process/quit; bounds play-again retries to prevent HTTP 400/500 anomaly trips; suppresses non-critical chat 503 telemetry during honor; advances full test suite baseline to 1060 passed with 0 failures."
   }
 ]

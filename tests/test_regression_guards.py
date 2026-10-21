@@ -530,3 +530,82 @@ def test_build_validator_health_and_telemetry_cli_invariants():
             validator_main(["--telemetry", "--json"])
         assert exc_tel.value.code == 0
 
+def test_app_sidebar_and_automation_play_again_invariants():
+    """LOBBY-003: Ensure AppSidebar quick actions and AutomationEngine enforce in-flight concurrency protection and bounded play-again attempts."""
+    sidebar_file = SRC / "ui" / "app_sidebar.py"
+    assert sidebar_file.exists()
+    s_text = sidebar_file.read_text(encoding="utf-8")
+
+    assert "_requeue_in_flight" in s_text
+    assert "_dodge_in_flight" in s_text
+    assert "_play_again_in_flight" in s_text
+    assert 'getattr(self, "_requeue_in_flight", False)' in s_text
+    assert 'getattr(self, "_dodge_in_flight", False)' in s_text
+    assert 'getattr(self, "_play_again_in_flight", False)' in s_text
+
+    auto_file = SRC / "services" / "automation.py"
+    assert auto_file.exists()
+    a_text = auto_file.read_text(encoding="utf-8")
+
+    assert "_play_again_attempts" in a_text
+    assert "self._play_again_attempts >= 3" in a_text
+    assert "[400, 404, 409]" in a_text
+
+    # Functional validation of AutomationEngine bounded play-again behavior
+    from services.automation import AutomationEngine
+    from unittest.mock import MagicMock
+
+    mock_lcu = MagicMock()
+    mock_assets = MagicMock()
+    mock_config = {
+        "auto_honor_enabled": False,
+        "skip_stats_enabled": True,
+        "auto_save_replays": False,
+    }
+    engine = AutomationEngine(mock_lcu, mock_assets, mock_config)
+
+    # 1. Immediate 400 refusal should be handled without looping
+    mock_eog = MagicMock()
+    mock_eog.status_code = 200
+    mock_eog.json.return_value = {"gameId": 12345}
+
+    mock_play_again_400 = MagicMock()
+    mock_play_again_400.status_code = 400
+
+    mock_lcu.request.side_effect = lambda method, endpoint, **kwargs: (
+        mock_eog if endpoint == "/lol-end-of-game/v1/eog-stats-block"
+        else mock_play_again_400 if endpoint == "/lol-lobby/v2/play-again"
+        else None
+    )
+
+    engine._handle_end_of_game("EndOfGame")
+    assert engine._play_again_handled is True
+    assert engine._play_again_attempts == 0
+
+    # 2. Transient failures bounded to 3 attempts
+    engine._honor_handled = False
+    engine._play_again_handled = False
+    engine._play_again_attempts = 0
+
+    mock_play_again_500 = MagicMock()
+    mock_play_again_500.status_code = 500
+    mock_lcu.request.side_effect = lambda method, endpoint, **kwargs: (
+        mock_eog if endpoint == "/lol-end-of-game/v1/eog-stats-block"
+        else mock_play_again_500 if endpoint == "/lol-lobby/v2/play-again"
+        else None
+    )
+
+    engine._handle_end_of_game("EndOfGame")
+    assert engine._play_again_handled is False
+    assert engine._play_again_attempts == 1
+
+    engine._honor_handled = False
+    engine._handle_end_of_game("EndOfGame")
+    assert engine._play_again_handled is False
+    assert engine._play_again_attempts == 2
+
+    engine._honor_handled = False
+    engine._handle_end_of_game("EndOfGame")
+    assert engine._play_again_handled is True
+    assert engine._play_again_attempts == 0
+

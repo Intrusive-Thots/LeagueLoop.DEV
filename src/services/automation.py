@@ -127,6 +127,7 @@ class AutomationEngine:
         self._post_game_requeue_pending: bool = False
         self._post_game_requeue_attempts: int = 0
         self._play_again_handled: bool = False
+        self._play_again_attempts: int = 0
         self._eog_stats_attempts: int = 0
         self._last_recorded_eog_game_id: Optional[int] = None
 
@@ -2025,6 +2026,7 @@ class AutomationEngine:
             self._honor_attempts = 0
             self._eog_stats_attempts = 0
             self._play_again_handled = False
+            self._play_again_attempts = 0
             return
 
         auto_honor = self.config.get(AUTO_HONOR_ENABLED, True)
@@ -2139,7 +2141,7 @@ class AutomationEngine:
                         self._honor_handled = True
                     else:
                         friend_teammates = []
-                        friends_res = self.lcu.request("GET", "/lol-chat/v1/friends")
+                        friends_res = self.lcu.request("GET", "/lol-chat/v1/friends", silent=True)
                         if friends_res and friends_res.status_code == 200:
                             friend_puuids = {f.get("puuid", "") for f in friends_res.json()}
                             friend_teammates = [p for p in teammates if p.get("puuid", "") in friend_puuids]
@@ -2201,11 +2203,21 @@ class AutomationEngine:
                             Logger.debug("AutoLoop", f"Replay saver trigger error: {e_rep}")
 
                 if skip_stats and not getattr(self, "_play_again_handled", False):
+                    self._play_again_attempts = getattr(self, "_play_again_attempts", 0) + 1
                     play_again = self.lcu.request("POST", "/lol-lobby/v2/play-again", silent=True)
                     if play_again and play_again.status_code in [200, 204]:
                         self._log("Proceeded to Lobby (Skipped Stats)")
                         self._play_again_handled = True
                         self._post_game_requeue_pending = True
+                        self._play_again_attempts = 0
+                    elif play_again and play_again.status_code in [400, 404, 409]:
+                        Logger.debug("Auto", f"Play again request returned {play_again.status_code}. Marking as handled.")
+                        self._play_again_handled = True
+                        self._play_again_attempts = 0
+                    elif self._play_again_attempts >= 3:
+                        Logger.debug("Auto", "Play again failed after 3 attempts. Giving up.")
+                        self._play_again_handled = True
+                        self._play_again_attempts = 0
 
         except Exception as e:
             Logger.debug("Auto", f"End of game error: {e}")

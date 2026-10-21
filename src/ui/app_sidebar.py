@@ -60,6 +60,9 @@ class SidebarWidget(ctk.CTkFrame):
         self._inline_subpanels = {}
         self._active_inline_key = None
         self._find_match_in_flight = False
+        self._requeue_in_flight = False
+        self._dodge_in_flight = False
+        self._play_again_in_flight = False
         
         EventBus.on("lobby_event", self._on_lobby_event)
 
@@ -1939,6 +1942,10 @@ class SidebarWidget(ctk.CTkFrame):
 
     def _force_requeue(self):
         if self.lcu:
+            if getattr(self, "_requeue_in_flight", False):
+                Logger.debug("AppSidebar", "Requeue already in flight; ignoring duplicate trigger.")
+                return
+            self._requeue_in_flight = True
             def _execute():
                 try:
                     self.lcu.request("DELETE", "/lol-lobby/v2/lobby/matchmaking/search")
@@ -1946,20 +1953,32 @@ class SidebarWidget(ctk.CTkFrame):
                     self.after(0, lambda: self.update_action_log("Re-queued Matchmaking."))
                 except Exception as e:
                     self.after(0, lambda: self.update_action_log(f"Requeue error: {e}"))
+                finally:
+                    self._requeue_in_flight = False
             threading.Thread(target=_execute, daemon=True).start()
 
     def _force_dodge(self):
         if self.lcu:
+            if getattr(self, "_dodge_in_flight", False):
+                Logger.debug("AppSidebar", "Dodge already in flight; ignoring duplicate trigger.")
+                return
+            self._dodge_in_flight = True
             self.update_action_log("Client exiting (Dodging)...")
             def _execute():
                 try:
                     self.lcu.request("POST", "/process-control/v1/process/quit")
                 except Exception as e:
                     self.after(0, lambda: self.update_action_log(f"Dodge error: {e}"))
+                finally:
+                    self._dodge_in_flight = False
             threading.Thread(target=_execute, daemon=True).start()
 
     def _play_again(self):
         if self.lcu:
+            if getattr(self, "_play_again_in_flight", False):
+                Logger.debug("AppSidebar", "Play again already in flight; ignoring duplicate trigger.")
+                return
+            self._play_again_in_flight = True
             self.update_action_log("Playing again...")
             def _execute():
                 try:
@@ -1972,6 +1991,8 @@ class SidebarWidget(ctk.CTkFrame):
                         self.after(0, lambda: self.update_action_log("Play Again failed."))
                 except Exception as e:
                     self.after(0, lambda: self.update_action_log(f"Play Again error: {e}"))
+                finally:
+                    self._play_again_in_flight = False
             threading.Thread(target=_execute, daemon=True).start()
 
     def _show_play_again(self):
