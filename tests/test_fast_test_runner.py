@@ -91,7 +91,20 @@ class TestFastTestRunner(unittest.TestCase):
         self.assertEqual(cm.exception.code, 0)
         self.assertTrue(mock_run.called)
 
+    def test_main_argv_summary(self):
+        from tools.fast_test_runner import main as runner_main
+        with patch("sys.stdout"):
+            with self.assertRaises(SystemExit) as cm:
+                runner_main(["--summary"])
+            self.assertEqual(cm.exception.code, 0)
+
+    def test_main_argv_graph(self):
+        from tools.fast_test_runner import main as runner_main
+        with patch("sys.stdout"):
+            with self.assertRaises(SystemExit) as cm:
+                runner_main(["--graph"])
+            self.assertEqual(cm.exception.code, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
-

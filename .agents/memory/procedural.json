@@ -143,5 +143,21 @@
       "Ensure silent_handlers_count == 0 before proceeding with release baseline updates.",
       "If silent handlers are detected, inspect offending_files and rewrite with Logger.debug using tools/log_silent_excepts.py --write."
     ]
+  },
+  {
+    "method": "Working-Directory Agnostic Static Inspection",
+    "procedure": [
+      "Always resolve default audit target paths against PROJECT_ROOT or __file__.resolve().parent.parent.",
+      "Ensure scan_silent_handlers() without arguments inspects all >90 files in src/ regardless of caller cwd.",
+      "Verify files_audited >= 90 in autonomous_improvement_runner telemetry."
+    ]
+  },
+  {
+    "method": "Fast Test Runner Introspection Protocol",
+    "procedure": [
+      "Execute python tools/fast_test_runner.py --summary to inspect indexed module count and mapped test targets in <0.1s.",
+      "Execute python tools/fast_test_runner.py --graph to inspect full module-to-test mapping.",
+      "Ensure introspection flags terminate with exit code 0 and never pass unrecognized arguments to pytest."
+    ]
   }
 ]

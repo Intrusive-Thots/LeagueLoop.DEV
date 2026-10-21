@@ -464,3 +464,26 @@ def test_app_sidebar_search_refusal_invariants():
     msg_404 = SidebarWidget._search_refusal_message(mock_resp_404)
     assert "lobby not found" in msg_404
 
+
+
+def test_silent_excepts_default_path_invariants():
+    """EXCEPT-001: Ensure scan_silent_handlers() without arguments defaults to project src and audits all files."""
+    from tools.log_silent_excepts import scan_silent_handlers
+    res = scan_silent_handlers()
+    assert res["status"] in ("PASS", "FAIL")
+    assert res["files_audited"] >= 90, f"Expected >= 90 audited files in src/, got {res['files_audited']}"
+
+
+def test_fast_runner_summary_and_graph_invariants():
+    """RUNNER-001: Ensure fast_test_runner supports --summary and --graph without passing invalid flags to pytest."""
+    from tools.fast_test_runner import main as runner_main
+    from unittest.mock import patch
+
+    with patch("sys.stdout"):
+        with pytest.raises(SystemExit) as exc_sum:
+            runner_main(["--summary"])
+        assert exc_sum.value.code == 0
+
+        with pytest.raises(SystemExit) as exc_graph:
+            runner_main(["--graph"])
+        assert exc_graph.value.code == 0

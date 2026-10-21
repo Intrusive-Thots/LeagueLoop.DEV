@@ -252,6 +252,7 @@ def main(argv=None):
         parser.add_argument("--all", action="store_true", help="Run full test suite unconditionally")
         parser.add_argument("--staged", action="store_true", help="Only map git staged changes")
         parser.add_argument("--graph", action="store_true", help="Print module AST dependency summary")
+        parser.add_argument("--summary", action="store_true", help="Print summary of AST test graph and mapped targets without executing pytest")
         parser.add_argument("targets", nargs="*", help="Optional source files, test files, or pytest flags")
         parser.print_help()
         sys.exit(0)
@@ -263,6 +264,7 @@ def main(argv=None):
     run_all = False
     staged = False
     show_graph = False
+    show_summary = False
     explicit_files = set()
     pytest_extra = []
 
@@ -275,6 +277,8 @@ def main(argv=None):
             staged = True
         elif arg == "--graph":
             show_graph = True
+        elif arg == "--summary":
+            show_summary = True
         elif arg in option_with_arg:
             pytest_extra.append(arg)
             if i + 1 < len(argv):
@@ -290,6 +294,13 @@ def main(argv=None):
         print(f"[AST Graph] Indexed {len(graph.module_to_tests)} module keys across {len(list(TESTS_DIR.glob('test_*.py')))} test files.")
         for k in sorted(graph.module_to_tests.keys())[:20]:
             print(f"  {k} -> {len(graph.module_to_tests[k])} test suites")
+        sys.exit(0)
+
+    if show_summary:
+        modified = get_git_modified_files(staged_only=staged)
+        selected_targets = map_source_to_tests(explicit_files or modified, graph) if (explicit_files or modified) else []
+        print(f"[AST Graph] Indexed {len(graph.module_to_tests)} module keys across {len(list(TESTS_DIR.glob('test_*.py')))} test files.")
+        print(f"[AST Graph] Modified files ({len(modified)}), targeted suites: {len(selected_targets)}")
         sys.exit(0)
 
     if run_all:

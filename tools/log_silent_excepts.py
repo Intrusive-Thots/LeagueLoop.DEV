@@ -32,6 +32,8 @@ BENIGN = {"ImportError", "ModuleNotFoundError", "AttributeError", "KeyError",
           "StopIteration", "IndexError", "FileNotFoundError", "OSError",
           "ValueError", "TypeError", "RuntimeError"}
 
+DEFAULT_SRC = pathlib.Path(__file__).resolve().parent.parent / "src"
+
 
 def _handler_type_names(handler: ast.ExceptHandler):
     node = handler.type
@@ -142,7 +144,7 @@ def scan_silent_handlers(
 ) -> Dict[str, Any]:
     """Scans Python files for swallowed exception handlers (`except Exception: pass` or bare `except: pass`)."""
     if paths is None:
-        paths = ["src"]
+        paths = [DEFAULT_SRC if DEFAULT_SRC.exists() else "src"]
     if skip_files is None:
         skip_files = SKIP_FILES
 
@@ -192,16 +194,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Audit and rewrite silent exception handlers")
     parser.add_argument("--write", action="store_true", help="Rewrite silent pass handlers in-place with Logger.debug")
     parser.add_argument("--json", action="store_true", help="Output audit results in JSON format")
-    parser.add_argument("paths", nargs="*", default=["src"], help="Target files or directories to audit")
+    parser.add_argument("paths", nargs="*", default=None, help="Target files or directories to audit")
     args = parser.parse_args(argv)
 
+    target_paths = args.paths if args.paths else [str(DEFAULT_SRC) if DEFAULT_SRC.exists() else "src"]
+
     if args.json:
-        res = scan_silent_handlers(paths=args.paths)
+        res = scan_silent_handlers(paths=target_paths)
         print(json.dumps(res, indent=2))
         return 0 if res["status"] == "PASS" else 1
 
     total = 0
-    for root in args.paths:
+    for root in target_paths:
         root_path = pathlib.Path(root)
         if not root_path.exists():
             continue
