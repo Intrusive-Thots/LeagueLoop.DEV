@@ -91,6 +91,16 @@ def run_version_alignment_check() -> Dict[str, Any]:
             return {"aligned": False, "message": str(e)}
 
 
+def run_build_assets_check() -> Dict[str, Any]:
+    """Validates that all critical build assets and spec files are present."""
+    try:
+        from tools.build_validator import validate_files
+        ok = validate_files(PROJECT_ROOT)
+        return {"ready": ok, "message": "All required build files and assets present" if ok else "Missing required build files"}
+    except Exception as e:
+        return {"ready": False, "message": str(e)}
+
+
 def run_accounts_check() -> Dict[str, Any]:
     """Runs non-destructive account switching preflight inspection via tools.check_accounts."""
     try:
@@ -459,6 +469,7 @@ def run_loop(
 
     diag = run_diagnostics_check()
     ver_check = run_version_alignment_check()
+    assets_check = run_build_assets_check()
     accts_check = run_accounts_check()
     metrics = measure_codebase_metrics(PROJECT_ROOT)
     entropy = run_entropy_check()
@@ -595,6 +606,16 @@ def run_loop(
             "description": "Correlating stored user accounts with SessionVault freshness metadata (fresh, ageing, stale, expired, missing) in preflight inspection prevents attempting account switches into expired or absent session slots that would fail during the client verification phase.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Network Stability Self-Healing and Reconnection Telemetry",
+            "description": "Correlating LCU and Riot Client reconnection events against historical connection drops in session.jsonl distinguishes self-healed transient disconnects from active degradations, preventing historical drops from reporting false-positive DEGRADED stability ratings.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
+        {
+            "concept": "Build Assets and Spec Integrity Preflight Invariant",
+            "description": "Integrating validate_files into the autonomous improvement runner guarantees all packaging prerequisites (LeagueLoop.spec, installer.iss, theme design tokens, and application icons) are intact before release or test baseline updates.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
@@ -706,6 +727,14 @@ def run_loop(
                 "If target session is marked EXPIRED or MISSING, prompt user to sign in once by hand to capture the fresh session.",
             ],
         },
+        {
+            "method": "Build Assets and Packaging Integrity Preflight",
+            "procedure": [
+                "Execute validate_files(PROJECT_ROOT) to audit existence of LeagueLoop.spec, installer.iss, design_tokens.json, and app.ico.",
+                "Ensure build_validator.validate_files passes before attempting pyinstaller or InnoSetup compilation.",
+                "Verify build asset readiness surfaces in autonomous improvement loop telemetry.",
+            ],
+        },
     ]
 
     top_files = entropy.get("top_files", [])
@@ -717,6 +746,7 @@ def run_loop(
     action_details = [
         "Verified runtime logs (error.log, crash.log, session.jsonl, debug.log) & debug screenshots via leagueloop_diagnostics (healthy status confirmed).",
         f"Version alignment protocol: {'[ALIGNED]' if ver_check.get('aligned') else '[MISALIGNED]'} ({ver_check.get('message')}).",
+        f"Build assets readiness: {'[READY]' if assets_check.get('ready') else '[MISSING]'} ({assets_check.get('message')}).",
         f"Executed code entropy audit: status={entropy.get('status')}, avg_entropy={entropy.get('avg_entropy', 0)}, bare_excepts={entropy.get('bare_excepts_total', 0)}, top_offender={top_offender}.",
         f"Executed test runner (duration={tests.get('duration_seconds')}s, passed={tests.get('passed')}, failed={tests.get('failed')}{err_tag}).",
         f"Indexed codebase metrics ({metrics.get('total_py_files')} python files, {metrics.get('total_py_lines')} lines; test-to-code ratio: {metrics.get('test_to_code_ratio', 0.0)}).",
@@ -759,6 +789,7 @@ def run_loop(
         "loop_number": loop_num,
         "diagnostics": diag,
         "version_alignment": ver_check,
+        "build_assets": assets_check,
         "accounts_preflight": accts_check,
         "entropy": entropy,
         "metrics": metrics,
@@ -833,6 +864,9 @@ def main(argv=None):
     ver_info = result.get("version_alignment", {})
     ver_stat = "[ALIGNED]" if ver_info.get("aligned") else "[MISALIGNED]"
     print(f"Version Alignment: {ver_stat} ({ver_info.get('message', 'N/A')})")
+    assets_info = result.get("build_assets", {})
+    assets_stat = "[READY]" if assets_info.get("ready") else "[MISSING]"
+    print(f"Build Assets: {assets_stat} ({assets_info.get('message', 'N/A')})")
     acct_info = result.get("accounts_preflight", {})
     acct_stat = f"[{acct_info.get('status', 'UNKNOWN')}]"
     usable_sess = acct_info.get("usable_sessions_count")
@@ -843,7 +877,8 @@ def main(argv=None):
     if stab:
         lat = stab.get("latency_stats", {})
         lat_str = f", latency avg={lat['avg_ms']}ms (n={lat['count']})" if lat.get("count", 0) > 0 else ""
-        print(f"Session Stability: [{stab.get('rating', 'UNKNOWN')}]{lat_str} (drops={stab.get('connection_drops_count', 0)}, throttles={stab.get('throttle_events_count', 0)})")
+        rec_str = f", {stab.get('recovered_drops_count', 0)} recovered" if stab.get("recovered_drops_count", 0) > 0 else ""
+        print(f"Session Stability: [{stab.get('rating', 'UNKNOWN')}]{lat_str} (drops={stab.get('connection_drops_count', 0)}{rec_str}, throttles={stab.get('throttle_events_count', 0)})")
     sc_analysis = result["diagnostics"].get("screenshot_analysis", {})
     if sc_analysis:
         fallback_tag = " (Desktop fallback)" if sc_analysis.get("used_fallback") else ""

@@ -119,5 +119,13 @@
       "Verify usable_sessions_count > 0 and inspect target account session_freshness before invoking --switch <id>.",
       "If target session is marked EXPIRED or MISSING, prompt user to sign in once by hand to capture the fresh session."
     ]
+  },
+  {
+    "method": "Build Assets and Packaging Integrity Preflight",
+    "procedure": [
+      "Execute validate_files(PROJECT_ROOT) to audit existence of LeagueLoop.spec, installer.iss, design_tokens.json, and app.ico.",
+      "Ensure build_validator.validate_files passes before attempting pyinstaller or InnoSetup compilation.",
+      "Verify build asset readiness surfaces in autonomous improvement loop telemetry."
+    ]
   }
 ]

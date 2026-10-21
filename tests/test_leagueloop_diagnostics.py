@@ -387,6 +387,21 @@ class TestLeagueLoopDiagnostics(unittest.TestCase):
         self.assertEqual(lat["max_ms"], 250.0)
         self.assertEqual(lat["avg_ms"], 200.0)
 
+    def test_inspect_session_log_recovered_connection_drops(self):
+        # Log with drop followed by successful reconnection -> RECOVERED
+        entries = [
+            '{"ts": "2026-10-14T10:00:00", "level": "INFO", "tag": "LCU_DIAGNOSTICS", "msg": "Connection drop recorded: Temporary socket disconnect (Total drops: 1)"}',
+            '{"ts": "2026-10-14T10:00:02", "level": "INFO", "tag": "LCU_WS", "msg": "WebSocket connected."}',
+        ]
+        self.paths["session_log"].write_text("\n".join(entries), encoding="utf-8")
+        res = inspect_session_log(self.paths["session_log"], max_entries=10)
+
+        self.assertEqual(res["stability"]["rating"], "RECOVERED")
+        self.assertEqual(res["stability"]["connection_drops_count"], 1)
+        self.assertEqual(res["stability"]["recovered_drops_count"], 1)
+        self.assertTrue(res["stability"]["is_connected"])
+        self.assertTrue(res["connection_drops"][0]["recovered"])
+
     def test_main_cli_session_stability_display(self):
         from tools.leagueloop_diagnostics import main
         self.paths["error_log"].write_text("INFO Clean", encoding="utf-8")

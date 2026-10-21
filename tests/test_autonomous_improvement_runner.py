@@ -7,6 +7,7 @@ from tools.autonomous_improvement_runner import (
     measure_codebase_metrics,
     run_diagnostics_check,
     run_version_alignment_check,
+    run_build_assets_check,
     run_accounts_check,
     run_entropy_check,
     run_tests_check,
@@ -41,6 +42,18 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         res = run_version_alignment_check()
         self.assertTrue(res["aligned"])
         self.assertEqual(res["message"], "Versions aligned")
+
+    @patch("tools.build_validator.validate_files")
+    def test_run_build_assets_check(self, mock_validate):
+        mock_validate.return_value = True
+        res = run_build_assets_check()
+        self.assertTrue(res["ready"])
+        self.assertIn("present", res["message"])
+
+        mock_validate.return_value = False
+        res_fail = run_build_assets_check()
+        self.assertFalse(res_fail["ready"])
+        self.assertIn("Missing", res_fail["message"])
 
     @patch("tools.check_accounts.run_account_preflight")
     def test_run_accounts_check(self, mock_accts):

@@ -176,6 +176,8 @@ def inspect_session_log(path: Path, max_entries: int = 20) -> Dict[str, Any]:
         "stability": {
             "rating": "EXCELLENT",
             "connection_drops_count": 0,
+            "recovered_drops_count": 0,
+            "is_connected": False,
             "drop_reasons": [],
             "throttle_events_count": 0,
             "latency_stats": dict(default_stats),
@@ -204,6 +206,9 @@ def inspect_session_log(path: Path, max_entries: int = 20) -> Dict[str, Any]:
         latency_re = re.compile(r"Latency anomaly detected on event:\s*([\d\.]+)ms", re.IGNORECASE)
         drop_re = re.compile(r"Connection drop recorded:\s*(.*?)(?:\s*\(Total drops:\s*(\d+)\))?$", re.IGNORECASE)
         throttle_re = re.compile(r"Rapid connection drops detected.*?backoff floor=([\d\.]+)s", re.IGNORECASE)
+        conn_re = re.compile(r"(?:WebSocket connected|Connected to Riot Client|Connected to LCU)", re.IGNORECASE)
+
+        last_connect_ts: Optional[str] = None
 
         for line in tail:
             sline = line.strip()
@@ -218,6 +223,10 @@ def inspect_session_log(path: Path, max_entries: int = 20) -> Dict[str, Any]:
                     sessions_seen.add(entry["session"])
                 tag = entry.get("tag", "")
                 msg = entry.get("msg", "")
+                ts = entry.get("ts")
+
+                if conn_re.search(msg) or (tag in ("LCU_WS", "RiotClientAPI") and "connect" in msg.lower()):
+                    last_connect_ts = ts
 
                 m_lat = latency_re.search(msg)
                 if m_lat:
@@ -232,28 +241,44 @@ def inspect_session_log(path: Path, max_entries: int = 20) -> Dict[str, Any]:
                         reason = m_drop.group(1).strip()
                         drop_reasons.append(reason)
                         connection_drops.append({
-                            "ts": entry.get("ts"),
+                            "ts": ts,
                             "reason": reason,
                             "total_drops": int(m_drop.group(2)) if m_drop.group(2) else 1,
+                            "recovered": False,
                         })
 
                 if tag == "LCU_NETWORK_THROTTLE" or "reconnect rate throttling" in msg:
                     m_thr = throttle_re.search(msg)
                     throttle_events.append({
-                        "ts": entry.get("ts"),
+                        "ts": ts,
                         "msg": msg,
                         "backoff_floor": float(m_thr.group(1)) if m_thr else None,
                     })
 
                 if "THROTTLE" in tag or "ANOMALY" in tag or lvl in ("WARNING", "ERROR", "CRITICAL"):
                     anomalies.append({
-                        "ts": entry.get("ts"),
+                        "ts": ts,
                         "level": lvl,
                         "tag": tag,
                         "msg": msg,
                     })
             except Exception:
                 continue
+
+        # Mark drops as recovered if a connection event occurred at or after the drop
+        if last_connect_ts:
+            for drop in connection_drops:
+                drop_ts = drop.get("ts")
+                if not drop_ts or str(last_connect_ts) >= str(drop_ts):
+                    drop["recovered"] = True
+
+        recovered_drops_count = sum(1 for d in connection_drops if d.get("recovered"))
+        drop_count = len(connection_drops)
+        thr_count = len(throttle_events)
+        lat_count = len(latency_values)
+
+        last_drop_ts = connection_drops[-1]["ts"] if connection_drops else None
+        is_connected = bool(last_connect_ts and (not last_drop_ts or str(last_connect_ts) >= str(last_drop_ts)))
 
         lat_stats = {
             "count": len(latency_values),
@@ -262,20 +287,22 @@ def inspect_session_log(path: Path, max_entries: int = 20) -> Dict[str, Any]:
             "avg_ms": round(sum(latency_values) / len(latency_values), 2) if latency_values else None,
         }
 
-        drop_count = len(connection_drops)
-        thr_count = len(throttle_events)
-        lat_count = len(latency_values)
-
-        if drop_count == 0 and thr_count == 0 and lat_count == 0:
+        if thr_count > 0:
+            rating = "DEGRADED"
+        elif drop_count == 0 and lat_count == 0:
             rating = "EXCELLENT"
-        elif drop_count == 0 and thr_count == 0 and lat_count <= 5:
+        elif drop_count == 0 and lat_count <= 5:
             rating = "GOOD"
+        elif drop_count > 0 and recovered_drops_count == drop_count and is_connected and lat_count <= 5:
+            rating = "RECOVERED"
         else:
             rating = "DEGRADED"
 
         stability_summary = {
             "rating": rating,
             "connection_drops_count": drop_count,
+            "recovered_drops_count": recovered_drops_count,
+            "is_connected": is_connected,
             "drop_reasons": list(dict.fromkeys(drop_reasons)),
             "throttle_events_count": thr_count,
             "latency_stats": lat_stats,
@@ -926,7 +953,8 @@ def main():
         print(f"  Active Sessions: {sa.get('active_sessions', [])}")
         stab = sa.get("stability", {})
         if stab:
-            print(f"  Network Stability: [{stab.get('rating', 'UNKNOWN')}] (drops: {stab.get('connection_drops_count', 0)}, throttles: {stab.get('throttle_events_count', 0)})")
+            rec_tag = f" ({stab.get('recovered_drops_count', 0)} recovered)" if stab.get("recovered_drops_count", 0) > 0 else ""
+            print(f"  Network Stability: [{stab.get('rating', 'UNKNOWN')}]{rec_tag} (drops: {stab.get('connection_drops_count', 0)}, throttles: {stab.get('throttle_events_count', 0)})")
             lat = stab.get("latency_stats", {})
             if lat.get("count", 0) > 0:
                 print(f"  Latency Anomalies (tail): {lat['count']} events (min={lat['min_ms']}ms, avg={lat['avg_ms']}ms, max={lat['max_ms']}ms)")
