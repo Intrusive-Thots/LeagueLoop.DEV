@@ -1233,28 +1233,8 @@ class SidebarWidget(ctk.CTkFrame):
     @staticmethod
     def _search_refusal_message(res, mode: str = "") -> str:
         """Extract a specific, actionable refusal reason from the matchmaking search response."""
-        if not res:
-            return "Matchmaking failed: no response from the League Client."
-        code = getattr(res, "status_code", None)
-        try:
-            data = res.json()
-            if isinstance(data, dict):
-                msg = data.get("message") or data.get("description")
-                if msg:
-                    return f"Matchmaking failed: {msg}"
-                errors = data.get("errors")
-                if isinstance(errors, list) and errors and isinstance(errors[0], dict):
-                    err_msg = errors[0].get("message")
-                    if err_msg:
-                        return f"Matchmaking failed: {err_msg}"
-        except Exception as exc:
-            Logger.debug("AppSidebar", f"Could not parse matchmaking search error response: {exc}", exc=exc)
-        if code == 400:
-            target = f" ({mode})" if mode else ""
-            return f"Matchmaking failed: queue unavailable or requirements not met{target}."
-        if code == 404:
-            return "Matchmaking failed: lobby not found."
-        return f"Matchmaking failed (HTTP {code})."
+        from services.queue_manager import QueueManager
+        return QueueManager.extract_search_refusal_reason(res, mode=mode)
 
     def _find_match(self):
         """Aggressive matchmaking: Stay in the lobby tab, just change the queue."""
@@ -1406,6 +1386,15 @@ class SidebarWidget(ctk.CTkFrame):
                         Logger.warning(
                             "Matchmaking",
                             f"Cannot start matchmaking ({mode}): lobby canStartActivity is False."
+                        )
+                        return
+                    local_member = v_data.get("localMember", {})
+                    if not local_member.get("isLeader", True):
+                        fail_msg = f"Can't start matchmaking ({mode}): player is not lobby leader."
+                        self.after(0, lambda m=fail_msg: self.update_action_log(m))
+                        Logger.warning(
+                            "Matchmaking",
+                            f"Cannot start matchmaking ({mode}): local player is not lobby leader."
                         )
                         return
                 except Exception as exc:

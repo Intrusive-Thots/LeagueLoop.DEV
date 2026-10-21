@@ -979,5 +979,82 @@ def test_app_sidebar_requeue_requires_leader_and_handles_refusal():
     assert "fail_msg = self._search_refusal_message(res)" in text
 
 
+def test_queue_manager_extract_search_refusal_reason():
+    """QUEUE-004: Ensure QueueManager.extract_search_refusal_reason properly parses diverse LCU error schemas."""
+    from services.queue_manager import QueueManager
+    from unittest.mock import MagicMock
+
+    # 1. No response
+    assert "no response from the League Client" in QueueManager.extract_search_refusal_reason(None)
+
+    # 2. JSON message field
+    mock_res_msg = MagicMock(status_code=400)
+    mock_res_msg.json.return_value = {"message": "QUEUE_DODGE_PENALTY_ACTIVE"}
+    assert QueueManager.extract_search_refusal_reason(mock_res_msg) == "Matchmaking failed: QUEUE_DODGE_PENALTY_ACTIVE"
+
+    # 3. JSON errors list schema
+    mock_res_err = MagicMock(status_code=400)
+    mock_res_err.json.return_value = {"errors": [{"message": "PARTY_NOT_READY"}]}
+    assert QueueManager.extract_search_refusal_reason(mock_res_err) == "Matchmaking failed: PARTY_NOT_READY"
+
+    # 4. Standard 400 with queue mode
+    mock_res_400 = MagicMock(status_code=400)
+    mock_res_400.json.return_value = {}
+    assert "queue unavailable or requirements not met (ARAM)" in QueueManager.extract_search_refusal_reason(mock_res_400, mode="ARAM")
+
+    # 5. Standard 404 lobby not found
+    mock_res_404 = MagicMock(status_code=404)
+    mock_res_404.json.return_value = {}
+    assert QueueManager.extract_search_refusal_reason(mock_res_404) == "Matchmaking failed: lobby not found."
+
+    # 6. Fallback HTTP status
+    mock_res_500 = MagicMock(status_code=500)
+    mock_res_500.json.return_value = {}
+    assert QueueManager.extract_search_refusal_reason(mock_res_500) == "Matchmaking failed (HTTP 500)."
+
+
+def test_queue_manager_start_matchmaking_logs_refusal():
+    """QUEUE-005: Ensure QueueManager.start_matchmaking returns False and parses refusal when search fails."""
+    from services.queue_manager import QueueManager
+    from unittest.mock import MagicMock
+
+    mgr = QueueManager.get_instance()
+    mock_lcu = MagicMock()
+    mock_lcu.is_connected = True
+
+    # Lobby check passes
+    mock_lobby = MagicMock(status_code=200)
+    mock_lobby.json.return_value = {"canStartActivity": True, "localMember": {"isLeader": True}}
+
+    # Search fails with 400
+    mock_search = MagicMock(status_code=400)
+    mock_search.json.return_value = {"message": "QUEUE_RESTRICTED"}
+
+    mock_lcu.request.side_effect = [mock_lobby, mock_search]
+
+    res = mgr.start_matchmaking(mock_lcu, check_readiness=True)
+    assert res is False
+    assert mock_lcu.request.call_count == 2
+
+
+def test_app_sidebar_find_match_requires_leader():
+    """LOBBY-005: Ensure AppSidebar._find_match validates leader status during preflight."""
+    sidebar_file = SRC / "ui" / "app_sidebar.py"
+    assert sidebar_file.exists()
+    text = sidebar_file.read_text(encoding="utf-8")
+    assert "local_member = v_data.get(\"localMember\", {})" in text
+    assert "Can't start matchmaking ({mode}): player is not lobby leader." in text
+
+
+def test_automation_act_handles_matchmaking_search_refusal():
+    """AUTO-006: Ensure Automation._act treats HTTP 400 on matchmaking search as a warning refusal, not error."""
+    automation_file = SRC / "services" / "automation.py"
+    assert automation_file.exists()
+    text = automation_file.read_text(encoding="utf-8")
+    assert 'endpoint == "/lol-lobby/v2/lobby/matchmaking/search" and code == 400' in text
+    assert 'matchmaking search refused (HTTP 400)' in text
+
+
+
 
 

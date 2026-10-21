@@ -253,10 +253,41 @@ class QueueManager:
                     Logger.debug("QueueManager", f"Failed to check lobby readiness: {exc}")
                     return False
             res = lcu.request("POST", "/lol-lobby/v2/lobby/matchmaking/search")
-            return res is not None and res.status_code in (200, 204)
+            if res is not None and res.status_code in (200, 204):
+                return True
+            if res is not None:
+                err_msg = self.extract_search_refusal_reason(res)
+                Logger.debug("QueueManager", f"Matchmaking search refused: {err_msg}")
+            return False
         except Exception as e:
             Logger.debug("QueueManager", f"Failed to start matchmaking: {e}")
             return False
+
+    @staticmethod
+    def extract_search_refusal_reason(res, mode: str = "") -> str:
+        """Extract a specific, actionable refusal reason from the matchmaking search response."""
+        if not res:
+            return "Matchmaking failed: no response from the League Client."
+        code = getattr(res, "status_code", None)
+        try:
+            data = res.json()
+            if isinstance(data, dict):
+                msg = data.get("message") or data.get("description")
+                if msg:
+                    return f"Matchmaking failed: {msg}"
+                errors = data.get("errors")
+                if isinstance(errors, list) and errors and isinstance(errors[0], dict):
+                    err_msg = errors[0].get("message")
+                    if err_msg:
+                        return f"Matchmaking failed: {err_msg}"
+        except Exception as exc:
+            Logger.debug("QueueManager", f"Could not parse matchmaking search error response: {exc}")
+        if code == 400:
+            target = f" ({mode})" if mode else ""
+            return f"Matchmaking failed: queue unavailable or requirements not met{target}."
+        if code == 404:
+            return "Matchmaking failed: lobby not found."
+        return f"Matchmaking failed (HTTP {code})."
 
     def stop_matchmaking(self, lcu) -> bool:
         """Cancels active matchmaking search."""

@@ -653,6 +653,10 @@ class AutomationEngine:
             if "/lol-champ-select/v1/session/actions/" in endpoint and code == 405:
                 Logger.debug("Automation", f"{label} - champ select action not yet open to modifications (HTTP 405 transient)")
                 return False
+            if endpoint == "/lol-lobby/v2/lobby/matchmaking/search" and code == 400:
+                Logger.warning("Automation", f"{label} - matchmaking search refused (HTTP 400): {body}".strip())
+                self._log(f"{label} refused: queue unavailable or party requirements not met.")
+                return False
             Logger.error(
                 "Automation",
                 f"{label} - the client refused it (HTTP {code}) {body}".strip(),
