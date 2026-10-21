@@ -126,6 +126,7 @@ class AutomationEngine:
         # Continuous loop post-match requeue tracking
         self._post_game_requeue_pending: bool = False
         self._post_game_requeue_attempts: int = 0
+        self._dodge_requeue_attempts: int = 0
         self._play_again_handled: bool = False
         self._play_again_attempts: int = 0
         self._eog_stats_attempts: int = 0
@@ -671,35 +672,59 @@ class AutomationEngine:
         """
         if not self.config.get("auto_requeue", False):
             return
+        if phase != "Lobby":
+            self._dodge_requeue_attempts = 0
+            return
         if prev_phase is None:
             prev_phase = self.last_phase
-        if phase == "Lobby" and prev_phase in ("ChampSelect", "ReadyCheck"):
-            # Check if local player is leader before requesting search to avoid INVALID_PERMISSIONS
-            lobby_resp = self.lcu.request("GET", "/lol-lobby/v2/lobby")
-            if lobby_resp and getattr(lobby_resp, "status_code", 0) == 200:
-                try:
-                    lobby_data = lobby_resp.json()
-                    local_member = lobby_data.get("localMember", {})
-                    if not local_member.get("isLeader", True):
-                        Logger.debug("Automation", "Dodge detected but local player is not lobby leader; skipping matchmaking restart.")
-                        return
-                except Exception as exc:
-                    Logger.debug("Automation", "Failed to query lobby leader state", exc=exc)
+        if prev_phase not in ("ChampSelect", "ReadyCheck"):
+            return
 
-            now = time.time()
-            if self._cached_search_state and (now - self._last_search_state_time < 3.0):
-                state = self._cached_search_state
-            else:
-                search_state = self.lcu.request("GET", "/lol-lobby/v2/lobby/matchmaking/search-state")
-                state = search_state.json() if search_state and getattr(search_state, "status_code", 0) == 200 else None
-                self._cached_search_state = state
-                self._last_search_state_time = now
-            
-            if not state or state.get("searchState") != "Searching":
-                self._act("POST", "/lol-lobby/v2/lobby/matchmaking/search",
-                          what="Restarted matchmaking after a dodge")
+        if getattr(self, "_dodge_requeue_attempts", 0) >= 3:
+            return
+
+        # Check if lobby exists and verify leader permissions
+        lobby_resp = self.lcu.request("GET", "/lol-lobby/v2/lobby", silent=True)
+        if lobby_resp and getattr(lobby_resp, "status_code", 0) == 200:
+            try:
+                lobby_data = lobby_resp.json()
+                local_member = lobby_data.get("localMember", {})
+                if not local_member.get("isLeader", True):
+                    Logger.debug("Automation", "Dodge detected but local player is not lobby leader; skipping matchmaking restart.")
+                    return
+                game_cfg = lobby_data.get("gameConfig", {})
+                if not game_cfg.get("queueId"):
+                    return
+                if not lobby_data.get("canStartActivity", True):
+                    Logger.debug("Automation", "Dodge detected but lobby cannot start activity.")
+                    return
+            except Exception as exc:
+                Logger.debug("Automation", "Failed to query lobby state for dodge requeue", exc=exc)
+                return
+        elif lobby_resp and getattr(lobby_resp, "status_code", 0) in (400, 404):
+            return
+
+        now = time.time()
+        if self._cached_search_state and (now - self._last_search_state_time < 3.0):
+            state = self._cached_search_state
+        else:
+            search_state = self.lcu.request("GET", "/lol-lobby/v2/lobby/matchmaking/search-state", silent=True)
+            state = search_state.json() if search_state and getattr(search_state, "status_code", 0) == 200 else None
+            self._cached_search_state = state
+            self._last_search_state_time = now
+
+        if not state or state.get("searchState") != "Searching":
+            success = self._act("POST", "/lol-lobby/v2/lobby/matchmaking/search",
+                                what="Restarted matchmaking after a dodge")
+            if success:
                 self._log("Dodge detected. Restarting Matchmaking...")
+                self._dodge_requeue_attempts = 0
                 self._last_search_state_time = 0
+            else:
+                self._dodge_requeue_attempts = getattr(self, "_dodge_requeue_attempts", 0) + 1
+                if self._dodge_requeue_attempts >= 3:
+                    Logger.warning("Automation", "Dodge requeue failed after 3 attempts; giving up.")
+                    self._last_search_state_time = 0
 
     def _handle_post_game_requeue(self, phase, prev_phase=None):
         """Continuous loop requeue: when skip_stats is enabled, restarts matchmaking search after match ends."""

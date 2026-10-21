@@ -609,3 +609,110 @@ def test_app_sidebar_and_automation_play_again_invariants():
     assert engine._play_again_handled is True
     assert engine._play_again_attempts == 0
 
+def test_dodge_requeue_invariants():
+    """LOBBY-004: Ensure AutomationEngine enforces leader permissions, lobby readiness, and bounded attempts on dodge requeue."""
+    from services.automation import AutomationEngine
+    from unittest.mock import MagicMock
+
+    auto_file = SRC / "services" / "automation.py"
+    assert auto_file.exists()
+    a_text = auto_file.read_text(encoding="utf-8")
+
+    assert "_dodge_requeue_attempts" in a_text
+    assert "self._dodge_requeue_attempts >= 3" in a_text
+    assert "canStartActivity" in a_text
+
+    mock_lcu = MagicMock()
+    mock_assets = MagicMock()
+    mock_config = {
+        "auto_requeue": True,
+        "auto_honor_enabled": False,
+        "skip_stats_enabled": False,
+    }
+    engine = AutomationEngine(mock_lcu, mock_assets, mock_config)
+
+    # 1. Non-200 (404/400) lobby response: does not attempt search
+    mock_lobby_404 = MagicMock()
+    mock_lobby_404.status_code = 404
+    mock_lcu.request.return_value = mock_lobby_404
+    engine._handle_dodge_requeue("Lobby", "ChampSelect")
+    assert engine._dodge_requeue_attempts == 0
+    mock_lcu.request.assert_called_once_with("GET", "/lol-lobby/v2/lobby", silent=True)
+
+    # 2. Local player is not leader: does not attempt search
+    mock_lcu.reset_mock()
+    mock_lobby_not_leader = MagicMock()
+    mock_lobby_not_leader.status_code = 200
+    mock_lobby_not_leader.json.return_value = {
+        "localMember": {"isLeader": False},
+        "gameConfig": {"queueId": 420},
+        "canStartActivity": True,
+    }
+    mock_lcu.request.return_value = mock_lobby_not_leader
+    engine._handle_dodge_requeue("Lobby", "ChampSelect")
+    assert engine._dodge_requeue_attempts == 0
+    assert mock_lcu.request.call_count == 1
+
+    # 3. Missing queueId or cannot start activity: does not attempt search
+    mock_lcu.reset_mock()
+    mock_lobby_no_queue = MagicMock()
+    mock_lobby_no_queue.status_code = 200
+    mock_lobby_no_queue.json.return_value = {
+        "localMember": {"isLeader": True},
+        "gameConfig": {"queueId": None},
+        "canStartActivity": False,
+    }
+    mock_lcu.request.return_value = mock_lobby_no_queue
+    engine._handle_dodge_requeue("Lobby", "ChampSelect")
+    assert engine._dodge_requeue_attempts == 0
+    assert mock_lcu.request.call_count == 1
+
+    # 4. Valid lobby but search endpoint fails: bounded to 3 attempts
+    mock_lcu.reset_mock()
+    mock_lobby_valid = MagicMock()
+    mock_lobby_valid.status_code = 200
+    mock_lobby_valid.json.return_value = {
+        "localMember": {"isLeader": True},
+        "gameConfig": {"queueId": 420},
+        "canStartActivity": True,
+    }
+    mock_search_state = MagicMock()
+    mock_search_state.status_code = 200
+    mock_search_state.json.return_value = {"searchState": "Invalid"}
+
+    mock_search_fail = MagicMock()
+    mock_search_fail.status_code = 400
+
+    def mock_request_router(method, endpoint, *args, **kwargs):
+        if endpoint == "/lol-lobby/v2/lobby":
+            return mock_lobby_valid
+        if endpoint == "/lol-lobby/v2/lobby/matchmaking/search-state":
+            return mock_search_state
+        if endpoint == "/lol-lobby/v2/lobby/matchmaking/search":
+            return mock_search_fail
+        return None
+
+    mock_lcu.request.side_effect = mock_request_router
+
+    # Attempt 1
+    engine._handle_dodge_requeue("Lobby", "ChampSelect")
+    assert engine._dodge_requeue_attempts == 1
+
+    # Attempt 2
+    engine._handle_dodge_requeue("Lobby", "ChampSelect")
+    assert engine._dodge_requeue_attempts == 2
+
+    # Attempt 3
+    engine._handle_dodge_requeue("Lobby", "ChampSelect")
+    assert engine._dodge_requeue_attempts == 3
+
+    # Attempt 4: Should bail immediately without making search request
+    mock_lcu.reset_mock()
+    engine._handle_dodge_requeue("Lobby", "ChampSelect")
+    assert engine._dodge_requeue_attempts == 3
+    assert mock_lcu.request.call_count == 0
+
+    # Phase transition out of Lobby resets attempt counter
+    engine._handle_dodge_requeue("ChampSelect", "Lobby")
+    assert engine._dodge_requeue_attempts == 0
+
