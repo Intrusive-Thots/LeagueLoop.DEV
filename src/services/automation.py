@@ -776,6 +776,10 @@ class AutomationEngine:
             # Queue ID not yet populated in lobby config; retry next tick
             return
 
+        if not lobby_data.get("canStartActivity", True):
+            Logger.debug("Automation", "Continuous loop: Lobby cannot start activity yet; retrying next tick.")
+            return
+
         # Hit Find Match
         success = self._act("POST", "/lol-lobby/v2/lobby/matchmaking/search",
                             what="Started matchmaking search (Continuous Loop)")

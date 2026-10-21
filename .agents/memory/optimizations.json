@@ -1994,5 +1994,27 @@
       "status": "Optimized implementation baseline"
     },
     "impact": "Prevents HTTP 400 spam on /lol-lobby/v2/lobby/matchmaking/search when client dodges before lobby activity is ready"
+  },
+  {
+    "timestamp": "2026-10-21T06:40:16.290558+00:00",
+    "feature": "Lobby Readiness Preflight and Matchmaking Anomaly Prevention",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Preflights canStartActivity before firing matchmaking search in automation, queue manager, and app sidebar to prevent HTTP 400 anomalies"
+  },
+  {
+    "timestamp": "2026-10-21T06:42:02.912102+00:00",
+    "feature": "Lobby Readiness Preflight and Matchmaking Anomaly Prevention",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Preflights canStartActivity before firing matchmaking search in automation, queue manager, and app sidebar to prevent HTTP 400 anomalies"
   }
 ]

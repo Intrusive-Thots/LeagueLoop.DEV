@@ -230,11 +230,21 @@ class QueueManager:
 
     # ─────────── Matchmaking Actions ───────────
 
-    def start_matchmaking(self, lcu) -> bool:
+    def start_matchmaking(self, lcu, check_readiness: bool = True) -> bool:
         """Starts matchmaking search in the current lobby."""
         if not lcu or not getattr(lcu, "is_connected", False):
             return False
         try:
+            if check_readiness:
+                lobby_resp = lcu.request("GET", "/lol-lobby/v2/lobby", silent=True)
+                if lobby_resp and getattr(lobby_resp, "status_code", 0) == 200:
+                    try:
+                        lobby_data = lobby_resp.json()
+                        if not lobby_data.get("canStartActivity", True):
+                            Logger.debug("QueueManager", "Cannot start matchmaking: lobby canStartActivity is False.")
+                            return False
+                    except Exception as exc:
+                        Logger.debug("QueueManager", f"Failed to check lobby readiness: {exc}")
             res = lcu.request("POST", "/lol-lobby/v2/lobby/matchmaking/search")
             return res is not None and res.status_code in (200, 204)
         except Exception as e:
@@ -283,9 +293,9 @@ def resolve_mode_name(queue_id: int, lcu=None) -> str:
     """Resolve queue ID to mode string."""
     return _mgr.resolve_mode_name(queue_id, lcu)
 
-def start_matchmaking(lcu) -> bool:
+def start_matchmaking(lcu, check_readiness: bool = True) -> bool:
     """Start matchmaking search."""
-    return _mgr.start_matchmaking(lcu)
+    return _mgr.start_matchmaking(lcu, check_readiness=check_readiness)
 
 def stop_matchmaking(lcu) -> bool:
     """Stop matchmaking search."""

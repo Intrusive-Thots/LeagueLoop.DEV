@@ -716,3 +716,90 @@ def test_dodge_requeue_invariants():
     engine._handle_dodge_requeue("ChampSelect", "Lobby")
     assert engine._dodge_requeue_attempts == 0
 
+
+def test_post_game_requeue_can_start_activity_preflight():
+    """LOOP-005: Ensure _handle_post_game_requeue verifies canStartActivity before attempting matchmaking search."""
+    from services.automation import AutomationEngine
+    from unittest.mock import MagicMock
+
+    mock_lcu = MagicMock()
+    mock_assets = MagicMock()
+    mock_config = {
+        "auto_requeue": False,
+        "auto_honor_enabled": False,
+        "skip_stats_enabled": True,
+    }
+    engine = AutomationEngine(mock_lcu, mock_assets, mock_config)
+    engine._post_game_requeue_pending = True
+
+    mock_search_state = MagicMock(status_code=200)
+    mock_search_state.json.return_value = {"searchState": "Invalid"}
+
+    mock_lobby = MagicMock(status_code=200)
+    mock_lobby.json.return_value = {
+        "localMember": {"isLeader": True},
+        "gameConfig": {"queueId": 420},
+        "canStartActivity": False,
+    }
+
+    def mock_request(method, endpoint, *args, **kwargs):
+        if endpoint == "/lol-lobby/v2/lobby/matchmaking/search-state":
+            return mock_search_state
+        if endpoint == "/lol-lobby/v2/lobby":
+            return mock_lobby
+        if endpoint == "/lol-lobby/v2/lobby/matchmaking/search":
+            raise AssertionError("Should not attempt search when canStartActivity is False")
+        return None
+
+    mock_lcu.request.side_effect = mock_request
+    engine._handle_post_game_requeue("Lobby", "EndOfGame")
+    assert engine._post_game_requeue_pending is True
+    assert getattr(engine, "_post_game_requeue_attempts", 0) == 0
+
+
+def test_queue_manager_start_matchmaking_readiness_preflight():
+    """QUEUE-002: Ensure QueueManager.start_matchmaking respects canStartActivity and avoids sending invalid search requests."""
+    from services.queue_manager import QueueManager
+    from unittest.mock import MagicMock
+
+    mgr = QueueManager.get_instance()
+    mock_lcu = MagicMock()
+    mock_lcu.is_connected = True
+
+    mock_lobby_not_ready = MagicMock(status_code=200)
+    mock_lobby_not_ready.json.return_value = {"canStartActivity": False}
+
+    mock_lcu.request.return_value = mock_lobby_not_ready
+    res = mgr.start_matchmaking(mock_lcu, check_readiness=True)
+    assert res is False
+    mock_lcu.request.assert_called_once_with("GET", "/lol-lobby/v2/lobby", silent=True)
+
+    # When canStartActivity is True, should proceed to post search
+    mock_lcu.reset_mock()
+    mock_lobby_ready = MagicMock(status_code=200)
+    mock_lobby_ready.json.return_value = {"canStartActivity": True}
+    mock_search_ok = MagicMock(status_code=200)
+
+    def mock_request(method, endpoint, *args, **kwargs):
+        if endpoint == "/lol-lobby/v2/lobby":
+            return mock_lobby_ready
+        if endpoint == "/lol-lobby/v2/lobby/matchmaking/search":
+            return mock_search_ok
+        return None
+
+    mock_lcu.request.side_effect = mock_request
+    res = mgr.start_matchmaking(mock_lcu, check_readiness=True)
+    assert res is True
+    assert mock_lcu.request.call_count == 2
+
+
+def test_app_sidebar_find_match_lobby_readiness_invariants():
+    """LOBBY-003: Ensure AppSidebar._find_match checks lobby readiness before initiating search."""
+    sidebar_file = SRC / "ui" / "app_sidebar.py"
+    assert sidebar_file.exists()
+    text = sidebar_file.read_text(encoding="utf-8")
+    assert "lobby_check = self.lcu.request(\"GET\", \"/lol-lobby/v2/lobby\")" in text
+    assert "canStartActivity" in text
+    assert "Cannot start matchmaking" in text
+
+

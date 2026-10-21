@@ -1388,7 +1388,23 @@ class SidebarWidget(ctk.CTkFrame):
                         return
                     time.sleep(0.8)
 
-                # 4. Start Search
+                # 4. Preflight Lobby Readiness
+                lobby_check = self.lcu.request("GET", "/lol-lobby/v2/lobby")
+                if lobby_check and getattr(lobby_check, "status_code", 0) == 200:
+                    try:
+                        v_data = lobby_check.json()
+                        if not v_data.get("canStartActivity", True):
+                            fail_msg = f"Can't start matchmaking ({mode}): lobby requirements or restrictions not met."
+                            self.after(0, lambda m=fail_msg: self.update_action_log(m))
+                            Logger.warning(
+                                "Matchmaking",
+                                f"Cannot start matchmaking ({mode}): lobby canStartActivity is False."
+                            )
+                            return
+                    except Exception as exc:
+                        Logger.debug("AppSidebar", f"Failed to check lobby readiness: {exc}")
+
+                # 5. Start Search
                 res = self.lcu.request("POST", "/lol-lobby/v2/lobby/matchmaking/search")
                 
                 def _update_ui():
@@ -1949,6 +1965,15 @@ class SidebarWidget(ctk.CTkFrame):
             def _execute():
                 try:
                     self.lcu.request("DELETE", "/lol-lobby/v2/lobby/matchmaking/search")
+                    time.sleep(0.3)
+                    verify_lobby = self.lcu.request("GET", "/lol-lobby/v2/lobby")
+                    if verify_lobby and getattr(verify_lobby, "status_code", 0) == 200:
+                        try:
+                            if not verify_lobby.json().get("canStartActivity", True):
+                                self.after(0, lambda: self.update_action_log("Cannot re-queue: lobby not ready."))
+                                return
+                        except Exception as exc:
+                            Logger.debug("AppSidebar", f"Failed to check lobby readiness during requeue: {exc}")
                     self.lcu.request("POST", "/lol-lobby/v2/lobby/matchmaking/search")
                     self.after(0, lambda: self.update_action_log("Re-queued Matchmaking."))
                 except Exception as e:
