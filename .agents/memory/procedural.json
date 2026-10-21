@@ -103,5 +103,13 @@
       "Execute python tools/build_validator.py --skip-tests --json to verify spec files, assets, and version alignment.",
       "Execute python tools/build_validator.py to perform full pre-build test validation and telemetry recording."
     ]
+  },
+  {
+    "method": "Account Switching Preflight Verification",
+    "procedure": [
+      "Execute python tools/check_accounts.py --json to inspect client process, API connectivity, and stored account credentials.",
+      "Verify problems_count == 0 before triggering live account switches or test sign-outs.",
+      "Review active user vs default account index to avoid redundant or conflicting switch requests."
+    ]
   }
 ]

@@ -6,6 +6,7 @@ in or out, so you can confirm the plumbing before risking your session or a
 Riot rate limit.
 
     python tools/check_accounts.py                 # read-only preflight
+    python tools/check_accounts.py --json          # machine-readable JSON output
     python tools/check_accounts.py --round-trip    # sign out + back in (live)
     python tools/check_accounts.py --switch 1      # actually switch (destructive)
     python tools/check_accounts.py --sign-out      # actually sign out
@@ -16,12 +17,22 @@ state and userinfo. It never calls sign_in or sign_out.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
+from pathlib import Path
+from typing import Dict, Any, Optional, List
 
-sys.path.insert(
-    0, os.path.join(os.path.abspath(os.path.dirname(os.path.dirname(__file__))), "src")
-)
+# Force UTF-8 encoding on stdout and stderr for Windows compatibility
+if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT / "src"))
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 OK = "  OK   "
 WARN = "  WARN "
@@ -33,9 +44,96 @@ def line(mark: str, text: str) -> None:
     print(mark + text, flush=True)
 
 
-def preflight() -> int:
+def run_account_preflight(manager: Optional[Any] = None) -> Dict[str, Any]:
+    """Runs a non-destructive read-only account switching preflight inspection.
+
+    Returns structured dictionary with connection state, account counts, and problem tally.
+    """
     from services.account_manager import AccountManager
     from services.accounts import RiotSession
+
+    if manager is None:
+        manager = AccountManager()
+
+    problems = 0
+    switcher = getattr(manager, "_switcher", None)
+    switcher_wired = switcher is not None
+    switcher_phase = (
+        getattr(getattr(switcher, "phase", None), "value", "unknown")
+        if switcher_wired
+        else "unavailable"
+    )
+    switcher_busy = getattr(switcher, "busy", False) if switcher_wired else False
+    if not switcher_wired:
+        problems += 1
+
+    session = RiotSession(getattr(manager, "riot_client", None))
+    running = session.client_running()
+    if not running:
+        problems += 1
+
+    connected = session.connect()
+    if running and not connected:
+        problems += 1
+
+    signed_in = False
+    current = ""
+    if connected:
+        signed_in = session.is_signed_in()
+        if signed_in:
+            current = session.current_login_name() or ""
+
+    raw_accounts = manager.get_accounts() or []
+    accounts_report: List[Dict[str, Any]] = []
+    default_idx = manager.get_default_account_index()
+
+    for i, acct in enumerate(raw_accounts):
+        label = acct.get("label") or acct.get("username") or "?"
+        username = acct.get("username") or ""
+        has_pw = False
+        try:
+            has_pw = bool(manager.get_password(i))
+        except Exception:
+            has_pw = False
+
+        is_active = bool(username and current and username.lower() == current.lower())
+        is_default = i == default_idx
+        if not username or not has_pw:
+            problems += 1
+
+        accounts_report.append({
+            "index": i,
+            "label": label,
+            "username": username,
+            "has_password": has_pw,
+            "is_active": is_active,
+            "is_default": is_default,
+        })
+
+    return {
+        "status": "HEALTHY" if problems == 0 else "ATTENTION_REQUIRED",
+        "problems_count": problems,
+        "account_manager_wired": True,
+        "switcher_wired": switcher_wired,
+        "switcher_phase": switcher_phase,
+        "switcher_busy": switcher_busy,
+        "riot_client_running": running,
+        "api_reachable": connected,
+        "signed_in": signed_in,
+        "current_user": current,
+        "accounts_count": len(raw_accounts),
+        "accounts": accounts_report,
+    }
+
+
+def preflight(as_json: bool = False, manager: Optional[Any] = None) -> int:
+    from services.account_manager import AccountManager
+    from services.accounts import RiotSession
+
+    if as_json:
+        res = run_account_preflight(manager=manager)
+        print(json.dumps(res, indent=2))
+        return 0 if res["problems_count"] == 0 else 1
 
     problems = 0
 
@@ -46,7 +144,8 @@ def preflight() -> int:
 
     # --- 1. manager + switcher -------------------------------------------
     print("[1] Account manager")
-    manager = AccountManager()
+    if manager is None:
+        manager = AccountManager()
     line(OK, "AccountManager constructed")
 
     switcher = getattr(manager, "_switcher", None)
@@ -341,7 +440,7 @@ def do_round_trip() -> int:
     return rc
 
 
-def main() -> int:
+def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--switch", type=int, metavar="INDEX",
                         help="Actually switch to this account index (destructive)")
@@ -349,7 +448,9 @@ def main() -> int:
                         help="Actually sign out (destructive)")
     parser.add_argument("--round-trip", action="store_true",
                         help="Sign out and back into the same account (live)")
-    args = parser.parse_args()
+    parser.add_argument("--json", action="store_true",
+                        help="Output preflight report as structured JSON")
+    args = parser.parse_args(argv)
 
     if args.switch is not None:
         return do_switch(args.switch)
@@ -357,7 +458,7 @@ def main() -> int:
         return do_sign_out()
     if args.round_trip:
         return do_round_trip()
-    return preflight()
+    return preflight(as_json=args.json)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ from tools.autonomous_improvement_runner import (
     measure_codebase_metrics,
     run_diagnostics_check,
     run_version_alignment_check,
+    run_accounts_check,
     run_entropy_check,
     run_tests_check,
     update_memory_state,
@@ -40,6 +41,14 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         res = run_version_alignment_check()
         self.assertTrue(res["aligned"])
         self.assertEqual(res["message"], "Versions aligned")
+
+    @patch("tools.check_accounts.run_account_preflight")
+    def test_run_accounts_check(self, mock_accts):
+        mock_accts.return_value = {"status": "HEALTHY", "problems_count": 0, "accounts_count": 4}
+        res = run_accounts_check()
+        self.assertEqual(res["status"], "HEALTHY")
+        self.assertEqual(res["problems_count"], 0)
+        self.assertEqual(res["accounts_count"], 4)
 
     @patch("tools.code_entropy_analyzer.get_top_entropy_files")
     @patch("tools.code_entropy_analyzer.run_entropy_summary")

@@ -91,6 +91,15 @@ def run_version_alignment_check() -> Dict[str, Any]:
             return {"aligned": False, "message": str(e)}
 
 
+def run_accounts_check() -> Dict[str, Any]:
+    """Runs non-destructive account switching preflight inspection via tools.check_accounts."""
+    try:
+        from tools.check_accounts import run_account_preflight
+        return run_account_preflight()
+    except Exception as e:
+        return {"status": "ERROR", "error": str(e), "problems_count": 1}
+
+
 def run_entropy_check(top_n: int = 5) -> Dict[str, Any]:
     """Runs static code entropy & quality audit via tools.code_entropy_analyzer."""
     try:
@@ -450,6 +459,7 @@ def run_loop(
 
     diag = run_diagnostics_check()
     ver_check = run_version_alignment_check()
+    accts_check = run_accounts_check()
     metrics = measure_codebase_metrics(PROJECT_ROOT)
     entropy = run_entropy_check()
     tests = run_tests_check(run_all=all_tests, targets=targets, staged=staged)
@@ -575,6 +585,11 @@ def run_loop(
             "description": "Validating that src/core/version.py and installer.iss (AppVersion and VersionInfoVersion) are strictly aligned during pre-build verification (tools.build_validator) prevents shipping misaligned or unversioned installer binaries.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Non-Destructive Account Switching Preflight Diagnostics",
+            "description": "Exposing structured JSON preflight checks for Riot Client status, local API reachability, token validity, and saved password existence in tools.check_accounts allows automated tooling to verify account switching readiness without triggering credential lockouts or client sign-outs.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
@@ -670,6 +685,14 @@ def run_loop(
                 "Execute python tools/build_validator.py to perform full pre-build test validation and telemetry recording.",
             ],
         },
+        {
+            "method": "Account Switching Preflight Verification",
+            "procedure": [
+                "Execute python tools/check_accounts.py --json to inspect client process, API connectivity, and stored account credentials.",
+                "Verify problems_count == 0 before triggering live account switches or test sign-outs.",
+                "Review active user vs default account index to avoid redundant or conflicting switch requests.",
+            ],
+        },
     ]
 
     top_files = entropy.get("top_files", [])
@@ -723,6 +746,7 @@ def run_loop(
         "loop_number": loop_num,
         "diagnostics": diag,
         "version_alignment": ver_check,
+        "accounts_preflight": accts_check,
         "entropy": entropy,
         "metrics": metrics,
         "tests": tests,
@@ -796,6 +820,9 @@ def main(argv=None):
     ver_info = result.get("version_alignment", {})
     ver_stat = "[ALIGNED]" if ver_info.get("aligned") else "[MISALIGNED]"
     print(f"Version Alignment: {ver_stat} ({ver_info.get('message', 'N/A')})")
+    acct_info = result.get("accounts_preflight", {})
+    acct_stat = f"[{acct_info.get('status', 'UNKNOWN')}]"
+    print(f"Accounts Preflight: {acct_stat} ({acct_info.get('accounts_count', 0)} accounts, problems={acct_info.get('problems_count', 0)})")
     session_an = result["diagnostics"].get("session_analysis", {})
     stab = session_an.get("stability", {})
     if stab:
