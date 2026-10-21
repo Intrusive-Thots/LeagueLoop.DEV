@@ -500,3 +500,33 @@ def test_entropy_analyzer_default_path_invariants():
     assert len(top) == 3
     assert all("entropy_score" in item for item in top)
 
+
+def test_build_validator_health_and_telemetry_cli_invariants():
+    """BUILD-001: Ensure build_validator supports --health/--preflight and --telemetry CLI flags without running full pytest suite."""
+    from tools.build_validator import main as validator_main, verify_system_wide_health, get_build_validation_telemetry
+    from unittest.mock import patch
+
+    health = verify_system_wide_health()
+    assert health["status"] in ("HEALTHY", "DEGRADED", "UNHEALTHY")
+    assert "version_aligned" in health
+    assert "files_ok" in health
+    assert "test_environment_ok" in health
+    assert health["duration_ms"] < 200.0
+
+    telemetry = get_build_validation_telemetry()
+    assert "validation_cycles_count" in telemetry
+    assert "health_status" in telemetry
+
+    with patch("sys.stdout"):
+        with pytest.raises(SystemExit) as exc_health:
+            validator_main(["--health", "--json"])
+        assert exc_health.value.code == 0
+
+        with pytest.raises(SystemExit) as exc_preflight:
+            validator_main(["--preflight"])
+        assert exc_preflight.value.code == 0
+
+        with pytest.raises(SystemExit) as exc_tel:
+            validator_main(["--telemetry", "--json"])
+        assert exc_tel.value.code == 0
+

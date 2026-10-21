@@ -142,6 +142,19 @@ class TestBuildValidatorComprehensive(unittest.TestCase):
         main(["--skip-tests", "--json"])
         mock_exit.assert_called_with(0)
 
+    @patch("sys.exit")
+    @patch("tools.build_validator.PROJECT_ROOT")
+    def test_main_cli_health(self, mock_project_root, mock_exit):
+        mock_project_root.__truediv__.side_effect = self.root.__truediv__
+        main(["--health", "--json"])
+        mock_exit.assert_called_with(0)
+
+    @patch("sys.exit")
+    @patch("tools.build_validator.PROJECT_ROOT")
+    def test_main_cli_telemetry(self, mock_project_root, mock_exit):
+        main(["--telemetry", "--json"])
+        mock_exit.assert_called_with(0)
+
 
 if __name__ == "__main__":
     unittest.main()

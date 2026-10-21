@@ -8,6 +8,7 @@ from tools.autonomous_improvement_runner import (
     run_diagnostics_check,
     run_version_alignment_check,
     run_build_assets_check,
+    run_build_health_check,
     run_accounts_check,
     run_silent_excepts_check,
     run_entropy_check,
@@ -55,6 +56,13 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         res_fail = run_build_assets_check()
         self.assertFalse(res_fail["ready"])
         self.assertIn("Missing", res_fail["message"])
+
+    @patch("tools.build_validator.verify_system_wide_health")
+    def test_run_build_health_check(self, mock_health):
+        mock_health.return_value = {"status": "HEALTHY", "version": "2-10-289-1636", "duration_ms": 3.5}
+        health = run_build_health_check()
+        self.assertEqual(health["status"], "HEALTHY")
+        self.assertEqual(health["version"], "2-10-289-1636")
 
     @patch("tools.check_accounts.run_account_preflight")
     def test_run_accounts_check(self, mock_accts):

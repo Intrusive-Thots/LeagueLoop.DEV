@@ -101,6 +101,15 @@ def run_build_assets_check() -> Dict[str, Any]:
         return {"ready": False, "message": str(e)}
 
 
+def run_build_health_check() -> Dict[str, Any]:
+    """Validates system-wide health and build environment readiness via tools.build_validator."""
+    try:
+        from tools.build_validator import verify_system_wide_health
+        return verify_system_wide_health(PROJECT_ROOT)
+    except Exception as e:
+        return {"status": "ERROR", "error": str(e)}
+
+
 def run_accounts_check() -> Dict[str, Any]:
     """Runs non-destructive account switching preflight inspection via tools.check_accounts."""
     try:
@@ -496,6 +505,7 @@ def run_loop(
     diag = run_diagnostics_check()
     ver_check = run_version_alignment_check()
     assets_check = run_build_assets_check()
+    build_health = run_build_health_check()
     accts_check = run_accounts_check()
     silent_check = run_silent_excepts_check()
     metrics = measure_codebase_metrics(PROJECT_ROOT)
@@ -663,9 +673,22 @@ def run_loop(
             "description": "Adding explicit --summary and introspection handling in fast_test_runner prevents tool flags from being inadvertently passed down to pytest as unrecognized arguments, enabling instantaneous test graph summaries without process failures.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Fast Build System Health and Telemetry Preflight Invariant",
+            "description": "Adding non-destructive --health and --telemetry CLI switches to build_validator allows autonomous runners and CI to verify environment readiness, spec file presence, and version alignment in <5ms without triggering lengthy test cycles.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
+        {
+            "method": "Fast Build System Verification Protocol",
+            "procedure": [
+                "Run python tools/build_validator.py --health --json to inspect version alignment and asset integrity in <5ms.",
+                "Run python tools/build_validator.py --telemetry to inspect cycle pass rates.",
+                "Run full build validation cycle only prior to release packaging.",
+            ],
+        },
         {
             "method": "Autonomous Improvement Loop Execution",
             "procedure": [
@@ -826,6 +849,7 @@ def run_loop(
         "Verified runtime logs (error.log, crash.log, session.jsonl, debug.log) & debug screenshots via leagueloop_diagnostics (healthy status confirmed).",
         f"Version alignment protocol: {'[ALIGNED]' if ver_check.get('aligned') else '[MISALIGNED]'} ({ver_check.get('message')}).",
         f"Build assets readiness: {'[READY]' if assets_check.get('ready') else '[MISSING]'} ({assets_check.get('message')}).",
+        f"Build health preflight: [{build_health.get('status', 'UNKNOWN')}] (version={build_health.get('version', 'N/A')}, duration={build_health.get('duration_ms', 0)}ms).",
         f"Account switching preflight: [{accts_check.get('status', 'UNKNOWN')}] ({accts_check.get('accounts_count', 0)} accounts, {accts_check.get('usable_sessions_count', 0)} usable sessions, problems={accts_check.get('problems_count', 0)}).",
         f"Swallowed exceptions audit: [{silent_check.get('status', 'UNKNOWN')}] ({silent_check.get('silent_handlers_count', 0)} swallowed exceptions across {silent_check.get('files_audited', 0)} files audited).",
         f"Executed code entropy audit: status={entropy.get('status')}, avg_entropy={entropy.get('avg_entropy', 0)}, bare_excepts={entropy.get('bare_excepts_total', 0)}, top_offender={top_offender}.",
@@ -874,6 +898,7 @@ def run_loop(
         "diagnostics": diag,
         "version_alignment": ver_check,
         "build_assets": assets_check,
+        "build_health": build_health,
         "accounts_preflight": accts_check,
         "silent_excepts": silent_check,
         "entropy": entropy,
@@ -952,6 +977,9 @@ def main(argv=None):
     assets_info = result.get("build_assets", {})
     assets_stat = "[READY]" if assets_info.get("ready") else "[MISSING]"
     print(f"Build Assets: {assets_stat} ({assets_info.get('message', 'N/A')})")
+    bh_info = result.get("build_health", {})
+    bh_stat = f"[{bh_info.get('status', 'UNKNOWN')}]"
+    print(f"Build Health Preflight: {bh_stat} (version={bh_info.get('version', 'N/A')}, check_duration={bh_info.get('duration_ms', 0)}ms)")
     acct_info = result.get("accounts_preflight", {})
     acct_stat = f"[{acct_info.get('status', 'UNKNOWN')}]"
     usable_sess = acct_info.get("usable_sessions_count")

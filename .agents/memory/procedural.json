@@ -167,5 +167,13 @@
       "Ensure run_entropy_summary() and get_top_entropy_files() without arguments audit all 94 files in src/ from any working directory.",
       "Propagate TCL_LIBRARY and TK_LIBRARY in runner subprocess environments to guarantee full GUI test suite pass rate without skips."
     ]
+  },
+  {
+    "method": "Fast Build System Verification Protocol",
+    "procedure": [
+      "Run python tools/build_validator.py --health --json to inspect version alignment and asset integrity in <5ms.",
+      "Run python tools/build_validator.py --telemetry to inspect cycle pass rates.",
+      "Run full build validation cycle only prior to release packaging."
+    ]
   }
 ]

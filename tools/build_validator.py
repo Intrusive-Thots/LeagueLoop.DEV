@@ -11,7 +11,7 @@ import json
 import argparse
 import threading
 from pathlib import Path
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, Union
 
 # Force UTF-8 encoding on stdout for Windows compatibility
 if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
@@ -35,8 +35,9 @@ _validation_telemetry: Dict[str, Any] = {
 }
 
 
-def validate_version(project_root: Path) -> str:
-    version_file = project_root / "src" / "core" / "version.py"
+def validate_version(project_root: Union[str, Path]) -> str:
+    root_path = Path(project_root) if isinstance(project_root, str) else project_root
+    version_file = root_path / "src" / "core" / "version.py"
     if not version_file.exists():
         raise FileNotFoundError(f"Version file missing at {version_file}")
     
@@ -50,15 +51,16 @@ def validate_version(project_root: Path) -> str:
     return version_str
 
 
-def validate_version_alignment(project_root: Path) -> Tuple[bool, str]:
+def validate_version_alignment(project_root: Union[str, Path]) -> Tuple[bool, str]:
     """Validates that src/core/version.py and installer.iss are strictly aligned."""
-    if str(project_root) not in sys.path:
-        sys.path.insert(0, str(project_root))
+    root_path = Path(project_root) if isinstance(project_root, str) else project_root
+    if str(root_path) not in sys.path:
+        sys.path.insert(0, str(root_path))
 
-    version_file = project_root / "src" / "core" / "version.py"
-    iss_file = project_root / "installer.iss"
+    version_file = root_path / "src" / "core" / "version.py"
+    iss_file = root_path / "installer.iss"
     if not iss_file.exists():
-        iss_file = project_root / "build_scripts" / "installer.iss"
+        iss_file = root_path / "build_scripts" / "installer.iss"
 
     try:
         from tools.bump_version import check_version_alignment
@@ -74,11 +76,12 @@ def validate_version_alignment(project_root: Path) -> Tuple[bool, str]:
         return False, msg
 
 
-def validate_test_suite(project_root: Path) -> bool:
+def validate_test_suite(project_root: Union[str, Path]) -> bool:
+    root_path = Path(project_root) if isinstance(project_root, str) else project_root
     print("Executing pre-build test validation suite...")
     os.environ["HEADLESS"] = "1"
     os.environ["PYTHONUNBUFFERED"] = "1"
-    src_dir = str(project_root / "src")
+    src_dir = str(root_path / "src")
     if src_dir not in sys.path:
         sys.path.insert(0, src_dir)
 
@@ -88,7 +91,7 @@ def validate_test_suite(project_root: Path) -> bool:
             "-q",
             "--disable-warnings",
             "--no-cov",
-            str(project_root / "tests")
+            str(root_path / "tests")
         ])
         if ret_code != 0:
             print(f"[FAIL] Test suite validation failed with exit code {ret_code}.")
@@ -100,20 +103,21 @@ def validate_test_suite(project_root: Path) -> bool:
         return False
 
 
-def validate_files(project_root: Path) -> bool:
-    spec_path = project_root / "LeagueLoop.spec"
+def validate_files(project_root: Union[str, Path]) -> bool:
+    root_path = Path(project_root) if isinstance(project_root, str) else project_root
+    spec_path = root_path / "LeagueLoop.spec"
     if not spec_path.exists():
-        spec_path = project_root / "build_scripts" / "LeagueLoop.spec"
+        spec_path = root_path / "build_scripts" / "LeagueLoop.spec"
 
-    iss_path = project_root / "installer.iss"
+    iss_path = root_path / "installer.iss"
     if not iss_path.exists():
-        iss_path = project_root / "build_scripts" / "installer.iss"
+        iss_path = root_path / "build_scripts" / "installer.iss"
 
     required_paths = [
         spec_path,
         iss_path,
-        project_root / "src" / "ui" / "theme" / "design_tokens.json",
-        project_root / "assets" / "app.ico",
+        root_path / "src" / "ui" / "theme" / "design_tokens.json",
+        root_path / "assets" / "app.ico",
     ]
     missing = [str(p) for p in required_paths if not p.exists()]
     if missing:
@@ -123,10 +127,12 @@ def validate_files(project_root: Path) -> bool:
     return True
 
 
-def verify_system_wide_health(project_root: Optional[Path] = None) -> Dict[str, Any]:
+def verify_system_wide_health(project_root: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
     """Task 300: Verify continuous system-wide health and build environment readiness."""
     if project_root is None:
         project_root = PROJECT_ROOT
+    elif isinstance(project_root, str):
+        project_root = Path(project_root)
 
     t_start = time.perf_counter()
     health_status = "HEALTHY"
@@ -177,10 +183,12 @@ def get_build_validation_telemetry() -> Dict[str, Any]:
         return data
 
 
-def run_full_validation_cycle(project_root: Optional[Path] = None, skip_tests: bool = False) -> Dict[str, Any]:
+def run_full_validation_cycle(project_root: Optional[Union[str, Path]] = None, skip_tests: bool = False) -> Dict[str, Any]:
     """Task 300: Executes a full build validation cycle, updating global telemetry and readiness state."""
     if project_root is None:
         project_root = PROJECT_ROOT
+    elif isinstance(project_root, str):
+        project_root = Path(project_root)
 
     t_start = time.perf_counter()
     ver = ""
@@ -235,10 +243,34 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="LeagueLoop Build Pipeline Pre-Flight Verification")
     parser.add_argument("--skip-tests", action="store_true", help="Skip running pytest suite")
     parser.add_argument("--alignment-only", action="store_true", help="Only validate version and alignment")
+    parser.add_argument("--health", "--preflight", action="store_true", help="Run fast system-wide health and build environment preflight without running tests")
+    parser.add_argument("--telemetry", action="store_true", help="Output build validation telemetry metrics")
     parser.add_argument("--json", action="store_true", help="Output results in JSON format")
     args = parser.parse_args(argv)
 
     root = PROJECT_ROOT
+
+    if args.health:
+        res = verify_system_wide_health(root)
+        if args.json:
+            print(json.dumps(res, indent=2))
+        else:
+            status_tag = f"[{res['status']}]"
+            print(f"Build System Health: {status_tag} (Version: {res.get('version', 'N/A')}, Duration: {res.get('duration_ms', 0)}ms)")
+            if res.get("errors"):
+                for err in res["errors"]:
+                    print(f"  - {err}")
+        sys.exit(0 if res["status"] == "HEALTHY" else 1)
+        return
+
+    if args.telemetry:
+        tel = get_build_validation_telemetry()
+        if args.json:
+            print(json.dumps(tel, indent=2))
+        else:
+            print(f"Build Telemetry: cycles={tel.get('validation_cycles_count', 0)}, pass_rate={tel.get('pass_rate_pct', 0.0)}%, health={tel.get('health_status', 'UNKNOWN')}")
+        sys.exit(0)
+        return
 
     if args.alignment_only:
         ok, msg = validate_version_alignment(root)
