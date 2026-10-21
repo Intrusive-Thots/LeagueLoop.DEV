@@ -1,12 +1,12 @@
 {
-  "run_number": 187,
-  "last_run": "2026-10-17T09:35:59.016178+00:00",
+  "run_number": 188,
+  "last_run": "2026-10-21T01:49:01.918732+00:00",
   "test_baseline": {
     "passed": 1004,
     "failed": 0,
     "skipped": 0,
     "warnings": 0,
-    "last_targeted_passed": 0,
+    "last_targeted_passed": 93,
     "errors": 0
   },
   "index_baseline": {
@@ -34,10 +34,10 @@
     "bare_excepts": 0
   },
   "storage_baseline": {
-    "status": "ELEVATED",
-    "total_mb": 101.8,
-    "logs_mb": 17.0,
-    "screenshots_mb": 84.8,
+    "status": "OPTIMAL",
+    "total_mb": 99.24,
+    "logs_mb": 21.12,
+    "screenshots_mb": 78.12,
     "warnings_count": 0
   }
 }
