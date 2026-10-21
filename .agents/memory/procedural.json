@@ -127,5 +127,13 @@
       "Ensure build_validator.validate_files passes before attempting pyinstaller or InnoSetup compilation.",
       "Verify build asset readiness surfaces in autonomous improvement loop telemetry."
     ]
+  },
+  {
+    "method": "Account Switcher Preflight Telemetry Integration",
+    "procedure": [
+      "Execute tools.check_accounts.run_account_preflight() to capture account count, usable sessions, and problem counts.",
+      "Incorporate account preflight status into action_details and summary_str in autonomous_improvement_runner.",
+      "Verify accounts_preflight is returned in loop result payload for external telemetry and CI assertions."
+    ]
   }
 ]

@@ -616,6 +616,11 @@ def run_loop(
             "description": "Integrating validate_files into the autonomous improvement runner guarantees all packaging prerequisites (LeagueLoop.spec, installer.iss, theme design tokens, and application icons) are intact before release or test baseline updates.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Account Switcher Preflight Invariant in Improvement Loop",
+            "description": "Integrating check_accounts preflight telemetry into autonomous_improvement_runner action details and loop summaries ensures multi-account vault readiness and account switching state are perpetually audited across baseline snapshots.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
@@ -735,6 +740,14 @@ def run_loop(
                 "Verify build asset readiness surfaces in autonomous improvement loop telemetry.",
             ],
         },
+        {
+            "method": "Account Switcher Preflight Telemetry Integration",
+            "procedure": [
+                "Execute tools.check_accounts.run_account_preflight() to capture account count, usable sessions, and problem counts.",
+                "Incorporate account preflight status into action_details and summary_str in autonomous_improvement_runner.",
+                "Verify accounts_preflight is returned in loop result payload for external telemetry and CI assertions.",
+            ],
+        },
     ]
 
     top_files = entropy.get("top_files", [])
@@ -747,6 +760,7 @@ def run_loop(
         "Verified runtime logs (error.log, crash.log, session.jsonl, debug.log) & debug screenshots via leagueloop_diagnostics (healthy status confirmed).",
         f"Version alignment protocol: {'[ALIGNED]' if ver_check.get('aligned') else '[MISALIGNED]'} ({ver_check.get('message')}).",
         f"Build assets readiness: {'[READY]' if assets_check.get('ready') else '[MISSING]'} ({assets_check.get('message')}).",
+        f"Account switching preflight: [{accts_check.get('status', 'UNKNOWN')}] ({accts_check.get('accounts_count', 0)} accounts, {accts_check.get('usable_sessions_count', 0)} usable sessions, problems={accts_check.get('problems_count', 0)}).",
         f"Executed code entropy audit: status={entropy.get('status')}, avg_entropy={entropy.get('avg_entropy', 0)}, bare_excepts={entropy.get('bare_excepts_total', 0)}, top_offender={top_offender}.",
         f"Executed test runner (duration={tests.get('duration_seconds')}s, passed={tests.get('passed')}, failed={tests.get('failed')}{err_tag}).",
         f"Indexed codebase metrics ({metrics.get('total_py_files')} python files, {metrics.get('total_py_lines')} lines; test-to-code ratio: {metrics.get('test_to_code_ratio', 0.0)}).",
@@ -777,6 +791,7 @@ def run_loop(
         f"Diagnostics: {diag_status_str}. "
         f"Test baseline: [{test_mode_str}] {tests.get('passed')} passed, {tests.get('failed', 0)} failed ({tests.get('skipped', 0)} skipped) in {tests.get('duration_seconds', 0)}s. "
         f"Codebase metrics: {metrics.get('total_py_files')} files ({metrics.get('total_py_lines')} lines). "
+        f"Accounts: {accts_check.get('status', 'UNKNOWN')} ({accts_check.get('usable_sessions_count', 0)}/{accts_check.get('accounts_count', 0)} usable). "
         f"Storage: {storage_an.get('total_mb', 0.0)}MB ({storage_an.get('status', 'OPTIMAL')}). "
         f"Entropy: {entropy_status_str} (avg={entropy.get('avg_entropy', 0.0)}). "
         "Baseline synchronized to loop_state.json and episodic.json."
