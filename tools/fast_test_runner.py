@@ -235,9 +235,17 @@ def run_tests(targets: List[str], extra_args: List[str] = None) -> int:
     if targets:
         cmd.extend(targets)
 
+    env = os.environ.copy()
+    base_tcl = os.path.join(sys.base_prefix, "tcl", "tcl8.6")
+    base_tk = os.path.join(sys.base_prefix, "tcl", "tk8.6")
+    if os.path.exists(base_tcl):
+        env["TCL_LIBRARY"] = base_tcl
+    if os.path.exists(base_tk):
+        env["TK_LIBRARY"] = base_tk
+
     print(f"Executing: {' '.join(cmd)}")
     start = time.perf_counter()
-    res = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
+    res = subprocess.run(cmd, cwd=str(PROJECT_ROOT), env=env)
     duration = time.perf_counter() - start
     print(f"\nExecution finished in {duration:.2f}s (Exit code: {res.returncode})")
     return res.returncode

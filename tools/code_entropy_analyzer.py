@@ -12,7 +12,7 @@ import ast
 import json
 import argparse
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional, Union
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -58,9 +58,10 @@ class PythonEntropyAuditor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-def analyze_python_file(filepath: str) -> Dict[str, Any]:
+def analyze_python_file(filepath: Union[str, Path]) -> Dict[str, Any]:
+    file_str = str(filepath)
     try:
-        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+        with open(file_str, "r", encoding="utf-8", errors="ignore") as f:
             code = f.read()
 
         tree = ast.parse(code)
@@ -76,7 +77,7 @@ def analyze_python_file(filepath: str) -> Dict[str, Any]:
         entropy_score = (auditor.complexity * 2) + (len(auditor.bare_excepts) * 10) + (len(auditor.large_functions) * 5)
 
         return {
-            "file": filepath,
+            "file": file_str,
             "loc": loc,
             "code_lines": loc - empty_lines - comment_lines,
             "comment_lines": comment_lines,
@@ -89,12 +90,28 @@ def analyze_python_file(filepath: str) -> Dict[str, Any]:
             "status": "PASS" if entropy_score < 30 else "WARN" if entropy_score < 60 else "FAIL",
         }
     except Exception as e:
-        return {"file": filepath, "error": str(e), "status": "ERROR"}
+        return {"file": file_str, "error": str(e), "status": "ERROR"}
 
 
-def analyze_directory(target_dir: str) -> List[Dict[str, Any]]:
+DEFAULT_SRC = PROJECT_ROOT / "src"
+
+
+def _resolve_target_dir(target_dir: Optional[Union[str, Path]] = None) -> str:
+    """Resolves target directory, prioritizing PROJECT_ROOT / 'src' on defaults."""
+    if target_dir is None or target_dir == "src" or target_dir == Path("src"):
+        return str(DEFAULT_SRC if DEFAULT_SRC.exists() else "src")
+    p = Path(target_dir)
+    if not p.is_absolute():
+        repo_candidate = PROJECT_ROOT / p
+        if repo_candidate.exists():
+            return str(repo_candidate)
+    return str(target_dir)
+
+
+def analyze_directory(target_dir: Union[str, Path]) -> List[Dict[str, Any]]:
     results = []
-    for root, _, files in os.walk(target_dir):
+    target_str = str(target_dir)
+    for root, _, files in os.walk(target_str):
         if any(ignored in root for ignored in [".git", "__pycache__", "node_modules", ".venv", "snapshots"]):
             continue
         for file in files:
@@ -104,11 +121,9 @@ def analyze_directory(target_dir: str) -> List[Dict[str, Any]]:
     return results
 
 
-def run_entropy_summary(target_dir: str = "src") -> Dict[str, Any]:
+def run_entropy_summary(target_dir: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
     """Computes an aggregate entropy summary for a target directory."""
-    path = target_dir
-    if not os.path.exists(path) and (PROJECT_ROOT / path).exists():
-        path = str(PROJECT_ROOT / path)
+    path = _resolve_target_dir(target_dir)
     results = analyze_directory(path)
     total_files = len(results)
     if total_files == 0:
@@ -130,11 +145,9 @@ def run_entropy_summary(target_dir: str = "src") -> Dict[str, Any]:
     }
 
 
-def get_top_entropy_files(target_dir: str = "src", top_n: int = 5) -> List[Dict[str, Any]]:
+def get_top_entropy_files(target_dir: Optional[Union[str, Path]] = None, top_n: int = 5) -> List[Dict[str, Any]]:
     """Retrieves top N files sorted by entropy descending."""
-    path = target_dir
-    if not os.path.exists(path) and (PROJECT_ROOT / path).exists():
-        path = str(PROJECT_ROOT / path)
+    path = _resolve_target_dir(target_dir)
     results = analyze_directory(path) if os.path.isdir(path) else [analyze_python_file(path)]
     sorted_res = sorted(results, key=lambda x: x.get("entropy_score", 0), reverse=True)
     return sorted_res[:top_n]
@@ -159,18 +172,19 @@ def main(argv=None):
         else:
             targets.append(str(args.pos_target))
     if not targets:
-        targets = ["src"]
-
-    resolved_targets: List[str] = []
-    for tp in targets:
-        if os.path.exists(tp):
-            resolved_targets.append(tp)
-        elif (PROJECT_ROOT / tp).exists():
-            resolved_targets.append(str(PROJECT_ROOT / tp))
-        else:
-            print(f"Error: Target path '{tp}' does not exist.", file=sys.stderr)
-            sys.exit(1)
-    targets = resolved_targets
+        targets = [str(DEFAULT_SRC if DEFAULT_SRC.exists() else "src")]
+    else:
+        resolved_targets: List[str] = []
+        for tp in targets:
+            tp_path = Path(tp)
+            if not tp_path.is_absolute() and (PROJECT_ROOT / tp_path).exists():
+                resolved_targets.append(str(PROJECT_ROOT / tp_path))
+            elif os.path.exists(tp):
+                resolved_targets.append(tp)
+            else:
+                print(f"Error: Target path '{tp}' does not exist.", file=sys.stderr)
+                sys.exit(1)
+        targets = resolved_targets
 
     if args.summary:
         all_results = []

@@ -159,5 +159,13 @@
       "Execute python tools/fast_test_runner.py --graph to inspect full module-to-test mapping.",
       "Ensure introspection flags terminate with exit code 0 and never pass unrecognized arguments to pytest."
     ]
+  },
+  {
+    "method": "Working-Directory Agnostic Code Entropy Inspection Protocol",
+    "procedure": [
+      "Always resolve default entropy targets against PROJECT_ROOT / 'src' before checking relative cwd.",
+      "Ensure run_entropy_summary() and get_top_entropy_files() without arguments audit all 94 files in src/ from any working directory.",
+      "Propagate TCL_LIBRARY and TK_LIBRARY in runner subprocess environments to guarantee full GUI test suite pass rate without skips."
+    ]
   }
 ]

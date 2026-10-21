@@ -487,3 +487,16 @@ def test_fast_runner_summary_and_graph_invariants():
         with pytest.raises(SystemExit) as exc_graph:
             runner_main(["--graph"])
         assert exc_graph.value.code == 0
+
+
+def test_entropy_analyzer_default_path_invariants():
+    """ENTROPY-001: Ensure run_entropy_summary() and get_top_entropy_files() default to project src and audit all files."""
+    from tools.code_entropy_analyzer import run_entropy_summary, get_top_entropy_files
+    res = run_entropy_summary()
+    assert res["status"] in ("PASS", "WARN", "FAIL")
+    assert res["total_files"] >= 90, f"Expected >= 90 audited files in src/, got {res['total_files']}"
+
+    top = get_top_entropy_files(top_n=3)
+    assert len(top) == 3
+    assert all("entropy_score" in item for item in top)
+

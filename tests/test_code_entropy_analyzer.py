@@ -150,10 +150,37 @@ class TestCodeEntropyAnalyzer(unittest.TestCase):
         top = get_top_entropy_files("src", top_n=2)
         self.assertGreater(len(top), 0)
 
-        with patch("sys.stdout") as mock_stdout:
-            with self.assertRaises(SystemExit) as cm:
-                main(["--summary"])
-            self.assertEqual(cm.exception.code, 0)
+        # Test None defaults
+        summary_none = run_entropy_summary(None)
+        self.assertEqual(summary_none["total_files"], summary["total_files"])
+
+        top_none = get_top_entropy_files(None, top_n=2)
+        self.assertEqual(len(top_none), len(top))
+
+        # Test Path object support
+        summary_path = run_entropy_summary(Path("src"))
+        self.assertEqual(summary_path["total_files"], summary["total_files"])
+
+        # Test working-directory invariance when cwd has a dummy src/ folder
+        dummy_foreign_dir = self.base / "foreign"
+        dummy_foreign_dir.mkdir(parents=True, exist_ok=True)
+        dummy_foreign_src = dummy_foreign_dir / "src"
+        dummy_foreign_src.mkdir(parents=True, exist_ok=True)
+        (dummy_foreign_src / "dummy.py").write_text("x = 1\n", encoding="utf-8")
+
+        cwd_orig = os.getcwd()
+        try:
+            os.chdir(str(dummy_foreign_dir))
+            summary_foreign = run_entropy_summary("src")
+            # Must resolve to project src (>= 90 files), not dummy_foreign_src (1 file)
+            self.assertGreaterEqual(summary_foreign["total_files"], 90)
+
+            with patch("sys.stdout") as mock_stdout:
+                with self.assertRaises(SystemExit) as cm:
+                    main(["--summary"])
+                self.assertEqual(cm.exception.code, 0)
+        finally:
+            os.chdir(cwd_orig)
 
 
 if __name__ == "__main__":
