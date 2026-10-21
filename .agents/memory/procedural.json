@@ -135,5 +135,13 @@
       "Incorporate account preflight status into action_details and summary_str in autonomous_improvement_runner.",
       "Verify accounts_preflight is returned in loop result payload for external telemetry and CI assertions."
     ]
+  },
+  {
+    "method": "Swallowed Exception Static Audit Protocol",
+    "procedure": [
+      "Execute tools.log_silent_excepts.scan_silent_handlers() to audit src/ for swallowed exception patterns.",
+      "Ensure silent_handlers_count == 0 before proceeding with release baseline updates.",
+      "If silent handlers are detected, inspect offending_files and rewrite with Logger.debug using tools/log_silent_excepts.py --write."
+    ]
   }
 ]

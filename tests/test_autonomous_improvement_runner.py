@@ -9,6 +9,7 @@ from tools.autonomous_improvement_runner import (
     run_version_alignment_check,
     run_build_assets_check,
     run_accounts_check,
+    run_silent_excepts_check,
     run_entropy_check,
     run_tests_check,
     update_memory_state,
@@ -62,6 +63,33 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         self.assertEqual(res["status"], "HEALTHY")
         self.assertEqual(res["problems_count"], 0)
         self.assertEqual(res["accounts_count"], 4)
+
+    @patch("tools.log_silent_excepts.scan_silent_handlers")
+    def test_run_silent_excepts_check(self, mock_scan):
+        mock_scan.return_value = {
+            "status": "PASS",
+            "silent_handlers_count": 0,
+            "files_audited": 92,
+            "offending_files": [],
+            "message": "Zero silent exception handlers detected",
+        }
+        res = run_silent_excepts_check()
+        self.assertEqual(res["status"], "PASS")
+        self.assertEqual(res["silent_handlers_count"], 0)
+        self.assertEqual(res["files_audited"], 92)
+
+    @patch("tools.log_silent_excepts.scan_silent_handlers")
+    def test_run_silent_excepts_check_failure(self, mock_scan):
+        mock_scan.return_value = {
+            "status": "FAIL",
+            "silent_handlers_count": 2,
+            "files_audited": 92,
+            "offending_files": [{"file": "src/services/bad.py", "count": 2, "sites": []}],
+            "message": "2 silent handler(s) detected across 1 file(s)",
+        }
+        res = run_silent_excepts_check()
+        self.assertEqual(res["status"], "FAIL")
+        self.assertEqual(res["silent_handlers_count"], 2)
 
     @patch("tools.code_entropy_analyzer.get_top_entropy_files")
     @patch("tools.code_entropy_analyzer.run_entropy_summary")
@@ -259,6 +287,41 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         self.assertIn("HEALTHY", acct_action[0])
         self.assertIn("4 accounts", acct_action[0])
         self.assertIn("2 usable sessions", acct_action[0])
+
+    @patch("tools.autonomous_improvement_runner.run_silent_excepts_check")
+    @patch("tools.autonomous_improvement_runner.run_diagnostics_check")
+    @patch("tools.autonomous_improvement_runner.run_entropy_check")
+    @patch("tools.autonomous_improvement_runner.run_tests_check")
+    @patch("tools.autonomous_improvement_runner.sync_mempalace")
+    def test_run_loop_includes_silent_excepts_action(
+        self, mock_mempalace, mock_tests, mock_entropy, mock_diag, mock_silent
+    ):
+        mock_diag.return_value = {"healthy": True}
+        mock_entropy.return_value = {"status": "PASS", "avg_entropy": 10.0, "bare_excepts_total": 0}
+        mock_tests.return_value = {
+            "exit_code": 0,
+            "success": True,
+            "duration_seconds": 1.0,
+            "passed": 807,
+            "failed": 0,
+            "skipped": 0,
+        }
+        mock_silent.return_value = {
+            "status": "PASS",
+            "silent_handlers_count": 0,
+            "files_audited": 92,
+            "offending_files": [],
+            "message": "Zero silent exception handlers detected",
+        }
+
+        res = run_loop(all_tests=False, dry_run=True)
+        actions = res["memory"]["episodic_entry"]["actions"]
+        silent_action = [a for a in actions if "Swallowed exceptions audit" in a]
+        self.assertEqual(len(silent_action), 1)
+        self.assertIn("PASS", silent_action[0])
+        self.assertIn("0 swallowed exceptions", silent_action[0])
+        self.assertEqual(res["silent_excepts"]["status"], "PASS")
+        self.assertEqual(res["silent_excepts"]["silent_handlers_count"], 0)
 
     @patch("tools.autonomous_improvement_runner.run_loop")
     def test_main_cli(self, mock_run_loop):

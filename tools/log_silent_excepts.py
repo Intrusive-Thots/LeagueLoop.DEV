@@ -13,14 +13,17 @@ just stops them being invisible.
 Usage:
     python tools/log_silent_excepts.py            # report only
     python tools/log_silent_excepts.py --write    # rewrite in place
+    python tools/log_silent_excepts.py --json     # output JSON audit
 """
 from __future__ import annotations
 
 import argparse
 import ast
+import json
 import pathlib
 import re
 import sys
+from typing import Dict, Any, List, Optional, Union
 
 SKIP_FILES = {"logger.py", "session_log.py"}
 
@@ -133,15 +136,77 @@ def rewrite(path: pathlib.Path, tag: str) -> int:
     return len(found)
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--write", action="store_true")
-    parser.add_argument("paths", nargs="*", default=["src"])
-    args = parser.parse_args()
+def scan_silent_handlers(
+    paths: Optional[List[Union[str, pathlib.Path]]] = None,
+    skip_files: Optional[set] = None,
+) -> Dict[str, Any]:
+    """Scans Python files for swallowed exception handlers (`except Exception: pass` or bare `except: pass`)."""
+    if paths is None:
+        paths = ["src"]
+    if skip_files is None:
+        skip_files = SKIP_FILES
+
+    offending_files = []
+    total_handlers = 0
+    total_files_audited = 0
+
+    for root in paths:
+        root_path = pathlib.Path(root)
+        if not root_path.exists():
+            continue
+        if root_path.is_file():
+            py_files = [root_path] if root_path.suffix == ".py" else []
+        else:
+            py_files = sorted(root_path.rglob("*.py"))
+
+        for path in py_files:
+            if path.name in skip_files:
+                continue
+            total_files_audited += 1
+            src, found = sites(path)
+            if found:
+                total_handlers += len(found)
+                offending_files.append({
+                    "file": str(path),
+                    "count": len(found),
+                    "sites": found,
+                })
+
+    status = "PASS" if total_handlers == 0 else "FAIL"
+    msg = (
+        "Zero silent exception handlers detected"
+        if total_handlers == 0
+        else f"{total_handlers} silent handler(s) detected across {len(offending_files)} file(s)"
+    )
+
+    return {
+        "status": status,
+        "silent_handlers_count": total_handlers,
+        "files_audited": total_files_audited,
+        "offending_files": offending_files,
+        "message": msg,
+    }
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    parser = argparse.ArgumentParser(description="Audit and rewrite silent exception handlers")
+    parser.add_argument("--write", action="store_true", help="Rewrite silent pass handlers in-place with Logger.debug")
+    parser.add_argument("--json", action="store_true", help="Output audit results in JSON format")
+    parser.add_argument("paths", nargs="*", default=["src"], help="Target files or directories to audit")
+    args = parser.parse_args(argv)
+
+    if args.json:
+        res = scan_silent_handlers(paths=args.paths)
+        print(json.dumps(res, indent=2))
+        return 0 if res["status"] == "PASS" else 1
 
     total = 0
     for root in args.paths:
-        for path in sorted(pathlib.Path(root).rglob("*.py")):
+        root_path = pathlib.Path(root)
+        if not root_path.exists():
+            continue
+        py_files = [root_path] if root_path.is_file() and root_path.suffix == ".py" else sorted(root_path.rglob("*.py"))
+        for path in py_files:
             if path.name in SKIP_FILES:
                 continue
             src, found = sites(path)

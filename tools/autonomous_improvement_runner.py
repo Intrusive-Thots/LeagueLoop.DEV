@@ -110,6 +110,15 @@ def run_accounts_check() -> Dict[str, Any]:
         return {"status": "ERROR", "error": str(e), "problems_count": 1}
 
 
+def run_silent_excepts_check(paths: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Runs static audit for swallowed exception handlers via tools.log_silent_excepts."""
+    try:
+        from tools.log_silent_excepts import scan_silent_handlers
+        return scan_silent_handlers(paths=paths)
+    except Exception as e:
+        return {"status": "ERROR", "error": str(e), "silent_handlers_count": 0, "files_audited": 0, "offending_files": []}
+
+
 def run_entropy_check(top_n: int = 5) -> Dict[str, Any]:
     """Runs static code entropy & quality audit via tools.code_entropy_analyzer."""
     try:
@@ -198,6 +207,7 @@ def update_memory_state(
     failures: Optional[List[Dict[str, Any]]] = None,
     entropy_results: Optional[Dict[str, Any]] = None,
     storage_results: Optional[Dict[str, Any]] = None,
+    silent_results: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Updates loop_state.json, episodic.json, optimizations.json, semantic.json, procedural.json, and failures.json."""
     MEMORY_DIR.mkdir(parents=True, exist_ok=True)
@@ -215,6 +225,7 @@ def update_memory_state(
         "index_baseline": {"total_files": 0, "total_py_lines": 0},
         "entropy_baseline": {"status": "PASS", "avg_entropy": 0.0, "bare_excepts": 0},
         "storage_baseline": {"status": "OPTIMAL", "total_mb": 0.0, "logs_mb": 0.0, "screenshots_mb": 0.0},
+        "silent_baseline": {"status": "PASS", "silent_handlers_count": 0, "files_audited": 0},
     }
 
     if loop_state_file.exists():
@@ -276,6 +287,11 @@ def update_memory_state(
             "logs_mb": st_info.get("logs", {}).get("total_mb", 0.0) if isinstance(st_info.get("logs"), dict) else 0.0,
             "screenshots_mb": st_info.get("screenshots", {}).get("total_mb", 0.0) if isinstance(st_info.get("screenshots"), dict) else 0.0,
             "warnings_count": len(st_info.get("warnings", [])),
+        },
+        "silent_baseline": {
+            "status": (silent_results or {}).get("status", "PASS"),
+            "silent_handlers_count": (silent_results or {}).get("silent_handlers_count", 0),
+            "files_audited": (silent_results or {}).get("files_audited", 0),
         },
     }
 
@@ -471,6 +487,7 @@ def run_loop(
     ver_check = run_version_alignment_check()
     assets_check = run_build_assets_check()
     accts_check = run_accounts_check()
+    silent_check = run_silent_excepts_check()
     metrics = measure_codebase_metrics(PROJECT_ROOT)
     entropy = run_entropy_check()
     tests = run_tests_check(run_all=all_tests, targets=targets, staged=staged)
@@ -621,6 +638,11 @@ def run_loop(
             "description": "Integrating check_accounts preflight telemetry into autonomous_improvement_runner action details and loop summaries ensures multi-account vault readiness and account switching state are perpetually audited across baseline snapshots.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Zero-Swallowed Exception Static Guard Invariant",
+            "description": "Integrating AST-based static inspection of broad and bare pass handlers (tools.log_silent_excepts) into the autonomous improvement loop guarantees that no component silently swallows unexpected exceptions, preserving traceback observability across client lifecycle phases.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
@@ -748,6 +770,14 @@ def run_loop(
                 "Verify accounts_preflight is returned in loop result payload for external telemetry and CI assertions.",
             ],
         },
+        {
+            "method": "Swallowed Exception Static Audit Protocol",
+            "procedure": [
+                "Execute tools.log_silent_excepts.scan_silent_handlers() to audit src/ for swallowed exception patterns.",
+                "Ensure silent_handlers_count == 0 before proceeding with release baseline updates.",
+                "If silent handlers are detected, inspect offending_files and rewrite with Logger.debug using tools/log_silent_excepts.py --write.",
+            ],
+        },
     ]
 
     top_files = entropy.get("top_files", [])
@@ -761,6 +791,7 @@ def run_loop(
         f"Version alignment protocol: {'[ALIGNED]' if ver_check.get('aligned') else '[MISALIGNED]'} ({ver_check.get('message')}).",
         f"Build assets readiness: {'[READY]' if assets_check.get('ready') else '[MISSING]'} ({assets_check.get('message')}).",
         f"Account switching preflight: [{accts_check.get('status', 'UNKNOWN')}] ({accts_check.get('accounts_count', 0)} accounts, {accts_check.get('usable_sessions_count', 0)} usable sessions, problems={accts_check.get('problems_count', 0)}).",
+        f"Swallowed exceptions audit: [{silent_check.get('status', 'UNKNOWN')}] ({silent_check.get('silent_handlers_count', 0)} swallowed exceptions across {silent_check.get('files_audited', 0)} files audited).",
         f"Executed code entropy audit: status={entropy.get('status')}, avg_entropy={entropy.get('avg_entropy', 0)}, bare_excepts={entropy.get('bare_excepts_total', 0)}, top_offender={top_offender}.",
         f"Executed test runner (duration={tests.get('duration_seconds')}s, passed={tests.get('passed')}, failed={tests.get('failed')}{err_tag}).",
         f"Indexed codebase metrics ({metrics.get('total_py_files')} python files, {metrics.get('total_py_lines')} lines; test-to-code ratio: {metrics.get('test_to_code_ratio', 0.0)}).",
@@ -781,6 +812,7 @@ def run_loop(
         procedural_methods=procedural_methods or default_procedural,
         entropy_results=entropy,
         storage_results=storage_an,
+        silent_results=silent_check,
     )
 
     loop_num = memory_result["new_state"]["run_number"]
@@ -792,6 +824,7 @@ def run_loop(
         f"Test baseline: [{test_mode_str}] {tests.get('passed')} passed, {tests.get('failed', 0)} failed ({tests.get('skipped', 0)} skipped) in {tests.get('duration_seconds', 0)}s. "
         f"Codebase metrics: {metrics.get('total_py_files')} files ({metrics.get('total_py_lines')} lines). "
         f"Accounts: {accts_check.get('status', 'UNKNOWN')} ({accts_check.get('usable_sessions_count', 0)}/{accts_check.get('accounts_count', 0)} usable). "
+        f"Silent Handlers: {silent_check.get('status', 'UNKNOWN')} ({silent_check.get('silent_handlers_count', 0)} detected). "
         f"Storage: {storage_an.get('total_mb', 0.0)}MB ({storage_an.get('status', 'OPTIMAL')}). "
         f"Entropy: {entropy_status_str} (avg={entropy.get('avg_entropy', 0.0)}). "
         "Baseline synchronized to loop_state.json and episodic.json."
@@ -806,6 +839,7 @@ def run_loop(
         "version_alignment": ver_check,
         "build_assets": assets_check,
         "accounts_preflight": accts_check,
+        "silent_excepts": silent_check,
         "entropy": entropy,
         "metrics": metrics,
         "tests": tests,
@@ -887,6 +921,8 @@ def main(argv=None):
     usable_sess = acct_info.get("usable_sessions_count")
     sess_tag = f", usable_sessions={usable_sess}/{acct_info.get('accounts_count', 0)}" if usable_sess is not None else ""
     print(f"Accounts Preflight: {acct_stat} ({acct_info.get('accounts_count', 0)} accounts{sess_tag}, problems={acct_info.get('problems_count', 0)})")
+    silent_info = result.get("silent_excepts", {})
+    print(f"Silent Handlers: [{silent_info.get('status', 'UNKNOWN')}] ({silent_info.get('silent_handlers_count', 0)} swallowed exceptions across {silent_info.get('files_audited', 0)} files audited)")
     session_an = result["diagnostics"].get("session_analysis", {})
     stab = session_an.get("stability", {})
     if stab:
