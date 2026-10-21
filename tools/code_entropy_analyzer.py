@@ -11,7 +11,10 @@ import sys
 import ast
 import json
 import argparse
+from pathlib import Path
 from typing import Dict, List, Any
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 class PythonEntropyAuditor(ast.NodeVisitor):
@@ -103,7 +106,10 @@ def analyze_directory(target_dir: str) -> List[Dict[str, Any]]:
 
 def run_entropy_summary(target_dir: str = "src") -> Dict[str, Any]:
     """Computes an aggregate entropy summary for a target directory."""
-    results = analyze_directory(target_dir)
+    path = target_dir
+    if not os.path.exists(path) and (PROJECT_ROOT / path).exists():
+        path = str(PROJECT_ROOT / path)
+    results = analyze_directory(path)
     total_files = len(results)
     if total_files == 0:
         return {"total_files": 0, "avg_entropy": 0, "bare_excepts_total": 0, "status": "PASS"}
@@ -126,7 +132,10 @@ def run_entropy_summary(target_dir: str = "src") -> Dict[str, Any]:
 
 def get_top_entropy_files(target_dir: str = "src", top_n: int = 5) -> List[Dict[str, Any]]:
     """Retrieves top N files sorted by entropy descending."""
-    results = analyze_directory(target_dir) if os.path.isdir(target_dir) else [analyze_python_file(target_dir)]
+    path = target_dir
+    if not os.path.exists(path) and (PROJECT_ROOT / path).exists():
+        path = str(PROJECT_ROOT / path)
+    results = analyze_directory(path) if os.path.isdir(path) else [analyze_python_file(path)]
     sorted_res = sorted(results, key=lambda x: x.get("entropy_score", 0), reverse=True)
     return sorted_res[:top_n]
 
@@ -152,10 +161,16 @@ def main(argv=None):
     if not targets:
         targets = ["src"]
 
+    resolved_targets: List[str] = []
     for tp in targets:
-        if not os.path.exists(tp):
+        if os.path.exists(tp):
+            resolved_targets.append(tp)
+        elif (PROJECT_ROOT / tp).exists():
+            resolved_targets.append(str(PROJECT_ROOT / tp))
+        else:
             print(f"Error: Target path '{tp}' does not exist.", file=sys.stderr)
             sys.exit(1)
+    targets = resolved_targets
 
     if args.summary:
         all_results = []

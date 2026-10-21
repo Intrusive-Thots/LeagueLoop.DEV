@@ -141,6 +141,20 @@ class TestCodeEntropyAnalyzer(unittest.TestCase):
                 main([str(f1), str(f2), "--max-entropy", "-1.0"])
             self.assertEqual(cm.exception.code, 1)
 
+    def test_project_root_fallback(self):
+        from tools.code_entropy_analyzer import main, run_entropy_summary, get_top_entropy_files
+        # Target relative path 'src' resolves via PROJECT_ROOT even if not in cwd
+        summary = run_entropy_summary("src")
+        self.assertGreater(summary["total_files"], 0)
+
+        top = get_top_entropy_files("src", top_n=2)
+        self.assertGreater(len(top), 0)
+
+        with patch("sys.stdout") as mock_stdout:
+            with self.assertRaises(SystemExit) as cm:
+                main(["--summary"])
+            self.assertEqual(cm.exception.code, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
