@@ -742,7 +742,7 @@ class AutomationEngine:
             self._post_game_requeue_pending = True
 
         if phase != "Lobby" or not getattr(self, "_post_game_requeue_pending", False):
-            if phase in ("Matchmaking", "ReadyCheck", "ChampSelect", "InProgress"):
+            if phase in ("Matchmaking", "ReadyCheck", "ChampSelect", "InProgress", "None"):
                 self._post_game_requeue_pending = False
                 self._post_game_requeue_attempts = 0
             return
@@ -750,12 +750,15 @@ class AutomationEngine:
         # Check if already searching
         search_state = self.lcu.request("GET", "/lol-lobby/v2/lobby/matchmaking/search-state", silent=True)
         if search_state and getattr(search_state, "status_code", 0) == 200:
-            st = search_state.json()
-            if st and st.get("searchState") == "Searching":
-                Logger.info("Automation", "Already searching matchmaking; continuous loop requeue satisfied.")
-                self._post_game_requeue_pending = False
-                self._post_game_requeue_attempts = 0
-                return
+            try:
+                st = search_state.json()
+                if st and st.get("searchState") == "Searching":
+                    Logger.info("Automation", "Already searching matchmaking; continuous loop requeue satisfied.")
+                    self._post_game_requeue_pending = False
+                    self._post_game_requeue_attempts = 0
+                    return
+            except Exception as exc:
+                Logger.debug("Automation", f"Failed to parse search-state JSON in post-game requeue: {exc}")
 
         # Check lobby exists and verify leader permissions
         lobby_resp = self.lcu.request("GET", "/lol-lobby/v2/lobby", silent=True)
@@ -763,7 +766,12 @@ class AutomationEngine:
             # Lobby still initializing; retry next tick
             return
 
-        lobby_data = lobby_resp.json()
+        try:
+            lobby_data = lobby_resp.json()
+        except Exception as exc:
+            Logger.debug("Automation", f"Failed to parse lobby JSON in post-game requeue: {exc}")
+            return
+
         local_member = lobby_data.get("localMember", {})
         if not local_member.get("isLeader", True):
             Logger.debug("Automation", "Continuous loop: Local player is not lobby leader; skipping matchmaking search.")

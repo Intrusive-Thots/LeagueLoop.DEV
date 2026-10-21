@@ -1410,6 +1410,8 @@ class SidebarWidget(ctk.CTkFrame):
                         return
                 except Exception as exc:
                     Logger.debug("AppSidebar", f"Failed to check lobby readiness: {exc}")
+                    fail_msg = f"Can't start matchmaking ({mode}): unable to verify lobby readiness state."
+                    self.after(0, lambda m=fail_msg: self.update_action_log(m))
                     return
 
                 # 5. Start Search

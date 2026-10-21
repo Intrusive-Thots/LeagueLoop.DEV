@@ -846,3 +846,102 @@ def test_dodge_requeue_fail_closed_on_unreachable_lobby():
     mock_lcu.request.assert_called_once_with("GET", "/lol-lobby/v2/lobby", silent=True)
 
 
+def test_post_game_requeue_fail_closed_on_malformed_lobby_json():
+    """LOOP-007: Ensure _handle_post_game_requeue safely catches malformed lobby JSON without crashing."""
+    from services.automation import AutomationEngine
+    from unittest.mock import MagicMock
+
+    mock_lcu = MagicMock()
+    mock_assets = MagicMock()
+    mock_config = {
+        "auto_requeue": False,
+        "auto_honor_enabled": False,
+        "skip_stats_enabled": True,
+    }
+    engine = AutomationEngine(mock_lcu, mock_assets, mock_config)
+    engine._post_game_requeue_pending = True
+
+    mock_search_state = MagicMock(status_code=200)
+    mock_search_state.json.return_value = {"searchState": "Invalid"}
+
+    mock_lobby = MagicMock(status_code=200)
+    mock_lobby.json.side_effect = ValueError("Corrupted JSON payload from LCU")
+
+    def mock_request(method, endpoint, *args, **kwargs):
+        if endpoint == "/lol-lobby/v2/lobby/matchmaking/search-state":
+            return mock_search_state
+        if endpoint == "/lol-lobby/v2/lobby":
+            return mock_lobby
+        if endpoint == "/lol-lobby/v2/lobby/matchmaking/search":
+            raise AssertionError("Should never call search on malformed lobby JSON")
+        return None
+
+    mock_lcu.request.side_effect = mock_request
+    # Should catch gracefully and not raise
+    engine._handle_post_game_requeue("Lobby", "EndOfGame")
+    assert engine._post_game_requeue_pending is True
+
+
+def test_post_game_requeue_handles_malformed_search_state_json():
+    """LOOP-008: Ensure _handle_post_game_requeue safely catches malformed search-state JSON."""
+    from services.automation import AutomationEngine
+    from unittest.mock import MagicMock
+
+    mock_lcu = MagicMock()
+    mock_assets = MagicMock()
+    mock_config = {
+        "auto_requeue": False,
+        "auto_honor_enabled": False,
+        "skip_stats_enabled": True,
+    }
+    engine = AutomationEngine(mock_lcu, mock_assets, mock_config)
+    engine._post_game_requeue_pending = True
+
+    mock_search_state = MagicMock(status_code=200)
+    mock_search_state.json.side_effect = ValueError("Malformed search-state JSON")
+
+    mock_lobby = MagicMock(status_code=200)
+    mock_lobby.json.return_value = {
+        "localMember": {"isLeader": True},
+        "gameConfig": {"queueId": 420},
+        "canStartActivity": True,
+    }
+
+    def mock_request(method, endpoint, *args, **kwargs):
+        if endpoint == "/lol-lobby/v2/lobby/matchmaking/search-state":
+            return mock_search_state
+        if endpoint == "/lol-lobby/v2/lobby":
+            return mock_lobby
+        if endpoint == "/lol-lobby/v2/lobby/matchmaking/search":
+            return MagicMock(status_code=200)
+        return None
+
+    mock_lcu.request.side_effect = mock_request
+    engine._handle_post_game_requeue("Lobby", "EndOfGame")
+    # Search should proceed and succeed
+    assert engine._post_game_requeue_pending is False
+    assert engine._post_game_requeue_attempts == 0
+
+
+def test_post_game_requeue_clears_on_none_phase():
+    """LOOP-009: Ensure _handle_post_game_requeue clears pending state when transitioning to None phase."""
+    from services.automation import AutomationEngine
+    from unittest.mock import MagicMock
+
+    mock_lcu = MagicMock()
+    mock_assets = MagicMock()
+    mock_config = {
+        "auto_requeue": False,
+        "auto_honor_enabled": False,
+        "skip_stats_enabled": True,
+    }
+    engine = AutomationEngine(mock_lcu, mock_assets, mock_config)
+    engine._post_game_requeue_pending = True
+    engine._post_game_requeue_attempts = 2
+
+    engine._handle_post_game_requeue("None", "Lobby")
+    assert engine._post_game_requeue_pending is False
+    assert engine._post_game_requeue_attempts == 0
+
+
+
