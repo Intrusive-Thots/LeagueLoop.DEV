@@ -1981,14 +1981,24 @@ class SidebarWidget(ctk.CTkFrame):
                         self.after(0, lambda: self.update_action_log("Cannot re-queue: lobby not found or unreachable."))
                         return
                     try:
-                        if not verify_lobby.json().get("canStartActivity", True):
+                        v_json = verify_lobby.json()
+                        if not v_json.get("canStartActivity", True):
                             self.after(0, lambda: self.update_action_log("Cannot re-queue: lobby not ready."))
+                            return
+                        local_member = v_json.get("localMember", {})
+                        if not local_member.get("isLeader", True):
+                            self.after(0, lambda: self.update_action_log("Cannot re-queue: player is not lobby leader."))
                             return
                     except Exception as exc:
                         Logger.debug("AppSidebar", f"Failed to check lobby readiness during requeue: {exc}")
+                        self.after(0, lambda: self.update_action_log("Cannot re-queue: unable to verify lobby readiness state."))
                         return
-                    self.lcu.request("POST", "/lol-lobby/v2/lobby/matchmaking/search")
-                    self.after(0, lambda: self.update_action_log("Re-queued Matchmaking."))
+                    res = self.lcu.request("POST", "/lol-lobby/v2/lobby/matchmaking/search")
+                    if res and res.status_code in (200, 204):
+                        self.after(0, lambda: self.update_action_log("Re-queued Matchmaking."))
+                    else:
+                        fail_msg = self._search_refusal_message(res)
+                        self.after(0, lambda m=fail_msg: self.update_action_log(m))
                 except Exception as e:
                     self.after(0, lambda: self.update_action_log(f"Requeue error: {e}"))
                 finally:

@@ -245,6 +245,10 @@ class QueueManager:
                     if not lobby_data.get("canStartActivity", True):
                         Logger.debug("QueueManager", "Cannot start matchmaking: lobby canStartActivity is False.")
                         return False
+                    local_member = lobby_data.get("localMember", {})
+                    if not local_member.get("isLeader", True):
+                        Logger.debug("QueueManager", "Cannot start matchmaking: local player is not lobby leader.")
+                        return False
                 except Exception as exc:
                     Logger.debug("QueueManager", f"Failed to check lobby readiness: {exc}")
                     return False

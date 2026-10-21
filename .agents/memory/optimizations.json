@@ -2091,5 +2091,16 @@
       "status": "Optimized implementation baseline"
     },
     "impact": "Enforced safe JSON parsing, None-phase cleanup, and bounded lobby verification"
+  },
+  {
+    "timestamp": "2026-10-21T07:38:56.170094+00:00",
+    "feature": "Lobby Readiness Fail-Closed & Requeue Leader Enforcement",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Enforces leader checks and actionable refusal inspection on requeue and matchmaking search across AppSidebar and QueueManager, eliminating invalid HTTP 400 requests; advances full test baseline to 1064 passed with 0 failures."
   }
 ]

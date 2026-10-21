@@ -944,4 +944,40 @@ def test_post_game_requeue_clears_on_none_phase():
     assert engine._post_game_requeue_attempts == 0
 
 
+def test_queue_manager_start_matchmaking_requires_leader():
+    """QUEUE-003: Ensure QueueManager.start_matchmaking fails closed when local player is not lobby leader."""
+    from services.queue_manager import QueueManager
+    from unittest.mock import MagicMock
+
+    mgr = QueueManager.get_instance()
+    mock_lcu = MagicMock()
+    mock_lcu.is_connected = True
+
+    mock_lobby = MagicMock(status_code=200)
+    mock_lobby.json.return_value = {
+        "canStartActivity": True,
+        "localMember": {"isLeader": False},
+    }
+    mock_lcu.request.return_value = mock_lobby
+
+    res = mgr.start_matchmaking(mock_lcu, check_readiness=True)
+    assert res is False
+    # Only the GET lobby check should be called, never the POST search
+    assert mock_lcu.request.call_count == 1
+    mock_lcu.request.assert_called_once_with("GET", "/lol-lobby/v2/lobby", silent=True)
+
+
+def test_app_sidebar_requeue_requires_leader_and_handles_refusal():
+    """LOBBY-004: Ensure AppSidebar._force_requeue validates leader status and handles search refusals."""
+    sidebar_file = SRC / "ui" / "app_sidebar.py"
+    assert sidebar_file.exists()
+    text = sidebar_file.read_text(encoding="utf-8")
+    assert "local_member = v_json.get(\"localMember\", {})" in text
+    assert "not local_member.get(\"isLeader\", True)" in text
+    assert "Cannot re-queue: player is not lobby leader." in text
+    assert "res = self.lcu.request(\"POST\", \"/lol-lobby/v2/lobby/matchmaking/search\")" in text
+    assert "fail_msg = self._search_refusal_message(res)" in text
+
+
+
 
