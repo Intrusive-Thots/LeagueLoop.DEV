@@ -79,11 +79,16 @@ def run_diagnostics_check() -> Dict[str, Any]:
 def run_version_alignment_check() -> Dict[str, Any]:
     """Validates that src/core/version.py and installer.iss are strictly aligned."""
     try:
-        from tools.bump_version import check_version_alignment
-        ok, msg = check_version_alignment()
+        from tools.build_validator import validate_version_alignment
+        ok, msg = validate_version_alignment(PROJECT_ROOT)
         return {"aligned": ok, "message": msg}
-    except Exception as e:
-        return {"aligned": False, "message": str(e)}
+    except Exception:
+        try:
+            from tools.bump_version import check_version_alignment
+            ok, msg = check_version_alignment()
+            return {"aligned": ok, "message": msg}
+        except Exception as e:
+            return {"aligned": False, "message": str(e)}
 
 
 def run_entropy_check(top_n: int = 5) -> Dict[str, Any]:
@@ -565,6 +570,11 @@ def run_loop(
             "description": "Consolidating queue ID and mode resolution into services.queue_manager.QueueManager and delegating from AppSidebar eliminates duplicate hardcoded mode dictionaries, prevents drift against dynamic LCU endpoints, and reduces UI component complexity.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Pre-Build Version Alignment and Build Verification Invariant",
+            "description": "Validating that src/core/version.py and installer.iss (AppVersion and VersionInfoVersion) are strictly aligned during pre-build verification (tools.build_validator) prevents shipping misaligned or unversioned installer binaries.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
@@ -650,6 +660,14 @@ def run_loop(
                 "Delegate queue resolution from UI components directly to services.queue_manager.resolve_queue_id.",
                 "Ensure QueueManager dynamically queries /lol-game-queues/v1/queues when client is connected.",
                 "Maintain regression guard QUEUE-001 in test_regression_guards.py to prevent reintroduction of hardcoded mode maps in UI classes.",
+            ],
+        },
+        {
+            "method": "Pre-Build Verification and Alignment Inspection",
+            "procedure": [
+                "Execute python tools/build_validator.py --alignment-only --json to verify zero version drift.",
+                "Execute python tools/build_validator.py --skip-tests --json to verify spec files, assets, and version alignment.",
+                "Execute python tools/build_validator.py to perform full pre-build test validation and telemetry recording.",
             ],
         },
     ]

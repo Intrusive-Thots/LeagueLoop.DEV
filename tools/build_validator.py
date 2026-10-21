@@ -1,20 +1,26 @@
 """
 build_validator.py — Automated pre-build verification utility for LeagueLoop.
-Validates environment, test suite status, version formatting, required assets, and spec file integrity.
+Validates environment, test suite status, version formatting, required assets, version alignment, and spec file integrity.
 """
 
 import os
 import re
 import sys
 import time
+import json
+import argparse
 import threading
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 
 # Force UTF-8 encoding on stdout for Windows compatibility
 if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 _validation_lock = threading.Lock()
 _validation_telemetry: Dict[str, Any] = {
@@ -42,6 +48,30 @@ def validate_version(project_root: Path) -> str:
     version_str = match.group(1)
     print(f"[OK] Version detected: {version_str}")
     return version_str
+
+
+def validate_version_alignment(project_root: Path) -> Tuple[bool, str]:
+    """Validates that src/core/version.py and installer.iss are strictly aligned."""
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+
+    version_file = project_root / "src" / "core" / "version.py"
+    iss_file = project_root / "installer.iss"
+    if not iss_file.exists():
+        iss_file = project_root / "build_scripts" / "installer.iss"
+
+    try:
+        from tools.bump_version import check_version_alignment
+        ok, msg = check_version_alignment(str(version_file), str(iss_file))
+        if ok:
+            print(f"[OK] Version alignment verified: {msg}")
+        else:
+            print(f"[FAIL] Version alignment mismatch: {msg}")
+        return ok, msg
+    except Exception as e:
+        msg = f"Version alignment check error: {e}"
+        print(f"[FAIL] {msg}")
+        return False, msg
 
 
 def validate_test_suite(project_root: Path) -> bool:
@@ -93,11 +123,10 @@ def validate_files(project_root: Path) -> bool:
     return True
 
 
-
 def verify_system_wide_health(project_root: Optional[Path] = None) -> Dict[str, Any]:
     """Task 300: Verify continuous system-wide health and build environment readiness."""
     if project_root is None:
-        project_root = Path(__file__).resolve().parent.parent
+        project_root = PROJECT_ROOT
 
     t_start = time.perf_counter()
     health_status = "HEALTHY"
@@ -108,6 +137,11 @@ def verify_system_wide_health(project_root: Optional[Path] = None) -> Dict[str, 
     except Exception as e:
         ver = "UNKNOWN"
         errors.append(f"Version error: {e}")
+        health_status = "UNHEALTHY"
+
+    align_ok, align_msg = validate_version_alignment(project_root)
+    if not align_ok:
+        errors.append(f"Version alignment error: {align_msg}")
         health_status = "UNHEALTHY"
 
     files_ok = validate_files(project_root)
@@ -124,6 +158,7 @@ def verify_system_wide_health(project_root: Optional[Path] = None) -> Dict[str, 
     return {
         "status": health_status,
         "version": ver,
+        "version_aligned": align_ok,
         "files_ok": files_ok,
         "test_environment_ok": test_env_ok,
         "duration_ms": duration_ms,
@@ -142,26 +177,33 @@ def get_build_validation_telemetry() -> Dict[str, Any]:
         return data
 
 
-def run_full_validation_cycle(project_root: Optional[Path] = None) -> Dict[str, Any]:
+def run_full_validation_cycle(project_root: Optional[Path] = None, skip_tests: bool = False) -> Dict[str, Any]:
     """Task 300: Executes a full build validation cycle, updating global telemetry and readiness state."""
     if project_root is None:
-        project_root = Path(__file__).resolve().parent.parent
+        project_root = PROJECT_ROOT
 
     t_start = time.perf_counter()
     ver = ""
     files_ok = False
     tests_ok = False
+    align_ok = False
     err_msg = None
 
     try:
         ver = validate_version(project_root)
+        align_ok, align_msg = validate_version_alignment(project_root)
+        if not align_ok:
+            err_msg = align_msg
         files_ok = validate_files(project_root)
-        tests_ok = validate_test_suite(project_root)
+        if skip_tests:
+            tests_ok = True
+        else:
+            tests_ok = validate_test_suite(project_root)
     except Exception as e:
         err_msg = str(e)
 
     duration_ms = round((time.perf_counter() - t_start) * 1000.0, 2)
-    cycle_passed = files_ok and tests_ok and (err_msg is None)
+    cycle_passed = align_ok and files_ok and tests_ok and (err_msg is None)
 
     with _validation_lock:
         _validation_telemetry["validation_cycles_count"] += 1
@@ -180,6 +222,7 @@ def run_full_validation_cycle(project_root: Optional[Path] = None) -> Dict[str, 
     return {
         "passed": cycle_passed,
         "version": ver,
+        "version_aligned": align_ok,
         "files_ok": files_ok,
         "tests_ok": tests_ok,
         "duration_ms": duration_ms,
@@ -188,19 +231,41 @@ def run_full_validation_cycle(project_root: Optional[Path] = None) -> Dict[str, 
     }
 
 
-def main():
-    root = Path(__file__).resolve().parent.parent
-    print("=" * 60)
-    print("  LeagueLoop Build Pipeline Pre-Flight Verification")
-    print("=" * 60)
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="LeagueLoop Build Pipeline Pre-Flight Verification")
+    parser.add_argument("--skip-tests", action="store_true", help="Skip running pytest suite")
+    parser.add_argument("--alignment-only", action="store_true", help="Only validate version and alignment")
+    parser.add_argument("--json", action="store_true", help="Output results in JSON format")
+    args = parser.parse_args(argv)
 
-    res = run_full_validation_cycle(root)
-    if res["passed"]:
-        print(f"\nBUILD READINESS: READY FOR COMPILATION (Cycle completed in {res['duration_ms']}ms)")
-        sys.exit(0)
+    root = PROJECT_ROOT
+
+    if args.alignment_only:
+        ok, msg = validate_version_alignment(root)
+        if args.json:
+            print(json.dumps({"version_aligned": ok, "message": msg}, indent=2))
+        else:
+            print(f"Alignment: {'[ALIGNED]' if ok else '[MISALIGNED]'} - {msg}")
+        sys.exit(0 if ok else 1)
+        return
+
+    if not args.json:
+        print("=" * 60)
+        print("  LeagueLoop Build Pipeline Pre-Flight Verification")
+        print("=" * 60)
+
+    res = run_full_validation_cycle(root, skip_tests=args.skip_tests)
+
+    if args.json:
+        print(json.dumps(res, indent=2))
     else:
-        print(f"\nBUILD READINESS: UNREADY (Validation Failures: {res['error'] or 'Check logs'})")
-        sys.exit(1)
+        if res["passed"]:
+            print(f"\nBUILD READINESS: READY FOR COMPILATION (Cycle completed in {res['duration_ms']}ms)")
+        else:
+            print(f"\nBUILD READINESS: UNREADY (Validation Failures: {res['error'] or 'Check logs'})")
+
+    sys.exit(0 if res["passed"] else 1)
+    return
 
 
 if __name__ == "__main__":

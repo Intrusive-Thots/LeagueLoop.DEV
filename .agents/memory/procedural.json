@@ -95,5 +95,13 @@
       "Ensure QueueManager dynamically queries /lol-game-queues/v1/queues when client is connected.",
       "Maintain regression guard QUEUE-001 in test_regression_guards.py to prevent reintroduction of hardcoded mode maps in UI classes."
     ]
+  },
+  {
+    "method": "Pre-Build Verification and Alignment Inspection",
+    "procedure": [
+      "Execute python tools/build_validator.py --alignment-only --json to verify zero version drift.",
+      "Execute python tools/build_validator.py --skip-tests --json to verify spec files, assets, and version alignment.",
+      "Execute python tools/build_validator.py to perform full pre-build test validation and telemetry recording."
+    ]
   }
 ]
