@@ -604,6 +604,56 @@ class TestUIComponents(unittest.TestCase):
         sidebar.update_dock_styling(docked=True)
         sidebar.update_dock_styling(docked=False)
 
+    def test_sidebar_search_refusal_message(self):
+        """Test _search_refusal_message extracts granular error reasons from client responses."""
+        from ui.app_sidebar import SidebarWidget
+
+        # None response
+        self.assertEqual(
+            SidebarWidget._search_refusal_message(None),
+            "Matchmaking failed: no response from the League Client.",
+        )
+
+        # JSON with message
+        mock_res_msg = MagicMock(status_code=400)
+        mock_res_msg.json.return_value = {"message": "You cannot queue right now due to a penalty"}
+        self.assertEqual(
+            SidebarWidget._search_refusal_message(mock_res_msg),
+            "Matchmaking failed: You cannot queue right now due to a penalty",
+        )
+
+        # JSON with nested errors list
+        mock_res_err = MagicMock(status_code=400)
+        mock_res_err.json.return_value = {"errors": [{"message": "Queue requires a party leader"}]}
+        self.assertEqual(
+            SidebarWidget._search_refusal_message(mock_res_err),
+            "Matchmaking failed: Queue requires a party leader",
+        )
+
+        # HTTP 400 without specific message body
+        mock_res_400 = MagicMock(status_code=400)
+        mock_res_400.json.side_effect = ValueError("Invalid JSON")
+        self.assertEqual(
+            SidebarWidget._search_refusal_message(mock_res_400, mode="Ranked Solo/Duo"),
+            "Matchmaking failed: queue unavailable or requirements not met (Ranked Solo/Duo).",
+        )
+
+        # HTTP 404
+        mock_res_404 = MagicMock(status_code=404)
+        mock_res_404.json.side_effect = ValueError("Invalid JSON")
+        self.assertEqual(
+            SidebarWidget._search_refusal_message(mock_res_404),
+            "Matchmaking failed: lobby not found.",
+        )
+
+        # HTTP 500
+        mock_res_500 = MagicMock(status_code=500)
+        mock_res_500.json.side_effect = ValueError("Invalid JSON")
+        self.assertEqual(
+            SidebarWidget._search_refusal_message(mock_res_500),
+            "Matchmaking failed (HTTP 500).",
+        )
+
     def test_loot_tool_visuals_and_telemetry(self):
         """Test LootTool visual elements, telemetry chips, category mapping and busy states."""
         from ui.components.game_tools.loot_tool import LootTool, _get_loot_visuals

@@ -428,5 +428,39 @@ def test_app_sidebar_matchmaking_concurrency_invariants():
     assert "self._find_match_in_flight = False" in text
     assert "transport connection failure (no response from client)" in text
 
+def test_app_sidebar_search_refusal_invariants():
+    """LOBBY-002: Ensure AppSidebar._search_refusal_message extracts granular client refusal reasons and guards against generic failures."""
+    sidebar_file = SRC / "ui" / "app_sidebar.py"
+    assert sidebar_file.exists()
+    text = sidebar_file.read_text(encoding="utf-8")
+    assert "def _search_refusal_message" in text
+    assert "_search_refusal_message(res" in text
 
+    from ui.app_sidebar import SidebarWidget
+    from unittest.mock import MagicMock
+
+    # Test None response (transport failure)
+    msg_none = SidebarWidget._search_refusal_message(None, "Ranked Solo/Duo")
+    assert "no response from the League Client" in msg_none
+
+    # Test JSON message payload
+    mock_resp_json = MagicMock()
+    mock_resp_json.status_code = 400
+    mock_resp_json.json.return_value = {"message": "Position preferences required"}
+    msg_json = SidebarWidget._search_refusal_message(mock_resp_json, "Ranked Solo/Duo")
+    assert msg_json == "Matchmaking failed: Position preferences required"
+
+    # Test 400 fallback
+    mock_resp_400 = MagicMock()
+    mock_resp_400.status_code = 400
+    mock_resp_400.json.side_effect = ValueError("Not JSON")
+    msg_400 = SidebarWidget._search_refusal_message(mock_resp_400, "ARAM")
+    assert "queue unavailable or requirements not met (ARAM)" in msg_400
+
+    # Test 404 fallback
+    mock_resp_404 = MagicMock()
+    mock_resp_404.status_code = 404
+    mock_resp_404.json.side_effect = ValueError("Not JSON")
+    msg_404 = SidebarWidget._search_refusal_message(mock_resp_404)
+    assert "lobby not found" in msg_404
 

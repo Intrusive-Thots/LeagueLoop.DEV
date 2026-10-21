@@ -1617,5 +1617,38 @@
       "delta_entropy": 0.0
     },
     "impact": "Continuous regression prevention, test ratio tracking (0.552), and entropy baseline tracked across Run #188."
+  },
+  {
+    "timestamp": "2026-10-21T01:52:54.801330+00:00",
+    "feature": "Matchmaking Search Refusal Telemetry & Action Log Clarification",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Replaces blind failure strings with parsed LCU error payloads and adds regression guard LOBBY-002."
+  },
+  {
+    "timestamp": "2026-10-21T01:54:16.283700+00:00",
+    "feature": "Granular Client Matchmaking Refusal Telemetry",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Parsed specific LCU error messages into UI notifications and telemetry logs to eliminate ambiguous generic matchmaking failure reports"
+  },
+  {
+    "timestamp": "2026-10-21T01:54:37.498797+00:00",
+    "feature": "Matchmaking Search Refusal Telemetry & Action Log Clarification",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Replaces blind failure strings with parsed LCU error payloads and adds regression guard LOBBY-002."
   }
 ]

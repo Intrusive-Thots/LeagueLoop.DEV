@@ -1227,6 +1227,32 @@ class SidebarWidget(ctk.CTkFrame):
             return "{} isn't available to queue for right now.".format(mode)
         return "Couldn't create the {} lobby (HTTP {}).".format(mode, code)
 
+    @staticmethod
+    def _search_refusal_message(res, mode: str = "") -> str:
+        """Extract a specific, actionable refusal reason from the matchmaking search response."""
+        if not res:
+            return "Matchmaking failed: no response from the League Client."
+        code = getattr(res, "status_code", None)
+        try:
+            data = res.json()
+            if isinstance(data, dict):
+                msg = data.get("message") or data.get("description")
+                if msg:
+                    return f"Matchmaking failed: {msg}"
+                errors = data.get("errors")
+                if isinstance(errors, list) and errors and isinstance(errors[0], dict):
+                    err_msg = errors[0].get("message")
+                    if err_msg:
+                        return f"Matchmaking failed: {err_msg}"
+        except Exception as exc:
+            Logger.debug("AppSidebar", f"Could not parse matchmaking search error response: {exc}", exc=exc)
+        if code == 400:
+            target = f" ({mode})" if mode else ""
+            return f"Matchmaking failed: queue unavailable or requirements not met{target}."
+        if code == 404:
+            return "Matchmaking failed: lobby not found."
+        return f"Matchmaking failed (HTTP {code})."
+
     def _find_match(self):
         """Aggressive matchmaking: Stay in the lobby tab, just change the queue."""
         if not self.lcu:
@@ -1377,12 +1403,17 @@ class SidebarWidget(ctk.CTkFrame):
                         except Exception as exc:
                             Logger.debug("AppSidebar", f"DebugTracker queue start hook suppressed: {exc}", exc=exc)
                     else:
-                        self.update_action_log("Matchmaking failed - check client.")
+                        fail_msg = self._search_refusal_message(res, mode)
+                        self.update_action_log(fail_msg)
+                        Logger.warning(
+                            "Matchmaking",
+                            f"Matchmaking search failed ({mode}): {fail_msg} (status={getattr(res, 'status_code', None)})"
+                        )
                         try:
                             from services.debug_tracker import DebugTracker
                             DebugTracker.get_instance(self.config).record_action(
                                 action_name="queue_search_failed",
-                                outcome="Matchmaking failed to start",
+                                outcome=fail_msg,
                                 details={"mode": mode, "status_code": getattr(res, "status_code", None)},
                                 window=self
                             )
