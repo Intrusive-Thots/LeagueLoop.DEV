@@ -766,15 +766,34 @@ def test_queue_manager_start_matchmaking_readiness_preflight():
     mock_lcu = MagicMock()
     mock_lcu.is_connected = True
 
+    # 1. Unreachable / None lobby response -> fail closed
+    mock_lcu.request.return_value = None
+    assert mgr.start_matchmaking(mock_lcu, check_readiness=True) is False
+    mock_lcu.request.assert_called_once_with("GET", "/lol-lobby/v2/lobby", silent=True)
+
+    # 2. HTTP 404 lobby response -> fail closed
+    mock_lcu.reset_mock()
+    mock_lcu.request.return_value = MagicMock(status_code=404)
+    assert mgr.start_matchmaking(mock_lcu, check_readiness=True) is False
+    mock_lcu.request.assert_called_once_with("GET", "/lol-lobby/v2/lobby", silent=True)
+
+    # 3. Malformed JSON -> fail closed
+    mock_lcu.reset_mock()
+    mock_bad_json = MagicMock(status_code=200)
+    mock_bad_json.json.side_effect = ValueError("Invalid JSON")
+    mock_lcu.request.return_value = mock_bad_json
+    assert mgr.start_matchmaking(mock_lcu, check_readiness=True) is False
+
+    # 4. canStartActivity is False -> fail closed
+    mock_lcu.reset_mock()
     mock_lobby_not_ready = MagicMock(status_code=200)
     mock_lobby_not_ready.json.return_value = {"canStartActivity": False}
-
     mock_lcu.request.return_value = mock_lobby_not_ready
     res = mgr.start_matchmaking(mock_lcu, check_readiness=True)
     assert res is False
     mock_lcu.request.assert_called_once_with("GET", "/lol-lobby/v2/lobby", silent=True)
 
-    # When canStartActivity is True, should proceed to post search
+    # 5. When canStartActivity is True, should proceed to post search
     mock_lcu.reset_mock()
     mock_lobby_ready = MagicMock(status_code=200)
     mock_lobby_ready.json.return_value = {"canStartActivity": True}
@@ -799,7 +818,31 @@ def test_app_sidebar_find_match_lobby_readiness_invariants():
     assert sidebar_file.exists()
     text = sidebar_file.read_text(encoding="utf-8")
     assert "lobby_check = self.lcu.request(\"GET\", \"/lol-lobby/v2/lobby\")" in text
+    assert "not lobby_check or getattr(lobby_check, \"status_code\", 0) != 200" in text
     assert "canStartActivity" in text
     assert "Cannot start matchmaking" in text
+    assert "Cannot re-queue: lobby not found or unreachable." in text
+
+
+def test_dodge_requeue_fail_closed_on_unreachable_lobby():
+    """LOOP-006: Ensure _handle_dodge_requeue fails closed without calling search when lobby is unreachable."""
+    from services.automation import AutomationEngine
+    from unittest.mock import MagicMock
+
+    mock_lcu = MagicMock()
+    mock_assets = MagicMock()
+    mock_config = {
+        "auto_requeue": True,
+        "auto_honor_enabled": False,
+        "skip_stats_enabled": False,
+    }
+    engine = AutomationEngine(mock_lcu, mock_assets, mock_config)
+
+    # When lobby response is None, search must NOT be invoked
+    mock_lcu.request.return_value = None
+    engine._handle_dodge_requeue("Lobby", "ChampSelect")
+    # request should only be called once for lobby check, never for search-state or search
+    assert mock_lcu.request.call_count == 1
+    mock_lcu.request.assert_called_once_with("GET", "/lol-lobby/v2/lobby", silent=True)
 
 

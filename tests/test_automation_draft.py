@@ -50,13 +50,34 @@ class FakeAssets:
         return ()
 
 
+class FakeResponse:
+    def __init__(self, data=None, status_code=200):
+        self._data = data or {}
+        self.status_code = status_code
+
+    def json(self):
+        return self._data
+
+
 class FakeLcu:
     def __init__(self):
         self.calls = []
         self.is_connected = True
+        self.responses = {
+            "/lol-lobby/v2/lobby": FakeResponse({
+                "localMember": {"isLeader": True},
+                "gameConfig": {"queueId": 420},
+                "canStartActivity": True,
+            }),
+            "/lol-lobby/v2/lobby/matchmaking/search-state": FakeResponse({
+                "searchState": "Invalid",
+            }),
+        }
 
     def request(self, method, endpoint, data=None, silent=False):
         self.calls.append((method, endpoint, data))
+        if endpoint in self.responses:
+            return self.responses[endpoint]
         return None
 
     def set_in_game_mode(self, *_a):

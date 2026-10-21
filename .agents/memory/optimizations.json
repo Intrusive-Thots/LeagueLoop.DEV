@@ -2058,5 +2058,27 @@
       "delta_entropy": 0.0
     },
     "impact": "Continuous regression prevention, test ratio tracking (0.583), and entropy baseline tracked across Run #219."
+  },
+  {
+    "timestamp": "2026-10-21T07:08:21.879350+00:00",
+    "feature": "Lobby Readiness Fail-Closed & Search Protection",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Enforces fail-closed validation on lobby preflight across QueueManager, AppSidebar, and AutomationEngine, preventing blind HTTP 400 search dispatches on missing or unready client lobbies; advances full test baseline to 1065 passed with 0 failures."
+  },
+  {
+    "timestamp": "2026-10-21T07:11:41.183536+00:00",
+    "feature": "Lobby Readiness Fail-Closed & Search Protection",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Enforces fail-closed validation on lobby preflight across QueueManager, AppSidebar, and AutomationEngine, preventing blind HTTP 400 search dispatches on missing or unready client lobbies; advances full test baseline to 1065 passed with 0 failures."
   }
 ]

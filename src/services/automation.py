@@ -685,23 +685,23 @@ class AutomationEngine:
 
         # Check if lobby exists and verify leader permissions
         lobby_resp = self.lcu.request("GET", "/lol-lobby/v2/lobby", silent=True)
-        if lobby_resp and getattr(lobby_resp, "status_code", 0) == 200:
-            try:
-                lobby_data = lobby_resp.json()
-                local_member = lobby_data.get("localMember", {})
-                if not local_member.get("isLeader", True):
-                    Logger.debug("Automation", "Dodge detected but local player is not lobby leader; skipping matchmaking restart.")
-                    return
-                game_cfg = lobby_data.get("gameConfig", {})
-                if not game_cfg.get("queueId"):
-                    return
-                if not lobby_data.get("canStartActivity", True):
-                    Logger.debug("Automation", "Dodge detected but lobby cannot start activity.")
-                    return
-            except Exception as exc:
-                Logger.debug("Automation", "Failed to query lobby state for dodge requeue", exc=exc)
+        if not lobby_resp or getattr(lobby_resp, "status_code", 0) != 200:
+            Logger.debug("Automation", f"Dodge detected but lobby check failed (status={getattr(lobby_resp, 'status_code', None)}).")
+            return
+        try:
+            lobby_data = lobby_resp.json()
+            local_member = lobby_data.get("localMember", {})
+            if not local_member.get("isLeader", True):
+                Logger.debug("Automation", "Dodge detected but local player is not lobby leader; skipping matchmaking restart.")
                 return
-        elif lobby_resp and getattr(lobby_resp, "status_code", 0) in (400, 404):
+            game_cfg = lobby_data.get("gameConfig", {})
+            if not game_cfg.get("queueId"):
+                return
+            if not lobby_data.get("canStartActivity", True):
+                Logger.debug("Automation", "Dodge detected but lobby cannot start activity.")
+                return
+        except Exception as exc:
+            Logger.debug("Automation", "Failed to query lobby state for dodge requeue", exc=exc)
             return
 
         now = time.time()

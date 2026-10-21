@@ -1390,19 +1390,27 @@ class SidebarWidget(ctk.CTkFrame):
 
                 # 4. Preflight Lobby Readiness
                 lobby_check = self.lcu.request("GET", "/lol-lobby/v2/lobby")
-                if lobby_check and getattr(lobby_check, "status_code", 0) == 200:
-                    try:
-                        v_data = lobby_check.json()
-                        if not v_data.get("canStartActivity", True):
-                            fail_msg = f"Can't start matchmaking ({mode}): lobby requirements or restrictions not met."
-                            self.after(0, lambda m=fail_msg: self.update_action_log(m))
-                            Logger.warning(
-                                "Matchmaking",
-                                f"Cannot start matchmaking ({mode}): lobby canStartActivity is False."
-                            )
-                            return
-                    except Exception as exc:
-                        Logger.debug("AppSidebar", f"Failed to check lobby readiness: {exc}")
+                if not lobby_check or getattr(lobby_check, "status_code", 0) != 200:
+                    fail_msg = f"Can't start matchmaking ({mode}): unable to verify lobby state."
+                    self.after(0, lambda m=fail_msg: self.update_action_log(m))
+                    Logger.warning(
+                        "Matchmaking",
+                        f"Cannot start matchmaking ({mode}): lobby check failed (status={getattr(lobby_check, 'status_code', None)})."
+                    )
+                    return
+                try:
+                    v_data = lobby_check.json()
+                    if not v_data.get("canStartActivity", True):
+                        fail_msg = f"Can't start matchmaking ({mode}): lobby requirements or restrictions not met."
+                        self.after(0, lambda m=fail_msg: self.update_action_log(m))
+                        Logger.warning(
+                            "Matchmaking",
+                            f"Cannot start matchmaking ({mode}): lobby canStartActivity is False."
+                        )
+                        return
+                except Exception as exc:
+                    Logger.debug("AppSidebar", f"Failed to check lobby readiness: {exc}")
+                    return
 
                 # 5. Start Search
                 res = self.lcu.request("POST", "/lol-lobby/v2/lobby/matchmaking/search")
@@ -1967,13 +1975,16 @@ class SidebarWidget(ctk.CTkFrame):
                     self.lcu.request("DELETE", "/lol-lobby/v2/lobby/matchmaking/search")
                     time.sleep(0.3)
                     verify_lobby = self.lcu.request("GET", "/lol-lobby/v2/lobby")
-                    if verify_lobby and getattr(verify_lobby, "status_code", 0) == 200:
-                        try:
-                            if not verify_lobby.json().get("canStartActivity", True):
-                                self.after(0, lambda: self.update_action_log("Cannot re-queue: lobby not ready."))
-                                return
-                        except Exception as exc:
-                            Logger.debug("AppSidebar", f"Failed to check lobby readiness during requeue: {exc}")
+                    if not verify_lobby or getattr(verify_lobby, "status_code", 0) != 200:
+                        self.after(0, lambda: self.update_action_log("Cannot re-queue: lobby not found or unreachable."))
+                        return
+                    try:
+                        if not verify_lobby.json().get("canStartActivity", True):
+                            self.after(0, lambda: self.update_action_log("Cannot re-queue: lobby not ready."))
+                            return
+                    except Exception as exc:
+                        Logger.debug("AppSidebar", f"Failed to check lobby readiness during requeue: {exc}")
+                        return
                     self.lcu.request("POST", "/lol-lobby/v2/lobby/matchmaking/search")
                     self.after(0, lambda: self.update_action_log("Re-queued Matchmaking."))
                 except Exception as e:

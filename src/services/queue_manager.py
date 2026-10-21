@@ -237,14 +237,17 @@ class QueueManager:
         try:
             if check_readiness:
                 lobby_resp = lcu.request("GET", "/lol-lobby/v2/lobby", silent=True)
-                if lobby_resp and getattr(lobby_resp, "status_code", 0) == 200:
-                    try:
-                        lobby_data = lobby_resp.json()
-                        if not lobby_data.get("canStartActivity", True):
-                            Logger.debug("QueueManager", "Cannot start matchmaking: lobby canStartActivity is False.")
-                            return False
-                    except Exception as exc:
-                        Logger.debug("QueueManager", f"Failed to check lobby readiness: {exc}")
+                if not lobby_resp or getattr(lobby_resp, "status_code", 0) != 200:
+                    Logger.debug("QueueManager", f"Cannot start matchmaking: lobby check failed (status={getattr(lobby_resp, 'status_code', None)}).")
+                    return False
+                try:
+                    lobby_data = lobby_resp.json()
+                    if not lobby_data.get("canStartActivity", True):
+                        Logger.debug("QueueManager", "Cannot start matchmaking: lobby canStartActivity is False.")
+                        return False
+                except Exception as exc:
+                    Logger.debug("QueueManager", f"Failed to check lobby readiness: {exc}")
+                    return False
             res = lcu.request("POST", "/lol-lobby/v2/lobby/matchmaking/search")
             return res is not None and res.status_code in (200, 204)
         except Exception as e:
