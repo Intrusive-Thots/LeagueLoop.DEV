@@ -66,9 +66,11 @@ class SessionHeader(ctk.CTkFrame):
         # Time Label
         self.time_label = ctk.CTkLabel(
             self.inner_frame,
-            text="Queue: Idle",
+            # Honest first frame: nothing is known about the client yet, so do
+            # not claim an idle queue. LCU callbacks replace this on connect.
+            text="Client not running",
             font=get_font("caption"),
-            text_color=get_color("colors.text.primary"),
+            text_color="#A0A7B4",
             anchor="w"
         )
         self.time_label.grid(row=1, column=0, padx=(CARD_PAD, 2), pady=(0, CARD_PAD), sticky="w")
@@ -76,9 +78,9 @@ class SessionHeader(ctk.CTkFrame):
         # Estimate / Status Label
         self.estimate_label = ctk.CTkLabel(
             self.inner_frame,
-            text="● Connected",
+            text="○ Offline",
             font=get_font("caption"),
-            text_color=get_color("colors.state.success", "#00C853"),
+            text_color="#8A93A0",
             anchor="e"
         )
         self.estimate_label.grid(row=1, column=1, padx=(2, CARD_PAD), pady=(0, CARD_PAD), sticky="e")

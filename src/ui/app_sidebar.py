@@ -1397,7 +1397,7 @@ class SidebarWidget(ctk.CTkFrame):
 
     #: One quick-toggle icon's footprint: the button plus its padding.
     QUICK_ICON_SIZE = 26
-    QUICK_ICON_PAD = 3
+    QUICK_ICON_PAD = 2
 
     def _quick_icon_cell(self) -> int:
         """One icon's real footprint, measured rather than assumed.

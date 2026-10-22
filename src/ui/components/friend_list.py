@@ -249,6 +249,47 @@ class FriendPriorityList(ctk.CTkFrame):
         self.list_parent = ctk.CTkFrame(self.scroll, fg_color="transparent")
         self.list_parent.pack(fill="x")
 
+        # First frame: say why the list is empty instead of a blank box.
+        self._render_empty_state()
+        self._sync_header_actions(0, 0)
+
+    def _client_connected(self) -> bool:
+        lcu = getattr(self, "lcu", None)
+        return bool(lcu is not None and getattr(lcu, "is_connected", False) is True)
+
+    def _render_empty_state(self):
+        """Explain an empty list: client offline vs. still loading."""
+        if self._client_connected():
+            title, hint = "Loading friends…", "Pulling your friend list from the client."
+        else:
+            title, hint = "No client connected", "Friends show up here once League is running."
+        ctk.CTkLabel(
+            self.list_parent, text=title,
+            font=get_font("body", "bold"),
+            text_color="#A0A7B4",
+        ).pack(pady=(28, 2))
+        ctk.CTkLabel(
+            self.list_parent, text=hint,
+            font=get_font("caption"),
+            text_color="#8A93A0",
+            wraplength=220, justify="center",
+        ).pack(pady=(0, 20))
+
+    def _sync_header_actions(self, online_count: int, total_count: int = 0):
+        """Invite All needs someone online; Export needs a list. Disable otherwise."""
+        pairs = (
+            (getattr(self, "btn_mass_invite", None), online_count > 0),
+            (getattr(self, "btn_export", None), total_count > 0),
+        )
+        for btn, enabled in pairs:
+            state = "normal" if enabled else "disabled"
+            if btn is None:
+                continue
+            try:
+                btn.configure(state=state)
+            except Exception as exc:
+                Logger.debug("FriendList", "_sync_header_actions suppressed an error", exc=exc)
+
     # ─────────── Data Fetching (EventBus-driven) ───────────
 
     def _on_friends_event(self, friends_data):
@@ -427,13 +468,9 @@ class FriendPriorityList(ctk.CTkFrame):
             else:
                 self.lbl_online_count.configure(fg_color=get_color("colors.text.muted"))
 
+        self._sync_header_actions(online_count, total_count)
         if not self._friends_data:
-            lbl = ctk.CTkLabel(
-                self.list_parent, text="Checking friends...",
-                font=get_font("caption"),
-                text_color=get_color("colors.text.muted")
-            )
-            lbl.pack(pady=20)
+            self._render_empty_state()
             return
 
         # Hoist assets lookup outside the loop
