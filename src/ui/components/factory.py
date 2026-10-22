@@ -92,6 +92,13 @@ class RiotButton(ctk.CTkFrame):
             inner_color = "#A98A48"
             hover_color = get_color("colors.accent.gold", "#C8AA6E")  # Brighten on hover
             base_text_color = text_color or get_color("colors.background.app", "#091428")
+        elif style == "danger":
+            # Danger-outline (#21): red 1px border, card fill, light-red text
+            # (~5:1). Destructive actions read as deliberate, not decorative.
+            outer_color = "#B9473D"
+            inner_color = get_color("colors.background.card", "#0F1923")
+            hover_color = "#2A1517"
+            base_text_color = text_color or "#FF7A70"
         elif style == "ghost" or style == "danger":
             outer_color = get_color("colors.background.card", "#1E2328") if style == "danger" else "transparent"
             inner_color = "transparent"
@@ -142,6 +149,7 @@ class RiotButton(ctk.CTkFrame):
 
         self._inner_color = inner_color
         self._base_text_color = base_text_color
+        self._ll_focus_ring = True  # focus_ring.py draws the ring on the outer frame
         self._disabled = False  # Item #194: Track disabled state
         
     def _on_enter(self, h_color):
@@ -246,7 +254,7 @@ def make_input(parent, placeholder="", width=None, **kw):
         border_color=border_c,
         border_width=border_w,
         placeholder_text=placeholder,
-        placeholder_text_color=get_color("colors.text.muted", "#6C757D"),
+        placeholder_text_color=get_color("colors.text.muted", "#8A93A0"),
         text_color=get_color("colors.text.primary", "#F0E6D2"),
         
         **kw

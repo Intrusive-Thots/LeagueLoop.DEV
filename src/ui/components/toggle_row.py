@@ -1,4 +1,5 @@
 import customtkinter as ctk  # type: ignore
+from ui.components.glyphs import ctk_glyph
 from PIL import ImageOps  # type: ignore
 from ui.components.factory import get_color, get_font
 from ui.components.lol_toggle import LolToggle  # type: ignore
@@ -49,7 +50,8 @@ class ToggleRow(ctk.CTkFrame):
         
         # Borderless gear icon — no square box, transparent background
         self.btn_edit = ctk.CTkButton(
-            self, text="⚙", width=22, height=22,
+            self, text="", width=22, height=22,
+            image=ctk_glyph("gear", "#C8AA6E", 14),
             corner_radius=6, font=("Segoe UI Symbol", 15),
             fg_color="transparent",
             border_width=0,

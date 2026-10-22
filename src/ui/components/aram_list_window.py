@@ -140,7 +140,7 @@ class AramListWindow(ctk.CTkToplevel):
         ).pack(side="left", padx=3)
         ctk.CTkLabel(
             self.cs_legend_frame,
-            text="👥 Team",
+            text="Team",
             font=get_font("caption", "bold"),
             text_color="#FFC107",
             fg_color="#3D2E0A",

@@ -36,20 +36,31 @@ bare `ctk.CTk()` root with a stub config and a real `AssetManager`, run under
 11. **Accounts** (pass 1) — glyph empty state + gold "Add account"; "Loading accounts…" placeholder
     instead of a blank tab. Rank emblems: N/A, the tool has no rank data.
 12. **Settings** (pass 1) — PERFORMANCE / DIAGNOSTICS sections, inline hotkey rows, secondary buttons.
+13. **Contrast** (pass 2) — `colors.text.muted` #6C757D → #8A93A0 (≈5.3:1 on #0F1923), placeholder
+    fallback too; League Client button now dark-on-gold (was white-on-gold ≈2.2:1).
+14. **Focus rings** (pass 2) — `components/focus_ring.py`: CTk buttons/switches/checkboxes made
+    Tab-focusable (Space/Return activate); 2px gold ring on keyboard focus only (focus-visible),
+    incl. LolToggle and RiotButton. Verified with real xdotool Tab events.
+15. **Session header states** (pass 2) — one `HEADER_STATES` table: offline / queue idle / match
+    found / champ select / in game / post-game / reconnect; champ select gold (was purple).
+16. **Accounts header** (pass 2) — drawn plus / launch / play glyphs replace "+", 🚀, ⚔.
+17. **Loot "," artefact** (pass 2) — idle progress nub hidden (progress colour = track).
+18. **Power button** (pass 2) — "▶ Active" → bolt glyph + "Auto on" / "Auto paused".
+19. **Tooltip overflow** (pass 2) — wraplength 240 and clamped inside the window/screen.
+20. **Loot grid (mocked)** (pass 2) — rows: chest glyph badge, neutral border, gold only when
+    openable, "Ready"/"Needs key"/"Blocked" without emoji, Open button no longer squeezed out
+    by long names (13-char ellipsis + tooltip). Champ select verified as header state (mocked).
+21. **Kill Processes** (pass 2) — RiotButton `style="danger"` red outline.
+22. **Iconography sweep** (pass 2) — Find Match/Play Again, Invite All, toggle gear, "👥 Team"
+    now drawn glyphs or plain text.
 
-## Next (highest impact first)
-13. **Contrast pass** — `colors.text.muted` (#6C757D) is ~3.8:1 on cards; lift
-    it in `design_tokens.json` and audit all captions.
-14. **Focus rings** — keyboard focus visible on CTkButtons/icon buttons, not
-    only LolToggle.
-15. **Queue states** — matchmaking/ready/champ-select/in-game header states:
-    timer tabular figures, progress bar meaning, Requeue/Dodge hierarchy.
-
-
-## Found in pass 1
-16. **Accounts header** — Riot/League Client buttons still use emoji (🚀/⚔) and a bare "+".
-17. **Loot VAULT INVENTORY** — summary line shows a stray "," when empty.
-18. **"▶ Active" in session header** — automation power state reads like connection state; reword.
-19. **Hotkey recorder tooltip** — "Click to record a new hotkey" overflows the 300px window edge.
-20. **Loot item grid / Champ select states** — verify with a live client (can't render offline).
-21. **Kill Processes** — red text button on dark card; consider danger-outline style.
+## Next (pass 3+)
+23. **Live-client only** — real LCU phase transitions, champ-select pick/ban panel, actual loot
+    opening/crafting results and item art; needs a running League client.
+24. **Disabled Find Match** — play glyph dark-on-dark when disabled; dim to muted.
+25. **Match Found toast** — still uses ⚔️ emoji.
+26. **Motion audit** — tooltip slide + several per-widget fades; keep one authored entrance per view.
+27. **Section chevrons** — "▶/▼" text chevrons in collapsible headers → drawn chevron glyph.
+28. **Spacing rhythm** — card paddings mix 4/5/6/8/10px; normalise to a 4/8/12 scale.
+29. **Error states** — LCU request failures surface only in logs on Loot/Accounts; add inline
+    retry rows.

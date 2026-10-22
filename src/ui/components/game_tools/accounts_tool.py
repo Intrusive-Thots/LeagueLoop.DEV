@@ -12,6 +12,7 @@ import threading
 from datetime import datetime
 
 from ui.components.factory import get_color, get_font, get_radius
+from ui.components.glyphs import ctk_glyph
 from ui.ui_shared import CTkTooltip
 from core.constants import SPACING_SM, SPACING_MD
 from utils.logger import Logger
@@ -76,8 +77,9 @@ class AccountsTool(ctk.CTkFrame):
 
         # + Add button
         self.btn_add = ctk.CTkButton(
-            self.header, text="+", width=20, height=20,
-            corner_radius=10, font=get_font("body", "bold"),
+            self.header, text="", width=22, height=22,
+            image=ctk_glyph("plus", get_color("colors.accent.gold", "#C8AA6E"), 14),
+            corner_radius=4, font=get_font("body", "bold"),
             fg_color="transparent",
             text_color=get_color("colors.accent.primary"),
             hover_color=get_color("colors.state.hover"),
@@ -111,7 +113,8 @@ class AccountsTool(ctk.CTkFrame):
 
         btn_rc = ctk.CTkButton(
             launch_bar,
-            text="🚀 Riot Client",
+            text="Riot Client",
+            image=ctk_glyph("launch", "#A0A7B4", 14), compound="left",
             font=get_font("caption", "bold"),
             height=26,
             fg_color=get_color("colors.background.card"),
@@ -127,12 +130,14 @@ class AccountsTool(ctk.CTkFrame):
 
         btn_lol = ctk.CTkButton(
             launch_bar,
-            text="⚔️ League Client",
+            text="League Client",
+            image=ctk_glyph("play", "#0A1428", 12), compound="left",
             font=get_font("caption", "bold"),
             height=26,
             fg_color=get_color("colors.accent.primary"),
-            hover_color=get_color("colors.state.hover"),
-            text_color="#ffffff",
+            hover_color="#D8BC82",
+            # Dark text on gold: white on #C8AA6E was ~2.2:1.
+            text_color="#0A1428",
             command=self._launch_league_client,
             cursor="hand2"
         )

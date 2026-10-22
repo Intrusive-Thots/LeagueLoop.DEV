@@ -11,6 +11,7 @@ from functools import lru_cache
 from typing import Tuple
 
 from PIL import Image, ImageDraw
+from utils.logger import Logger
 
 _SCALE = 4
 
@@ -66,6 +67,18 @@ def _draw(name: str, d: ImageDraw.ImageDraw, s: int, col, w: int) -> None:
     elif name == "link":
         d.rounded_rectangle([s * .08, s * .34, s * .56, s * .66], radius=s * .16, outline=col, width=w)
         d.rounded_rectangle([s * .44, s * .34, s * .92, s * .66], radius=s * .16, outline=col, width=w)
+    elif name == "plus":
+        d.line([s * .50, s * .20, s * .50, s * .80], fill=col, width=w)
+        d.line([s * .20, s * .50, s * .80, s * .50], fill=col, width=w)
+    elif name == "launch":  # arrow leaving a box: "open external app"
+        d.line([s * .40, s * .20, s * .20, s * .20, s * .20, s * .80, s * .80, s * .80, s * .80, s * .60],
+               fill=col, width=w, joint="curve")
+        d.line([s * .46, s * .54, s * .82, s * .18], fill=col, width=w)
+        d.polygon([(s * .56, s * .14), (s * .86, s * .14), (s * .86, s * .44)], fill=col)
+    elif name == "warning":
+        d.polygon([(s * .50, s * .12), (s * .90, s * .84), (s * .10, s * .84)], outline=col, width=w)
+        d.line([s * .50, s * .38, s * .50, s * .60], fill=col, width=w)
+        d.ellipse([s * .46, s * .67, s * .54, s * .75], fill=col)
     else:
         raise KeyError(name)
 
@@ -89,4 +102,13 @@ def ctk_glyph(name: str, color: str = "#F0E6D2", size: int = 16):
 
 
 GLYPHS = ("play", "chest", "person", "bolt", "gear", "lock", "unlock",
-          "minimize", "close", "refresh", "link")
+          "minimize", "close", "refresh", "link", "plus", "launch", "warning")
+
+
+def set_icon(btn, name: str, color: str, size: int = 14) -> None:
+    """Put glyph *name* left of *btn*'s text (CTkButton or RiotButton)."""
+    target = getattr(btn, "lbl", btn)  # RiotButton draws its text in .lbl
+    try:
+        target.configure(image=ctk_glyph(name, color, size), compound="left")
+    except Exception as exc:
+        Logger.debug("Glyphs", "set_icon suppressed an error", exc=exc)

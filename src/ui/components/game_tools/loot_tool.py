@@ -11,6 +11,7 @@ import threading
 from typing import Any, Callable, Dict, List, Optional
 
 import customtkinter as ctk
+from ui.components.glyphs import ctk_glyph
 
 from services.loot_service import LootService
 from ui.components.factory import get_color, get_font, make_card
@@ -300,7 +301,9 @@ class LootTool(ctk.CTkFrame):
             height=3,
             corner_radius=2,
             fg_color="#141E28",
-            progress_color=get_color("colors.accent.gold", "#C8AA6E"),
+            # Idle bar is track-coloured: CTk draws a rounded nub even at 0,
+            # which read as a stray "," under VAULT INVENTORY (#17).
+            progress_color="#141E28",
         )
         self.progress_bar.pack(fill="x", padx=10, pady=(2, 2))
         self.progress_bar.set(0)
@@ -438,7 +441,8 @@ class LootTool(ctk.CTkFrame):
                 if hasattr(self, "btn_stop") and not self.btn_stop.winfo_ismapped():
                     self.btn_stop.pack(side="right", padx=(6, 0))
                 self.btn_stop.configure(state="normal")
-                self.progress_bar.configure(mode="indeterminate")
+                self.progress_bar.configure(mode="indeterminate",
+                                            progress_color=get_color("colors.accent.gold", "#C8AA6E"))
                 self.progress_bar.start()
             else:
                 if hasattr(self, "btn_stop") and self.btn_stop.winfo_ismapped():
@@ -447,6 +451,7 @@ class LootTool(ctk.CTkFrame):
                 self.progress_bar.stop()
                 self.progress_bar.configure(mode="determinate")
                 self.progress_bar.set(0)
+                self.progress_bar.configure(progress_color="#141E28")
         except Exception as exc:
             Logger.debug("LootTool", "_set_busy suppressed an error", exc=exc)
 
@@ -598,11 +603,13 @@ class LootTool(ctk.CTkFrame):
 
             visuals = _get_loot_visuals(loot_id, name, item_type, cat)
 
+            # Single-accent rows (#20): neutral card, gold only marks what
+            # can be opened now; drawn chest glyph instead of emoji badges.
             card_fr = ctk.CTkFrame(
                 self.list_frame,
-                fg_color=visuals["bg_color"],
+                fg_color=get_color("colors.background.card", "#0F1923"),
                 border_width=1,
-                border_color=visuals["border_color"],
+                border_color="#6E5C3A" if can_open else "#2A3442",
                 corner_radius=6,
                 height=48,
             )
@@ -610,24 +617,17 @@ class LootTool(ctk.CTkFrame):
             card_fr.pack(fill="x", pady=(2, pad_bottom), padx=(4, 6))
             card_fr.pack_propagate(False)
 
-            # Left: Icon Badge (34x34)
-            icon_badge = ctk.CTkFrame(
-                card_fr,
-                width=34,
-                height=34,
-                fg_color=visuals["badge_bg"],
-                border_width=1,
-                border_color=visuals["badge_color"],
-                corner_radius=5,
+            icon_badge = ctk.CTkLabel(
+                card_fr, text="", width=34, height=34,
+                fg_color="#141E28", corner_radius=5,
+                image=ctk_glyph("chest", "#C8AA6E" if can_open else "#8A93A0", 20),
             )
             icon_badge.pack(side="left", padx=(5, 5), pady=6)
-            icon_badge.pack_propagate(False)
 
-            ctk.CTkLabel(
-                icon_badge,
-                text=visuals["icon"],
-                font=("Segoe UI Emoji", 14),
-            ).pack(expand=True)
+            # Right column is packed before the info column so a long name
+            # can't squeeze the per-row Open button out of the card.
+            action_col = ctk.CTkFrame(card_fr, fg_color="transparent")
+            action_col.pack(side="right", padx=(4, 6), pady=6)
 
             # Center: Info Column (Name & Status)
             info_col = ctk.CTkFrame(card_fr, fg_color="transparent")
@@ -645,7 +645,7 @@ class LootTool(ctk.CTkFrame):
                 text_color=get_color("colors.accent.gold", "#C8AA6E"),
             ).pack(side="left")
 
-            display_name = name if len(name) <= 18 else name[:16] + "…"
+            display_name = name if len(name) <= 13 else name[:12].rstrip() + "…"
             name_lbl = ctk.CTkLabel(
                 top_row,
                 text=display_name,
@@ -654,7 +654,7 @@ class LootTool(ctk.CTkFrame):
                 anchor="w",
             )
             name_lbl.pack(side="left", padx=(4, 0), fill="x", expand=True)
-            if len(name) > 18:
+            if len(name) > 13:
                 CTkTooltip(name_lbl, name)
 
             # Row 2: Category Pill + Status Pill
@@ -664,20 +664,20 @@ class LootTool(ctk.CTkFrame):
 
             ctk.CTkLabel(
                 bot_row,
-                text=f"[{visuals['pill_text']}]",
+                text=str(visuals['pill_text']).title(),
                 font=("Inter", 8, "bold"),
-                text_color=visuals["badge_color"],
+                text_color="#A0A7B4",
             ).pack(side="left")
 
             if can_open:
-                status_text = f"✓ Ready ({will})" if will > 1 else "✓ Ready"
+                status_text = f"Ready ({will})" if will > 1 else "Ready"
                 status_color = "#2ECC71"
             elif needs_key:
-                status_text = "🗝️ Needs key"
-                status_color = "#E67E22"
+                status_text = "Needs key"
+                status_color = "#E0A43A"
             else:
-                status_text = "— Blocked"
-                status_color = "#8A9BA8"
+                status_text = "Blocked"
+                status_color = "#8A93A0"
 
             ctk.CTkLabel(
                 bot_row,
@@ -686,9 +686,6 @@ class LootTool(ctk.CTkFrame):
                 text_color=status_color,
             ).pack(side="left", padx=(2, 0))
 
-            # Right: Action Button
-            action_col = ctk.CTkFrame(card_fr, fg_color="transparent")
-            action_col.pack(side="right", padx=(4, 6), pady=6)
 
             if can_open:
                 btn_single = ctk.CTkButton(

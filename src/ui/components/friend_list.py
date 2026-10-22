@@ -18,6 +18,7 @@ import threading
 from core.events import EventBus
 import tkinter as tk
 import customtkinter as ctk
+from ui.components.glyphs import set_icon
 
 from ui.components.factory import get_color, get_font, get_radius
 from ui.ui_shared import CTkTooltip
@@ -243,7 +244,7 @@ class FriendPriorityList(ctk.CTkFrame):
 
         # Mass Invite button
         self.btn_mass_invite = ctk.CTkButton(
-            self.header, text="👥 Invite All", width=80, height=20,
+            self.header, text=" Invite All", width=84, height=20,
             corner_radius=get_radius("sm"), font=get_font("caption", "bold"),
             fg_color="transparent",
             text_color=get_color("colors.text.muted"),
@@ -251,6 +252,7 @@ class FriendPriorityList(ctk.CTkFrame):
             command=self._on_mass_invite,
             cursor="hand2",
         )
+        set_icon(self.btn_mass_invite, "person", "#A0A7B4", 12)
         self.btn_mass_invite.pack(side="right")
         CTkTooltip(self.btn_mass_invite, "Invite all online friends (or VIPs) to your lobby")
 

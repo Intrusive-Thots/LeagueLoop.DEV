@@ -38,7 +38,7 @@ DEFAULT_TOKENS = {
     },
     "colors": {
         "background": {"app": "#091428", "panel": "#0A1428", "card": "#141E28"},
-        "text": {"primary": "#F0E6D2", "secondary": "#C8AA6E", "muted": "#6C757D"},
+        "text": {"primary": "#F0E6D2", "secondary": "#C8AA6E", "muted": "#8A93A0"},
         "accent": {"primary": "#C8AA6E", "gold": "#C8AA6E", "blue": "#0BC6E3"},
         "border": {"subtle": "#1E2328", "soft": "#1A2332", "card": "#1A2332"}
     },

@@ -2,6 +2,7 @@
 Sidebar navigation and main layout component.
 """
 import customtkinter as ctk  # type: ignore
+from ui.components.glyphs import set_icon
 import os
 import threading
 import time
@@ -182,6 +183,12 @@ class SidebarWidget(ctk.CTkFrame):
             _bar = getattr(self, "tab_bar", None)
             if _bar is not None:
                 _bar.set_active(tab_name)
+            # Keyboard focus rings (#14); tabs build lazily, so re-scan each switch.
+            try:
+                from ui.components.focus_ring import install_focus_rings
+                self.after_idle(lambda: install_focus_rings(self.winfo_toplevel(), self))
+            except Exception as exc:
+                Logger.debug("AppSidebar", "focus rings suppressed", exc=exc)
 
             if prev_tab != tab_name:
                 try:
@@ -338,7 +345,7 @@ class SidebarWidget(ctk.CTkFrame):
         # ── Find Match (primary action) ──
         self.btn_find_match = make_button(
             self.queue_actions_container, 
-            text="▶  Find Match",
+            text=" Find Match",
             style="primary",
             font=get_font("body", "bold"), 
             height=BTN_HEIGHT,
@@ -346,6 +353,7 @@ class SidebarWidget(ctk.CTkFrame):
             border_color=get_color("colors.accent.primary", "#F0E6D2"),
             command=self._find_match
         )
+        set_icon(self.btn_find_match, "play", "#0A1428", 12)
         self.btn_find_match.pack(fill="x", pady=0)
         hk_find = self.config.get("hotkey_find_match", "ctrl+shift+f").upper()
         CTkTooltip(self.btn_find_match, f"Start or Cancel Matchmaking ({hk_find})")
@@ -393,7 +401,7 @@ class SidebarWidget(ctk.CTkFrame):
 
         self.play_again_button = make_button(
             self.queue_actions_container,
-            text="🔄 Play Again",
+            text=" Play Again",
             style="primary",
             font=get_font("body", "bold"),
             height=BTN_HEIGHT,
@@ -401,6 +409,7 @@ class SidebarWidget(ctk.CTkFrame):
             border_color=get_color("colors.accent.primary", "#F0E6D2"),
             command=self._play_again
         )
+        set_icon(self.play_again_button, "refresh", "#0A1428", 13)
         CTkTooltip(self.play_again_button, "Return to lobby and play again")
 
         # ── Launch Client ──
@@ -1207,8 +1216,7 @@ class SidebarWidget(ctk.CTkFrame):
             self._hide_quick_actions()
             self._stop_local_queue_timer()
             
-            self.time_label.configure(text="Disconnected", text_color=get_color("colors.state.danger", "#ff4444"))
-            self.estimate_label.configure(text="● Offline", text_color=get_color("colors.state.danger", "#ff4444"))
+            self._set_header_state("offline")
 
         # Show/hide accounts tool and launch button based on login state
         self.update_accounts_tool_visibility(lcu_connected=connected)
@@ -1219,6 +1227,27 @@ class SidebarWidget(ctk.CTkFrame):
                 self.after(400, self.loot_tool.refresh)
             except Exception as exc:
                 Logger.debug("AppSidebar", "on_lcu_connection_changed suppressed an error", exc=exc)
+
+    # One palette for every client phase shown in the session header (#15).
+    # Text colours all clear 4.5:1 on the card; gold stays the only accent,
+    # green/amber/red are reserved for "needs attention / good news" states.
+    HEADER_STATES = {
+        "offline":      ("Client not running", "○ Offline",          "#A0A7B4", "#8A93A0", 0.0, None),
+        "idle":         ("Queue idle",         "● Connected",        "#F0E6D2", "#2ECC71", 0.0, None),
+        "ready":        ("Match found",        "● Accept now",       "#2ECC71", "#2ECC71", 1.0, "#2ECC71"),
+        "champ_select": ("Champ select",       "● Drafting",         "#F0E6D2", "#C8AA6E", 1.0, "#C8AA6E"),
+        "in_game":      ("In game",            "● Playing",          "#F0E6D2", "#A0A7B4", 0.0, None),
+        "post_game":    ("Post-game",          "● Waiting for stats", "#F0E6D2", "#E0A43A", 0.0, None),
+        "reconnect":    ("Game disconnected",  "● Reconnect",        "#FF6B6B", "#FF6B6B", 0.0, None),
+    }
+
+    def _set_header_state(self, key: str):
+        """Apply one HEADER_STATES entry to the session header labels."""
+        title, status, title_col, status_col, progress, bar_col = self.HEADER_STATES[key]
+        self.time_label.configure(text=title, text_color=title_col)
+        self.estimate_label.configure(text=status, text_color=status_col)
+        self.progress_bar.set(progress)
+        self.progress_bar.configure(progress_color=bar_col or get_color("colors.accent.gold", "#C8AA6E"))
 
     def set_power_state(self, state: bool):
         """Pure visual/logical toggle without user-cancel side effects."""
@@ -1231,10 +1260,8 @@ class SidebarWidget(ctk.CTkFrame):
             Logger.debug("UI", f"State sync error: {e}")
 
         if hasattr(self, "btn_power_status") and self.btn_power_status.winfo_exists():
-            if state:
-                self.btn_power_status.configure(text="▶ Active", text_color=get_color("colors.accent.primary"))
-            else:
-                self.btn_power_status.configure(text="⏸ Paused", text_color=get_color("colors.text.muted"))
+            from ui.components.session_header import style_power_button
+            style_power_button(self.btn_power_status, state)
 
         if self.toggle_callback:
             self.toggle_callback(self.power_state)
@@ -2185,10 +2212,7 @@ class SidebarWidget(ctk.CTkFrame):
         elif phase == "ReadyCheck":
             if prev_ui_phase != "ReadyCheck":
                 self._stop_local_queue_timer()
-                self.time_label.configure(text="Match Found!", text_color=get_color("colors.state.success", get_color("colors.state.success", "#00C853")))
-                self.estimate_label.configure(text="● Ready", text_color=get_color("colors.state.success", "#00C853"))
-                self.progress_bar.set(1.0)
-                self.progress_bar.configure(progress_color=get_color("colors.state.success", "#00C853"))
+                self._set_header_state("ready")
                 self._hide_quick_actions(show_find_match=False)
 
                 try:
@@ -2201,10 +2225,7 @@ class SidebarWidget(ctk.CTkFrame):
         elif phase == "ChampSelect":
             if prev_ui_phase != "ChampSelect":
                 self._stop_local_queue_timer()
-                self.time_label.configure(text="Champ Select", text_color=get_color("colors.accent.purple", "#A855F7"))
-                self.estimate_label.configure(text="● Drafting", text_color=get_color("colors.accent.purple", "#A855F7"))
-                self.progress_bar.set(1.0)
-                self.progress_bar.configure(progress_color=get_color("colors.accent.purple", "#A855F7"))
+                self._set_header_state("champ_select")
                 self._show_quick_actions(show_requeue=False)
                 if getattr(self, "friend_list", None) and hasattr(self.friend_list, "_expanded") and self.friend_list._expanded:
                     try:
@@ -2219,18 +2240,14 @@ class SidebarWidget(ctk.CTkFrame):
         elif phase == "InProgress":
             if prev_ui_phase != "InProgress":
                 self._stop_local_queue_timer()
-                self.time_label.configure(text="In Game", text_color=get_color("colors.text.primary"))
-                self.estimate_label.configure(text="● Playing", text_color=get_color("colors.accent.blue", "#3B82F6"))
-                self.progress_bar.set(0)
+                self._set_header_state("in_game")
                 self._hide_quick_actions(show_find_match=False)
             self._last_ui_phase = phase
 
         elif phase in ["EndOfGame", "PreEndOfGame", "WaitingForStats"]:
             if prev_ui_phase not in ["EndOfGame", "PreEndOfGame", "WaitingForStats"]:
                 self._stop_local_queue_timer()
-                self.time_label.configure(text="Post Game", text_color=get_color("colors.text.primary"))
-                self.estimate_label.configure(text="● Waiting Stats", text_color=get_color("colors.state.warning", "#F59E0B"))
-                self.progress_bar.set(0)
+                self._set_header_state("post_game")
                 self._hide_quick_actions(show_find_match=False)
                 self._show_play_again()
             elif not getattr(self, "play_again_button", None) or not bool(self.play_again_button.winfo_manager()):
@@ -2241,9 +2258,7 @@ class SidebarWidget(ctk.CTkFrame):
         elif phase == "Reconnect":
             if prev_ui_phase != "Reconnect":
                 self._stop_local_queue_timer()
-                self.time_label.configure(text="Reconnect", text_color=get_color("colors.state.danger", "#ff4444"))
-                self.estimate_label.configure(text="● Crash/DC", text_color=get_color("colors.state.danger", "#ff4444"))
-                self.progress_bar.set(0)
+                self._set_header_state("reconnect")
                 self._hide_quick_actions(show_find_match=False)
             self._last_ui_phase = phase
 
@@ -2252,12 +2267,9 @@ class SidebarWidget(ctk.CTkFrame):
             if prev_ui_phase not in ["Lobby", "None"] or prev_ui_phase is None:
                 self._stop_local_queue_timer()
                 if getattr(self.master, "lcu", None) and self.master.lcu.is_connected:
-                    self.time_label.configure(text="Queue: Idle", text_color=get_color("colors.text.primary"))
-                    self.estimate_label.configure(text="● Connected", text_color=get_color("colors.state.success", "#00C853"))
+                    self._set_header_state("idle")
                 else:
-                    self.time_label.configure(text="Disconnected", text_color=get_color("colors.state.danger", "#ff4444"))
-                    self.estimate_label.configure(text="● Offline", text_color=get_color("colors.state.danger", "#ff4444"))
-                self.progress_bar.set(0)
+                    self._set_header_state("offline")
                 self._hide_quick_actions(show_find_match=True)
             self._last_ui_phase = phase
 
