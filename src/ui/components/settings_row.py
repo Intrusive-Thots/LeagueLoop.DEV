@@ -127,18 +127,20 @@ class SettingsHotkeyRow(ctk.CTkFrame):
             font=get_font("body"), 
             text_color=get_color("colors.text.primary")
         )
-        self.text_label.pack(side="top", anchor="w")
-        
+        # Inline: label left, recorder right — one row per hotkey instead of
+        # two, so the whole Hotkeys card reads as a compact key map.
+        self.text_label.pack(side="left", anchor="w")
+
         if tooltip_text:
             CTkTooltip(self.text_label, tooltip_text)
-            
+
         self.recorder = HotkeyRecorder(
-            self, 
-            initial_value=default_val, 
-            width=150, 
+            self,
+            initial_value=default_val,
+            width=130,
             on_change=lambda val: on_change_callback(val, config_key)
         )
-        self.recorder.pack(fill="x", pady=(2, 0))
+        self.recorder.pack(side="right")
         
         if tooltip_text:
             CTkTooltip(self.recorder, tooltip_text)

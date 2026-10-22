@@ -37,7 +37,12 @@ class ToggleRow(ctk.CTkFrame):
             anchor="w", 
             text_color=get_color("colors.text.primary", "#F0E6D2")
         )
-        self.text_label.pack(side="left", padx=(6, 0))
+        # Label takes the free width; gear + toggle sit together on the right
+        # so every row's controls line up in one column.
+        self.toggle = LolToggle(self, variable=variable, command=self._on_toggle,
+                                bg_color=get_color("colors.background.card", "#0F1923"))
+        self.toggle.pack(side="right")
+        self.text_label.pack(side="left", padx=(8, 0), fill="x", expand=True)
         
         if tooltip_text:
             CTkTooltip(self.text_label, tooltip_text)
@@ -53,12 +58,10 @@ class ToggleRow(ctk.CTkFrame):
             command=self._handle_edit, cursor="hand2"
         )
         if self._on_edit:
-            self.btn_edit.pack(side="left", padx=(6, 0))
+            self.btn_edit.pack(side="right", padx=(0, 6), before=self.text_label)
             self.text_label.bind("<Button-1>", lambda e: self._handle_edit())
             self.text_label.configure(cursor="hand2")
         
-        self.toggle = LolToggle(self, variable=variable, command=self._on_toggle)
-        self.toggle.pack(side="right")
         
         self._user_command = command
         
@@ -116,7 +119,7 @@ class ToggleRow(ctk.CTkFrame):
         
         is_on = self._variable.get() if self._variable else False
         gold = get_color("colors.accent.gold", "#C8AA6E")
-        muted = get_color("colors.text.muted", "#5B5A56")
+        muted = "#8A93A0"  # off-state text: ≥4.5:1 on card (token muted is ~3.8:1)
         
         if is_on:
             # Show color icon and start pulse

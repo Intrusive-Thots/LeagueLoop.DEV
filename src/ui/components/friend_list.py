@@ -26,6 +26,25 @@ from utils.logger import Logger
 from utils.smooth_scroll import apply_smooth_scroll
 
 
+#: Longest name / status that fits beside the icon in the ~280 px sidebar.
+NAME_MAX_CHARS = 18
+STATUS_MAX_CHARS = 26
+
+
+def _ellipsize(text, limit):
+    text = text or ""
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+def _presence_color(availability):
+    a = (availability or "").lower()
+    if a in ("chat", "online"):
+        return "#2ECC71"
+    if a in ("away", "dnd", "ingame", "championselect", "inqueue", "busy"):
+        return "#E0A43A"
+    return "#5B6573"
+
+
 class FriendRow(ctk.CTkFrame):
     """A single friend entry using grid layout for deterministic column alignment."""
 
@@ -55,9 +74,11 @@ class FriendRow(ctk.CTkFrame):
         if icon_widget_cb:
             icon_widget_cb(self.icon_lbl)
 
-        # Col 1: Status Dot
-        is_online = availability != "offline"
-        dot_color = get_color("colors.state.success") if is_online else get_color("colors.state.error")
+        # Col 1: Status Dot — League's own presence colours: green = online,
+        # amber = away / in game, grey = offline. Offline was red before, which
+        # read as an error on every friend who simply was not playing.
+        is_online = availability not in ("offline", "", None)
+        dot_color = _presence_color(availability)
         self.status_dot = ctk.CTkLabel(
             self, text="●", text_color=dot_color,
             font=get_font("body"), width=14
@@ -66,26 +87,28 @@ class FriendRow(ctk.CTkFrame):
         CTkTooltip(self.status_dot, f"Status: {availability}")
 
         # Col 2: Name + Status Text (stacked)
-        name_color = get_color("colors.accent.primary") if is_online else get_color("colors.text.disabled")
+        name_color = get_color("colors.accent.primary") if is_online else "#8A93A0"
         self.lbl_name = ctk.CTkLabel(
-            self, text=name,
+            self, text=_ellipsize(name, NAME_MAX_CHARS),
             font=get_font("body", "bold"),
             text_color=name_color,
             anchor="w"
         )
         self.lbl_name.grid(row=0, column=2, sticky="ew", pady=(4, 0))
 
-        status_color = get_color("colors.text.muted") if is_online else get_color("colors.text.disabled")
+        status_color = "#A0A7B4" if is_online else "#8A93A0"
         self.lbl_status = ctk.CTkLabel(
-            self, text=status_text,
+            self, text=_ellipsize(status_text, STATUS_MAX_CHARS),
             font=get_font("caption"),
             text_color=status_color,
             anchor="w"
         )
         self.lbl_status.grid(row=1, column=2, sticky="ew", pady=(0, 4))
+        if len(name) > NAME_MAX_CHARS or len(status_text or "") > STATUS_MAX_CHARS:
+            CTkTooltip(self.lbl_name, f"{name} — {status_text}" if status_text else name)
 
         # Col 3: Auto-Join Indicator
-        aj_color = "#00A2FF" if is_auto_join else get_color("colors.text.disabled")
+        aj_color = get_color("colors.accent.gold", "#C8AA6E") if is_auto_join else "#4A5562"
         aj_tip = "Auto-Join Active — Click to toggle" if is_auto_join else "Auto-Join Inactive — Click to toggle"
         self.auto_join_lbl = ctk.CTkLabel(
             self, text="⚭", font=get_font("title", "bold"),

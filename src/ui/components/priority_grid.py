@@ -16,9 +16,12 @@ from core.constants import SPACING_SM, SPACING_MD
 from utils.smooth_scroll import apply_smooth_scroll
 from utils.logger import Logger
 
-ICON_SIZE = 40
+ICON_SIZE = 48  # was 40: portraits must be recognisable at a glance in champ select
 ICONS_PER_ROW = 4
 GRID_GAP = SPACING_SM
+#: Horizontal space one grid column takes (cell + border + gap); windows use
+#: it to work out how many portraits fit per row.
+CELL_PITCH = ICON_SIZE + 12
 
 # Selection colours
 SEL_BORDER = get_color("colors.accent.gold", "#C8AA6E")  # gold ring for single-select in edit mode
@@ -773,7 +776,7 @@ class PriorityIconGrid(ctk.CTkFrame):
         cols_per_row = getattr(self, "_icons_per_row", ICONS_PER_ROW)
         if hasattr(self, "grid_parent") and self.grid_parent.winfo_exists():
             for c in range(cols_per_row):
-                self.grid_parent.grid_columnconfigure(c, weight=0, minsize=48)
+                self.grid_parent.grid_columnconfigure(c, weight=0, minsize=ICON_SIZE + 8)
 
         # Hoist static tokens once for the whole render pass
         ctx = {

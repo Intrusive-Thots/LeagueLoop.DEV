@@ -66,6 +66,10 @@ class SidebarWidget(ctk.CTkFrame):
         self._setup_ui()
         self.after(100, self._load_icons_async)
 
+    #: Footer text when nothing has happened yet. Connection state lives in the
+    #: session header only; the footer is purely the last-action log.
+    ACTION_LOG_IDLE = "No recent actions"
+
     def _setup_ui(self):
         # ── Header / Drag Area ──
         self.header = ctk.CTkFrame(self, fg_color="transparent", height=32)
@@ -100,48 +104,52 @@ class SidebarWidget(ctk.CTkFrame):
         self.lbl_title.pack(side="left", padx=(0, 4))
         CTkTooltip(self.lbl_title, "LeagueLoop — Never Miss a Queue Again")
 
-        # Dock / Undock Lock Button (Gold 🔒 when docked/ON, Red 🔓 when undocked/OFF)
+        # Dock / Undock lock. Drawn glyphs (not emoji) so it renders the same on
+        # every platform. Docked = gold lock; undocked = grey open lock — being
+        # undocked is a choice, not an error, so it is no longer red.
+        from ui.components.glyphs import ctk_glyph
         self._dock_state = self.config.get("docked", True)
+        self._dock_imgs = {
+            True: ctk_glyph("lock", "#C8AA6E", 14),
+            False: ctk_glyph("unlock", "#A0A7B4", 14),
+        }
         self.btn_dock = ctk.CTkButton(
             self.header,
-            text="🔒" if self._dock_state else "🔓",
+            text="",
+            image=self._dock_imgs[bool(self._dock_state)],
             width=26, height=22,
             corner_radius=6,
-            font=("Segoe UI Emoji", 11, "bold"),
             fg_color="#1E2328",
             border_width=1,
-            border_color="#C8AA6E" if self._dock_state else "#FF4655",
-            text_color="#C8AA6E" if self._dock_state else "#FF4655",
+            border_color="#C8AA6E" if self._dock_state else "#3A4654",
             hover_color="#2A3447",
             command=self._on_dock_toggle,
             cursor="hand2"
         )
         self.btn_dock.pack(side="left", padx=(2, 0))
         self.dock_tooltip = CTkTooltip(
-            self.btn_dock, 
+            self.btn_dock,
             "Docked to League Client (Click to Undock)" if self._dock_state else "Undocked (Click to Dock)"
         )
 
-        # 🗕 Minimize
+        # Window controls, right-aligned in the usual order: minimize, close.
+        self.btn_close = ctk.CTkButton(
+            self.header, text="", image=ctk_glyph("close", "#A0A7B4", 12),
+            width=24, height=22, corner_radius=6,
+            fg_color="transparent", hover_color=get_color("colors.state.danger", "#e81123"),
+            command=self.master._on_close, cursor="hand2",
+        )
+        self.btn_close.pack(side="right", padx=(2, 0))
+        CTkTooltip(self.btn_close, "Close Application")
+
         self.btn_minimize = ctk.CTkButton(
-            self.header, text="🗕", width=20, height=20,
-            corner_radius=10, font=get_font("caption"),
+            self.header, text="", image=ctk_glyph("minimize", "#A0A7B4", 12),
+            width=24, height=22, corner_radius=6,
             fg_color="transparent", hover_color="#1E2328",
-            text_color=get_color("colors.text.muted", "#6C757D"),
             command=self._on_minimize_click, cursor="hand2",
         )
         self.btn_minimize.pack(side="right", padx=(2, 2))
         CTkTooltip(self.btn_minimize, "Minimize Window")
-
-        # ✕ Close
-        self.btn_close = ctk.CTkButton(
-            self.header, text="✕", width=20, height=20,
-            corner_radius=10, font=get_font("caption"),
-            fg_color="transparent", hover_color=get_color("colors.state.danger", "#e81123"),
-            command=self.master._on_close, cursor="hand2",
-            )
-        self.btn_close.pack(side="right", padx=(2, 2))
-        CTkTooltip(self.btn_close, "Close Application")
         self.drag_widgets = [self.header, self.lbl_title]
 
         # Gold accent divider below header (pre-blended: #C8AA6E at ~12% on #091428)
@@ -171,6 +179,9 @@ class SidebarWidget(ctk.CTkFrame):
         def _switch_tab(tab_name):
             prev_tab = self._current_tab
             self._current_tab = tab_name
+            _bar = getattr(self, "tab_bar", None)
+            if _bar is not None:
+                _bar.set_active(tab_name)
 
             if prev_tab != tab_name:
                 try:
@@ -200,11 +211,23 @@ class SidebarWidget(ctk.CTkFrame):
             self.spacer.pack_forget()
             
             # Pack based on tab
+            _ph = getattr(self, "_accounts_placeholder", None)
+            if _ph is not None:
+                _ph.pack_forget()
             if tab_name == "Accounts":
                 if getattr(self, "accounts_tool", None):
                     self.accounts_tool.pack(fill="both", expand=True, pady=(0, SECTION_GAP))
                     if not getattr(self.accounts_tool, "_expanded", False):
                         self.accounts_tool._toggle_collapse()
+                else:
+                    # Never a blank tab: say what is happening.
+                    if _ph is None:
+                        _ph = ctk.CTkLabel(
+                            self.main_body, text="Loading accounts…",
+                            font=get_font("caption"), text_color="#A0A7B4",
+                        )
+                        self._accounts_placeholder = _ph
+                    _ph.pack(fill="x", pady=(SECTION_GAP, 0))
                 self.spacer.pack(fill="both", expand=True)
 
             elif tab_name == "Loot":
@@ -257,9 +280,16 @@ class SidebarWidget(ctk.CTkFrame):
             labels={
                 "Play": "Play",
                 "Loot": "Loot",
-                "Accounts": "Accts",
+                "Accounts": "Accounts",
                 "Automations": "Auto",
-                "Settings": "Set",
+                "Settings": "Settings",
+            },
+            icons={
+                "Play": "play",
+                "Loot": "chest",
+                "Accounts": "person",
+                "Automations": "bolt",
+                "Settings": "gear",
             },
             default_tab=None,
             command=self.switch_tab,
@@ -376,8 +406,8 @@ class SidebarWidget(ctk.CTkFrame):
         # ── Launch Client ──
         self.btn_launch_client = make_button(
             self.btn_frame,
-            text="🚀 Launch Client",
-            style="secondary",
+            text="Launch Client",
+            style="primary",
             font=get_font("body", "bold"),
             height=BTN_HEIGHT,
             command=lambda: self.master._hotkey_launch_client() if hasattr(self.master, "_hotkey_launch_client") else None
@@ -410,13 +440,21 @@ class SidebarWidget(ctk.CTkFrame):
         self.master_switch_frame.pack_propagate(False)
 
         self.var_master = ctk.BooleanVar(value=True)
+        _master_text = ctk.CTkFrame(self.master_switch_frame, fg_color="transparent")
+        _master_text.pack(side="left", padx=CARD_PAD, fill="y")
         self._master_label = ctk.CTkLabel(
-            self.master_switch_frame, text="⚡ ALL ON",
-            font=get_font("title"),
-            text_color=get_color("colors.accent.gold", "#C8AA6E"),
-            anchor="w"
+            _master_text, text="All automations",
+            font=get_font("body", "bold"),
+            text_color=get_color("colors.text.primary", "#F0E6D2"),
+            anchor="w", height=18,
         )
-        self._master_label.pack(side="left", padx=CARD_PAD)
+        self._master_label.pack(side="top", anchor="w", pady=(6, 0))
+        self._master_summary = ctk.CTkLabel(
+            _master_text, text="",
+            font=get_font("caption"), text_color="#A0A7B4",
+            anchor="w", height=14,
+        )
+        self._master_summary.pack(side="top", anchor="w")
 
         self._master_toggle = LolToggle(
             self.master_switch_frame, width=48, height=24,
@@ -433,16 +471,42 @@ class SidebarWidget(ctk.CTkFrame):
         self._automation_rows = []
         self._automation_saved_states = {}  # Saved states when master is turned off
 
-        def _make_item_card(key, label_text, var, command, tooltip_text, icon_id, icon_type="item", pack_card=True):
-            card = ctk.CTkFrame(
+        # Automations are grouped by the game phase they act in, so the list
+        # reads in the order things happen: queue → champ select → post-game.
+        self._automation_groups = {}
+        for gkey, gtitle in (("queue", "QUEUE"), ("select", "CHAMP SELECT"), ("post", "POST-GAME")):
+            ctk.CTkLabel(
+                self.automations_scroll, text=gtitle,
+                font=get_font("caption", "bold"), text_color="#A0A7B4",
+                anchor="w", height=16,
+            ).pack(fill="x", padx=CARD_PAD + 2, pady=(0, 2))
+            gcard = ctk.CTkFrame(
                 self.automations_scroll,
                 fg_color=get_color("colors.background.card", "#192230"),
                 corner_radius=get_radius("md"),
                 border_width=1,
-                border_color="#1E2838"
+                border_color="#1E2838",
             )
-            if pack_card:
-                card.pack(fill="x", padx=CARD_PAD, pady=(0, INNER_GAP))
+            gcard.pack(fill="x", padx=CARD_PAD, pady=(0, SECTION_GAP))
+            gcard._row_count = 0
+            self._automation_groups[gkey] = gcard
+
+        def _make_item_card(key, label_text, var, command, tooltip_text, icon_id, icon_type="item", pack_card=True, group=None):
+            if group and pack_card:
+                card = self._automation_groups[group]
+                if card._row_count:
+                    ctk.CTkFrame(card, height=1, fg_color="#1E2838").pack(fill="x", padx=8)
+                card._row_count += 1
+            else:
+                card = ctk.CTkFrame(
+                    self.automations_scroll,
+                    fg_color=get_color("colors.background.card", "#192230"),
+                    corner_radius=get_radius("md"),
+                    border_width=1,
+                    border_color="#1E2838"
+                )
+                if pack_card:
+                    card.pack(fill="x", padx=CARD_PAD, pady=(0, INNER_GAP))
 
             def _edit_handler(k=key):
                 if k == "priority_picker":
@@ -468,7 +532,7 @@ class SidebarWidget(ctk.CTkFrame):
                 row_kwargs["icon_item_id"] = icon_id
 
             row = ToggleRow(**row_kwargs)
-            row.pack(fill="x", padx=8, pady=6)
+            row.pack(fill="x", padx=8, pady=5)
             row.card = card
             if pack_card:
                 self._automation_rows.append((key, var, row))
@@ -476,28 +540,28 @@ class SidebarWidget(ctk.CTkFrame):
 
         # Auto Accept
         self.var_accept = ctk.BooleanVar(value=self.config.get("auto_accept", True))
-        self.row_accept = _make_item_card("auto_accept", "Auto Accept", self.var_accept, self._on_toggle_accept, "Automatically accepts match queue pops", "2420")
+        self.row_accept = _make_item_card("auto_accept", "Auto Accept", self.var_accept, self._on_toggle_accept, "Automatically accepts match queue pops", "2420", group="queue")
 
         # ARAM Picker
         self.var_priority = ctk.BooleanVar(value=self.config.get("priority_picker", {}).get("enabled", False))
-        self.row_priority = _make_item_card("priority_picker", "ARAM Picker", self.var_priority, self._on_toggle_priority, "Attempts to pick highest available champion from ARAM List", "2010")
+        self.row_priority = _make_item_card("priority_picker", "ARAM Picker", self.var_priority, self._on_toggle_priority, "Attempts to pick highest available champion from ARAM List", "2010", group="select")
 
         self.var_auto_add_played = ctk.BooleanVar(value=self.config.get("aram_auto_add_played", False))
 
         # Friend Auto-Join
         self.var_auto_join = ctk.BooleanVar(value=self.config.get("auto_join_enabled", True))
-        self.row_auto_join = _make_item_card("auto_join", "Friend Auto-Join", self.var_auto_join, self._on_toggle_auto_join, "Automatically joins available friend lobbies", "3109")
+        self.row_auto_join = _make_item_card("auto_join", "Friend Auto-Join", self.var_auto_join, self._on_toggle_auto_join, "Automatically joins available friend lobbies", "3109", group="queue")
 
         # Auto Honor
         self.var_auto_honor = ctk.BooleanVar(value=self.config.get("auto_honor_enabled", False))
-        self.row_auto_honor = _make_item_card("auto_honor", "Auto Honor", self.var_auto_honor, self._on_toggle_auto_honor, "Automatically honors a teammate after each game", "3105")
+        self.row_auto_honor = _make_item_card("auto_honor", "Auto Honor", self.var_auto_honor, self._on_toggle_auto_honor, "Automatically honors a teammate after each game", "3105", group="post")
 
         # Skip Stats
         self.var_skip_stats = ctk.BooleanVar(value=self.config.get("skip_stats_enabled", True))
         self.row_skip_stats = _make_item_card(
             "skip_stats", "Skip Stats", self.var_skip_stats, self._on_toggle_skip_stats,
             "Skips post-game stats and continuously loops: plays again and finds match automatically", "3111"
-        )
+        , group="post")
 
         # Auto Replay
         from core.config_keys import AUTO_SAVE_REPLAYS
@@ -507,15 +571,17 @@ class SidebarWidget(ctk.CTkFrame):
             self._on_toggle_auto_save_replays,
             "Automatically downloads match replays (.rofl) after each game (compatible with Skip Stats)",
             "3363"
-        )
+        , group="post")
 
         # Auto Select Skin
         self.var_auto_skin = ctk.BooleanVar(value=self.config.get("auto_random_skin", True))
-        self.row_auto_skin = _make_item_card("auto_skin", "Auto Select Skin", self.var_auto_skin, self._on_toggle_auto_skin, "Automatically selects a random skin when a champion is selected", "3157", icon_type="item")
+        self.row_auto_skin = _make_item_card("auto_skin", "Auto Select Skin", self.var_auto_skin, self._on_toggle_auto_skin, "Automatically selects a random skin when a champion is selected", "3157", icon_type="item", group="select")
 
         # Auto-Ban (hidden for now: ARAM focus)
         self.var_auto_ban = ctk.BooleanVar(value=self.config.get("auto_ban_enabled", False))
         self.row_auto_ban = _make_item_card("auto_ban", "Auto-Ban", self.var_auto_ban, self._on_toggle_auto_ban, "Automatically bans configured champions in champ select", "350", icon_type="champion", pack_card=False)
+
+        self._refresh_master_summary()
 
         # Build quick automation icons row below Find Match
         self._build_quick_automation_icon_bar()
@@ -524,7 +590,7 @@ class SidebarWidget(ctk.CTkFrame):
         for _v in [self.var_accept, self.var_priority, self.var_auto_join, self.var_auto_honor,
                    self.var_skip_stats, self.var_auto_save_replays, self.var_auto_skin]:
             try:
-                _v.trace_add("write", lambda *args: self._update_all_quick_icons())
+                _v.trace_add("write", lambda *args: (self._update_all_quick_icons(), self._refresh_master_summary()))
             except Exception as exc:
                 Logger.debug("AppSidebar", "_setup_ui suppressed an error", exc=exc)
         
@@ -620,6 +686,7 @@ class SidebarWidget(ctk.CTkFrame):
             label_text="Recent match replays",
             description="Download replays for recent games",
             button_text="Download",
+            style="secondary",
             button_width=90,
             command=self._on_download_recent_replays,
             tooltip_text="Asks the League client to save replays that are still on this patch. Older games are skipped.",
@@ -654,7 +721,7 @@ class SidebarWidget(ctk.CTkFrame):
             self.recorders[config_key] = row.recorder
 
         # SYSTEM & PERFORMANCE OPTIMIZATION
-        card_sys = make_card(self.advanced_scroll, title="SYSTEM & PERFORMANCE", padx=0, pady=(0, SECTION_GAP))
+        card_sys = make_card(self.advanced_scroll, title="PERFORMANCE", padx=0, pady=(0, SECTION_GAP))
         from ui.components.settings_row import SettingsActionRow, SettingsToggleRow  # type: ignore
 
         def _on_fix_ping():
@@ -729,6 +796,7 @@ class SidebarWidget(ctk.CTkFrame):
             description="MTU 1428, Cloudflare DNS, & TCPNoDelay",
             button_text="Fix Ping",
             button_width=90,
+            style="secondary",
             command=_on_fix_ping,
             tooltip_text="Optimize gaming latency and eliminate cellular packet fragmentation"
         )
@@ -736,15 +804,19 @@ class SidebarWidget(ctk.CTkFrame):
 
         self.row_kill_proc = SettingsActionRow(
             card_sys,
-            label_text="Kill Unnecessary Windows Processes",
-            description="Safely purge updaters, telemetry, & idle hogs",
+            label_text="Kill background processes",
+            description="Closes updaters, telemetry & idle apps",
             button_text="Kill Processes",
             button_width=105,
             style="danger",
             command=_on_kill_processes,
             tooltip_text="Terminate non-essential background processes to free CPU, RAM, & bandwidth"
         )
-        self.row_kill_proc.pack(fill="x", pady=(0, INNER_GAP))
+        self.row_kill_proc.pack(fill="x", pady=(0, 0))
+
+        # DIAGNOSTICS — debug logging is not a performance tool, so it gets its
+        # own card instead of sitting under Fix Ping / Kill Processes.
+        card_diag = make_card(self.advanced_scroll, title="DIAGNOSTICS", padx=0, pady=(0, SECTION_GAP))
 
         # Debug Mode toggle
         self.debug_mode_var = ctk.BooleanVar(value=bool(self.config.get("debug_mode", False)))
@@ -769,8 +841,8 @@ class SidebarWidget(ctk.CTkFrame):
                 )
 
         self.row_debug_mode = SettingsToggleRow(
-            card_sys,
-            label_text="Debug Mode (Actions & Screenshots)",
+            card_diag,
+            label_text="Debug mode (logs + screenshots)",
             variable=self.debug_mode_var,
             command=_on_debug_mode_toggle,
             tooltip_text="When enabled, every action logs details and captures a window screenshot to disk"
@@ -788,7 +860,7 @@ class SidebarWidget(ctk.CTkFrame):
                 Logger.debug("AppSidebar", f"Could not open screenshots dir: {exc}", exc=exc)
 
         btn_debug_folder = make_button(
-            card_sys,
+            card_diag,
             text="Open Screenshots Folder",
             style="ghost",
             font=get_font("caption", "bold"),
@@ -869,7 +941,7 @@ class SidebarWidget(ctk.CTkFrame):
         action_row.pack(fill="x", padx=SPACING_SM, pady=(SPACING_SM, 0))
 
         self.lbl_action = ctk.CTkLabel(
-            action_row, text="Waiting for client...",
+            action_row, text=self.ACTION_LOG_IDLE,
             font=get_font("caption"),
             text_color=get_color("colors.text.muted"),
             wraplength=170, anchor="w"
@@ -929,21 +1001,35 @@ class SidebarWidget(ctk.CTkFrame):
                     "Sidebar", "Could not check for the Riot Client", exc=exc,
                 )
 
+        # Offline, the only useful next step is starting League, so Launch is
+        # the gold primary action on top and Find Match steps back (disabled —
+        # it cannot queue without a client). One primary action at a time.
         if not lcu_connected:
             if not bool(self.btn_launch_client.winfo_manager()):
                 from .theme.token_loader import TOKENS
-                self.btn_launch_client.pack(fill="x", pady=(TOKENS.get("spacing", "sm", 4), 0))
-            if riot_running:
-                self.btn_launch_client.configure(
-                    text="⚔️ Launch League",
-                )
-            else:
-                self.btn_launch_client.configure(
-                    text="🚀 Launch Client",
-                )
+                kw = {"fill": "x", "pady": (0, TOKENS.get("spacing", "sm", 4))}
+                qac = getattr(self, "queue_actions_container", None)
+                if qac is not None and qac.winfo_manager() and qac.master is self.btn_launch_client.master:
+                    kw["before"] = qac
+                self.btn_launch_client.pack(**kw)
+            self.btn_launch_client.configure(
+                text="Launch League" if riot_running else "Launch Client",
+            )
+            self._set_find_match_enabled(False)
         else:
             if bool(self.btn_launch_client.winfo_manager()):
                 self.btn_launch_client.pack_forget()
+            self._set_find_match_enabled(True)
+
+    def _set_find_match_enabled(self, enabled: bool):
+        btn = getattr(self, "btn_find_match", None)
+        if btn is None:
+            return
+        try:
+            btn.configure(state="normal" if enabled else "disabled")
+            btn.configure(border_color=get_color("colors.accent.primary", "#F0E6D2") if enabled else "#2A3442")
+        except Exception as exc:
+            Logger.debug("AppSidebar", "_set_find_match_enabled suppressed an error", exc=exc)
 
     def update_accounts_tool_visibility(self, lcu_connected: bool = False):
         """Account Manager is always accessible and visible."""
@@ -979,11 +1065,10 @@ class SidebarWidget(ctk.CTkFrame):
         """Toggle window docking mode and update button appearance."""
         self._dock_state = not self._dock_state
         self.config.set("docked", self._dock_state)
-        lock_text = "🔒" if self._dock_state else "🔓"
-        lock_color = "#C8AA6E" if self._dock_state else "#FF4655"
+        lock_color = "#C8AA6E" if self._dock_state else "#3A4654"
         tooltip_text = "Docked to League Client (Click to Undock)" if self._dock_state else "Undocked (Click to Dock)"
         if hasattr(self, 'btn_dock') and self.btn_dock.winfo_exists():
-            self.btn_dock.configure(text=lock_text, text_color=lock_color, border_color=lock_color)
+            self.btn_dock.configure(image=self._dock_imgs[bool(self._dock_state)], border_color=lock_color)
         if hasattr(self, 'dock_tooltip'):
             self.dock_tooltip.configure(text=tooltip_text)
         if hasattr(self.master, "on_dock_toggled"):
@@ -1784,16 +1869,28 @@ class SidebarWidget(ctk.CTkFrame):
         self.config.set("auto_ban_enabled", self.var_auto_ban.get())
         self._update_all_quick_icons()
 
+    def _refresh_master_summary(self):
+        """'5 of 7 on' under the master switch, so its state is never a guess."""
+        lbl = getattr(self, "_master_summary", None)
+        rows = getattr(self, "_automation_rows", [])
+        if lbl is None or not rows:
+            return
+        try:
+            on = sum(1 for _k, v, _r in rows if v.get())
+            if not self.var_master.get():
+                lbl.configure(text="Paused — all automations off")
+            else:
+                lbl.configure(text=f"{on} of {len(rows)} on")
+        except Exception as exc:
+            Logger.debug("AppSidebar", "_refresh_master_summary suppressed an error", exc=exc)
+
     def _on_master_toggle(self):
         """Master switch: toggle all automations on or off."""
         master_on = self.var_master.get()
         
         if master_on:
             # Restore saved states
-            self._master_label.configure(
-                text="⚡ ALL ON",
-                text_color=get_color("colors.accent.gold", "#C8AA6E")
-            )
+            self._master_label.configure(text_color=get_color("colors.text.primary", "#F0E6D2"))
             for key, var, row in self._automation_rows:
                 saved = self._automation_saved_states.get(key)
                 if saved is not None:
@@ -1811,10 +1908,7 @@ class SidebarWidget(ctk.CTkFrame):
             self._on_toggle_auto_add_played()
         else:
             # Save current states then turn all off
-            self._master_label.configure(
-                text="ALL OFF",
-                text_color=get_color("colors.text.muted", "#5B5A56")
-            )
+            self._master_label.configure(text_color="#A0A7B4")
             for key, var, row in self._automation_rows:
                 self._automation_saved_states[key] = var.get()
                 var.set(False)
@@ -1904,7 +1998,7 @@ class SidebarWidget(ctk.CTkFrame):
 
     def _clear_action_log(self):
         if self.winfo_exists():
-            self.lbl_action.configure(text="Idle.")
+            self.lbl_action.configure(text=self.ACTION_LOG_IDLE)
 
     def _force_requeue(self):
         if self.lcu:

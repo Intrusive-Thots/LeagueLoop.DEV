@@ -654,7 +654,7 @@ class AccountsTool(ctk.CTkFrame):
             frame,
             text="Accounts are unavailable",
             font=get_font("caption", "bold"),
-            text_color=get_color("colors.state.warning", "#FFB020"),
+            text_color=get_color("colors.text.primary", "#F0E6D2"),
             anchor="w",
         ).pack(fill="x", pady=(0, 4))
 
@@ -689,38 +689,38 @@ class AccountsTool(ctk.CTkFrame):
         empty_frame = ctk.CTkFrame(self.list_frame, fg_color="transparent")
         empty_frame.pack(fill="x", pady=8, padx=6)
 
+        from ui.components.glyphs import ctk_glyph
+        ctk.CTkLabel(
+            empty_frame, text="", image=ctk_glyph("person", "#C8AA6E", 26),
+        ).pack(pady=(6, 4))
+
         ctk.CTkLabel(
             empty_frame,
-            text="Multi-Account Manager",
-            font=get_font("caption", "bold"),
-            text_color=get_color("colors.text.primary"),
-            anchor="w"
-        ).pack(fill="x", pady=(0, 4))
+            text="No accounts saved",
+            font=get_font("body", "bold"),
+            text_color=get_color("colors.text.primary", "#F0E6D2"),
+        ).pack(pady=(0, 2))
 
-        for line in [
-            "① Save login credentials for multiple accounts",
-            "② Switch accounts with one click",
-            "③ Passwords are encrypted (Windows DPAPI)",
-            "④ Auto-detects which account is active",
-        ]:
-            ctk.CTkLabel(
-                empty_frame, text=line,
-                font=("Inter", 10), text_color=get_color("colors.text.muted"),
-                anchor="w"
-            ).pack(fill="x", padx=(8, 0))
+        ctk.CTkLabel(
+            empty_frame,
+            text="Save your logins here to switch accounts in one click. "
+                 "Passwords stay encrypted on this PC.",
+            font=("Inter", 10), text_color="#A0A7B4",
+            justify="center", wraplength=230,
+        ).pack(pady=(0, 8))
 
         ctk.CTkButton(
             empty_frame,
-            text="+ Add First Account",
+            text="Add account",
             font=get_font("body", "bold"),
-            fg_color=get_color("colors.accent.primary"),
-            text_color="#ffffff",
-            hover_color=get_color("colors.state.hover"),
-            height=36,
-            corner_radius=8,
+            fg_color=get_color("colors.accent.gold", "#C8AA6E"),
+            text_color="#0A1428",
+            hover_color="#D3B679",
+            height=32,
+            corner_radius=6,
             command=self._show_add_form,
             cursor="hand2"
-        ).pack(fill="x", pady=(8, 0))
+        ).pack(fill="x", pady=(0, 4))
 
     def _offer_manual_sign_in(self, idx: int) -> None:
         """Explain the one thing that creates a session, and offer to keep it.

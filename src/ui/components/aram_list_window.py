@@ -6,7 +6,7 @@ import ctypes
 import ctypes.wintypes  # `import ctypes` alone does not provide this
 import customtkinter as ctk
 from ui.components.factory import get_color, get_font
-from ui.components.priority_grid import PriorityIconGrid
+from ui.components.priority_grid import PriorityIconGrid, CELL_PITCH
 from utils.logger import Logger
 
 _LEAGUE_TITLES = {"league of legends"}
@@ -321,7 +321,7 @@ class AramListWindow(ctk.CTkToplevel):
             return
         w = event.width
         if w > 100 and hasattr(self, "grid_widget"):
-            icons_per_row = max(4, (w - 48) // 52)
+            icons_per_row = max(4, (w - 48) // CELL_PITCH)
             self.grid_widget.set_icons_per_row(icons_per_row)
 
     def _apply_geometry(self, drawer_w, drawer_h, target_x, target_y):

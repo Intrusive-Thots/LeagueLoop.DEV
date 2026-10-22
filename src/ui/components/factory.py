@@ -141,6 +141,7 @@ class RiotButton(ctk.CTkFrame):
                 w.bind("<Return>", lambda e: self._on_click(e))
 
         self._inner_color = inner_color
+        self._base_text_color = base_text_color
         self._disabled = False  # Item #194: Track disabled state
         
     def _on_enter(self, h_color):
@@ -168,7 +169,9 @@ class RiotButton(ctk.CTkFrame):
         if "text" in kwargs:
             self.lbl.configure(text=kwargs.pop("text"))
         if "text_color" in kwargs:
-            self.lbl.configure(text_color=kwargs.pop("text_color"))
+            self._base_text_color = kwargs.pop("text_color")
+            if not self._disabled:
+                self.lbl.configure(text_color=self._base_text_color)
         if "inner_color" in kwargs:
             inner_c = kwargs.pop("inner_color")
             self.inner.configure(fg_color=inner_c)
@@ -186,7 +189,10 @@ class RiotButton(ctk.CTkFrame):
                     w.configure(cursor="")
             else:
                 self._disabled = False
-                self.lbl.configure(text_color=self.lbl.cget("text_color"))
+                # Restore the colour the button was built with — reading
+                # cget() here returned the disabled grey, so a re-enabled
+                # button stayed looking disabled.
+                self.lbl.configure(text_color=self._base_text_color)
                 self.inner.configure(fg_color=self._inner_color)
                 for w in (self, self.inner, self.lbl):
                     w.configure(cursor="hand2")
