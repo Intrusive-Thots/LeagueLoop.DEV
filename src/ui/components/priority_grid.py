@@ -6,6 +6,7 @@ Icons loaded from cache/assets/champion_{Name}.png.
 import math
 import os
 import tkinter as tk
+from ui.components.glyphs import ctk_glyph
 import customtkinter as ctk
 from ui.components.glyphs import set_chevron, set_icon
 
@@ -81,14 +82,14 @@ class PriorityIconGrid(ctk.CTkFrame):
             self._empty_toast = "Ban List Cleared"
             self._export_empty = "Ban List is empty!"
             self._export_ok = "Ban List Copied!"
-            self._add_all_label = "✨ Add All Champions to Ban List"
+            self._add_all_label = "Add All Champions to Ban List"
         else:
             self._section_title = "ARAM LIST"
             self._list_label = "ARAM List"
             self._empty_toast = "ARAM List Cleared"
             self._export_empty = "ARAM List is empty!"
             self._export_ok = "ARAM List Copied!"
-            self._add_all_label = "✨ Add All Champions to ARAM List"
+            self._add_all_label = "Add All Champions to ARAM List"
 
         self._expanded = expanded
         self._edit_mode = False
@@ -238,9 +239,11 @@ class PriorityIconGrid(ctk.CTkFrame):
         if not hasattr(self, "btn_undo"):
             return
         if self._undo_stack:
-            self.btn_undo.configure(state="normal", text_color=get_color("colors.text.primary"))
+            self.btn_undo.configure(state="normal", text_color=get_color("colors.text.primary"),
+                                    image=ctk_glyph("undo", get_color("colors.text.primary"), 12))
         else:
-            self.btn_undo.configure(state="disabled", text_color=get_color("colors.text.disabled"))
+            self.btn_undo.configure(state="disabled", text_color=get_color("colors.text.disabled"),
+                                    image=ctk_glyph("undo", get_color("colors.text.disabled"), 12))
 
     # ───────────── header ─────────────
     def _build_header(self):
@@ -301,7 +304,7 @@ class PriorityIconGrid(ctk.CTkFrame):
 
         # +
         self.btn_add = ctk.CTkButton(
-            self.header, text="+", width=20, height=20,
+            self.header, text="", image=ctk_glyph("plus", get_color("colors.accent.primary"), 12), width=20, height=20,
             corner_radius=10, font=get_font("body", "bold"),
             fg_color="transparent",
             text_color=get_color("colors.accent.primary"),
@@ -313,7 +316,7 @@ class PriorityIconGrid(ctk.CTkFrame):
 
         # Undo
         self.btn_undo = ctk.CTkButton(
-            self.header, text="↶", width=20, height=20,
+            self.header, text="", image=ctk_glyph("undo", get_color("colors.text.disabled"), 12), width=20, height=20,
             corner_radius=10, font=get_font("body"),
             fg_color="transparent",
             text_color=get_color("colors.text.disabled"),
@@ -365,10 +368,10 @@ class PriorityIconGrid(ctk.CTkFrame):
         self.hover_name.pack(side="left")
 
         self.hover_add_btn = ctk.CTkButton(
-            self.hover_frame, text="+ Add", width=60, height=28,
+            self.hover_frame, text=" Add", image=ctk_glyph("plus", "#0A1428", 10), compound="left", text_color="#0A1428", width=60, height=28,
             corner_radius=get_radius("sm"), font=get_font("caption", "bold"),
             fg_color=get_color("colors.accent.primary"),
-            hover_color=get_color("colors.state.hover"),
+            hover_color="#A88B4A",
             command=self._add_hovered_champion, cursor="hand2",
             )
         self.hover_add_btn.pack(side="right", padx=(8, 8))
@@ -412,15 +415,15 @@ class PriorityIconGrid(ctk.CTkFrame):
             height=28,
             font=get_font("caption")
         )
-        self.add_entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        self.add_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
         self.add_entry.bind("<Return>", lambda e: self._commit_add())
         self.add_entry.bind("<KeyRelease>", self._on_add_typing)
 
         ctk.CTkButton(
-            self.add_row, text="+ Add", width=52, height=28,
+            self.add_row, text=" Add", image=ctk_glyph("plus", "#0A1428", 10), compound="left", text_color="#0A1428", width=52, height=28,
             corner_radius=get_radius("sm"), font=get_font("caption", "bold"),
             fg_color=get_color("colors.accent.primary"),
-            hover_color=get_color("colors.state.hover"),
+            hover_color="#A88B4A",
             command=self._commit_add, cursor="hand2",
         ).pack(side="left")
 
@@ -540,9 +543,9 @@ class PriorityIconGrid(ctk.CTkFrame):
         in_list = any(p.lower() == champ_lower for p in plist)
                 
         if in_list:
-            self.hover_add_btn.configure(state="disabled", text="Added", fg_color="transparent", text_color=get_color("colors.text.disabled"))
+            self.hover_add_btn.configure(state="disabled", text=" Added", fg_color="transparent", text_color=get_color("colors.text.disabled"), image=ctk_glyph("check", get_color("colors.text.disabled"), 10))
         else:
-            self.hover_add_btn.configure(state="normal", text="+ Add", fg_color=get_color("colors.accent.primary"), text_color="#ffffff")
+            self.hover_add_btn.configure(state="normal", text=" Add", fg_color=get_color("colors.accent.primary"), text_color="#0A1428", image=ctk_glyph("plus", "#0A1428", 10))
 
         # Load icon
         def _update_hover_icon(img):
@@ -572,7 +575,7 @@ class PriorityIconGrid(ctk.CTkFrame):
                 self._render_grid()
                 
                 # Refresh button state inline
-                self.hover_add_btn.configure(state="disabled", text="Added", fg_color="transparent", text_color=get_color("colors.text.disabled"))
+                self.hover_add_btn.configure(state="disabled", text=" Added", fg_color="transparent", text_color=get_color("colors.text.disabled"), image=ctk_glyph("check", get_color("colors.text.disabled"), 10))
                 
                 # Show toast
                 try:
@@ -764,7 +767,8 @@ class PriorityIconGrid(ctk.CTkFrame):
         if not names:
             empty_btn = ctk.CTkButton(
                 self.grid_parent,
-                text="+\nAdd Champion",
+                text="Add Champion",
+                image=ctk_glyph("plus", get_color("colors.text.muted"), 18), compound="top",
                 font=get_font("body", "bold"),
                 fg_color="transparent",
                 border_width=1,
@@ -776,7 +780,7 @@ class PriorityIconGrid(ctk.CTkFrame):
                 command=self._show_add_input,
                 cursor="hand2"
             )
-            empty_btn.grid(row=0, column=0, columnspan=ICONS_PER_ROW, pady=20, padx=10)
+            empty_btn.grid(row=0, column=0, columnspan=ICONS_PER_ROW, pady=20, padx=12)
             self._icon_widgets.append((empty_btn, empty_btn, -1))
             self._sync_edit_bar_state()
             return
@@ -982,7 +986,7 @@ class PriorityIconGrid(ctk.CTkFrame):
                  
         if self._edit_mode and len(self._selected_indices) == 1 and idx not in self._selected_indices:
             ctk.CTkLabel(
-                tip_frame, text="⇧Click to move here", fg_color="transparent",
+                tip_frame, text="Shift+click to move here", fg_color="transparent",
                 text_color=get_color("colors.accent.blue", "#4da6ff"), font=get_font("caption")
             ).pack(anchor="w", padx=8, pady=(0, 4))
 
@@ -1330,7 +1334,7 @@ class PriorityIconGrid(ctk.CTkFrame):
 
             ToastManager.get_instance().show(
                 self._empty_toast,
-                icon="💥",
+                icon="trash",
                 theme="error",
                 confetti=True
             )
@@ -1352,12 +1356,12 @@ class PriorityIconGrid(ctk.CTkFrame):
         # Visual feedback
         pulse_color = get_color("colors.accent.primary", "#C8AA6E")
         orig_color = self.btn_undo.cget("text_color")
-        self.btn_undo.configure(text_color=pulse_color)
-        self.after(200, lambda: self.btn_undo.winfo_exists() and self.btn_undo.configure(text_color=orig_color))
+        self.btn_undo.configure(text_color=pulse_color, image=ctk_glyph("undo", pulse_color, 12))
+        self.after(200, lambda: self.btn_undo.winfo_exists() and self._sync_undo_btn())
 
         ToastManager.get_instance().show(
             "Undid last action",
-            icon="↶",
+            icon="undo",
             theme="success"
         )
 
@@ -1374,7 +1378,7 @@ class PriorityIconGrid(ctk.CTkFrame):
 
         ToastManager.get_instance().show(
             self._export_ok,
-            icon="📋",
+            icon="check",
             theme="success",
             confetti=True
         )
@@ -1459,7 +1463,7 @@ class PriorityIconGrid(ctk.CTkFrame):
 
         ToastManager.get_instance().show(
             f"Imported {len(self._parsed_import)} champions!",
-            icon="🎉",
+            icon="check",
             theme="success"
         )
 
@@ -1554,7 +1558,7 @@ class PriorityIconGrid(ctk.CTkFrame):
                 hover_color=get_color("colors.state.hover"),
                 command=self._commit_add, cursor="hand2"
             )
-            btn.pack(side="right", padx=6)
+            btn.pack(side="right", padx=8)
             return
 
         # Alias match
@@ -1601,7 +1605,7 @@ class PriorityIconGrid(ctk.CTkFrame):
 
             # Icon
             icon_lbl = ctk.CTkLabel(card, text="", width=28, height=28, fg_color="transparent")
-            icon_lbl.pack(side="left", padx=(6, 8), pady=4)
+            icon_lbl.pack(side="left", padx=(8, 8), pady=4)
 
             def _update_card_icon(img, lbl=icon_lbl):
                 try:
@@ -1644,14 +1648,14 @@ class PriorityIconGrid(ctk.CTkFrame):
                     self._flash_champion_in_grid(champ)
             else:
                 add_btn = ctk.CTkButton(
-                    card, text="+ Add", width=50, height=24,
+                    card, text=" Add", image=ctk_glyph("plus", "#0A1428", 10), compound="left", text_color="#0A1428", width=50, height=24,
                     corner_radius=4, font=get_font("caption", "bold"),
                     fg_color=get_color("colors.accent.primary"),
-                    hover_color=get_color("colors.state.hover"),
+                    hover_color="#A88B4A",
                     command=lambda c=champ: self._select_suggestion(c),
                     cursor="hand2"
                 )
-                add_btn.pack(side="right", padx=6)
+                add_btn.pack(side="right", padx=8)
 
                 card.bind("<Button-1>", lambda e, c=champ: self._select_suggestion(c))
                 name_lbl.bind("<Button-1>", lambda e, c=champ: self._select_suggestion(c))

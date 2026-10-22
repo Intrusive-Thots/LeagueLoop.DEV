@@ -2,7 +2,7 @@
 Sidebar navigation and main layout component.
 """
 import customtkinter as ctk  # type: ignore
-from ui.components.glyphs import set_icon
+from ui.components.glyphs import ctk_glyph, set_icon
 import os
 import threading
 import time
@@ -108,7 +108,6 @@ class SidebarWidget(ctk.CTkFrame):
         # Dock / Undock lock. Drawn glyphs (not emoji) so it renders the same on
         # every platform. Docked = gold lock; undocked = grey open lock — being
         # undocked is a choice, not an error, so it is no longer red.
-        from ui.components.glyphs import ctk_glyph
         self._dock_state = self.config.get("docked", True)
         self._dock_imgs = {
             True: ctk_glyph("lock", "#C8AA6E", 14),
@@ -365,7 +364,7 @@ class SidebarWidget(ctk.CTkFrame):
             self.queue_actions_container,
             fg_color="transparent"
         )
-        self.quick_icon_bar.pack(fill="x", pady=(6, 4))
+        self.quick_icon_bar.pack(fill="x", pady=(8, 4))
 
         # ── Quick Actions Row (2-column grid, fixed height) ──
         self.quick_actions_frame = ctk.CTkFrame(
@@ -459,7 +458,7 @@ class SidebarWidget(ctk.CTkFrame):
             text_color=get_color("colors.text.primary", "#F0E6D2"),
             anchor="w", height=18,
         )
-        self._master_label.pack(side="top", anchor="w", pady=(6, 0))
+        self._master_label.pack(side="top", anchor="w", pady=(8, 0))
         self._master_summary = ctk.CTkLabel(
             _master_text, text="",
             font=get_font("caption"), text_color="#A0A7B4",
@@ -543,7 +542,7 @@ class SidebarWidget(ctk.CTkFrame):
                 row_kwargs["icon_item_id"] = icon_id
 
             row = ToggleRow(**row_kwargs)
-            row.pack(fill="x", padx=8, pady=5)
+            row.pack(fill="x", padx=8, pady=4)
             row.card = card
             if pack_card:
                 self._automation_rows.append((key, var, row))
@@ -762,7 +761,7 @@ class SidebarWidget(ctk.CTkFrame):
                                                  icon="check" if success else "close")
                     ToastManager.get_instance(self.winfo_toplevel()).show(
                         outcome_msg,
-                        icon="⚡",
+                        icon="bolt",
                         theme=theme,
                         duration=4000
                     )
@@ -795,7 +794,7 @@ class SidebarWidget(ctk.CTkFrame):
                     self.row_kill_proc.set_status(display_text, is_error=False, icon="check")
                     ToastManager.get_instance(self.winfo_toplevel()).show(
                         outcome_msg,
-                        icon="🧹",
+                        icon="check",
                         theme=theme,
                         duration=4000
                     )
@@ -847,7 +846,7 @@ class SidebarWidget(ctk.CTkFrame):
                 from ui.components.toast import ToastManager
                 ToastManager.get_instance(self.winfo_toplevel()).show(
                     "Debug Mode enabled: Actions & screenshots will be logged",
-                    icon="📸",
+                    icon="check",
                     theme="info",
                     duration=3500
                 )
@@ -961,7 +960,7 @@ class SidebarWidget(ctk.CTkFrame):
         self.lbl_action.pack(side="left", fill="x", expand=True)
 
         self.btn_clear_log = ctk.CTkButton(
-            action_row, text="✕", width=18, height=18,
+            action_row, text="", image=ctk_glyph("close", get_color("colors.text.muted"), 10), width=18, height=18,
             corner_radius=9, font=get_font("caption"),
             fg_color="transparent",
             text_color=get_color("colors.text.muted"),
@@ -1731,7 +1730,7 @@ class SidebarWidget(ctk.CTkFrame):
         if entry.get("tooltip") and hasattr(entry["tooltip"], "configure"):
             try:
                 state_str = "ON" if is_on else "OFF"
-                entry["tooltip"].configure(text=f"⚡ {label} — {state_str}\nClick to toggle")
+                entry["tooltip"].configure(text=f"{label} — {state_str}\nClick to toggle")
             except Exception as exc:
                 Logger.debug("AppSidebar", "_update_quick_icon_entry suppressed an error", exc=exc)
 
@@ -2008,7 +2007,7 @@ class SidebarWidget(ctk.CTkFrame):
                     text="No additional inline settings available.",
                     font=get_font("caption"),
                     text_color=get_color("colors.text.muted")
-                ).pack(padx=10, pady=8)
+                ).pack(padx=12, pady=8)
             self._inline_subpanels[key] = panel
 
         # Pack inline sub-panel inside parent_card container
@@ -2038,7 +2037,7 @@ class SidebarWidget(ctk.CTkFrame):
                     self.lcu.request("POST", "/lol-lobby/v2/lobby/matchmaking/search")
                     self.after(0, lambda: self.update_action_log("Re-queued Matchmaking."))
                 except Exception as e:
-                    self.after(0, lambda: self.update_action_log(f"Requeue error: {e}"))
+                    self.after(0, lambda e=e: self.update_action_log(f"Requeue error: {e}"))
             threading.Thread(target=_execute, daemon=True).start()
 
     def _force_dodge(self):
@@ -2048,7 +2047,7 @@ class SidebarWidget(ctk.CTkFrame):
                 try:
                     self.lcu.request("POST", "/process-control/v1/process/quit")
                 except Exception as e:
-                    self.after(0, lambda: self.update_action_log(f"Dodge error: {e}"))
+                    self.after(0, lambda e=e: self.update_action_log(f"Dodge error: {e}"))
             threading.Thread(target=_execute, daemon=True).start()
 
     def _play_again(self):
@@ -2064,7 +2063,7 @@ class SidebarWidget(ctk.CTkFrame):
                     else:
                         self.after(0, lambda: self.update_action_log("Play Again failed."))
                 except Exception as e:
-                    self.after(0, lambda: self.update_action_log(f"Play Again error: {e}"))
+                    self.after(0, lambda e=e: self.update_action_log(f"Play Again error: {e}"))
             threading.Thread(target=_execute, daemon=True).start()
 
     def _show_play_again(self):

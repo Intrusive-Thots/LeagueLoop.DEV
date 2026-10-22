@@ -4,6 +4,7 @@ Single custom title bar; stores champions in config auto_ban_list.
 """
 import ctypes
 import ctypes.wintypes  # `import ctypes` alone does not provide this
+from ui.components.glyphs import ctk_glyph
 import customtkinter as ctk
 
 from ui.components.factory import get_color, get_font
@@ -102,7 +103,7 @@ class BanListWindow(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             self.header,
-            text="🚫  AUTO-BAN LIST",
+            text="AUTO-BAN LIST",
             font=get_font("body", "bold"),
             text_color=get_color("colors.accent.gold", "#C8AA6E"),
         ).pack(side="left", padx=12)
@@ -126,7 +127,8 @@ class BanListWindow(ctk.CTkToplevel):
 
         self.btn_close = ctk.CTkButton(
             self.header,
-            text="✕",
+            text="",
+            image=ctk_glyph("close", "#FF4655", 12),
             width=28,
             height=26,
             corner_radius=4,

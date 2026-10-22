@@ -94,7 +94,7 @@ class DraftTool(ctk.CTkFrame):
             font=get_font("body", "bold"),
             fg_color=get_color("colors.accent.primary"), text_color="#ffffff",
             hover_color=get_color("colors.state.hover"),
-            command=self._save_config
+            command=self._save_config, cursor="hand2"
         )
         self.btn_save.pack(fill="x", pady=(SPACING_MD, 0), padx=4)
 

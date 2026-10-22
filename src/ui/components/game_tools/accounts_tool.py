@@ -203,7 +203,7 @@ class AccountsTool(ctk.CTkFrame):
 
         # Password visibility toggle
         self.btn_eye = ctk.CTkButton(
-            pw_row, text="👁", width=24, height=24,
+            pw_row, text="", image=ctk_glyph("eye", get_color("colors.text.muted"), 14), width=24, height=24,
             corner_radius=get_radius("sm"), font=get_font("caption"),
             fg_color="transparent", hover_color=get_color("colors.state.hover"),
             text_color=get_color("colors.text.muted"),
@@ -247,7 +247,7 @@ class AccountsTool(ctk.CTkFrame):
         btn_row.pack(fill="x", padx=4, pady=(0, 4))
 
         self.btn_save = ctk.CTkButton(
-            btn_row, text="💾 Save", height=24, width=60,
+            btn_row, text=" Save", image=ctk_glyph("save", "#ffffff", 12), compound="left", height=24, width=60,
             corner_radius=get_radius("sm"), font=get_font("caption", "bold"),
             fg_color=get_color("colors.state.success"),
             hover_color="#00b359", text_color="#ffffff",
@@ -256,7 +256,7 @@ class AccountsTool(ctk.CTkFrame):
         self.btn_save.pack(side="left", padx=(0, 4))
 
         ctk.CTkButton(
-            btn_row, text="✕ Cancel", height=24, width=60,
+            btn_row, text=" Cancel", image=ctk_glyph("close", get_color("colors.state.danger", "#ff4444"), 12), compound="left", height=24, width=60,
             corner_radius=get_radius("sm"), font=get_font("caption", "bold"),
             fg_color="transparent", hover_color=get_color("colors.state.danger.muted", "#4d1111"),
             text_color=get_color("colors.state.danger", "#ff4444"), border_width=1, border_color=get_color("colors.state.danger", "#ff4444"),
@@ -336,7 +336,7 @@ class AccountsTool(ctk.CTkFrame):
         else:
             self.chk_default.deselect()
 
-        self.btn_save.configure(text="💾 Update")
+        self.btn_save.configure(text=" Update")
 
         self.list_frame.pack_forget()
         self.form_container.pack(fill="x", padx=4, pady=(4, 0))
@@ -351,7 +351,7 @@ class AccountsTool(ctk.CTkFrame):
         self.entry_password.configure(show="•")
         self.chk_default.deselect()
         self._show_password = False
-        self.btn_save.configure(text="💾 Save")
+        self.btn_save.configure(text=" Save")
 
     def _cancel_form(self):
         self._adding = False
@@ -361,6 +361,9 @@ class AccountsTool(ctk.CTkFrame):
     def _toggle_password_visibility(self):
         self._show_password = not self._show_password
         self.entry_password.configure(show="" if self._show_password else "•")
+        self.btn_eye.configure(image=ctk_glyph(  # gold while the password is shown
+            "eye", get_color("colors.accent.gold", "#C8AA6E") if self._show_password
+            else get_color("colors.text.muted"), 14))
 
     def _save_form(self):
         """Save or update an account from the form fields."""
@@ -402,7 +405,7 @@ class AccountsTool(ctk.CTkFrame):
             from ui.components.toast import ToastManager
             ToastManager.get_instance().show(
                 f"Account {action}: {label}",
-                icon="🔐", theme="success"
+                icon="lock", theme="success"
             )
         except Exception as exc:
             Logger.debug("AccountsTool", "_save_form suppressed an error", exc=exc)
@@ -817,7 +820,7 @@ class AccountsTool(ctk.CTkFrame):
         """Send a log message to both toast and sidebar action log."""
         try:
             from ui.components.toast import ToastManager
-            ToastManager.get_instance().show(msg, icon="🔐", duration=3000)
+            ToastManager.get_instance().show(msg, icon="lock", duration=3000)
         except Exception as exc:
             Logger.debug("AccountsTool", "_log_message suppressed an error", exc=exc)
 
@@ -855,7 +858,7 @@ class AccountsTool(ctk.CTkFrame):
             try:
                 from ui.components.toast import ToastManager
                 ToastManager.get_instance().show(
-                    f"Removed: {label}", icon="🗑️", theme="warning"
+                    f"Removed: {label}", icon="trash", theme="warning"
                 )
             except Exception as exc:
                 Logger.debug("AccountsTool", "_delete_account suppressed an error", exc=exc)

@@ -1,4 +1,5 @@
 import os
+from ui.components.glyphs import ctk_glyph
 import customtkinter as ctk
 
 from ui.components.factory import get_color, get_font
@@ -87,42 +88,42 @@ class ArenaTool(ctk.CTkFrame):
         self.var_synergy_enabled = ctk.BooleanVar(value=self.config.get("arena_synergy_enabled", True))
         self.sw_synergy = SettingsToggleRow(
             self.body, 
-            label_text="⚡ Enable Synergy", 
+            label_text="Enable Synergy", 
             variable=self.var_synergy_enabled,
             command=self._on_toggle_synergy,
             height=28
         )
-        self.sw_synergy.pack(fill="x", padx=10, pady=(5, 0))
+        self.sw_synergy.pack(fill="x", padx=12, pady=(4, 0))
 
         # Row 2: Auto-Lock
         self.var_auto_lock = ctk.BooleanVar(value=self.config.get("arena_auto_lock", False))
         self.sw_auto_lock = SettingsToggleRow(
             self.body,
-            label_text="🔒 Auto-Lock Pick",
+            label_text="Auto-Lock Pick",
             variable=self.var_auto_lock,
             command=self._on_toggle_auto_lock,
             height=28
         )
-        self.sw_auto_lock.pack(fill="x", padx=10, pady=(4, 0))
+        self.sw_auto_lock.pack(fill="x", padx=12, pady=(4, 0))
         
         # Row 3: Instant Ban
         self.var_instant_ban = ctk.BooleanVar(value=self.config.get("arena_instant_ban", False))
         self.sw_instant_ban = SettingsToggleRow(
             self.body,
-            label_text="⚡ Instant Ban",
+            label_text="Instant Ban",
             variable=self.var_instant_ban,
             command=self._on_toggle_instant_ban,
             height=28
         )
-        self.sw_instant_ban.pack(fill="x", padx=10, pady=(4, 0))
+        self.sw_instant_ban.pack(fill="x", padx=12, pady=(4, 0))
 
-        make_divider(self.body, padx=10, pady=(8, 8))
+        make_divider(self.body, padx=12, pady=(8, 8))
 
         # Row 4: Auto Ban
         self.ban_row = ctk.CTkFrame(self.body, fg_color="transparent", height=28)
         self.ban_row.pack_propagate(False)
-        self.ban_row.pack(fill="x", padx=10, pady=(0, 4))
-        ctk.CTkLabel(self.ban_row, text="🚫 Auto Ban", font=get_font("body"), text_color=get_color("colors.text.primary")).pack(side="left")
+        self.ban_row.pack(fill="x", padx=12, pady=(0, 4))
+        ctk.CTkLabel(self.ban_row, text="Auto Ban", font=get_font("body"), text_color=get_color("colors.text.primary")).pack(side="left")
         self.entry_ban = ChampionInput(self.ban_row, placeholder="None", width=120, height=26, on_commit=self._on_ban_updated)
         self.entry_ban.pack(side="right")
         self.entry_ban.insert(0, self.config.get("arena_ban", ""))
@@ -131,20 +132,20 @@ class ArenaTool(ctk.CTkFrame):
         # Row 5: Fallback Pick
         self.fallback_row = ctk.CTkFrame(self.body, fg_color="transparent", height=28)
         self.fallback_row.pack_propagate(False)
-        self.fallback_row.pack(fill="x", padx=10, pady=(0, 8))
-        ctk.CTkLabel(self.fallback_row, text="❔ Fallback Pick", font=get_font("body"), text_color=get_color("colors.text.primary")).pack(side="left")
+        self.fallback_row.pack(fill="x", padx=12, pady=(0, 8))
+        ctk.CTkLabel(self.fallback_row, text="Fallback Pick", font=get_font("body"), text_color=get_color("colors.text.primary")).pack(side="left")
         self.entry_fallback = ChampionInput(self.fallback_row, placeholder="None", width=120, height=26, on_commit=self._on_fallback_updated)
         self.entry_fallback.pack(side="right")
         self.entry_fallback.insert(0, self.config.get("arena_fallback_pick", ""))
         self.entry_fallback.bind("<FocusOut>", lambda e: self._on_fallback_updated())
 
-        make_divider(self.body, padx=10, pady=(0, 8))
+        make_divider(self.body, padx=12, pady=(0, 8))
 
         # Add Pair Section
-        ctk.CTkLabel(self.body, text="Create New Synergy", font=get_font("caption", "bold"), text_color=get_color("colors.accent.gold", "#C8AA6E")).pack(anchor="w", padx=10, pady=(0, 2))
+        ctk.CTkLabel(self.body, text="Create New Synergy", font=get_font("caption", "bold"), text_color=get_color("colors.accent.gold", "#C8AA6E")).pack(anchor="w", padx=12, pady=(0, 2))
         
         self.add_inputs = ctk.CTkFrame(self.body, fg_color="transparent")
-        self.add_inputs.pack(fill="x", padx=10, pady=(0, 8))
+        self.add_inputs.pack(fill="x", padx=12, pady=(0, 8))
         
         self.entry_teammate = ChampionInput(self.add_inputs, placeholder="Teammate...", width=90, height=24)
         self.entry_teammate.pack(side="left", fill="x", expand=True, padx=(0, 4))
@@ -173,7 +174,7 @@ class ArenaTool(ctk.CTkFrame):
             self.list_frame._scrollbar.configure(width=6)
         except Exception as exc:
             Logger.debug("ArenaTool", "Could not thin the scrollbar", exc=exc)
-        self.list_frame.pack(fill="x", padx=10, pady=(0, 10))
+        self.list_frame.pack(fill="x", padx=12, pady=(0, 12))
 
     # ───────────── Callbacks ─────────────
     def _on_toggle_synergy(self):
@@ -260,7 +261,7 @@ class ArenaTool(ctk.CTkFrame):
         self.entry_teammate.focus_set()
         
         try:
-            ToastManager.get_instance().show(f"Added: {tm_resolved} → {me_resolved}", icon="🤝", theme="success")
+            ToastManager.get_instance().show(f"Added: {tm_resolved} → {me_resolved}", icon="person", theme="success")
         except Exception as exc:
             Logger.debug("ArenaTool", "_add_pair suppressed an error", exc=exc)
 
@@ -317,7 +318,7 @@ class ArenaTool(ctk.CTkFrame):
             row.pack(fill="x", pady=2)
             
             top_bar = ctk.CTkFrame(row, fg_color="transparent")
-            top_bar.pack(fill="x", padx=6, pady=(6, 2))
+            top_bar.pack(fill="x", padx=8, pady=(8, 2))
 
             tm_name = pair.get("teammate", "Unknown")
             tm_color = get_color("colors.accent.blue", "#3B82F6") if is_enabled else get_color("colors.text.disabled")
@@ -325,7 +326,7 @@ class ArenaTool(ctk.CTkFrame):
             ctk.CTkLabel(top_bar, text="IF", font=("Inter", 9, "bold"), text_color=get_color("colors.text.disabled")).pack(side="left", padx=(0, 4))
             ctk.CTkLabel(top_bar, text=tm_name, font=get_font("caption", "bold"), text_color=tm_color).pack(side="left")
 
-            btn_del = ctk.CTkButton(top_bar, text="✕", width=20, height=20, corner_radius=4, fg_color="transparent", text_color=get_color("colors.text.muted"), hover_color=get_color("colors.state.danger.muted", "#4d1111"), command=lambda idx=i: self._delete_pair(idx), cursor="hand2")
+            btn_del = ctk.CTkButton(top_bar, text="", image=ctk_glyph("close", get_color("colors.text.muted"), 12), width=20, height=20, corner_radius=4, fg_color="transparent", text_color=get_color("colors.text.muted"), hover_color=get_color("colors.state.danger.muted", "#4d1111"), command=lambda idx=i: self._delete_pair(idx), cursor="hand2")
             btn_del.pack(side="right")
             
             btn_tog = ctk.CTkButton(top_bar, text="ON" if is_enabled else "OFF", width=30, height=20, corner_radius=4, fg_color=get_color("colors.state.success.muted") if is_enabled else "transparent", text_color=get_color("colors.state.success") if is_enabled else get_color("colors.text.muted"), hover_color=get_color("colors.state.hover"), command=lambda idx=i: self._toggle_pair(idx), cursor="hand2")
@@ -334,7 +335,7 @@ class ArenaTool(ctk.CTkFrame):
             # Fallbacks
             me_list = pair.get("me", [])
             tag_frame = ctk.CTkFrame(row, fg_color="transparent")
-            tag_frame.pack(fill="x", padx=6, pady=(2, 6))
+            tag_frame.pack(fill="x", padx=8, pady=(2, 8))
             
             ctk.CTkLabel(tag_frame, text="THEN", font=("Inter", 9, "bold"), text_color=get_color("colors.text.disabled")).pack(side="left", padx=(0, 4))
             
@@ -347,4 +348,4 @@ class ArenaTool(ctk.CTkFrame):
                 
                 ctk.CTkLabel(tag, text=f"#{j+1}", font=("Inter", 9, "bold"), text_color=get_color("colors.text.disabled")).pack(side="left", padx=(4, 2))
                 ctk.CTkLabel(tag, text=champ, font=get_font("caption"), text_color=tag_color).pack(side="left", padx=2)
-                ctk.CTkButton(tag, text="✕", width=16, height=16, corner_radius=4, font=("Inter", 10), fg_color="transparent", text_color=get_color("colors.text.muted"), hover_color=get_color("colors.state.danger.muted", "#4d1111"), command=lambda pid=i, fid=j: self._remove_fallback(pid, fid), cursor="hand2").pack(side="right", padx=(0, 2))
+                ctk.CTkButton(tag, text="", image=ctk_glyph("close", get_color("colors.text.muted"), 10), width=16, height=16, corner_radius=4, font=get_font("small"), fg_color="transparent", text_color=get_color("colors.text.muted"), hover_color=get_color("colors.state.danger.muted", "#4d1111"), command=lambda pid=i, fid=j: self._remove_fallback(pid, fid), cursor="hand2").pack(side="right", padx=(0, 2))

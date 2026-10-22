@@ -105,6 +105,18 @@ def _draw(name: str, d: ImageDraw.ImageDraw, s: int, col, w: int) -> None:
                   outline=col, width=w)
         d.line([s * .44, s * .44, s * .45, s * .74], fill=col, width=w)
         d.line([s * .56, s * .44, s * .55, s * .74], fill=col, width=w)
+    elif name == "eye":  # almond outline + pupil: "show password"
+        d.arc([s * .08, s * .26, s * .92, s * 1.00], 205, 335, fill=col, width=w)
+        d.arc([s * .08, s * .00, s * .92, s * .74], 25, 155, fill=col, width=w)
+        d.ellipse([s * .38, s * .38, s * .62, s * .62], fill=col)
+    elif name == "undo":  # curved arrow back to the left
+        d.arc([s * .26, s * .26, s * .86, s * .82], 200, 90, fill=col, width=w)
+        d.polygon([(s * .12, s * .30), (s * .42, s * .18), (s * .36, s * .48)], fill=col)
+    elif name == "save":  # floppy: body, shutter, label
+        d.polygon([(s * .18, s * .16), (s * .70, s * .16), (s * .84, s * .30),
+                   (s * .84, s * .84), (s * .18, s * .84)], outline=col, width=w)
+        d.rectangle([s * .32, s * .16, s * .62, s * .36], outline=col, width=w)
+        d.rectangle([s * .32, s * .56, s * .70, s * .84], outline=col, width=w)
     else:
         raise KeyError(name)
 
@@ -129,7 +141,8 @@ def ctk_glyph(name: str, color: str = "#F0E6D2", size: int = 16):
 
 GLYPHS = ("play", "chest", "person", "bolt", "gear", "lock", "unlock",
           "minimize", "close", "refresh", "link", "plus", "launch", "warning",
-          "chev_right", "chev_down", "chev_up", "pencil", "check", "swords", "trash")
+          "chev_right", "chev_down", "chev_up", "pencil", "check", "swords", "trash",
+          "eye", "undo", "save")
 
 
 def set_icon(btn, name: str, color: str, size: int = 14) -> None:

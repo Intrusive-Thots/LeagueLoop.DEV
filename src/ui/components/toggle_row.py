@@ -60,7 +60,7 @@ class ToggleRow(ctk.CTkFrame):
             command=self._handle_edit, cursor="hand2"
         )
         if self._on_edit:
-            self.btn_edit.pack(side="right", padx=(0, 6), before=self.text_label)
+            self.btn_edit.pack(side="right", padx=(0, 8), before=self.text_label)
             self.text_label.bind("<Button-1>", lambda e: self._handle_edit())
             self.text_label.configure(cursor="hand2")
         

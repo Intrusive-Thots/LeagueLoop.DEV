@@ -324,7 +324,7 @@ def make_input(parent, placeholder="", width=None, **kw):
 
 
 def make_card(parent, title=None, fg_color=None, border_color=None, corner_radius=None,
-              padx=12, pady=12, inner_padx=10, inner_pady=8, collapsible=False, start_collapsed=False):
+              padx=12, pady=12, inner_padx=12, inner_pady=8, collapsible=False, start_collapsed=False):
     """Create a standardized League-styled card frame.
     
     Returns the content frame (inside the card) where widgets should be packed.

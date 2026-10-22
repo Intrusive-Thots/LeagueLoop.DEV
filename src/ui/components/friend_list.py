@@ -434,9 +434,15 @@ class FriendPriorityList(ctk.CTkFrame):
             fg=get_color("colors.text.primary", "#F0E6D2"),
             activebackground=get_color("colors.state.hover"),
             activeforeground=get_color("colors.text.primary"),
-            relief="flat",
+            relief="solid",  # lift the popup off the panel it opens over
             borderwidth=1,
+            activeborderwidth=0,
+            font=("Inter", -12),  # negative = pixels, matching CTk body size
         )
+        try:
+            menu.configure(bg="#1E2832", activebackground="#2A3644")
+        except Exception as exc:
+            Logger.debug("FriendList", "menu colour unavailable", exc=exc)
 
         name_lower = friend_name.lower()
         is_auto = self._auto_join_names.get(name_lower, False)

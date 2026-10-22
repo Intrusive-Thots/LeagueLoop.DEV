@@ -81,9 +81,20 @@ bare `ctk.CTk()` root with a stub config and a real `AssetManager`, run under
 36. **Loot empty-state clipping** (pass 4) — caption wraplength 220 overflowed the ~195px box
     (".oot shows up…"); now 160 with a non-breaking last space (no widow).
 
-## Next (pass 5)
-23. **Live-client only** (blocked) — real LCU phase transitions, champ-select pick/ban panel,
-    loot opening/crafting results and item art, real account-detection failures.
-37. **Last text ✕/✓** — close buttons in ban/ARAM windows, automation_editor, arena; accounts
-    "✕ Cancel"; hotkey "✓"; ⚡ in arena labels.
-38. **Friend-list context menu** — native tk Menu; not captured by the harness (popup).
+## Done (pass 5 — final)
+37. Last text ✕/✓/⚡ → drawn glyphs: ban/ARAM/editor/arena close buttons, accounts Cancel/Save/
+    Update, password eye (gold when shown), hotkey success check, arena labels de-emojied.
+38. Harness `LL_MENU` captures the friend-list context menu; menu restyled (distinct bg, solid
+    1px border, pixel font). Popup windows (ban, ARAM, editor, mini player, About) captured.
+- Sweep: undo/eye/save glyphs added; priority-grid "+ Add" → plus glyph, dark-on-gold text,
+  gold hover, disabled "Added" check; ✨/⇧ removed; mini-player ×/[ ] → glyphs; hand cursors
+  on clickable labels; ~32 spacing values snapped to 4/8/12; editor subtitle wraps; About
+  footer no longer collides with Close; fixed `lambda e=e` closure bug in app_sidebar.
+- Kept deliberately: ●/○ status dots and ★ rank text (data, not chrome); About title 16
+  (display); loot category emoji (live data only); friend-list/toast paddings that drive layout.
+
+## Blocked (needs a live League client)
+23. Real LCU phase transitions + status pill; champ-select pick/ban panel and ARAM bench
+    live highlight; loot opening/crafting results, item art, loot category icons; real
+    account-detection failures; friend list with real friends + invite flow; arena synergy
+    pairs in a live draft.

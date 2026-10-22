@@ -1,4 +1,5 @@
-import customtkinter as ctk # type: ignore
+import customtkinter as ctk
+from ui.components.glyphs import ctk_glyph # type: ignore
 from ui.components.factory import get_color, get_font # type: ignore
 from ui.ui_shared import CTkTooltip # type: ignore
 from utils.logger import Logger
@@ -32,21 +33,21 @@ class MiniPlayer(ctk.CTkToplevel):
         self.lbl_status.pack(side="left", padx=16)
 
         self.btn_close = ctk.CTkButton(
-            self, text="×", width=30, height=30,
+            self, text="", image=ctk_glyph("close", get_color("colors.text.muted"), 14), width=30, height=30,
             fg_color="transparent",
             text_color=get_color("colors.text.muted"),
             hover_color=get_color("colors.state.hover"),
-            command=self.hide
+            command=self.hide, cursor="hand2"
         )
         self.btn_close.pack(side="right", padx=8)
         CTkTooltip(self.btn_close, "Hide Compact Tracker")
         
         self.btn_restore = ctk.CTkButton(
-            self, text="[ ]", width=30, height=30,
+            self, text="", image=ctk_glyph("launch", get_color("colors.text.muted"), 14), width=30, height=30,
             fg_color="transparent",
             text_color=get_color("colors.text.muted"),
             hover_color=get_color("colors.state.hover"),
-            command=self._restore_main
+            command=self._restore_main, cursor="hand2"
         )
         self.btn_restore.pack(side="right", padx=4)
         CTkTooltip(self.btn_restore, "Restore Full Window")
