@@ -187,6 +187,8 @@ class SidebarWidget(ctk.CTkFrame):
             try:
                 from ui.components.focus_ring import install_focus_rings
                 self.after_idle(lambda: install_focus_rings(self.winfo_toplevel(), self))
+                from ui.components.pressed_state import install_pressed_states
+                self.after_idle(lambda: install_pressed_states(self.winfo_toplevel(), self))
             except Exception as exc:
                 Logger.debug("AppSidebar", "focus rings suppressed", exc=exc)
 
@@ -735,7 +737,7 @@ class SidebarWidget(ctk.CTkFrame):
 
         def _on_fix_ping():
             self.row_fix_ping.set_loading(True, "Fixing...")
-            self.row_fix_ping.set_status("⏳ Optimizing network & DNS...")
+            self.row_fix_ping.set_status("Optimizing network & DNS…", icon="refresh")
 
             def _worker():
                 from services.system_optimizer import SystemOptimizer
@@ -753,10 +755,11 @@ class SidebarWidget(ctk.CTkFrame):
                     from ui.components.toast import ToastManager
                     success = bool(res.get("success", False))
                     theme = "success" if success else "error"
-                    display_text = f"✓ {outcome_msg}" if success else f"✗ {outcome_msg}"
+                    display_text = outcome_msg
                     if debug_res.get("recorded") and debug_res.get("screenshot"):
-                        display_text += " [📸 Screenshot saved]"
-                    self.row_fix_ping.set_status(display_text, is_error=not success)
+                        display_text += " · screenshot saved"
+                    self.row_fix_ping.set_status(display_text, is_error=not success,
+                                                 icon="check" if success else "close")
                     ToastManager.get_instance(self.winfo_toplevel()).show(
                         outcome_msg,
                         icon="⚡",
@@ -768,7 +771,7 @@ class SidebarWidget(ctk.CTkFrame):
 
         def _on_kill_processes():
             self.row_kill_proc.set_loading(True, "Scanning...")
-            self.row_kill_proc.set_status("⏳ Purging background processes...")
+            self.row_kill_proc.set_status("Purging background processes…", icon="refresh")
 
             def _worker():
                 from services.system_optimizer import SystemOptimizer
@@ -786,10 +789,10 @@ class SidebarWidget(ctk.CTkFrame):
                     from ui.components.toast import ToastManager
                     count = res.get("killed_count", 0)
                     theme = "success" if count > 0 else "info"
-                    display_text = f"✓ {outcome_msg}"
+                    display_text = outcome_msg
                     if debug_res.get("recorded") and debug_res.get("screenshot"):
-                        display_text += " [📸 Screenshot saved]"
-                    self.row_kill_proc.set_status(display_text, is_error=False)
+                        display_text += " · screenshot saved"
+                    self.row_kill_proc.set_status(display_text, is_error=False, icon="check")
                     ToastManager.get_instance(self.winfo_toplevel()).show(
                         outcome_msg,
                         icon="🧹",

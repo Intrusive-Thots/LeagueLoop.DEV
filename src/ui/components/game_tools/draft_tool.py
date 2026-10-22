@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from ui.components.glyphs import set_chevron
+from ui.components.glyphs import set_chevron, set_icon
 
 from ui.components.factory import get_color, get_font, get_radius
 from ui.components.champion_input import ChampionInput
@@ -133,11 +133,14 @@ class DraftTool(ctk.CTkFrame):
         # Quick flash logic for success UI
         orig_text = self.btn_save.cget("text")
         orig_color = self.btn_save.cget("fg_color")
-        self.btn_save.configure(text="✓ Saved", fg_color=get_color("colors.state.success", "#00C853"))
+        orig_icon = getattr(self.btn_save, "_ll_icon", None)
+        self.btn_save.configure(text=" Saved", fg_color=get_color("colors.state.success", "#2ECC71"))
+        set_icon(self.btn_save, "check", "#0A1428", 12)
+        self._save_orig_icon = orig_icon
         
         try:
             from ui.components.toast import ToastManager
-            ToastManager.get_instance().show("Draft Profiles Saved", theme="success", icon="🛡️")
+            ToastManager.get_instance().show("Draft Profiles Saved", theme="success", icon="check")
         except Exception as exc:
             Logger.debug("DraftTool", "_save_config suppressed an error", exc=exc)
 
@@ -148,6 +151,14 @@ class DraftTool(ctk.CTkFrame):
         """Safely revert save button text after flash."""
         if self.winfo_exists() and self.btn_save.winfo_exists():
             self.btn_save.configure(text=text, fg_color=color)
+            orig_icon = getattr(self, "_save_orig_icon", None)
+            if orig_icon:
+                set_icon(self.btn_save, *orig_icon)
+            else:
+                try:
+                    self.btn_save.configure(image=None)
+                except Exception as exc:
+                    Logger.debug("DraftTool", "clear save icon failed", exc=exc)
 
     def destroy(self):
         if getattr(self, "_revert_timer", None) is not None:

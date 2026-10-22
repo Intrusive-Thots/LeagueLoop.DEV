@@ -92,10 +92,19 @@ def _draw(name: str, d: ImageDraw.ImageDraw, s: int, col, w: int) -> None:
     elif name == "check":
         d.line([s * .22, s * .52, s * .42, s * .72, s * .80, s * .30], fill=col, width=w, joint="curve")
     elif name == "swords":  # crossed blades: "match"
-        d.line([s * .20, s * .20, s * .76, s * .76], fill=col, width=w)
-        d.line([s * .80, s * .20, s * .24, s * .76], fill=col, width=w)
-        d.line([s * .60, s * .80, s * .80, s * .60], fill=col, width=w)
-        d.line([s * .20, s * .60, s * .40, s * .80], fill=col, width=w)
+        d.line([s * .14, s * .14, s * .70, s * .70], fill=col, width=w)  # blades
+        d.line([s * .86, s * .14, s * .30, s * .70], fill=col, width=w)
+        d.line([s * .54, s * .78, s * .78, s * .54], fill=col, width=w)  # guards
+        d.line([s * .22, s * .54, s * .46, s * .78], fill=col, width=w)
+        d.line([s * .70, s * .70, s * .88, s * .88], fill=col, width=w)  # grips
+        d.line([s * .30, s * .70, s * .12, s * .88], fill=col, width=w)
+    elif name == "trash":  # lid, handle, tapered bin with two ribs
+        d.line([s * .18, s * .26, s * .82, s * .26], fill=col, width=w)
+        d.line([s * .40, s * .26, s * .42, s * .14, s * .58, s * .14, s * .60, s * .26], fill=col, width=w)
+        d.polygon([(s * .26, s * .32), (s * .74, s * .32), (s * .68, s * .86), (s * .32, s * .86)],
+                  outline=col, width=w)
+        d.line([s * .44, s * .44, s * .45, s * .74], fill=col, width=w)
+        d.line([s * .56, s * .44, s * .55, s * .74], fill=col, width=w)
     else:
         raise KeyError(name)
 
@@ -120,7 +129,7 @@ def ctk_glyph(name: str, color: str = "#F0E6D2", size: int = 16):
 
 GLYPHS = ("play", "chest", "person", "bolt", "gear", "lock", "unlock",
           "minimize", "close", "refresh", "link", "plus", "launch", "warning",
-          "chev_right", "chev_down", "chev_up", "pencil", "check", "swords")
+          "chev_right", "chev_down", "chev_up", "pencil", "check", "swords", "trash")
 
 
 def set_icon(btn, name: str, color: str, size: int = 14) -> None:

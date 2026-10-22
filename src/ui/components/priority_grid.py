@@ -7,7 +7,7 @@ import math
 import os
 import tkinter as tk
 import customtkinter as ctk
-from ui.components.glyphs import set_chevron
+from ui.components.glyphs import set_chevron, set_icon
 
 from utils.path_utils import get_asset_path
 from ui.components.factory import get_color, get_font, get_radius, make_input
@@ -440,22 +440,25 @@ class PriorityIconGrid(ctk.CTkFrame):
         )
         self.lbl_import_preview.pack(side="left", padx=(4, 0))
 
-        ctk.CTkButton(
-            self.import_header, text="✕", width=24, height=24,
+        _btn_close_import = ctk.CTkButton(
+            self.import_header, text="", width=24, height=24,
             corner_radius=get_radius("sm"), font=get_font("body"),
             fg_color="transparent", hover_color=get_color("colors.state.danger", "#e81123"),
             text_color=get_color("colors.text.muted"),
             command=self._close_import, cursor="hand2",
-            ).pack(side="right")
+            )
+        set_icon(_btn_close_import, "close", get_color("colors.text.muted", "#8A93A0"), 12)
+        _btn_close_import.pack(side="right")
 
         self.btn_import_apply = ctk.CTkButton(
-            self.import_header, text="✓ Apply", width=60, height=24,
+            self.import_header, text=" Apply", width=64, height=24,
             corner_radius=get_radius("sm"), font=get_font("caption", "bold"),
             fg_color=get_color("colors.state.success"),
-            hover_color="#00b359",
-            text_color="#ffffff",
+            hover_color="#27B463",
+            text_color="#0A1428",
             command=self._commit_import, cursor="hand2",
             )
+        set_icon(self.btn_import_apply, "check", "#0A1428", 12)
         self.btn_import_apply.pack(side="right", padx=(0, 4))
 
         self.import_scroll = ctk.CTkScrollableFrame(
@@ -477,14 +480,14 @@ class PriorityIconGrid(ctk.CTkFrame):
         self.lbl_edit_hint.pack(side="left", padx=4)
 
         self.btn_del = ctk.CTkButton(
-            self.edit_bar, text="✕ Delete Selected", height=24,
+            self.edit_bar, text=" Delete Selected", height=24,
             corner_radius=get_radius("sm"), font=get_font("body", "bold"),
             fg_color="transparent", hover_color=get_color("colors.state.danger.muted", "#4d1111"),
             text_color=get_color("colors.state.danger", "#ff4444"), command=self._delete_active, cursor="hand2",
             )
 
         self.btn_clear_all = ctk.CTkButton(
-            self.edit_bar, text="🗑️ Clear All", height=24,
+            self.edit_bar, text=" Clear All", height=24,
             corner_radius=get_radius("sm"), font=get_font("body"),
             fg_color="transparent", hover_color=get_color("colors.state.danger.muted", "#4d1111"),
             text_color=get_color("colors.state.danger", "#ff4444"), command=self._request_clear_all, cursor="hand2",
@@ -503,6 +506,9 @@ class PriorityIconGrid(ctk.CTkFrame):
             border_color=get_color("colors.state.danger", "#E74C3C"),
             text_color=get_color("colors.state.danger", "#E74C3C"),
         )
+        _danger = get_color("colors.state.danger", "#E74C3C")
+        set_icon(self.btn_del, "close", _danger, 12)
+        set_icon(self.btn_clear_all, "trash", _danger, 12)
         self.btn_clear_all.pack(side="right", padx=1)
         CTkTooltip(self.btn_clear_all, "Clear All")
         self.btn_del.pack(side="right", padx=1)
@@ -655,7 +661,7 @@ class PriorityIconGrid(ctk.CTkFrame):
                     width=badge_width,
                     height=12,
                     corner_radius=3,
-                    font=("Segoe UI", 7, "bold"),
+                    font=("Segoe UI", 9, "bold"),
                     text_color=fg_col,
                     fg_color=bg_badge,
                 )
@@ -1253,9 +1259,9 @@ class PriorityIconGrid(ctk.CTkFrame):
         count_sel = len(self._selected_indices)
         if hasattr(self, "btn_del") and self.btn_del.winfo_exists():
             if count_sel > 0:
-                self.btn_del.configure(text=f"✕ Delete Selected ({count_sel})")
+                self.btn_del.configure(text=f" Delete Selected ({count_sel})")
             else:
-                self.btn_del.configure(text="✕ Delete Selected")
+                self.btn_del.configure(text=" Delete Selected")
 
         for cell, lbl, idx in self._icon_widgets:
             if idx < 0:
@@ -1300,7 +1306,7 @@ class PriorityIconGrid(ctk.CTkFrame):
             orig_text = self.btn_clear_all.cget("text")
             orig_color = self.btn_clear_all.cget("text_color")
 
-            self.btn_clear_all.configure(text="Sure?", text_color="#e81123")
+            self.btn_clear_all.configure(text=" Sure?", text_color="#e81123")
 
             def reset():
                 if self.winfo_exists() and self._clear_confirm:
@@ -1314,7 +1320,7 @@ class PriorityIconGrid(ctk.CTkFrame):
     def _commit_clear_all(self):
         """Execute the clear operation."""
         self._clear_confirm = False
-        self.btn_clear_all.configure(text="🗑️", text_color=get_color("colors.state.danger", "#ff4444"))
+        self.btn_clear_all.configure(text=" Clear All", text_color=get_color("colors.state.danger", "#ff4444"))
 
         names = self._get_priority_list()
         if names:

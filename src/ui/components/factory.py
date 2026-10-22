@@ -23,6 +23,14 @@ def get_radius(size="md"):
     """Retrieve corner radius."""
     return TOKENS.get("radius", size, default=10)
 
+# Type scale (#33): five steps, each with a matching vertical rhythm.
+# Hard-coded font tuples elsewhere should use one of these sizes only.
+#   micro 9  (badges, counters)      small 10 (hints, meta)
+#   caption/section 11               body 12              header 14 / title 15
+TYPE_SCALE = {"micro": 9, "small": 10, "caption": 11, "section": 11, "body": 12,
+              "header": 14, "title": 15}
+
+
 @functools.lru_cache(maxsize=32)
 def get_font(type="body", weight=None):
     """Retrieve font tuple. Weight can be 'bold', 'medium', or 'normal'.
@@ -48,6 +56,10 @@ def get_font(type="body", weight=None):
     elif type == "small":
         family = "Segoe UI"
         size = 10
+        weight_val = "normal"
+    elif type == "micro":
+        family = "Segoe UI"
+        size = 9
         weight_val = "normal"
     else:  # body
         family = "Segoe UI"
@@ -149,6 +161,7 @@ class RiotButton(ctk.CTkFrame):
                 w.bind("<Return>", lambda e: self._on_click(e))
 
         self._inner_color = inner_color
+        self._hover_color = hover_color
         self._base_text_color = base_text_color
         self._ll_focus_ring = True  # focus_ring.py draws the ring on the outer frame
         self._disabled = False  # Item #194: Track disabled state
@@ -168,7 +181,15 @@ class RiotButton(ctk.CTkFrame):
     def _on_click(self, e=None):
         if self._disabled:
             return
-        # Optional: Add small press scale if desired
+        # Pressed state (#34): darken briefly so the click registers visually.
+        try:
+            from ui.components.pressed_state import pressed_color
+            hover = getattr(self, "_hover_color", None)
+            self.inner.configure(fg_color=pressed_color(self._inner_color, hover))
+            self.after(110, lambda: (not self._disabled and self.inner.winfo_exists()
+                                     and self.inner.configure(fg_color=hover or self._inner_color)))
+        except Exception as exc:
+            Logger.debug("factory.py", "pressed state failed", exc=exc)
         if hasattr(self, "_canvas"):
             self._canvas.focus_set()
         if self.command:

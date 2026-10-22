@@ -65,13 +65,25 @@ bare `ctk.CTk()` root with a stub config and a real `AssetManager`, run under
     "Account check failed" row + Retry (mocked render; real detection failure needs live client).
 30. **Account row buttons** (pass 3) — Switch dark-on-gold + play glyph, Sign in amber outline,
     Sign out red outline (no ⏻), ▲▼✎✕ → drawn chev/pencil/close glyphs; empty-state widow fixed.
+31. **Remaining text glyphs** (pass 4) — friend-list menu Enable/Disable Auto-Join with drawn
+    check/close image; priority grid Apply (check, dark-on-green), Delete Selected (close),
+    Clear All (new trash glyph); draft "Saved" check; sidebar fix-ping/kill-proc statuses use
+    drawn refresh/check/close via `SettingsRow.set_status(icon=)`; swords glyph redrawn.
+32. **Toast capture** (pass 4) — toast is an in-window placed frame (not a Toplevel); harness
+    `LL_TOAST="msg|icon|theme"` shows one before capture. Fixed 5px root strip above the first
+    toast, lift on show, 8px stacking gap, error tint #FF7A70, wraplength 200 for the 300px window.
+33. **Type scale** (pass 4) — `TYPE_SCALE` in factory.py (micro 9 / small 10 / caption 11 /
+    body 12 / header 14 / title 15); 9 off-scale literals (7, 8, 13) snapped.
+34. **Pressed states** (pass 4) — `pressed_state.py`: every CTkButton gets a 110ms pressed fill
+    (light fills darken 18%, dark fills tint toward gold) via a first "LLPressed" bindtag; 4 tests.
+35. **IconButton** (pass 4) — NOT dead: `ui.components.buttons.IconButton` exists and is used by
+    collapsible Cards (loot, arena, friend list, sidebar). Kept. (Pass-3 note was wrong.)
+36. **Loot empty-state clipping** (pass 4) — caption wraplength 220 overflowed the ~195px box
+    (".oot shows up…"); now 160 with a non-breaking last space (no widow).
 
-## Next (pass 4+)
-23. **Live-client only** (partially mocked) — real LCU phase transitions, champ-select pick/ban
-    panel, loot opening/crafting results and item art, real account-detection failures.
-31. **Remaining text glyphs** — friend list "✕ Disable / ✓ Enable Auto-Join", priority grid
-    "✕ Delete Selected"/"✓ Apply", draft "✓ Saved", sidebar action-log ✓/✗.
-32. **Toast screenshot** — toast is a Toplevel; harness captures root only. Extend harness.
-33. **Type scale** — audit font sizes (9/10/11/12/13) and line-height rhythm to a 4-step scale.
-34. **Pressed states** — buttons have hover but no distinct pressed colour.
-35. **Dead code** — `cards/card.py` imports non-existent `IconButton`; confirm and remove.
+## Next (pass 5)
+23. **Live-client only** (blocked) — real LCU phase transitions, champ-select pick/ban panel,
+    loot opening/crafting results and item art, real account-detection failures.
+37. **Last text ✕/✓** — close buttons in ban/ARAM windows, automation_editor, arena; accounts
+    "✕ Cancel"; hotkey "✓"; ⚡ in arena labels.
+38. **Friend-list context menu** — native tk Menu; not captured by the harness (popup).

@@ -440,8 +440,18 @@ class FriendPriorityList(ctk.CTkFrame):
 
         name_lower = friend_name.lower()
         is_auto = self._auto_join_names.get(name_lower, False)
-        label = "✕ Disable Auto-Join" if is_auto else "✓ Enable Auto-Join"
-        menu.add_command(label=label, command=lambda: self._toggle_auto_join(friend_name))
+        label = "Disable Auto-Join" if is_auto else "Enable Auto-Join"
+        try:  # drawn glyph instead of a ✕/✓ text symbol (#31)
+            from PIL import ImageTk
+            from ui.components.glyphs import glyph_image
+            glyph = glyph_image("close" if is_auto else "check",
+                                "#FF7A70" if is_auto else "#2ECC71", 12)
+            menu._ll_img = ImageTk.PhotoImage(glyph, master=menu)  # keep a reference
+            menu.add_command(label="  " + label, image=menu._ll_img, compound="left",
+                             command=lambda: self._toggle_auto_join(friend_name))
+        except Exception as exc:
+            Logger.debug("FriendList", "menu glyph unavailable", exc=exc)
+            menu.add_command(label=label, command=lambda: self._toggle_auto_join(friend_name))
 
         try:
             menu.tk_popup(event.x_root, event.y_root)

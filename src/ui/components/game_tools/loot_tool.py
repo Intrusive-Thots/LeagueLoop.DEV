@@ -166,7 +166,7 @@ class LootTool(ctk.CTkFrame):
         self.lbl_stat_openable_num = ctk.CTkLabel(
             self.chip_openable,
             text="—",  # unknown until the first scan
-            font=("Inter", 13, "bold"),
+            font=("Inter", 14, "bold"),
             text_color=get_color("colors.accent.gold", "#C8AA6E"),
         )
         self.lbl_stat_openable_num.pack(pady=(4, 0))
@@ -195,7 +195,7 @@ class LootTool(ctk.CTkFrame):
         self.lbl_stat_keys_num = ctk.CTkLabel(
             self.chip_keys,
             text="—",  # unknown until the first scan
-            font=("Inter", 13, "bold"),
+            font=("Inter", 14, "bold"),
             text_color=get_color("colors.text.primary", "#F0E6D2"),
         )
         self.lbl_stat_keys_num.pack(pady=(4, 0))
@@ -224,7 +224,7 @@ class LootTool(ctk.CTkFrame):
         self.lbl_stat_frags_num = ctk.CTkLabel(
             self.chip_frags,
             text="—",  # unknown until the first scan
-            font=("Inter", 13, "bold"),
+            font=("Inter", 14, "bold"),
             text_color=get_color("colors.text.primary", "#F0E6D2"),
         )
         self.lbl_stat_frags_num.pack(pady=(4, 0))
@@ -508,14 +508,15 @@ class LootTool(ctk.CTkFrame):
             text=title,
             font=("Inter", 12, "bold"),
             text_color=get_color("colors.text.primary", "#F0F6FC"),
-        ).pack(pady=(0, 2))
+        ).pack(pady=(0, 4))
 
         ctk.CTkLabel(
             empty_box,
-            text=message,
+            # Bind the last two words so the line never ends in a lone widow.
+            text="\u00a0".join(message.rsplit(" ", 1)),
             font=("Inter", 9),
             text_color="#A0A7B4",
-            wraplength=220,
+            wraplength=160,
             justify="center",
         ).pack(pady=(0, 12), padx=12)
 
@@ -682,7 +683,7 @@ class LootTool(ctk.CTkFrame):
             ctk.CTkLabel(
                 bot_row,
                 text=str(visuals['pill_text']).title(),
-                font=("Inter", 8, "bold"),
+                font=("Inter", 9, "bold"),
                 text_color="#A0A7B4",
             ).pack(side="left")
 
@@ -699,7 +700,7 @@ class LootTool(ctk.CTkFrame):
             ctk.CTkLabel(
                 bot_row,
                 text=f" · {status_text}",
-                font=("Inter", 8),
+                font=("Inter", 9),
                 text_color=status_color,
             ).pack(side="left", padx=(2, 0))
 
@@ -735,7 +736,7 @@ class LootTool(ctk.CTkFrame):
                 ctk.CTkLabel(
                     need_badge,
                     text="Need Key",
-                    font=("Inter", 8),
+                    font=("Inter", 9),
                     text_color="#8A9BA8",
                 ).pack(expand=True)
 

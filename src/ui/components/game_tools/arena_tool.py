@@ -345,6 +345,6 @@ class ArenaTool(ctk.CTkFrame):
                 tag = ctk.CTkFrame(tag_frame, fg_color=get_color("colors.background.app"), corner_radius=4, border_width=1, border_color=get_color("colors.border.subtle"))
                 tag.pack(side="left", padx=2)
                 
-                ctk.CTkLabel(tag, text=f"#{j+1}", font=("Inter", 8, "bold"), text_color=get_color("colors.text.disabled")).pack(side="left", padx=(4, 2))
+                ctk.CTkLabel(tag, text=f"#{j+1}", font=("Inter", 9, "bold"), text_color=get_color("colors.text.disabled")).pack(side="left", padx=(4, 2))
                 ctk.CTkLabel(tag, text=champ, font=get_font("caption"), text_color=tag_color).pack(side="left", padx=2)
                 ctk.CTkButton(tag, text="✕", width=16, height=16, corner_radius=4, font=("Inter", 10), fg_color="transparent", text_color=get_color("colors.text.muted"), hover_color=get_color("colors.state.danger.muted", "#4d1111"), command=lambda pid=i, fid=j: self._remove_fallback(pid, fid), cursor="hand2").pack(side="right", padx=(0, 2))

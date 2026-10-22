@@ -116,7 +116,7 @@ class SessionHeader(ctk.CTkFrame):
             if i > 0:
                 menu.add_separator()
             menu.add_command(label=f"── {group_name} ──", state="disabled",
-                             font=("Segoe UI", 8, "bold"), foreground="#785A28")
+                             font=("Segoe UI", 9, "bold"), foreground="#785A28")
             for mode in modes:
                 menu.add_command(label=f"   {mode}", command=lambda m=mode: self.on_mode_change(m))
         
