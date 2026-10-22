@@ -79,6 +79,23 @@ def _draw(name: str, d: ImageDraw.ImageDraw, s: int, col, w: int) -> None:
         d.polygon([(s * .50, s * .12), (s * .90, s * .84), (s * .10, s * .84)], outline=col, width=w)
         d.line([s * .50, s * .38, s * .50, s * .60], fill=col, width=w)
         d.ellipse([s * .46, s * .67, s * .54, s * .75], fill=col)
+    elif name == "chev_right":
+        d.line([s * .40, s * .26, s * .64, s * .50, s * .40, s * .74], fill=col, width=w, joint="curve")
+    elif name == "chev_down":
+        d.line([s * .26, s * .40, s * .50, s * .64, s * .74, s * .40], fill=col, width=w, joint="curve")
+    elif name == "chev_up":
+        d.line([s * .26, s * .60, s * .50, s * .36, s * .74, s * .60], fill=col, width=w, joint="curve")
+    elif name == "pencil":  # angled pencil body + tip
+        d.polygon([(s * .62, s * .16), (s * .84, s * .38), (s * .38, s * .84),
+                   (s * .16, s * .84), (s * .16, s * .62)], outline=col, width=w)
+        d.line([s * .52, s * .26, s * .74, s * .48], fill=col, width=w)
+    elif name == "check":
+        d.line([s * .22, s * .52, s * .42, s * .72, s * .80, s * .30], fill=col, width=w, joint="curve")
+    elif name == "swords":  # crossed blades: "match"
+        d.line([s * .20, s * .20, s * .76, s * .76], fill=col, width=w)
+        d.line([s * .80, s * .20, s * .24, s * .76], fill=col, width=w)
+        d.line([s * .60, s * .80, s * .80, s * .60], fill=col, width=w)
+        d.line([s * .20, s * .60, s * .40, s * .80], fill=col, width=w)
     else:
         raise KeyError(name)
 
@@ -102,7 +119,8 @@ def ctk_glyph(name: str, color: str = "#F0E6D2", size: int = 16):
 
 
 GLYPHS = ("play", "chest", "person", "bolt", "gear", "lock", "unlock",
-          "minimize", "close", "refresh", "link", "plus", "launch", "warning")
+          "minimize", "close", "refresh", "link", "plus", "launch", "warning",
+          "chev_right", "chev_down", "chev_up", "pencil", "check", "swords")
 
 
 def set_icon(btn, name: str, color: str, size: int = 14) -> None:
@@ -110,5 +128,16 @@ def set_icon(btn, name: str, color: str, size: int = 14) -> None:
     target = getattr(btn, "lbl", btn)  # RiotButton draws its text in .lbl
     try:
         target.configure(image=ctk_glyph(name, color, size), compound="left")
+        btn._ll_icon = (name, color, size)  # lets disabled state recolour it (#24)
     except Exception as exc:
         Logger.debug("Glyphs", "set_icon suppressed an error", exc=exc)
+
+
+def set_chevron(label, expanded: bool, color: str = "#C8AA6E", size: int = 12) -> None:
+    """Drawn disclosure chevron left of a section label; strips old ▶/▼ text."""
+    try:
+        text = str(label.cget("text")).lstrip("▶▼ ").strip()
+        label.configure(text=f" {text}" if text else "", compound="left",
+                        image=ctk_glyph("chev_down" if expanded else "chev_right", color, size))
+    except Exception as exc:
+        Logger.debug("Glyphs", "set_chevron suppressed an error", exc=exc)

@@ -7,6 +7,7 @@ import math
 import os
 import tkinter as tk
 import customtkinter as ctk
+from ui.components.glyphs import set_chevron
 
 from utils.path_utils import get_asset_path
 from ui.components.factory import get_color, get_font, get_radius, make_input
@@ -255,6 +256,7 @@ class PriorityIconGrid(ctk.CTkFrame):
                 cursor="hand2"
             )
             self.lbl_section.pack(side="left", padx=2)
+            set_chevron(self.lbl_section, self._expanded, "#8A93A0")
             CTkTooltip(self.lbl_section, f"Toggle {self._list_label}")
             self.lbl_section.bind("<Button-1>", lambda e: self._toggle_collapse())
             self.lbl_section.bind(
@@ -988,12 +990,9 @@ class PriorityIconGrid(ctk.CTkFrame):
         try:
             if not self._tip or not getattr(self._tip, "winfo_exists", lambda: False)():
                 return
-            if self._tip._current_y > self._tip._target_y:
-                self._tip._current_y -= max(1, (self._tip._current_y - self._tip._target_y) // 2)
-                self._tip.wm_geometry(f"+{self._tip._x}+{self._tip._current_y}")
-                self.after(16, self._animate_tip_in)
-            else:
-                self._tip.wm_geometry(f"+{self._tip._x}+{self._tip._target_y}")
+            # Motion audit (#26): appear in place, no slide.
+            self._tip._current_y = self._tip._target_y
+            self._tip.wm_geometry(f"+{self._tip._x}+{self._tip._target_y}")
         except Exception as exc:
             Logger.debug("PriorityGrid", "_animate_tip_in suppressed an error", exc=exc)
 
@@ -1014,11 +1013,11 @@ class PriorityIconGrid(ctk.CTkFrame):
         if self._expanded:
             self.body.pack(fill="both", expand=True, pady=(SPACING_SM, SPACING_MD), padx=SPACING_MD)
             if hasattr(self, "lbl_section"):
-                self.lbl_section.configure(text=f"▼  {self._section_title}")
+                self.lbl_section.configure(text=self._section_title); set_chevron(self.lbl_section, True, "#8A93A0")
         else:
             self.body.pack_forget()
             if hasattr(self, "lbl_section"):
-                self.lbl_section.configure(text=f"▶  {self._section_title}")
+                self.lbl_section.configure(text=self._section_title); set_chevron(self.lbl_section, False, "#8A93A0")
 
     # ───────────── edit mode ─────────────
     def _toggle_edit_mode(self):

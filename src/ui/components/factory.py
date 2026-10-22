@@ -5,6 +5,7 @@ Centralizes the creation of styled widgets (Panels, Cards, Buttons) ensuring vis
 from utils.logger import Logger
 import functools
 import customtkinter as ctk
+from ui.components.glyphs import set_chevron
 from ..theme.token_loader import TOKENS
 from .color_utils import ctk_safe_color
 
@@ -191,8 +192,13 @@ class RiotButton(ctk.CTkFrame):
             state = kwargs.pop("state")
             if state == "disabled":
                 self._disabled = True
-                self.lbl.configure(text_color=get_color("colors.text.disabled"))
+                dis = get_color("colors.text.disabled", "#6B7584")
+                self.lbl.configure(text_color=dis)
                 self.inner.configure(fg_color=get_color("colors.background.card"))
+                icon = getattr(self, "_ll_icon", None)
+                if icon:  # a dark-on-gold glyph vanished on the disabled card (#24)
+                    from ui.components.glyphs import ctk_glyph
+                    self.lbl.configure(image=ctk_glyph(icon[0], dis, icon[2]))
                 for w in (self, self.inner, self.lbl):
                     w.configure(cursor="")
             else:
@@ -202,6 +208,10 @@ class RiotButton(ctk.CTkFrame):
                 # button stayed looking disabled.
                 self.lbl.configure(text_color=self._base_text_color)
                 self.inner.configure(fg_color=self._inner_color)
+                icon = getattr(self, "_ll_icon", None)
+                if icon:
+                    from ui.components.glyphs import ctk_glyph
+                    self.lbl.configure(image=ctk_glyph(*icon))
                 for w in (self, self.inner, self.lbl):
                     w.configure(cursor="hand2")
         if kwargs:
@@ -293,7 +303,7 @@ def make_input(parent, placeholder="", width=None, **kw):
 
 
 def make_card(parent, title=None, fg_color=None, border_color=None, corner_radius=None,
-              padx=10, pady=10, inner_padx=10, inner_pady=8, collapsible=False, start_collapsed=False):
+              padx=12, pady=12, inner_padx=10, inner_pady=8, collapsible=False, start_collapsed=False):
     """Create a standardized League-styled card frame.
     
     Returns the content frame (inside the card) where widgets should be packed.
@@ -350,6 +360,7 @@ def make_card(parent, title=None, fg_color=None, border_color=None, corner_radiu
                 text_color=get_color("colors.text.muted")
             )
             chevron.pack(side="left")
+            set_chevron(chevron, not start_collapsed, get_color("colors.text.muted"))
             
         title_label = ctk.CTkLabel(
             header_frame, text=title,
@@ -399,14 +410,14 @@ def make_card(parent, title=None, fg_color=None, border_color=None, corner_radiu
                 self.animating = True
                 
                 if self.is_expanded:
-                    chevron.configure(text="▶  ")
+                    set_chevron(chevron, False, get_color("colors.text.muted"))
                     self.target_h = 0
                     self.current_h = content.winfo_reqheight()
                     content_wrapper.configure(height=self.current_h)
                     content_wrapper.pack_propagate(False)
                     self.animate_collapse()
                 else:
-                    chevron.configure(text="▼  ")
+                    set_chevron(chevron, True, get_color("colors.text.muted"))
                     content_wrapper.pack(fill="x", padx=inner_padx, pady=(0 if title else inner_pady, inner_pady))
                     divider.pack(fill="x", padx=inner_padx, pady=(0, inner_pady - 2), before=content_wrapper)
                     

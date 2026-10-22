@@ -1074,7 +1074,7 @@ class SidebarWidget(ctk.CTkFrame):
         """Toggle window docking mode and update button appearance."""
         self._dock_state = not self._dock_state
         self.config.set("docked", self._dock_state)
-        lock_color = "#C8AA6E" if self._dock_state else "#3A4654"
+        lock_color = "#C8AA6E" if self._dock_state else "#8A93A0"
         tooltip_text = "Docked to League Client (Click to Undock)" if self._dock_state else "Undocked (Click to Dock)"
         if hasattr(self, 'btn_dock') and self.btn_dock.winfo_exists():
             self.btn_dock.configure(image=self._dock_imgs[bool(self._dock_state)], border_color=lock_color)
@@ -2217,7 +2217,7 @@ class SidebarWidget(ctk.CTkFrame):
 
                 try:
                     from ui.components.toast import ToastManager
-                    ToastManager.get_instance().show("Match Found!", icon="⚔️", duration=4000, theme="success", confetti=True)
+                    ToastManager.get_instance().show("Match found", icon="swords", duration=4000, theme="success")
                 except Exception as e:
                     Logger.error("UI", f"Failed to show match found toast: {e}")
             self._last_ui_phase = "ReadyCheck"

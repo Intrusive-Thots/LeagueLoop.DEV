@@ -116,12 +116,10 @@ class CTkTooltip:
             if not self.tooltip or not getattr(self.tooltip, "winfo_exists", lambda: False)():
                 return
 
-            if self._current_y > self._target_y:
-                self._current_y -= max(1, (self._current_y - self._target_y) // 2)
-                self.tooltip.wm_geometry(f"+{self._x}+{self._current_y}")
-                self.widget.after(16, self.animate_in)
-            else:
-                self.tooltip.wm_geometry(f"+{self._x}+{self._target_y}")
+            # Motion audit (#26): tooltips appear in place; the slide-up
+            # competed with each view's entrance and lagged the cursor.
+            self._current_y = self._target_y
+            self.tooltip.wm_geometry(f"+{self._x}+{self._target_y}")
         except Exception as e:
             Logger.error("tooltip.py", f"Tooltip Animation Error: {e}")
 

@@ -54,13 +54,24 @@ bare `ctk.CTk()` root with a stub config and a real `AssetManager`, run under
 22. **Iconography sweep** (pass 2) — Find Match/Play Again, Invite All, toggle gear, "👥 Team"
     now drawn glyphs or plain text.
 
-## Next (pass 3+)
-23. **Live-client only** — real LCU phase transitions, champ-select pick/ban panel, actual loot
-    opening/crafting results and item art; needs a running League client.
-24. **Disabled Find Match** — play glyph dark-on-dark when disabled; dim to muted.
-25. **Match Found toast** — still uses ⚔️ emoji.
-26. **Motion audit** — tooltip slide + several per-widget fades; keep one authored entrance per view.
-27. **Section chevrons** — "▶/▼" text chevrons in collapsible headers → drawn chevron glyph.
-28. **Spacing rhythm** — card paddings mix 4/5/6/8/10px; normalise to a 4/8/12 scale.
-29. **Error states** — LCU request failures surface only in logs on Loot/Accounts; add inline
-    retry rows.
+24. **Disabled contrast** (pass 3) — disabled token #3A4654 → #6B7584 (≈3.8:1); RiotButton recolours
+    its glyph to the disabled colour and restores it on enable; sidebar lock fallback muted.
+25. **Match Found toast** (pass 3) — drawn swords glyph (emoji→glyph map for all toasts), themed tint.
+26. **Motion audit** (pass 3) — toast slide-in is the one entrance; confetti off; tooltip and
+    priority-grid tip slides removed; toggle ambient pulse opt-in (steady gold by default).
+27. **Section chevrons** (pass 3) — `set_chevron()` drawn chevrons in all collapsible headers.
+28. **Spacing rhythm** (pass 3) — 39 padx/pady literals snapped to 4/8/12.
+29. **Error states** (pass 3) — Loot "Couldn't read your loot" + Retry; Accounts amber
+    "Account check failed" row + Retry (mocked render; real detection failure needs live client).
+30. **Account row buttons** (pass 3) — Switch dark-on-gold + play glyph, Sign in amber outline,
+    Sign out red outline (no ⏻), ▲▼✎✕ → drawn chev/pencil/close glyphs; empty-state widow fixed.
+
+## Next (pass 4+)
+23. **Live-client only** (partially mocked) — real LCU phase transitions, champ-select pick/ban
+    panel, loot opening/crafting results and item art, real account-detection failures.
+31. **Remaining text glyphs** — friend list "✕ Disable / ✓ Enable Auto-Join", priority grid
+    "✕ Delete Selected"/"✓ Apply", draft "✓ Saved", sidebar action-log ✓/✗.
+32. **Toast screenshot** — toast is a Toplevel; harness captures root only. Extend harness.
+33. **Type scale** — audit font sizes (9/10/11/12/13) and line-height rhythm to a 4-step scale.
+34. **Pressed states** — buttons have hover but no distinct pressed colour.
+35. **Dead code** — `cards/card.py` imports non-existent `IconButton`; confirm and remove.

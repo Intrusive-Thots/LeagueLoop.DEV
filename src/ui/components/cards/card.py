@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from ui.components.glyphs import set_chevron
 from ui.theme.token_loader import TOKENS
 from ui.components.factory import get_color, get_font, parse_border
 from ui.components.hover import apply_card_hover
@@ -47,11 +48,12 @@ class CardHeader(ctk.CTkFrame):
             from ui.components.buttons import IconButton
             self.btn_toggle = IconButton(
                 self,
-                text="▼" if self.is_expanded else "▶",
+                text="",
                 command=self.toggle,
                 size=24,
                 font=get_font("body")
             )
+            set_chevron(self.btn_toggle, self.is_expanded, "#A0A7B4")
             self.btn_toggle.pack(side="right", padx=TOKENS.get("spacing.md", 16), pady=TOKENS.get("spacing.sm", 8))
 
             # 🎨 Palette: Add UX affordances for the collapsible label
@@ -75,14 +77,14 @@ class CardHeader(ctk.CTkFrame):
         if self.is_expanded:
             self.content_widget.pack_forget()
             self.underline.pack_forget()
-            self.btn_toggle.configure(text="▶")
+            set_chevron(self.btn_toggle, False, "#A0A7B4")
             if self.card_widget:
                 self.card_widget.configure(height=40)
             self.is_expanded = False
         else:
             self.underline.pack(side="bottom", fill="x", padx=TOKENS.get("spacing.md", 16))
             self.content_widget.pack(fill="both", expand=True)
-            self.btn_toggle.configure(text="▼")
+            set_chevron(self.btn_toggle, True, "#A0A7B4")
             self.is_expanded = True
 
 class CardContent(ctk.CTkFrame):

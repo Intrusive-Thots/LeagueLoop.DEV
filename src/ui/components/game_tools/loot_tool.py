@@ -148,7 +148,7 @@ class LootTool(ctk.CTkFrame):
 
         # Hextech Telemetry / Stat Chips
         self.stats_frame = ctk.CTkFrame(self.body, fg_color="transparent")
-        self.stats_frame.pack(fill="x", padx=10, pady=(6, 2))
+        self.stats_frame.pack(fill="x", padx=12, pady=(8, 2))
 
         # 1. Containers Chip
         self.chip_openable = ctk.CTkFrame(
@@ -239,7 +239,7 @@ class LootTool(ctk.CTkFrame):
 
         # Options
         opts_frame = ctk.CTkFrame(self.body, fg_color="transparent")
-        opts_frame.pack(fill="x", padx=10, pady=(3, 1))
+        opts_frame.pack(fill="x", padx=12, pady=(4, 1))
 
         self.var_claim = ctk.BooleanVar(value=True)
         self.chk_claim = ctk.CTkCheckBox(
@@ -275,7 +275,7 @@ class LootTool(ctk.CTkFrame):
 
         # Resource Summary & Section Header
         self.summary_frame = ctk.CTkFrame(self.body, fg_color="transparent")
-        self.summary_frame.pack(fill="x", padx=10, pady=(3, 1))
+        self.summary_frame.pack(fill="x", padx=12, pady=(4, 1))
 
         self.lbl_vault_header = ctk.CTkLabel(
             self.summary_frame,
@@ -305,7 +305,7 @@ class LootTool(ctk.CTkFrame):
             # which read as a stray "," under VAULT INVENTORY (#17).
             progress_color="#141E28",
         )
-        self.progress_bar.pack(fill="x", padx=10, pady=(2, 2))
+        self.progress_bar.pack(fill="x", padx=12, pady=(2, 2))
         self.progress_bar.set(0)
 
         # Bottom controls (packed side="bottom" first to guarantee space reservation)
@@ -321,7 +321,7 @@ class LootTool(ctk.CTkFrame):
         self.status_lbl.pack(side="bottom", fill="x", padx=12, pady=(0, 4))
 
         self.actions_row2 = ctk.CTkFrame(self.body, fg_color="transparent")
-        self.actions_row2.pack(side="bottom", fill="x", padx=10, pady=(2, 4))
+        self.actions_row2.pack(side="bottom", fill="x", padx=12, pady=(2, 4))
 
         self.btn_open = ctk.CTkButton(
             self.actions_row2,
@@ -360,7 +360,7 @@ class LootTool(ctk.CTkFrame):
         # btn_stop is hidden when idle to avoid permanently consuming space
 
         self.actions_row1 = ctk.CTkFrame(self.body, fg_color="transparent")
-        self.actions_row1.pack(side="bottom", fill="x", padx=10, pady=(3, 2))
+        self.actions_row1.pack(side="bottom", fill="x", padx=12, pady=(4, 2))
 
         self.btn_refresh = ctk.CTkButton(
             self.actions_row1,
@@ -376,7 +376,7 @@ class LootTool(ctk.CTkFrame):
             command=self.refresh,
             cursor="hand2",
         )
-        self.btn_refresh.pack(side="left", fill="x", expand=True, padx=(0, 3))
+        self.btn_refresh.pack(side="left", fill="x", expand=True, padx=(0, 4))
         CTkTooltip(self.btn_refresh, "Refresh inventory from League Client")
 
         self.btn_claim = ctk.CTkButton(
@@ -393,7 +393,7 @@ class LootTool(ctk.CTkFrame):
             command=self.claim_rewards,
             cursor="hand2",
         )
-        self.btn_claim.pack(side="left", fill="x", expand=True, padx=(3, 0))
+        self.btn_claim.pack(side="left", fill="x", expand=True, padx=(4, 0))
         CTkTooltip(self.btn_claim, "Claim pending battle pass, event pass, and mission rewards")
 
         # Scrollable inventory list
@@ -403,7 +403,7 @@ class LootTool(ctk.CTkFrame):
             height=125,
             corner_radius=6,
         )
-        self.list_frame.pack(fill="both", expand=True, padx=10, pady=(2, 4))
+        self.list_frame.pack(fill="both", expand=True, padx=12, pady=(2, 4))
 
         self.empty_lbl = ctk.CTkLabel(
             self.list_frame,
@@ -439,7 +439,7 @@ class LootTool(ctk.CTkFrame):
             self.btn_refresh.configure(state=state)
             if busy:
                 if hasattr(self, "btn_stop") and not self.btn_stop.winfo_ismapped():
-                    self.btn_stop.pack(side="right", padx=(6, 0))
+                    self.btn_stop.pack(side="right", padx=(8, 0))
                 self.btn_stop.configure(state="normal")
                 self.progress_bar.configure(mode="indeterminate",
                                             progress_color=get_color("colors.accent.gold", "#C8AA6E"))
@@ -480,7 +480,8 @@ class LootTool(ctk.CTkFrame):
             Logger.debug("LootTool", "_clear_list suppressed an error", exc=exc)
 
     def _render_empty_state(self, message: str = "No openable containers found.",
-                            title: str = "Nothing to open", offline: bool = False) -> None:
+                            title: str = "Nothing to open", offline: bool = False,
+                            error: bool = False) -> None:
         if hasattr(self, "list_frame") and self.list_frame.winfo_exists():
             self.list_frame.configure(height=125)
 
@@ -491,15 +492,16 @@ class LootTool(ctk.CTkFrame):
             border_color="#182330",
             corner_radius=8,
         )
-        empty_box.pack(fill="x", padx=6, pady=20)
+        empty_box.pack(fill="x", padx=8, pady=20)
 
         # Hextech graphic icon
         from ui.components.glyphs import ctk_glyph
         ctk.CTkLabel(
             empty_box,
             text="",
-            image=ctk_glyph("chest", "#5B6573" if offline else "#C8AA6E", 26),
-        ).pack(pady=(14, 4))
+            image=(ctk_glyph("warning", "#E0A43A", 26) if error
+                   else ctk_glyph("chest", "#5B6573" if offline else "#C8AA6E", 26)),
+        ).pack(pady=(12, 4))
 
         ctk.CTkLabel(
             empty_box,
@@ -515,7 +517,7 @@ class LootTool(ctk.CTkFrame):
             text_color="#A0A7B4",
             wraplength=220,
             justify="center",
-        ).pack(pady=(0, 10), padx=10)
+        ).pack(pady=(0, 12), padx=12)
 
         btn_scan = ctk.CTkButton(
             empty_box,
@@ -530,10 +532,12 @@ class LootTool(ctk.CTkFrame):
             command=self.refresh,
             cursor="hand2",
         )
+        if error:
+            btn_scan.configure(text="Retry")
         if offline:
             btn_scan.configure(state="disabled", text="Waiting for client",
                                text_color_disabled="#8A93A0")
-        btn_scan.pack(pady=(0, 14))
+        btn_scan.pack(pady=(0, 12))
 
         self._row_widgets.append(empty_box)
 
@@ -552,6 +556,19 @@ class LootTool(ctk.CTkFrame):
         )
         self.btn_open.configure(state="disabled", fg_color="#1A2430", text_color_disabled="#8A93A0")
         self.btn_claim.configure(state="disabled", text_color_disabled="#8A93A0")
+        self.status_lbl.configure(text="")
+
+    def _show_error(self, err: str) -> None:
+        """Inline error + Retry row (#29) instead of an empty list and a log line."""
+        self._clear_list()
+        self._rows = []
+        detail = str(err).strip() or "Unknown error"
+        if len(detail) > 90:
+            detail = detail[:89] + "…"
+        self._render_empty_state(
+            f"{detail}\nCheck that League is open, then retry.",
+            title="Couldn't read your loot", error=True,
+        )
         self.status_lbl.configure(text="")
 
     def _render_rows(self, rows: List[Dict[str, Any]], keys: int = 0, frags: int = 0) -> None:
@@ -614,7 +631,7 @@ class LootTool(ctk.CTkFrame):
                 height=48,
             )
             pad_bottom = 6 if idx == len(rows) - 1 else 2
-            card_fr.pack(fill="x", pady=(2, pad_bottom), padx=(4, 6))
+            card_fr.pack(fill="x", pady=(2, pad_bottom), padx=(4, 8))
             card_fr.pack_propagate(False)
 
             icon_badge = ctk.CTkLabel(
@@ -622,12 +639,12 @@ class LootTool(ctk.CTkFrame):
                 fg_color="#141E28", corner_radius=5,
                 image=ctk_glyph("chest", "#C8AA6E" if can_open else "#8A93A0", 20),
             )
-            icon_badge.pack(side="left", padx=(5, 5), pady=6)
+            icon_badge.pack(side="left", padx=(4, 4), pady=8)
 
             # Right column is packed before the info column so a long name
             # can't squeeze the per-row Open button out of the card.
             action_col = ctk.CTkFrame(card_fr, fg_color="transparent")
-            action_col.pack(side="right", padx=(4, 6), pady=6)
+            action_col.pack(side="right", padx=(4, 8), pady=8)
 
             # Center: Info Column (Name & Status)
             info_col = ctk.CTkFrame(card_fr, fg_color="transparent")
@@ -809,8 +826,7 @@ class LootTool(ctk.CTkFrame):
                 if not self.winfo_exists():
                     return
                 if err and not rows:
-                    self.status_lbl.configure(text=err)
-                    self._render_rows([], 0, 0)
+                    self._show_error(err)
                 else:
                     self._render_rows(rows, keys, frags)
                     self.status_lbl.configure(

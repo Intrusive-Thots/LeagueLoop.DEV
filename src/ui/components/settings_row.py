@@ -260,7 +260,7 @@ class SettingsActionRow(ctk.CTkFrame):
             status_w = max(60, total_w - 8) if total_w > 1 else 250
             self.status_label.configure(text=message, text_color=color, wraplength=status_w, justify="left")
             if message and not self.status_label.winfo_ismapped():
-                self.status_label.pack(side="top", fill="x", anchor="w", pady=(3, 0))
+                self.status_label.pack(side="top", fill="x", anchor="w", pady=(4, 0))
             elif not message and self.status_label.winfo_ismapped():
                 self.status_label.pack_forget()
         except Exception as exc:

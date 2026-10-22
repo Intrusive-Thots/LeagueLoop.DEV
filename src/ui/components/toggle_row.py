@@ -145,8 +145,19 @@ class ToggleRow(ctk.CTkFrame):
                 self.btn_edit.configure(text_color=muted)
     
     def _start_pulse(self):
-        """Subtle pulse animation on the icon when automation is ON."""
+        """Mark an ON automation with steady gold (motion audit #26).
+
+        Every enabled row used to pulse forever, so a list of five automations
+        blinked out of sync. Ambient motion now stays off; the colour alone
+        says "on". The tick below is kept for an explicit opt-in.
+        """
         self._stop_pulse()  # Clear any existing
+        if not getattr(self, "ambient_pulse", False):
+            try:
+                self.icon_label.configure(text_color=get_color("colors.accent.gold", "#C8AA6E"))
+            except Exception as exc:
+                Logger.debug("ToggleRow", "Could not paint the on state", exc=exc)
+            return
         
         def _tick():
             if not self.winfo_exists():

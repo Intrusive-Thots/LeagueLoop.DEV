@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from ui.components.glyphs import set_chevron
 
 from ui.components.factory import get_color, get_font, get_radius
 from ui.components.champion_input import ChampionInput
@@ -34,6 +35,7 @@ class DraftTool(ctk.CTkFrame):
             cursor="hand2"
         )
         self.lbl_section.pack(side="left", padx=2)
+        set_chevron(self.lbl_section, False, "#8A93A0")
         CTkTooltip(self.lbl_section, "Toggle Role Enforcer Settings")
         
         self.lbl_section.bind("<Button-1>", lambda e: self._toggle_collapse())
@@ -100,10 +102,10 @@ class DraftTool(ctk.CTkFrame):
         self._expanded = not self._expanded
         if self._expanded:
             self.body.pack(fill="both", expand=True, pady=(SPACING_SM, SPACING_MD), padx=SPACING_MD)
-            self.lbl_section.configure(text="▼  DRAFT ASSISTANT")
+            set_chevron(self.lbl_section, True, "#8A93A0")
         else:
             self.body.pack_forget()
-            self.lbl_section.configure(text="▶  DRAFT ASSISTANT")
+            set_chevron(self.lbl_section, False, "#8A93A0")
 
     def _load_config(self):
         for role in self.ROLES:

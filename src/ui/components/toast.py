@@ -6,6 +6,10 @@ from dataclasses import dataclass, replace
 from typing import Optional
 from utils.logger import Logger
 import customtkinter as ctk
+from ui.components.glyphs import GLYPHS, ctk_glyph
+
+_ICON_GLYPHS = {"⚔": "swords", "⚠": "warning", "✅": "check", "✓": "check", "❌": "close",
+                "🔐": "lock", "🛡": "lock", "🤝": "person", "✨": "check", "📦": "chest"}
 from .factory import get_color, get_font, get_radius, parse_border
 from .color_utils import lighten_color
 
@@ -101,10 +105,21 @@ class Toast(ctk.CTkFrame):
         self.grid_columnconfigure(1, weight=1)
         
         # Icon
-        self.lbl_icon = ctk.CTkLabel(
-            self, text=icon, font=get_font("body"), width=30, cursor="hand2"
-        )
-        self.lbl_icon.grid(row=0, column=0, padx=(10, 5), pady=10)
+        # Drawn glyphs instead of emoji (#25): map legacy emoji icons to the
+        # glyph set, tinted by theme; unknown icons fall back to text.
+        glyph = _ICON_GLYPHS.get(str(icon).replace("\ufe0f", ""), None)
+        if glyph is None and str(icon) in GLYPHS:
+            glyph = str(icon)
+        tint = {"success": "#2ECC71", "error": "#FF6B6B"}.get(theme, "#C8AA6E")
+        if glyph:
+            self.lbl_icon = ctk.CTkLabel(
+                self, text="", image=ctk_glyph(glyph, tint, 18), width=30, cursor="hand2"
+            )
+        else:
+            self.lbl_icon = ctk.CTkLabel(
+                self, text=icon, font=get_font("body"), width=30, cursor="hand2"
+            )
+        self.lbl_icon.grid(row=0, column=0, padx=(12, 4), pady=12)
         self.lbl_icon.bind("<Button-1>", self.dismiss)
 
         # Message
@@ -113,7 +128,7 @@ class Toast(ctk.CTkFrame):
             text_color=get_color("colors.text.primary"),
             anchor="w", justify="left", wraplength=250, cursor="hand2"
         )
-        self.lbl_msg.grid(row=0, column=1, padx=(5, 15), pady=10)
+        self.lbl_msg.grid(row=0, column=1, padx=(4, 15), pady=12)
         self.lbl_msg.bind("<Button-1>", self.dismiss)
 
         # Slide-in Animation State
@@ -221,7 +236,9 @@ class Toast(ctk.CTkFrame):
             self.after(16, self.animate_in)
         else:
             self.pack_configure(pady=(self._target_y, 0))
-            if self.confetti:
+            # Motion audit (#26): the slide-in is the toast's one authored
+            # entrance; confetti competed with it and is no longer drawn.
+            if False and self.confetti:
                 self._spawn_confetti()
 
     def _on_hover(self, event=None):
