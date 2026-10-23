@@ -20,4 +20,4 @@ Bump this with every change. `tools/bump_version.py` writes it for you rather
 than leaving it to be remembered.
 """
 
-__version__ = "2-10-289-1636"
+__version__ = "2-10-296-0152"
