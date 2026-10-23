@@ -19,6 +19,7 @@ from core.events import EventBus
 import tkinter as tk
 import customtkinter as ctk
 from ui.components.glyphs import set_icon
+from services import friend_presence
 
 from ui.components.factory import get_color, get_font, get_radius
 from ui.ui_shared import CTkTooltip
@@ -37,13 +38,9 @@ def _ellipsize(text, limit):
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
 
 
-def _presence_color(availability):
-    a = (availability or "").lower()
-    if a in ("chat", "online"):
-        return "#2ECC71"
-    if a in ("away", "dnd", "ingame", "championselect", "inqueue", "busy"):
-        return "#E0A43A"
-    return "#5B6573"
+def _presence_color(kind):
+    """Dot colour for a presence kind from ``friend_presence.describe``."""
+    return friend_presence.COLORS.get((kind or "").lower(), friend_presence.COLORS["offline"])
 
 
 class FriendRow(ctk.CTkFrame):
@@ -79,32 +76,35 @@ class FriendRow(ctk.CTkFrame):
         # amber = away / in game, grey = offline. Offline was red before, which
         # read as an error on every friend who simply was not playing.
         is_online = availability not in ("offline", "", None)
+        is_league = availability in ("chat", "away", "ingame")
         dot_color = _presence_color(availability)
         self.status_dot = ctk.CTkLabel(
             self, text="●", text_color=dot_color,
             font=get_font("body"), width=14
         )
         self.status_dot.grid(row=0, column=1, rowspan=2, padx=(0, 4), sticky="w")
-        CTkTooltip(self.status_dot, f"Status: {availability}")
+        CTkTooltip(self.status_dot, status_text or availability)
 
         # Col 2: Name + Status Text (stacked)
-        name_color = get_color("colors.accent.primary") if is_online else "#8A93A0"
+        name_color = get_color("colors.accent.primary") if is_league else "#8A93A0"
         self.lbl_name = ctk.CTkLabel(
             self, text=_ellipsize(name, NAME_MAX_CHARS),
             font=get_font("body", "bold"),
             text_color=name_color,
-            anchor="w"
+            anchor="w", height=18,
         )
-        self.lbl_name.grid(row=0, column=2, sticky="ew", pady=(4, 0))
+        self.lbl_name.grid(row=0, column=2, sticky="sew", pady=(4, 0))
 
         status_color = "#A0A7B4" if is_online else "#8A93A0"
         self.lbl_status = ctk.CTkLabel(
             self, text=_ellipsize(status_text, STATUS_MAX_CHARS),
             font=get_font("caption"),
             text_color=status_color,
-            anchor="w"
+            anchor="w", height=14,
         )
-        self.lbl_status.grid(row=1, column=2, sticky="ew", pady=(0, 4))
+        # CTkLabel defaults to 28px tall; two of those in a 40px row clipped
+        # the status line away entirely (seen on the live client).
+        self.lbl_status.grid(row=1, column=2, sticky="new", pady=(0, 4))
         if len(name) > NAME_MAX_CHARS or len(status_text or "") > STATUS_MAX_CHARS:
             CTkTooltip(self.lbl_name, f"{name} — {status_text}" if status_text else name)
 
@@ -392,9 +392,14 @@ class FriendPriorityList(ctk.CTkFrame):
 
         def sort_key(f):
             """Sorting key function."""
-            avail = f.get("availability", "offline")
             gn = f.get("_name_lower", (f.get("gameName", "") or f.get("name", "")).lower())
-            prio = 1 if avail == "offline" else 0
+            # Invitable first, then mobile / other Riot games, then offline.
+            if friend_presence.is_invitable(f):
+                prio = 0
+            elif friend_presence.is_online(f):
+                prio = 1 if friend_presence.describe(f)[0] != "other" else 2
+            else:
+                prio = 3
             return (prio, gn)
 
         friends.sort(key=sort_key)
@@ -471,7 +476,7 @@ class FriendPriorityList(ctk.CTkFrame):
         for f in self._friends_data:
             name = f.get("gameName", "") or f.get("name", "")
             avail = f.get("availability", "offline")
-            msg = f.get("availabilityMessage", "Online")
+            msg = friend_presence.describe(f)[1]
             name_lower = f.get("_name_lower", name.lower())
             is_auto = self._auto_join_names.get(name_lower, False)
             sig.append(f"{name}|{avail}|{msg}|{is_auto}")
@@ -500,7 +505,9 @@ class FriendPriorityList(ctk.CTkFrame):
             w.destroy()
 
         # Update online count badge
-        online_count = sum(1 for f in self._friends_data if f.get("availability", "offline") != "offline")
+        # Count who can actually take a lobby invite: the live payload had
+        # mobile and VALORANT friends counted as "online" before.
+        online_count = sum(1 for f in self._friends_data if friend_presence.is_invitable(f))
         total_count = len(self._friends_data)
         if hasattr(self, "lbl_online_count"):
             self.lbl_online_count.configure(text=str(online_count))
@@ -523,11 +530,7 @@ class FriendPriorityList(ctk.CTkFrame):
             if not name:
                 continue
 
-            avail = item.get("availability", "offline")
-            status_msg = item.get("availabilityMessage", "Online") if avail != "offline" else "Offline"
-            if avail in ("dnd", "away", "chat"):
-                if not status_msg:
-                    status_msg = avail.capitalize()
+            avail, status_msg = friend_presence.describe(item)
 
             name_lower = item.get("_name_lower", name.lower())
             is_auto = self._auto_join_names.get(name_lower, False)
@@ -569,7 +572,7 @@ class FriendPriorityList(ctk.CTkFrame):
         """Copies the active Friend Auto-Join list to the clipboard."""
         from ui.components.toast import ToastManager
         if not self._friends_data:
-            ToastManager.get_instance().show("Friend list is empty!", icon="⚠️", theme="error")
+            ToastManager.get_instance().show("Friend list is empty!", icon="warning", theme="error")
             return
 
         names = [f.get("name", "") for f in self._friends_data if f.get("name", "")]
@@ -581,7 +584,7 @@ class FriendPriorityList(ctk.CTkFrame):
 
         ToastManager.get_instance().show(
             "Friend List Copied!",
-            icon="📋",
+            icon="check",
             theme="success",
             confetti=True
         )
@@ -597,7 +600,7 @@ class FriendPriorityList(ctk.CTkFrame):
         else:
             try:
                 from ui.components.toast import ToastManager
-                ToastManager.get_instance().show("Automation engine not available.", icon="⚠️", theme="error")
+                ToastManager.get_instance().show("Automation engine not available.", icon="warning", theme="error")
             except Exception as exc:
                 Logger.debug("FriendList", "_on_mass_invite suppressed an error", exc=exc)
 

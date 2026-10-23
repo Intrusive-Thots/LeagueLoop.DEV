@@ -98,3 +98,10 @@ bare `ctk.CTk()` root with a stub config and a real `AssetManager`, run under
     live highlight; loot opening/crafting results, item art, loot category icons; real
     account-detection failures; friend list with real friends + invite flow; arena synergy
     pairs in a live draft.
+
+### #23 live-client pass (pass 6, 2026-10-22, real LCU on James's PC, read-only GETs)
+- **Live-verified:** LCU connect via lockfile; phase `None` → status pill "Queue idle"; real friend list (70 friends) renders with avatars; signed-in-but-not-stored account detection message; Loot tab with real counts (0 openable, 6 keys) and "Nothing to open" empty state.
+- **Fixed from live data:** friends on mobile / in Riot Client / playing other Riot games were counted "online" and would have been mass-invited → new `services/friend_presence.py` (kinds, colours, status text, `is_invitable`); badge + Invite All now count invitable friends only. Friend status line was clipped to nothing (two 28px labels in a 40px row) → fixed. Season-pass claim reported phantom "Claimed N rewards" every run → skip claim POST when `rewardsCount <= 0`.
+- **Fixtures:** `tests/fixtures/lcu/{friends,loot,summoner,phase}.json` (anonymised live payloads), `tests/test_live_lcu_payloads.py`.
+- **Still blocked (James not in phase / forbidden):** champ-select pick/ban panel, ARAM bench highlighting, arena synergy, phase transitions, loot opening art + category icons (nothing openable), real invite flow. No champ-select/lobby payloads could be captured (404 outside those phases). TFT pass claim still counts any 2xx.
+- **Incident:** during live verification the app's loot automation claimed rewards on the real account (11 rewards at 23:23:04 UTC-4 incl. 2×750 BE, 25 OE, event pass rewards; an Open All that opened 0). Nothing disenchanted, crafted, queued or invited. Future live runs must use a sandbox config with all loot automation off and no GUI clicks.
