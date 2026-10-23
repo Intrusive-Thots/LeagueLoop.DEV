@@ -17,6 +17,7 @@ import psutil
 from .api_handler import LCUClient  # type: ignore
 from .asset_manager import AssetManager, ConfigManager  # type: ignore
 from services.draft.priority_engine import PriorityEngine
+from services import friend_presence
 from utils.logger import Logger  # type: ignore
 from core.config_keys import (
     AUTO_HONOR_ENABLED,
@@ -2234,8 +2235,9 @@ class AutomationEngine:
 
             invitations = []
             for f in friends:
-                avail = f.get("availability", "offline")
-                if avail == "offline":
+                # Real payloads include mobile users and friends in VALORANT
+                # or a game; a League lobby invite cannot reach them.
+                if not friend_presence.is_invitable(f):
                     continue
                 game_name = f.get("gameName", "")
                 summoner_id = f.get("summonerId", 0)
@@ -2249,7 +2251,7 @@ class AutomationEngine:
                 })
 
             if not invitations:
-                self._log("No online friends to invite.")
+                self._log("No friends available to invite.")
                 return 0
 
             inv_res = self.lcu.request("POST", "/lol-lobby/v2/lobby/invitations", invitations)

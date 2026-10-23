@@ -2,6 +2,7 @@
 Automation Editor — Popup window for editing automation parameters.
 Opens as a Toplevel dialog with dark theme styling, matching the app's aesthetic.
 """
+from ui.components.glyphs import ctk_glyph
 import customtkinter as ctk  # type: ignore
 
 from ui.components.factory import get_color, get_font  # type: ignore
@@ -122,7 +123,8 @@ class AutomationEditor(ctk.CTkToplevel):
         header.pack_propagate(False)
 
         ctk.CTkLabel(
-            header, text=f"⚙  {self._get_display_name()}",
+            header, text=f"  {self._get_display_name()}",
+            image=ctk_glyph("gear", get_color("colors.accent.gold", "#C8AA6E"), 16), compound="left",
             font=get_font("title"),
             text_color=get_color("colors.accent.gold", "#C8AA6E"),
             anchor="w"
@@ -130,7 +132,7 @@ class AutomationEditor(ctk.CTkToplevel):
 
         # Close button
         ctk.CTkButton(
-            header, text="✕", width=28, height=28,
+            header, text="", image=ctk_glyph("close", get_color("colors.text.muted"), 14), width=28, height=28,
             corner_radius=14, font=get_font("body"),
             fg_color="transparent",
             text_color=get_color("colors.text.muted"),
@@ -397,7 +399,7 @@ class AutomationEditor(ctk.CTkToplevel):
             text=f"Current ban list: {count} champion{'s' if count != 1 else ''}",
             font=get_font("body", "bold"),
             text_color=get_color("colors.accent.gold", "#C8AA6E"),
-        ).pack(anchor="w", pady=(0, 10))
+        ).pack(anchor="w", pady=(0, 12))
 
         ctk.CTkButton(
             self.body,
@@ -478,7 +480,8 @@ class AutomationEditor(ctk.CTkToplevel):
         sub = ctk.CTkLabel(
             card, text="Displays quick action toggle icon below 'Find Match' button on main page",
             font=get_font("caption"),
-            text_color=get_color("colors.text.muted")
+            text_color=get_color("colors.text.muted"),
+            wraplength=196, justify="left",
         )
         sub.pack(anchor="w", padx=12, pady=(0, 8))
 
@@ -529,7 +532,7 @@ class AutomationEditor(ctk.CTkToplevel):
             from ui.components.toast import ToastManager
             ToastManager.get_instance().show(
                 f"{self._get_display_name()} settings saved",
-                theme="success", icon="✓"
+                theme="success", icon="check"
             )
         except Exception as exc:
             Logger.debug("AutomationEditor", "_on_save suppressed an error", exc=exc)

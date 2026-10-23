@@ -69,17 +69,40 @@ class CTkTooltip:
                 text=self.text,
                 bg_color="transparent",
                 text_color=get_color("colors.text.primary"),
-                padx=10,
-                pady=5,
+                padx=12,
+                pady=4,
                 font=get_font("body"),
+                wraplength=240,
+                justify="left",
             )
             label.pack()
+            self._clamp_to_window()
 
             # Start animation
             self.animate_in()
 
         except Exception as e:  # pylint: disable=broad-exception-caught
             Logger.error("tooltip.py", f"Tooltip Error: {e}")
+
+    def _clamp_to_window(self):
+        """Keep the tooltip inside the app window (#19).
+
+        The sidebar is ~300px wide, so tooltips on right-hand controls (the
+        hotkey recorder, gear buttons) used to spill off its edge. Shift the
+        tooltip left so its right edge stays inside the window and screen.
+        """
+        try:
+            self.tooltip.update_idletasks()
+            tw = self.tooltip.winfo_reqwidth()
+            top = self.widget.winfo_toplevel()
+            right = top.winfo_rootx() + top.winfo_width() - 4
+            right = min(right, self.widget.winfo_screenwidth() - 4)
+            left = top.winfo_rootx() + 4
+            if self._x + tw > right:
+                self._x = max(left, right - tw)
+                self.tooltip.wm_geometry(f"+{self._x}+{self._current_y}")
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            Logger.debug("tooltip.py", f"clamp suppressed: {exc}")
 
     def configure(self, text=None, delay=None):
         if text is not None:
@@ -93,12 +116,10 @@ class CTkTooltip:
             if not self.tooltip or not getattr(self.tooltip, "winfo_exists", lambda: False)():
                 return
 
-            if self._current_y > self._target_y:
-                self._current_y -= max(1, (self._current_y - self._target_y) // 2)
-                self.tooltip.wm_geometry(f"+{self._x}+{self._current_y}")
-                self.widget.after(16, self.animate_in)
-            else:
-                self.tooltip.wm_geometry(f"+{self._x}+{self._target_y}")
+            # Motion audit (#26): tooltips appear in place; the slide-up
+            # competed with each view's entrance and lagged the cursor.
+            self._current_y = self._target_y
+            self.tooltip.wm_geometry(f"+{self._x}+{self._target_y}")
         except Exception as e:
             Logger.error("tooltip.py", f"Tooltip Animation Error: {e}")
 

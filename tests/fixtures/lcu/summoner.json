@@ -1,0 +1,24 @@
+{
+ "accountId": 0,
+ "displayName": "",
+ "gameName": "Friend215",
+ "internalName": "",
+ "nameChangeFlag": false,
+ "percentCompleteForNextLevel": 27,
+ "privacy": "PUBLIC",
+ "profileIconId": 7333,
+ "puuid": "x25b907ca",
+ "rerollPoints": {
+  "currentPoints": 0,
+  "maxRolls": 2,
+  "numberOfRolls": 0,
+  "pointsCostToRoll": 250,
+  "pointsToReroll": 250
+ },
+ "summonerId": 0,
+ "summonerLevel": 536,
+ "tagLine": "GAP",
+ "unnamed": false,
+ "xpSinceLastLevel": 893,
+ "xpUntilNextLevel": 3264
+}

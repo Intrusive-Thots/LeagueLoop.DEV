@@ -5,6 +5,7 @@ Centralizes the creation of styled widgets (Panels, Cards, Buttons) ensuring vis
 from utils.logger import Logger
 import functools
 import customtkinter as ctk
+from ui.components.glyphs import set_chevron
 from ..theme.token_loader import TOKENS
 from .color_utils import ctk_safe_color
 
@@ -21,6 +22,14 @@ def get_color(path, default="#000000"):
 def get_radius(size="md"):
     """Retrieve corner radius."""
     return TOKENS.get("radius", size, default=10)
+
+# Type scale (#33): five steps, each with a matching vertical rhythm.
+# Hard-coded font tuples elsewhere should use one of these sizes only.
+#   micro 9  (badges, counters)      small 10 (hints, meta)
+#   caption/section 11               body 12              header 14 / title 15
+TYPE_SCALE = {"micro": 9, "small": 10, "caption": 11, "section": 11, "body": 12,
+              "header": 14, "title": 15}
+
 
 @functools.lru_cache(maxsize=32)
 def get_font(type="body", weight=None):
@@ -47,6 +56,10 @@ def get_font(type="body", weight=None):
     elif type == "small":
         family = "Segoe UI"
         size = 10
+        weight_val = "normal"
+    elif type == "micro":
+        family = "Segoe UI"
+        size = 9
         weight_val = "normal"
     else:  # body
         family = "Segoe UI"
@@ -92,6 +105,13 @@ class RiotButton(ctk.CTkFrame):
             inner_color = "#A98A48"
             hover_color = get_color("colors.accent.gold", "#C8AA6E")  # Brighten on hover
             base_text_color = text_color or get_color("colors.background.app", "#091428")
+        elif style == "danger":
+            # Danger-outline (#21): red 1px border, card fill, light-red text
+            # (~5:1). Destructive actions read as deliberate, not decorative.
+            outer_color = "#B9473D"
+            inner_color = get_color("colors.background.card", "#0F1923")
+            hover_color = "#2A1517"
+            base_text_color = text_color or "#FF7A70"
         elif style == "ghost" or style == "danger":
             outer_color = get_color("colors.background.card", "#1E2328") if style == "danger" else "transparent"
             inner_color = "transparent"
@@ -141,6 +161,9 @@ class RiotButton(ctk.CTkFrame):
                 w.bind("<Return>", lambda e: self._on_click(e))
 
         self._inner_color = inner_color
+        self._hover_color = hover_color
+        self._base_text_color = base_text_color
+        self._ll_focus_ring = True  # focus_ring.py draws the ring on the outer frame
         self._disabled = False  # Item #194: Track disabled state
         
     def _on_enter(self, h_color):
@@ -158,7 +181,15 @@ class RiotButton(ctk.CTkFrame):
     def _on_click(self, e=None):
         if self._disabled:
             return
-        # Optional: Add small press scale if desired
+        # Pressed state (#34): darken briefly so the click registers visually.
+        try:
+            from ui.components.pressed_state import pressed_color
+            hover = getattr(self, "_hover_color", None)
+            self.inner.configure(fg_color=pressed_color(self._inner_color, hover))
+            self.after(110, lambda: (not self._disabled and self.inner.winfo_exists()
+                                     and self.inner.configure(fg_color=hover or self._inner_color)))
+        except Exception as exc:
+            Logger.debug("factory.py", "pressed state failed", exc=exc)
         if hasattr(self, "_canvas"):
             self._canvas.focus_set()
         if self.command:
@@ -168,7 +199,9 @@ class RiotButton(ctk.CTkFrame):
         if "text" in kwargs:
             self.lbl.configure(text=kwargs.pop("text"))
         if "text_color" in kwargs:
-            self.lbl.configure(text_color=kwargs.pop("text_color"))
+            self._base_text_color = kwargs.pop("text_color")
+            if not self._disabled:
+                self.lbl.configure(text_color=self._base_text_color)
         if "inner_color" in kwargs:
             inner_c = kwargs.pop("inner_color")
             self.inner.configure(fg_color=inner_c)
@@ -180,14 +213,26 @@ class RiotButton(ctk.CTkFrame):
             state = kwargs.pop("state")
             if state == "disabled":
                 self._disabled = True
-                self.lbl.configure(text_color=get_color("colors.text.disabled"))
+                dis = get_color("colors.text.disabled", "#6B7584")
+                self.lbl.configure(text_color=dis)
                 self.inner.configure(fg_color=get_color("colors.background.card"))
+                icon = getattr(self, "_ll_icon", None)
+                if icon:  # a dark-on-gold glyph vanished on the disabled card (#24)
+                    from ui.components.glyphs import ctk_glyph
+                    self.lbl.configure(image=ctk_glyph(icon[0], dis, icon[2]))
                 for w in (self, self.inner, self.lbl):
                     w.configure(cursor="")
             else:
                 self._disabled = False
-                self.lbl.configure(text_color=self.lbl.cget("text_color"))
+                # Restore the colour the button was built with — reading
+                # cget() here returned the disabled grey, so a re-enabled
+                # button stayed looking disabled.
+                self.lbl.configure(text_color=self._base_text_color)
                 self.inner.configure(fg_color=self._inner_color)
+                icon = getattr(self, "_ll_icon", None)
+                if icon:
+                    from ui.components.glyphs import ctk_glyph
+                    self.lbl.configure(image=ctk_glyph(*icon))
                 for w in (self, self.inner, self.lbl):
                     w.configure(cursor="hand2")
         if kwargs:
@@ -240,7 +285,7 @@ def make_input(parent, placeholder="", width=None, **kw):
         border_color=border_c,
         border_width=border_w,
         placeholder_text=placeholder,
-        placeholder_text_color=get_color("colors.text.muted", "#6C757D"),
+        placeholder_text_color=get_color("colors.text.muted", "#8A93A0"),
         text_color=get_color("colors.text.primary", "#F0E6D2"),
         
         **kw
@@ -279,7 +324,7 @@ def make_input(parent, placeholder="", width=None, **kw):
 
 
 def make_card(parent, title=None, fg_color=None, border_color=None, corner_radius=None,
-              padx=10, pady=10, inner_padx=10, inner_pady=8, collapsible=False, start_collapsed=False):
+              padx=12, pady=12, inner_padx=12, inner_pady=8, collapsible=False, start_collapsed=False):
     """Create a standardized League-styled card frame.
     
     Returns the content frame (inside the card) where widgets should be packed.
@@ -336,6 +381,7 @@ def make_card(parent, title=None, fg_color=None, border_color=None, corner_radiu
                 text_color=get_color("colors.text.muted")
             )
             chevron.pack(side="left")
+            set_chevron(chevron, not start_collapsed, get_color("colors.text.muted"))
             
         title_label = ctk.CTkLabel(
             header_frame, text=title,
@@ -385,14 +431,14 @@ def make_card(parent, title=None, fg_color=None, border_color=None, corner_radiu
                 self.animating = True
                 
                 if self.is_expanded:
-                    chevron.configure(text="▶  ")
+                    set_chevron(chevron, False, get_color("colors.text.muted"))
                     self.target_h = 0
                     self.current_h = content.winfo_reqheight()
                     content_wrapper.configure(height=self.current_h)
                     content_wrapper.pack_propagate(False)
                     self.animate_collapse()
                 else:
-                    chevron.configure(text="▼  ")
+                    set_chevron(chevron, True, get_color("colors.text.muted"))
                     content_wrapper.pack(fill="x", padx=inner_padx, pady=(0 if title else inner_pady, inner_pady))
                     divider.pack(fill="x", padx=inner_padx, pady=(0, inner_pady - 2), before=content_wrapper)
                     

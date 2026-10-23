@@ -20,9 +20,12 @@ class LolToggle(tk.Canvas):
             except Exception as exc:
                 Logger.debug("LolToggle", "__init__ suppressed an error", exc=exc)
 
-        self.color_inactive = get_color("colors.background.card", "#1E2328")
+        # Off track must read against the card it sits on; the card colour
+        # made OFF render as a lone floating knob.
+        self.color_inactive = "#2A3442"
         self.color_active = "#A88A4E" # C8AA6E dimmed
         self.color_knob = get_color("colors.text.primary", "#F0E6D2")
+        self.color_knob_off = "#8A93A0"
         self.color_focus_ring = get_color("colors.accent.gold", "#C8AA6E")
 
         self.pos_off = 2
@@ -71,7 +74,8 @@ class LolToggle(tk.Canvas):
         k_y = 2
         k_s = 12
         x = self._current_x
-        self.knob_id = self.create_oval(x, k_y, x+k_s, k_y+k_s, fill=self.color_knob, outline=self.color_knob)
+        knob = self.color_knob if self._state else self.color_knob_off
+        self.knob_id = self.create_oval(x, k_y, x+k_s, k_y+k_s, fill=knob, outline=knob)
 
     def _on_var_changed(self, *args):
         if not self.winfo_exists() or not self.variable:
@@ -108,7 +112,8 @@ class LolToggle(tk.Canvas):
                 self._current_x = target_x
                 self.coords(self.knob_id, self._current_x, 2, self._current_x + 12, 14)
                 # Revert knob color
-                self.itemconfig(self.knob_id, fill=self.color_knob, outline=self.color_knob)
+                knob = self.color_knob if self._state else self.color_knob_off
+                self.itemconfig(self.knob_id, fill=knob, outline=knob)
                 return
                 
             self._current_x += diff * 0.3

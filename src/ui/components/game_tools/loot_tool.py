@@ -11,6 +11,7 @@ import threading
 from typing import Any, Callable, Dict, List, Optional
 
 import customtkinter as ctk
+from ui.components.glyphs import ctk_glyph
 
 from services.loot_service import LootService
 from ui.components.factory import get_color, get_font, make_card
@@ -147,7 +148,7 @@ class LootTool(ctk.CTkFrame):
 
         # Hextech Telemetry / Stat Chips
         self.stats_frame = ctk.CTkFrame(self.body, fg_color="transparent")
-        self.stats_frame.pack(fill="x", padx=10, pady=(6, 2))
+        self.stats_frame.pack(fill="x", padx=12, pady=(8, 2))
 
         # 1. Containers Chip
         self.chip_openable = ctk.CTkFrame(
@@ -164,17 +165,17 @@ class LootTool(ctk.CTkFrame):
 
         self.lbl_stat_openable_num = ctk.CTkLabel(
             self.chip_openable,
-            text="0",
-            font=("Inter", 13, "bold"),
+            text="—",  # unknown until the first scan
+            font=("Inter", 14, "bold"),
             text_color=get_color("colors.accent.gold", "#C8AA6E"),
         )
         self.lbl_stat_openable_num.pack(pady=(4, 0))
 
         self.lbl_stat_openable_sub = ctk.CTkLabel(
             self.chip_openable,
-            text="📦 Openable",
+            text="Openable",
             font=("Inter", 9),
-            text_color=get_color("colors.text.muted", "#8A9BA8"),
+            text_color="#A0A7B4",
         )
         self.lbl_stat_openable_sub.pack(pady=(0, 4))
 
@@ -193,17 +194,17 @@ class LootTool(ctk.CTkFrame):
 
         self.lbl_stat_keys_num = ctk.CTkLabel(
             self.chip_keys,
-            text="0",
-            font=("Inter", 13, "bold"),
-            text_color=get_color("colors.accent.cyan", "#0AC8B9"),
+            text="—",  # unknown until the first scan
+            font=("Inter", 14, "bold"),
+            text_color=get_color("colors.text.primary", "#F0E6D2"),
         )
         self.lbl_stat_keys_num.pack(pady=(4, 0))
 
         self.lbl_stat_keys_sub = ctk.CTkLabel(
             self.chip_keys,
-            text="🗝️ Keys",
+            text="Keys",
             font=("Inter", 9),
-            text_color=get_color("colors.text.muted", "#8A9BA8"),
+            text_color="#A0A7B4",
         )
         self.lbl_stat_keys_sub.pack(pady=(0, 4))
 
@@ -222,23 +223,23 @@ class LootTool(ctk.CTkFrame):
 
         self.lbl_stat_frags_num = ctk.CTkLabel(
             self.chip_frags,
-            text="0",
-            font=("Inter", 13, "bold"),
-            text_color="#F1C40F",
+            text="—",  # unknown until the first scan
+            font=("Inter", 14, "bold"),
+            text_color=get_color("colors.text.primary", "#F0E6D2"),
         )
         self.lbl_stat_frags_num.pack(pady=(4, 0))
 
         self.lbl_stat_frags_sub = ctk.CTkLabel(
             self.chip_frags,
-            text="🧩 Fragments",
+            text="Fragments",
             font=("Inter", 9),
-            text_color=get_color("colors.text.muted", "#8A9BA8"),
+            text_color="#A0A7B4",
         )
         self.lbl_stat_frags_sub.pack(pady=(0, 4))
 
         # Options
         opts_frame = ctk.CTkFrame(self.body, fg_color="transparent")
-        opts_frame.pack(fill="x", padx=10, pady=(3, 1))
+        opts_frame.pack(fill="x", padx=12, pady=(4, 1))
 
         self.var_claim = ctk.BooleanVar(value=True)
         self.chk_claim = ctk.CTkCheckBox(
@@ -274,7 +275,7 @@ class LootTool(ctk.CTkFrame):
 
         # Resource Summary & Section Header
         self.summary_frame = ctk.CTkFrame(self.body, fg_color="transparent")
-        self.summary_frame.pack(fill="x", padx=10, pady=(3, 1))
+        self.summary_frame.pack(fill="x", padx=12, pady=(4, 1))
 
         self.lbl_vault_header = ctk.CTkLabel(
             self.summary_frame,
@@ -300,9 +301,11 @@ class LootTool(ctk.CTkFrame):
             height=3,
             corner_radius=2,
             fg_color="#141E28",
-            progress_color=get_color("colors.accent.cyan", "#0AC8B9"),
+            # Idle bar is track-coloured: CTk draws a rounded nub even at 0,
+            # which read as a stray "," under VAULT INVENTORY (#17).
+            progress_color="#141E28",
         )
-        self.progress_bar.pack(fill="x", padx=10, pady=(2, 2))
+        self.progress_bar.pack(fill="x", padx=12, pady=(2, 2))
         self.progress_bar.set(0)
 
         # Bottom controls (packed side="bottom" first to guarantee space reservation)
@@ -318,11 +321,11 @@ class LootTool(ctk.CTkFrame):
         self.status_lbl.pack(side="bottom", fill="x", padx=12, pady=(0, 4))
 
         self.actions_row2 = ctk.CTkFrame(self.body, fg_color="transparent")
-        self.actions_row2.pack(side="bottom", fill="x", padx=10, pady=(2, 4))
+        self.actions_row2.pack(side="bottom", fill="x", padx=12, pady=(2, 4))
 
         self.btn_open = ctk.CTkButton(
             self.actions_row2,
-            text="✨ Open All",
+            text="Open All",
             height=28,
             corner_radius=5,
             font=("Inter", 11, "bold"),
@@ -340,7 +343,7 @@ class LootTool(ctk.CTkFrame):
 
         self.btn_stop = ctk.CTkButton(
             self.actions_row2,
-            text="⏹ Stop",
+            text="Stop",
             width=64,
             height=28,
             corner_radius=5,
@@ -357,11 +360,11 @@ class LootTool(ctk.CTkFrame):
         # btn_stop is hidden when idle to avoid permanently consuming space
 
         self.actions_row1 = ctk.CTkFrame(self.body, fg_color="transparent")
-        self.actions_row1.pack(side="bottom", fill="x", padx=10, pady=(3, 2))
+        self.actions_row1.pack(side="bottom", fill="x", padx=12, pady=(4, 2))
 
         self.btn_refresh = ctk.CTkButton(
             self.actions_row1,
-            text="🔄 Refresh",
+            text="Refresh",
             height=28,
             corner_radius=5,
             font=("Inter", 10, "bold"),
@@ -373,12 +376,12 @@ class LootTool(ctk.CTkFrame):
             command=self.refresh,
             cursor="hand2",
         )
-        self.btn_refresh.pack(side="left", fill="x", expand=True, padx=(0, 3))
+        self.btn_refresh.pack(side="left", fill="x", expand=True, padx=(0, 4))
         CTkTooltip(self.btn_refresh, "Refresh inventory from League Client")
 
         self.btn_claim = ctk.CTkButton(
             self.actions_row1,
-            text="🎁 Claim",
+            text="Claim",
             height=28,
             corner_radius=5,
             font=("Inter", 10, "bold"),
@@ -390,7 +393,7 @@ class LootTool(ctk.CTkFrame):
             command=self.claim_rewards,
             cursor="hand2",
         )
-        self.btn_claim.pack(side="left", fill="x", expand=True, padx=(3, 0))
+        self.btn_claim.pack(side="left", fill="x", expand=True, padx=(4, 0))
         CTkTooltip(self.btn_claim, "Claim pending battle pass, event pass, and mission rewards")
 
         # Scrollable inventory list
@@ -400,13 +403,14 @@ class LootTool(ctk.CTkFrame):
             height=125,
             corner_radius=6,
         )
-        self.list_frame.pack(fill="both", expand=True, padx=10, pady=(2, 4))
+        self.list_frame.pack(fill="both", expand=True, padx=12, pady=(2, 4))
 
         self.empty_lbl = ctk.CTkLabel(
             self.list_frame,
-            text="Click Refresh — League Client must be logged in.",
+            text="Open League, then Refresh to scan your chests and capsules.",
             font=get_font("caption"),
-            text_color=get_color("colors.text.muted"),
+            text_color="#A0A7B4",
+            wraplength=220,
         )
         self.empty_lbl.pack(pady=16)
 
@@ -435,9 +439,10 @@ class LootTool(ctk.CTkFrame):
             self.btn_refresh.configure(state=state)
             if busy:
                 if hasattr(self, "btn_stop") and not self.btn_stop.winfo_ismapped():
-                    self.btn_stop.pack(side="right", padx=(6, 0))
+                    self.btn_stop.pack(side="right", padx=(8, 0))
                 self.btn_stop.configure(state="normal")
-                self.progress_bar.configure(mode="indeterminate")
+                self.progress_bar.configure(mode="indeterminate",
+                                            progress_color=get_color("colors.accent.gold", "#C8AA6E"))
                 self.progress_bar.start()
             else:
                 if hasattr(self, "btn_stop") and self.btn_stop.winfo_ismapped():
@@ -446,6 +451,7 @@ class LootTool(ctk.CTkFrame):
                 self.progress_bar.stop()
                 self.progress_bar.configure(mode="determinate")
                 self.progress_bar.set(0)
+                self.progress_bar.configure(progress_color="#141E28")
         except Exception as exc:
             Logger.debug("LootTool", "_set_busy suppressed an error", exc=exc)
 
@@ -473,7 +479,9 @@ class LootTool(ctk.CTkFrame):
         except Exception as exc:
             Logger.debug("LootTool", "_clear_list suppressed an error", exc=exc)
 
-    def _render_empty_state(self, message: str = "No openable containers found.") -> None:
+    def _render_empty_state(self, message: str = "No openable containers found.",
+                            title: str = "Nothing to open", offline: bool = False,
+                            error: bool = False) -> None:
         if hasattr(self, "list_frame") and self.list_frame.winfo_exists():
             self.list_frame.configure(height=125)
 
@@ -484,34 +492,37 @@ class LootTool(ctk.CTkFrame):
             border_color="#182330",
             corner_radius=8,
         )
-        empty_box.pack(fill="x", padx=6, pady=20)
+        empty_box.pack(fill="x", padx=8, pady=20)
 
         # Hextech graphic icon
+        from ui.components.glyphs import ctk_glyph
         ctk.CTkLabel(
             empty_box,
-            text="💎",
-            font=("Segoe UI Emoji", 24),
-        ).pack(pady=(14, 2))
+            text="",
+            image=(ctk_glyph("warning", "#E0A43A", 26) if error
+                   else ctk_glyph("chest", "#5B6573" if offline else "#C8AA6E", 26)),
+        ).pack(pady=(12, 4))
 
         ctk.CTkLabel(
             empty_box,
-            text="Hextech Vault Empty",
+            text=title,
             font=("Inter", 12, "bold"),
             text_color=get_color("colors.text.primary", "#F0F6FC"),
-        ).pack(pady=(0, 2))
+        ).pack(pady=(0, 4))
 
         ctk.CTkLabel(
             empty_box,
-            text=message,
+            # Bind the last two words so the line never ends in a lone widow.
+            text="\u00a0".join(message.rsplit(" ", 1)),
             font=("Inter", 9),
-            text_color=get_color("colors.text.muted", "#8A9BA8"),
-            wraplength=220,
+            text_color="#A0A7B4",
+            wraplength=160,
             justify="center",
-        ).pack(pady=(0, 10), padx=10)
+        ).pack(pady=(0, 12), padx=12)
 
         btn_scan = ctk.CTkButton(
             empty_box,
-            text="🔄 Scan Inventory",
+            text="Scan again",
             font=("Inter", 10, "bold"),
             width=120,
             height=24,
@@ -522,12 +533,50 @@ class LootTool(ctk.CTkFrame):
             command=self.refresh,
             cursor="hand2",
         )
-        btn_scan.pack(pady=(0, 14))
+        if error:
+            btn_scan.configure(text="Retry")
+        if offline:
+            btn_scan.configure(state="disabled", text="Waiting for client",
+                               text_color_disabled="#8A93A0")
+        btn_scan.pack(pady=(0, 12))
 
         self._row_widgets.append(empty_box)
 
+    def _show_offline(self) -> None:
+        """Honest offline state: no fake zeros, and actions that need the
+        client are disabled instead of failing on click."""
+        self._clear_list()
+        self._rows = []
+        for lbl in (self.lbl_stat_openable_num, self.lbl_stat_keys_num, self.lbl_stat_frags_num):
+            lbl.configure(text="—")
+        self.lbl_count.configure(text="")
+        self.summary_lbl.configure(text="")
+        self._render_empty_state(
+            "Loot shows up here once League is running.",
+            title="No client connected", offline=True,
+        )
+        self.btn_open.configure(state="disabled", fg_color="#1A2430", text_color_disabled="#8A93A0")
+        self.btn_claim.configure(state="disabled", text_color_disabled="#8A93A0")
+        self.status_lbl.configure(text="")
+
+    def _show_error(self, err: str) -> None:
+        """Inline error + Retry row (#29) instead of an empty list and a log line."""
+        self._clear_list()
+        self._rows = []
+        detail = str(err).strip() or "Unknown error"
+        if len(detail) > 90:
+            detail = detail[:89] + "…"
+        self._render_empty_state(
+            f"{detail}\nCheck that League is open, then retry.",
+            title="Couldn't read your loot", error=True,
+        )
+        self.status_lbl.configure(text="")
+
     def _render_rows(self, rows: List[Dict[str, Any]], keys: int = 0, frags: int = 0) -> None:
         self._clear_list()
+        if not self._busy:
+            self.btn_open.configure(state="normal", fg_color=get_color("colors.accent.gold", "#C8AA6E"))
+            self.btn_claim.configure(state="normal")
         self._rows = rows
 
         ready = sum(r["will_open"] for r in rows if r.get("can_open"))
@@ -537,7 +586,7 @@ class LootTool(ctk.CTkFrame):
         self.lbl_stat_openable_num.configure(text=str(ready))
         self.lbl_stat_keys_num.configure(text=str(keys))
         craftable_keys = frags // 3
-        frags_sub = f"🧩 Frags (+{craftable_keys})" if craftable_keys > 0 else "🧩 Fragments"
+        frags_sub = f"Fragments (+{craftable_keys} key{'s' if craftable_keys != 1 else ''})" if craftable_keys > 0 else "Fragments"
         self.lbl_stat_frags_sub.configure(text=frags_sub)
         self.lbl_stat_frags_num.configure(text=str(frags))
 
@@ -572,36 +621,31 @@ class LootTool(ctk.CTkFrame):
 
             visuals = _get_loot_visuals(loot_id, name, item_type, cat)
 
+            # Single-accent rows (#20): neutral card, gold only marks what
+            # can be opened now; drawn chest glyph instead of emoji badges.
             card_fr = ctk.CTkFrame(
                 self.list_frame,
-                fg_color=visuals["bg_color"],
+                fg_color=get_color("colors.background.card", "#0F1923"),
                 border_width=1,
-                border_color=visuals["border_color"],
+                border_color="#6E5C3A" if can_open else "#2A3442",
                 corner_radius=6,
                 height=48,
             )
             pad_bottom = 6 if idx == len(rows) - 1 else 2
-            card_fr.pack(fill="x", pady=(2, pad_bottom), padx=(4, 6))
+            card_fr.pack(fill="x", pady=(2, pad_bottom), padx=(4, 8))
             card_fr.pack_propagate(False)
 
-            # Left: Icon Badge (34x34)
-            icon_badge = ctk.CTkFrame(
-                card_fr,
-                width=34,
-                height=34,
-                fg_color=visuals["badge_bg"],
-                border_width=1,
-                border_color=visuals["badge_color"],
-                corner_radius=5,
+            icon_badge = ctk.CTkLabel(
+                card_fr, text="", width=34, height=34,
+                fg_color="#141E28", corner_radius=5,
+                image=ctk_glyph("chest", "#C8AA6E" if can_open else "#8A93A0", 20),
             )
-            icon_badge.pack(side="left", padx=(5, 5), pady=6)
-            icon_badge.pack_propagate(False)
+            icon_badge.pack(side="left", padx=(4, 4), pady=8)
 
-            ctk.CTkLabel(
-                icon_badge,
-                text=visuals["icon"],
-                font=("Segoe UI Emoji", 14),
-            ).pack(expand=True)
+            # Right column is packed before the info column so a long name
+            # can't squeeze the per-row Open button out of the card.
+            action_col = ctk.CTkFrame(card_fr, fg_color="transparent")
+            action_col.pack(side="right", padx=(4, 8), pady=8)
 
             # Center: Info Column (Name & Status)
             info_col = ctk.CTkFrame(card_fr, fg_color="transparent")
@@ -619,7 +663,7 @@ class LootTool(ctk.CTkFrame):
                 text_color=get_color("colors.accent.gold", "#C8AA6E"),
             ).pack(side="left")
 
-            display_name = name if len(name) <= 18 else name[:16] + "…"
+            display_name = name if len(name) <= 13 else name[:12].rstrip() + "…"
             name_lbl = ctk.CTkLabel(
                 top_row,
                 text=display_name,
@@ -628,7 +672,7 @@ class LootTool(ctk.CTkFrame):
                 anchor="w",
             )
             name_lbl.pack(side="left", padx=(4, 0), fill="x", expand=True)
-            if len(name) > 18:
+            if len(name) > 13:
                 CTkTooltip(name_lbl, name)
 
             # Row 2: Category Pill + Status Pill
@@ -638,31 +682,28 @@ class LootTool(ctk.CTkFrame):
 
             ctk.CTkLabel(
                 bot_row,
-                text=f"[{visuals['pill_text']}]",
-                font=("Inter", 8, "bold"),
-                text_color=visuals["badge_color"],
+                text=str(visuals['pill_text']).title(),
+                font=("Inter", 9, "bold"),
+                text_color="#A0A7B4",
             ).pack(side="left")
 
             if can_open:
-                status_text = f"✓ Ready ({will})" if will > 1 else "✓ Ready"
+                status_text = f"Ready ({will})" if will > 1 else "Ready"
                 status_color = "#2ECC71"
             elif needs_key:
-                status_text = "🗝️ Needs key"
-                status_color = "#E67E22"
+                status_text = "Needs key"
+                status_color = "#E0A43A"
             else:
-                status_text = "— Blocked"
-                status_color = "#8A9BA8"
+                status_text = "Blocked"
+                status_color = "#8A93A0"
 
             ctk.CTkLabel(
                 bot_row,
                 text=f" · {status_text}",
-                font=("Inter", 8),
+                font=("Inter", 9),
                 text_color=status_color,
             ).pack(side="left", padx=(2, 0))
 
-            # Right: Action Button
-            action_col = ctk.CTkFrame(card_fr, fg_color="transparent")
-            action_col.pack(side="right", padx=(4, 6), pady=6)
 
             if can_open:
                 btn_single = ctk.CTkButton(
@@ -695,7 +736,7 @@ class LootTool(ctk.CTkFrame):
                 ctk.CTkLabel(
                     need_badge,
                     text="Need Key",
-                    font=("Inter", 8),
+                    font=("Inter", 9),
                     text_color="#8A9BA8",
                 ).pack(expand=True)
 
@@ -708,7 +749,7 @@ class LootTool(ctk.CTkFrame):
         if self._busy:
             return
         if not self.service or not self.lcu:
-            self.status_lbl.configure(text="No LCU client")
+            self.status_lbl.configure(text="League client isn't running")
             return
 
         self._set_busy(True)
@@ -758,9 +799,8 @@ class LootTool(ctk.CTkFrame):
     def refresh(self) -> None:
         if self._busy:
             return
-        if not self.service or not self.lcu:
-            self._render_rows([], 0, 0)
-            self.status_lbl.configure(text="No LCU client")
+        if not self.service or not self.lcu or getattr(self.lcu, "is_connected", True) is False:
+            self._show_offline()
             return
 
         def work():
@@ -787,8 +827,7 @@ class LootTool(ctk.CTkFrame):
                 if not self.winfo_exists():
                     return
                 if err and not rows:
-                    self.status_lbl.configure(text=err)
-                    self._render_rows([], 0, 0)
+                    self._show_error(err)
                 else:
                     self._render_rows(rows, keys, frags)
                     self.status_lbl.configure(
@@ -808,7 +847,7 @@ class LootTool(ctk.CTkFrame):
         if self._busy:
             return
         if not self.service or not self.lcu:
-            self.status_lbl.configure(text="No LCU client")
+            self.status_lbl.configure(text="League client isn't running")
             return
 
         self._stop = False
@@ -864,7 +903,7 @@ class LootTool(ctk.CTkFrame):
         if self._busy:
             return
         if not self.service or not self.lcu:
-            self.status_lbl.configure(text="No LCU client")
+            self.status_lbl.configure(text="League client isn't running")
             return
 
         self._stop = False
