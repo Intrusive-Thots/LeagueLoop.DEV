@@ -4,9 +4,10 @@ Single custom title bar (no OS chrome double-header).
 """
 import ctypes
 import ctypes.wintypes  # `import ctypes` alone does not provide this
+from ui.components.glyphs import ctk_glyph
 import customtkinter as ctk
 from ui.components.factory import get_color, get_font
-from ui.components.priority_grid import PriorityIconGrid
+from ui.components.priority_grid import PriorityIconGrid, CELL_PITCH
 from utils.logger import Logger
 
 _LEAGUE_TITLES = {"league of legends"}
@@ -111,7 +112,7 @@ class AramListWindow(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             self.header,
-            text="🎯  ARAM PRIORITY LIST",
+            text="ARAM PRIORITY LIST",
             font=get_font("body", "bold"),
             text_color=get_color("colors.accent.gold", "#C8AA6E"),
         ).pack(side="left", padx=12)
@@ -120,34 +121,34 @@ class AramListWindow(ctk.CTkToplevel):
         self.cs_legend_frame = ctk.CTkFrame(self.header, fg_color="transparent")
         ctk.CTkLabel(
             self.cs_legend_frame,
-            text="🎲 Bench",
+            text="Bench",
             font=get_font("caption", "bold"),
             text_color="#00D4FF",
             fg_color="#003D4D",
             corner_radius=4,
             width=58,
             height=20,
-        ).pack(side="left", padx=3)
+        ).pack(side="left", padx=4)
         ctk.CTkLabel(
             self.cs_legend_frame,
-            text="★ You",
+            text="You",
             font=get_font("caption", "bold"),
             text_color="#00FF88",
             fg_color="#0A3D24",
             corner_radius=4,
             width=48,
             height=20,
-        ).pack(side="left", padx=3)
+        ).pack(side="left", padx=4)
         ctk.CTkLabel(
             self.cs_legend_frame,
-            text="👥 Team",
+            text="Team",
             font=get_font("caption", "bold"),
             text_color="#FFC107",
             fg_color="#3D2E0A",
             corner_radius=4,
             width=54,
             height=20,
-        ).pack(side="left", padx=3)
+        ).pack(side="left", padx=4)
 
         self.btn_done = ctk.CTkButton(
             self.header,
@@ -168,7 +169,8 @@ class AramListWindow(ctk.CTkToplevel):
 
         self.btn_close = ctk.CTkButton(
             self.header,
-            text="✕",
+            text="",
+            image=ctk_glyph("close", "#FF4655", 12),
             width=28,
             height=26,
             corner_radius=4,
@@ -214,7 +216,7 @@ class AramListWindow(ctk.CTkToplevel):
             checkbox_height=18,
             corner_radius=4,
         )
-        self.chk_auto_add.pack(side="left", padx=12, pady=6)
+        self.chk_auto_add.pack(side="left", padx=12, pady=8)
 
         def _on_pos_change(choice):
             pos = "top" if "Top" in choice else "bottom"
@@ -236,7 +238,7 @@ class AramListWindow(ctk.CTkToplevel):
             dropdown_fg_color="#1A2332",
         )
         self.opt_pos.set(pos_display)
-        self.opt_pos.pack(side="right", padx=12, pady=6)
+        self.opt_pos.pack(side="right", padx=12, pady=8)
 
         self.body_frame = ctk.CTkFrame(self.outer_frame, fg_color="transparent")
         self.body_frame.pack(fill="both", expand=True, padx=8, pady=(4, 8))
@@ -321,7 +323,7 @@ class AramListWindow(ctk.CTkToplevel):
             return
         w = event.width
         if w > 100 and hasattr(self, "grid_widget"):
-            icons_per_row = max(4, (w - 48) // 52)
+            icons_per_row = max(4, (w - 48) // CELL_PITCH)
             self.grid_widget.set_icons_per_row(icons_per_row)
 
     def _apply_geometry(self, drawer_w, drawer_h, target_x, target_y):

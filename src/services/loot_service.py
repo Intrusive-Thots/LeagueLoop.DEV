@@ -576,6 +576,11 @@ class LootService:
                 # Check unclaimed count
                 unclaimed = self._get_json(f"/lol-event-hub/v1/events/{eid}/reward-track/unclaimed-rewards")
                 uc_count = unclaimed.get("rewardsCount", 0) if isinstance(unclaimed, dict) else 0
+                # Live client: every event answered claim-all with 2xx even
+                # with nothing to claim, so each run "claimed" one phantom
+                # reward per event. Skip events that report zero.
+                if isinstance(unclaimed, dict) and uc_count <= 0:
+                    continue
 
                 ok, payload, err = self._post(f"/lol-event-hub/v1/events/{eid}/reward-track/claim-all", body={})
                 if ok:

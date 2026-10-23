@@ -1,4 +1,5 @@
 import customtkinter as ctk  # type: ignore
+from ui.components.glyphs import ctk_glyph
 from PIL import ImageOps  # type: ignore
 from ui.components.factory import get_color, get_font
 from ui.components.lol_toggle import LolToggle  # type: ignore
@@ -37,14 +38,20 @@ class ToggleRow(ctk.CTkFrame):
             anchor="w", 
             text_color=get_color("colors.text.primary", "#F0E6D2")
         )
-        self.text_label.pack(side="left", padx=(6, 0))
+        # Label takes the free width; gear + toggle sit together on the right
+        # so every row's controls line up in one column.
+        self.toggle = LolToggle(self, variable=variable, command=self._on_toggle,
+                                bg_color=get_color("colors.background.card", "#0F1923"))
+        self.toggle.pack(side="right")
+        self.text_label.pack(side="left", padx=(8, 0), fill="x", expand=True)
         
         if tooltip_text:
             CTkTooltip(self.text_label, tooltip_text)
         
         # Borderless gear icon — no square box, transparent background
         self.btn_edit = ctk.CTkButton(
-            self, text="⚙", width=22, height=22,
+            self, text="", width=22, height=22,
+            image=ctk_glyph("gear", "#C8AA6E", 14),
             corner_radius=6, font=("Segoe UI Symbol", 15),
             fg_color="transparent",
             border_width=0,
@@ -53,12 +60,10 @@ class ToggleRow(ctk.CTkFrame):
             command=self._handle_edit, cursor="hand2"
         )
         if self._on_edit:
-            self.btn_edit.pack(side="left", padx=(6, 0))
+            self.btn_edit.pack(side="right", padx=(0, 8), before=self.text_label)
             self.text_label.bind("<Button-1>", lambda e: self._handle_edit())
             self.text_label.configure(cursor="hand2")
         
-        self.toggle = LolToggle(self, variable=variable, command=self._on_toggle)
-        self.toggle.pack(side="right")
         
         self._user_command = command
         
@@ -116,7 +121,7 @@ class ToggleRow(ctk.CTkFrame):
         
         is_on = self._variable.get() if self._variable else False
         gold = get_color("colors.accent.gold", "#C8AA6E")
-        muted = get_color("colors.text.muted", "#5B5A56")
+        muted = "#8A93A0"  # off-state text: ≥4.5:1 on card (token muted is ~3.8:1)
         
         if is_on:
             # Show color icon and start pulse
@@ -140,8 +145,19 @@ class ToggleRow(ctk.CTkFrame):
                 self.btn_edit.configure(text_color=muted)
     
     def _start_pulse(self):
-        """Subtle pulse animation on the icon when automation is ON."""
+        """Mark an ON automation with steady gold (motion audit #26).
+
+        Every enabled row used to pulse forever, so a list of five automations
+        blinked out of sync. Ambient motion now stays off; the colour alone
+        says "on". The tick below is kept for an explicit opt-in.
+        """
         self._stop_pulse()  # Clear any existing
+        if not getattr(self, "ambient_pulse", False):
+            try:
+                self.icon_label.configure(text_color=get_color("colors.accent.gold", "#C8AA6E"))
+            except Exception as exc:
+                Logger.debug("ToggleRow", "Could not paint the on state", exc=exc)
+            return
         
         def _tick():
             if not self.winfo_exists():

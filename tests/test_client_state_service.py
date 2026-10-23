@@ -10,7 +10,7 @@ import unittest
 
 from core.events import EventBus
 from core.state import ConnectionStateEnum, GameflowPhase, StateManager
-from services.client_state_service import ClientStateService
+from services.client_state_service import ClientStateConfig, ClientStateService
 
 
 class FakeResponse:
@@ -68,6 +68,41 @@ def build(**kw):
     lcu = FakeLcu(**kw)
     service = ClientStateService(lcu, state, sleep=lambda _s: None)
     return service, lcu, state
+
+
+class ConfigTests(unittest.TestCase):
+    def test_client_state_config_defaults(self):
+        config = ClientStateConfig()
+        self.assertEqual(config.poll_interval_s, 1.0)
+        self.assertEqual(config.idle_interval_s, 3.0)
+
+    def test_client_state_service_with_config_object(self):
+        lcu = FakeLcu()
+        state = StateManager(bus=EventBus)
+        custom_sleep = lambda _s: None
+        custom_now = lambda: 123.4
+        config = ClientStateConfig(
+            poll_interval_s=0.5,
+            idle_interval_s=1.5,
+            sleep=custom_sleep,
+            now=custom_now,
+        )
+        service = ClientStateService(lcu, state, config=config)
+        self.assertEqual(service._poll_interval_s, 0.5)
+        self.assertEqual(service._idle_interval_s, 1.5)
+        self.assertEqual(service._sleep, custom_sleep)
+        self.assertEqual(service._now, custom_now)
+
+    def test_client_state_service_backward_compatible_kwargs(self):
+        lcu = FakeLcu()
+        state = StateManager(bus=EventBus)
+        custom_sleep = lambda _s: None
+        service = ClientStateService(
+            lcu, state, poll_interval_s=2.0, idle_interval_s=4.0, sleep=custom_sleep
+        )
+        self.assertEqual(service._poll_interval_s, 2.0)
+        self.assertEqual(service._idle_interval_s, 4.0)
+        self.assertEqual(service._sleep, custom_sleep)
 
 
 class ConnectionTests(unittest.TestCase):

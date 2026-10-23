@@ -50,25 +50,28 @@ class SessionHeader(ctk.CTkFrame):
         # Initial state is Active
         self.btn_power_status = make_button(
             self.inner_frame, 
-            text="▶ Active", 
+            text="Auto on",
             style="ghost",
             font=get_font("body", "bold"),
             text_color=get_color("colors.accent.primary"),
-            width=80,
+            width=100,
             height=24,
             command=self.on_power_click
         )
+        style_power_button(self.btn_power_status, True)
         self.btn_power_status.grid(row=0, column=1, padx=(2, CARD_PAD), pady=(CARD_PAD, 2), sticky="e")
         
         hk_auto = self.config.get("hotkey_toggle_automation", "ctrl+shift+a").upper()
-        CTkTooltip(self.btn_power_status, f"Toggle Automation ({hk_auto})")
+        CTkTooltip(self.btn_power_status, f"Pause or resume all automations ({hk_auto})")
 
         # Time Label
         self.time_label = ctk.CTkLabel(
             self.inner_frame,
-            text="Queue: Idle",
+            # Honest first frame: nothing is known about the client yet, so do
+            # not claim an idle queue. LCU callbacks replace this on connect.
+            text="Client not running",
             font=get_font("caption"),
-            text_color=get_color("colors.text.primary"),
+            text_color="#A0A7B4",
             anchor="w"
         )
         self.time_label.grid(row=1, column=0, padx=(CARD_PAD, 2), pady=(0, CARD_PAD), sticky="w")
@@ -76,9 +79,9 @@ class SessionHeader(ctk.CTkFrame):
         # Estimate / Status Label
         self.estimate_label = ctk.CTkLabel(
             self.inner_frame,
-            text="● Connected",
+            text="○ Offline",
             font=get_font("caption"),
-            text_color=get_color("colors.state.success", "#00C853"),
+            text_color="#8A93A0",
             anchor="e"
         )
         self.estimate_label.grid(row=1, column=1, padx=(2, CARD_PAD), pady=(0, CARD_PAD), sticky="e")
@@ -113,16 +116,14 @@ class SessionHeader(ctk.CTkFrame):
             if i > 0:
                 menu.add_separator()
             menu.add_command(label=f"── {group_name} ──", state="disabled",
-                             font=("Segoe UI", 8, "bold"), foreground="#785A28")
+                             font=("Segoe UI", 9, "bold"), foreground="#785A28")
             for mode in modes:
                 menu.add_command(label=f"   {mode}", command=lambda m=mode: self.on_mode_change(m))
         
         menu.tk_popup(event.x_root, event.y_root)
 
     def update_power_state(self, is_active: bool):
-        text = "▶ Active" if is_active else "⏸ Paused"
-        color = get_color("colors.accent.primary") if is_active else get_color("colors.text.muted")
-        self.btn_power_status.configure(text=text, text_color=color)
+        style_power_button(self.btn_power_status, is_active)
 
     def set_queue_mode(self, text: str):
         self.queue_label.configure(text=text)
@@ -137,3 +138,17 @@ class SessionHeader(ctk.CTkFrame):
 
     def set_progress(self, value: float):
         self.progress_bar.set(value)
+
+
+def style_power_button(btn, active: bool):
+    """Automation master state (#18): a bolt + "Auto on" / "Auto paused".
+
+    It used to read "▶ Active", which looked like client connection status.
+    """
+    try:
+        from ui.components.glyphs import set_icon
+        color = "#C8AA6E" if active else "#8A93A0"
+        btn.configure(text=" Auto on" if active else " Auto paused", text_color=color)
+        set_icon(btn, "bolt", color, 13)
+    except Exception:
+        btn.configure(text="Auto on" if active else "Auto paused")

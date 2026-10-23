@@ -127,18 +127,20 @@ class SettingsHotkeyRow(ctk.CTkFrame):
             font=get_font("body"), 
             text_color=get_color("colors.text.primary")
         )
-        self.text_label.pack(side="top", anchor="w")
-        
+        # Inline: label left, recorder right — one row per hotkey instead of
+        # two, so the whole Hotkeys card reads as a compact key map.
+        self.text_label.pack(side="left", anchor="w")
+
         if tooltip_text:
             CTkTooltip(self.text_label, tooltip_text)
-            
+
         self.recorder = HotkeyRecorder(
-            self, 
-            initial_value=default_val, 
-            width=150, 
+            self,
+            initial_value=default_val,
+            width=130,
             on_change=lambda val: on_change_callback(val, config_key)
         )
-        self.recorder.pack(fill="x", pady=(2, 0))
+        self.recorder.pack(side="right")
         
         if tooltip_text:
             CTkTooltip(self.recorder, tooltip_text)
@@ -250,15 +252,25 @@ class SettingsActionRow(ctk.CTkFrame):
         """Cleans up the inline status display."""
         self.set_status("")
 
-    def set_status(self, message: str, is_error: bool = False):
-        """Sets inline real-time status display with automatic wrapping and visibility."""
+    def set_status(self, message: str, is_error: bool = False, icon: str = None):
+        """Sets inline real-time status display with automatic wrapping and visibility.
+
+        *icon* is an optional glyph name ("check", "close", "refresh"...) drawn
+        left of the text in the status colour instead of a text symbol.
+        """
         try:
             color = get_color("colors.state.danger", "#E74C3C") if is_error else get_color("colors.accent.gold", "#C8AA6E")
             total_w = self.winfo_width()
             status_w = max(60, total_w - 8) if total_w > 1 else 250
-            self.status_label.configure(text=message, text_color=color, wraplength=status_w, justify="left")
+            img = None
+            if icon and message:
+                from ui.components.glyphs import ctk_glyph
+                img = ctk_glyph(icon, color, 12)
+            self.status_label.configure(text=(" " + message) if img else message, text_color=color,
+                                        wraplength=status_w, justify="left",
+                                        image=img, compound="left")
             if message and not self.status_label.winfo_ismapped():
-                self.status_label.pack(side="top", fill="x", anchor="w", pady=(3, 0))
+                self.status_label.pack(side="top", fill="x", anchor="w", pady=(4, 0))
             elif not message and self.status_label.winfo_ismapped():
                 self.status_label.pack_forget()
         except Exception as exc:

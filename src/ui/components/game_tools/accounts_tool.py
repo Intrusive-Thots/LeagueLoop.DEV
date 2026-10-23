@@ -8,10 +8,12 @@ Uses the same visual language as ArenaTool (collapsible header,
 card-based list, icon badges).
 """
 import customtkinter as ctk
+from ui.components.glyphs import set_chevron
 import threading
 from datetime import datetime
 
 from ui.components.factory import get_color, get_font, get_radius
+from ui.components.glyphs import ctk_glyph
 from ui.ui_shared import CTkTooltip
 from core.constants import SPACING_SM, SPACING_MD
 from utils.logger import Logger
@@ -58,6 +60,7 @@ class AccountsTool(ctk.CTkFrame):
             cursor="hand2"
         )
         self.lbl_section.pack(side="left", padx=2)
+        set_chevron(self.lbl_section, self._expanded, "#8A93A0")
         CTkTooltip(self.lbl_section, "Toggle Account Manager")
         self.lbl_section.bind("<Button-1>", lambda e: self._toggle_collapse())
         self.lbl_section.bind("<Enter>", lambda e: self.lbl_section.configure(
@@ -76,8 +79,9 @@ class AccountsTool(ctk.CTkFrame):
 
         # + Add button
         self.btn_add = ctk.CTkButton(
-            self.header, text="+", width=20, height=20,
-            corner_radius=10, font=get_font("body", "bold"),
+            self.header, text="", width=22, height=22,
+            image=ctk_glyph("plus", get_color("colors.accent.gold", "#C8AA6E"), 14),
+            corner_radius=4, font=get_font("body", "bold"),
             fg_color="transparent",
             text_color=get_color("colors.accent.primary"),
             hover_color=get_color("colors.state.hover"),
@@ -107,11 +111,12 @@ class AccountsTool(ctk.CTkFrame):
 
         # ── Client Launcher Bar ──
         launch_bar = ctk.CTkFrame(self.body, fg_color="transparent")
-        launch_bar.pack(fill="x", padx=4, pady=(2, 6))
+        launch_bar.pack(fill="x", padx=4, pady=(2, 8))
 
         btn_rc = ctk.CTkButton(
             launch_bar,
-            text="🚀 Riot Client",
+            text="Riot Client",
+            image=ctk_glyph("launch", "#A0A7B4", 14), compound="left",
             font=get_font("caption", "bold"),
             height=26,
             fg_color=get_color("colors.background.card"),
@@ -127,12 +132,14 @@ class AccountsTool(ctk.CTkFrame):
 
         btn_lol = ctk.CTkButton(
             launch_bar,
-            text="⚔️ League Client",
+            text="League Client",
+            image=ctk_glyph("play", "#0A1428", 12), compound="left",
             font=get_font("caption", "bold"),
             height=26,
             fg_color=get_color("colors.accent.primary"),
-            hover_color=get_color("colors.state.hover"),
-            text_color="#ffffff",
+            hover_color="#D8BC82",
+            # Dark text on gold: white on #C8AA6E was ~2.2:1.
+            text_color="#0A1428",
             command=self._launch_league_client,
             cursor="hand2"
         )
@@ -196,7 +203,7 @@ class AccountsTool(ctk.CTkFrame):
 
         # Password visibility toggle
         self.btn_eye = ctk.CTkButton(
-            pw_row, text="👁", width=24, height=24,
+            pw_row, text="", image=ctk_glyph("eye", get_color("colors.text.muted"), 14), width=24, height=24,
             corner_radius=get_radius("sm"), font=get_font("caption"),
             fg_color="transparent", hover_color=get_color("colors.state.hover"),
             text_color=get_color("colors.text.muted"),
@@ -240,7 +247,7 @@ class AccountsTool(ctk.CTkFrame):
         btn_row.pack(fill="x", padx=4, pady=(0, 4))
 
         self.btn_save = ctk.CTkButton(
-            btn_row, text="💾 Save", height=24, width=60,
+            btn_row, text=" Save", image=ctk_glyph("save", "#ffffff", 12), compound="left", height=24, width=60,
             corner_radius=get_radius("sm"), font=get_font("caption", "bold"),
             fg_color=get_color("colors.state.success"),
             hover_color="#00b359", text_color="#ffffff",
@@ -249,7 +256,7 @@ class AccountsTool(ctk.CTkFrame):
         self.btn_save.pack(side="left", padx=(0, 4))
 
         ctk.CTkButton(
-            btn_row, text="✕ Cancel", height=24, width=60,
+            btn_row, text=" Cancel", image=ctk_glyph("close", get_color("colors.state.danger", "#ff4444"), 12), compound="left", height=24, width=60,
             corner_radius=get_radius("sm"), font=get_font("caption", "bold"),
             fg_color="transparent", hover_color=get_color("colors.state.danger.muted", "#4d1111"),
             text_color=get_color("colors.state.danger", "#ff4444"), border_width=1, border_color=get_color("colors.state.danger", "#ff4444"),
@@ -274,13 +281,13 @@ class AccountsTool(ctk.CTkFrame):
         self._expanded = not self._expanded
         if self._expanded:
             self.body.pack(fill="both", expand=True, pady=(SPACING_SM, SPACING_MD), padx=SPACING_MD)
-            self.lbl_section.configure(text="▼  ACCOUNTS")
+            set_chevron(self.lbl_section, True, "#8A93A0")
             # Try to detect which account is active
             self._detect_active()
         else:
             self.body.pack_forget()
             self._cancel_form()
-            self.lbl_section.configure(text="▶  ACCOUNTS")
+            set_chevron(self.lbl_section, False, "#8A93A0")
         self._update_header_count()
 
     # ─────────── Form ───────────
@@ -329,7 +336,7 @@ class AccountsTool(ctk.CTkFrame):
         else:
             self.chk_default.deselect()
 
-        self.btn_save.configure(text="💾 Update")
+        self.btn_save.configure(text=" Update")
 
         self.list_frame.pack_forget()
         self.form_container.pack(fill="x", padx=4, pady=(4, 0))
@@ -344,7 +351,7 @@ class AccountsTool(ctk.CTkFrame):
         self.entry_password.configure(show="•")
         self.chk_default.deselect()
         self._show_password = False
-        self.btn_save.configure(text="💾 Save")
+        self.btn_save.configure(text=" Save")
 
     def _cancel_form(self):
         self._adding = False
@@ -354,6 +361,9 @@ class AccountsTool(ctk.CTkFrame):
     def _toggle_password_visibility(self):
         self._show_password = not self._show_password
         self.entry_password.configure(show="" if self._show_password else "•")
+        self.btn_eye.configure(image=ctk_glyph(  # gold while the password is shown
+            "eye", get_color("colors.accent.gold", "#C8AA6E") if self._show_password
+            else get_color("colors.text.muted"), 14))
 
     def _save_form(self):
         """Save or update an account from the form fields."""
@@ -395,7 +405,7 @@ class AccountsTool(ctk.CTkFrame):
             from ui.components.toast import ToastManager
             ToastManager.get_instance().show(
                 f"Account {action}: {label}",
-                icon="🔐", theme="success"
+                icon="lock", theme="success"
             )
         except Exception as exc:
             Logger.debug("AccountsTool", "_save_form suppressed an error", exc=exc)
@@ -422,6 +432,7 @@ class AccountsTool(ctk.CTkFrame):
         def _detect():
             try:
                 self.acct_mgr.detect_active_account()
+                self._detect_error = ""
                 if self.winfo_exists():
                     self.after(0, self._render_accounts)
             except Exception as exc:
@@ -430,6 +441,13 @@ class AccountsTool(ctk.CTkFrame):
                     "AccountsTool",
                     "Could not detect the active account.", exc=exc,
                 )
+                # Surface it inline with a Retry (#29), not only in the log.
+                self._detect_error = str(exc).strip() or type(exc).__name__
+                try:
+                    if self.winfo_exists():
+                        self.after(0, self._render_accounts)
+                except Exception as inner:
+                    Logger.debug("AccountsTool", "Could not schedule error row", exc=inner)
             finally:
                 self._detect_in_progress = False
         threading.Thread(target=_detect, daemon=True).start()
@@ -447,6 +465,9 @@ class AccountsTool(ctk.CTkFrame):
         accounts = self.acct_mgr.get_accounts()
         active_idx = self.acct_mgr.get_active_index()
         self._update_header_count()
+
+        if getattr(self, "_detect_error", ""):
+            self._render_error_row(self._detect_error)
 
         if not accounts:
             self._render_empty_state()
@@ -469,7 +490,7 @@ class AccountsTool(ctk.CTkFrame):
 
             # ── Top Row: Status + Label + Login Button ──
             top = ctk.CTkFrame(card, fg_color="transparent")
-            top.pack(fill="x", padx=6, pady=(6, 0))
+            top.pack(fill="x", padx=8, pady=(8, 0))
 
             # Active indicator — Item #118: Use Unicode dot with token colors instead of emojis
             dot_color = get_color("colors.state.success", "#00C853") if is_active else get_color("colors.text.disabled")
@@ -502,7 +523,7 @@ class AccountsTool(ctk.CTkFrame):
             )
 
             if not is_active or not lcu_connected:
-                btn_text = "▶ Switch" if can_switch else "⚠ Sign in"
+                btn_text = " Switch" if can_switch else " Sign in"
                 btn_color = (
                     get_color("colors.accent.primary") if can_switch
                     else get_color("colors.state.warning", "#FFA726")
@@ -521,9 +542,16 @@ class AccountsTool(ctk.CTkFrame):
                     top, text=btn_text, width=56, height=20,
                     corner_radius=get_radius("sm"),
                     font=get_font("caption", "bold"),
-                    fg_color=btn_color,
-                    hover_color=get_color("colors.state.hover"),
-                    text_color="#ffffff",
+                    # Dark-on-gold primary / amber outline (#30): white on gold
+                    # or yellow was ~2:1 and the ▶/⚠ were emoji-ish text.
+                    fg_color=btn_color if can_switch else "transparent",
+                    border_width=0 if can_switch else 1,
+                    border_color="#E0A43A",
+                    hover_color="#D8BC82" if can_switch else "#2A2216",
+                    text_color="#0A1428" if can_switch else "#E0A43A",
+                    image=(ctk_glyph("play", "#0A1428", 10) if can_switch
+                           else ctk_glyph("warning", "#E0A43A", 11)),
+                    compound="left",
                     command=btn_cmd,
                     cursor="hand2",
                 )
@@ -533,13 +561,13 @@ class AccountsTool(ctk.CTkFrame):
             if is_active:
                 # Sign out button for active account
                 signout_btn = ctk.CTkButton(
-                    top, text="⏻ Sign Out", width=68, height=20,
+                    top, text="Sign out", width=60, height=20,
                     corner_radius=get_radius("sm"),
                     font=get_font("caption", "bold"),
                     fg_color="transparent",
                     hover_color=get_color("colors.state.danger.muted", "#4d1111"),
-                    text_color=get_color("colors.state.danger", "#ff4444"),
-                    border_width=1, border_color=get_color("colors.state.danger", "#ff4444"),
+                    text_color="#FF7A70",
+                    border_width=1, border_color="#B9473D",
                     command=self._sign_out_active,
                     cursor="hand2",
                 )
@@ -548,7 +576,7 @@ class AccountsTool(ctk.CTkFrame):
 
             # -- Bottom Row: Riot ID + Actions --
             bottom = ctk.CTkFrame(card, fg_color="transparent")
-            bottom.pack(fill="x", padx=6, pady=(2, 6))
+            bottom.pack(fill="x", padx=8, pady=(2, 8))
 
             riot_id = acct.get("tagline", "")
             if riot_id:
@@ -600,7 +628,7 @@ class AccountsTool(ctk.CTkFrame):
             # Move up
             if i > 0:
                 ctk.CTkButton(
-                    action_frame, text="▲", width=18, height=18,
+                    action_frame, text="", image=ctk_glyph("chev_up", "#A0A7B4", 12), width=18, height=18,
                     corner_radius=get_radius("sm"), font=get_font("caption"),
                     fg_color="transparent", hover_color=get_color("colors.state.hover"),
                     text_color=get_color("colors.text.muted"),
@@ -611,7 +639,7 @@ class AccountsTool(ctk.CTkFrame):
             # Move down
             if i < len(accounts) - 1:
                 ctk.CTkButton(
-                    action_frame, text="▼", width=18, height=18,
+                    action_frame, text="", image=ctk_glyph("chev_down", "#A0A7B4", 12), width=18, height=18,
                     corner_radius=get_radius("sm"), font=get_font("caption"),
                     fg_color="transparent", hover_color=get_color("colors.state.hover"),
                     text_color=get_color("colors.text.muted"),
@@ -621,7 +649,7 @@ class AccountsTool(ctk.CTkFrame):
 
             # Edit
             ctk.CTkButton(
-                action_frame, text="✎", width=20, height=20,
+                action_frame, text="", image=ctk_glyph("pencil", "#C8AA6E", 12), width=20, height=20,
                 corner_radius=get_radius("sm"), font=get_font("caption"),
                 fg_color="transparent", hover_color=get_color("colors.state.hover"),
                 text_color=get_color("colors.accent.gold", "#C8AA6E"),
@@ -631,13 +659,40 @@ class AccountsTool(ctk.CTkFrame):
 
             # Delete
             ctk.CTkButton(
-                action_frame, text="✕", width=20, height=20,
+                action_frame, text="", image=ctk_glyph("close", "#FF7A70", 12), width=20, height=20,
                 corner_radius=get_radius("sm"), font=get_font("caption", "bold"),
                 fg_color="transparent", hover_color=get_color("colors.state.danger.muted", "#4d1111"),
                 text_color=get_color("colors.state.danger", "#ff4444"),
                 command=lambda idx=i: self._delete_account(idx),
                 cursor="hand2"
             ).pack(side="left")
+
+    def _render_error_row(self, detail: str) -> None:
+        """Inline amber row: what failed, and a Retry that re-runs detection."""
+        row = ctk.CTkFrame(self.list_frame, fg_color="#1F1A12", border_width=1,
+                           border_color="#5C4826", corner_radius=6)
+        row.pack(fill="x", padx=4, pady=(4, 8))
+        ctk.CTkLabel(row, text="", image=ctk_glyph("warning", "#E0A43A", 16),
+                     width=20).pack(side="left", padx=(8, 4), pady=8)
+        retry = ctk.CTkButton(
+            row, text="Retry", width=52, height=24, corner_radius=4,
+            font=("Inter", 10, "bold"), fg_color="transparent", border_width=1,
+            border_color="#E0A43A", hover_color="#2A2216", text_color="#E0A43A",
+            command=self._retry_detect, cursor="hand2",
+        )
+        retry.pack(side="right", padx=8, pady=8)
+        short = detail if len(detail) <= 60 else detail[:59] + "…"
+        txt = ctk.CTkFrame(row, fg_color="transparent")
+        txt.pack(side="left", fill="x", expand=True, pady=8)
+        ctk.CTkLabel(txt, text="Account check failed", font=("Inter", 10, "bold"),
+                     text_color="#F0E6D2", anchor="w").pack(fill="x")
+        ctk.CTkLabel(txt, text=short, font=("Inter", 9), text_color="#A0A7B4",
+                     anchor="w", justify="left", wraplength=130).pack(fill="x")
+
+    def _retry_detect(self) -> None:
+        self._detect_error = ""
+        self._render_accounts()
+        self._detect_active()
 
     def _render_unavailable_state(self):
         """Say the accounts feature is off, and why.
@@ -648,13 +703,13 @@ class AccountsTool(ctk.CTkFrame):
         cannot work.
         """
         frame = ctk.CTkFrame(self.list_frame, fg_color="transparent")
-        frame.pack(fill="x", pady=8, padx=6)
+        frame.pack(fill="x", pady=8, padx=8)
 
         ctk.CTkLabel(
             frame,
             text="Accounts are unavailable",
             font=get_font("caption", "bold"),
-            text_color=get_color("colors.state.warning", "#FFB020"),
+            text_color=get_color("colors.text.primary", "#F0E6D2"),
             anchor="w",
         ).pack(fill="x", pady=(0, 4))
 
@@ -687,40 +742,40 @@ class AccountsTool(ctk.CTkFrame):
     def _render_empty_state(self):
         """Rich empty state with explanation."""
         empty_frame = ctk.CTkFrame(self.list_frame, fg_color="transparent")
-        empty_frame.pack(fill="x", pady=8, padx=6)
+        empty_frame.pack(fill="x", pady=8, padx=8)
+
+        from ui.components.glyphs import ctk_glyph
+        ctk.CTkLabel(
+            empty_frame, text="", image=ctk_glyph("person", "#C8AA6E", 26),
+        ).pack(pady=(8, 4))
 
         ctk.CTkLabel(
             empty_frame,
-            text="Multi-Account Manager",
-            font=get_font("caption", "bold"),
-            text_color=get_color("colors.text.primary"),
-            anchor="w"
-        ).pack(fill="x", pady=(0, 4))
+            text="No accounts saved",
+            font=get_font("body", "bold"),
+            text_color=get_color("colors.text.primary", "#F0E6D2"),
+        ).pack(pady=(0, 2))
 
-        for line in [
-            "① Save login credentials for multiple accounts",
-            "② Switch accounts with one click",
-            "③ Passwords are encrypted (Windows DPAPI)",
-            "④ Auto-detects which account is active",
-        ]:
-            ctk.CTkLabel(
-                empty_frame, text=line,
-                font=("Inter", 10), text_color=get_color("colors.text.muted"),
-                anchor="w"
-            ).pack(fill="x", padx=(8, 0))
+        ctk.CTkLabel(
+            empty_frame,
+            text="Save your logins here to switch accounts in one click. "
+                 "Passwords stay encrypted on\u00a0this\u00a0PC.",
+            font=("Inter", 10), text_color="#A0A7B4",
+            justify="center", wraplength=230,
+        ).pack(pady=(0, 8))
 
         ctk.CTkButton(
             empty_frame,
-            text="+ Add First Account",
+            text="Add account",
             font=get_font("body", "bold"),
-            fg_color=get_color("colors.accent.primary"),
-            text_color="#ffffff",
-            hover_color=get_color("colors.state.hover"),
-            height=36,
-            corner_radius=8,
+            fg_color=get_color("colors.accent.gold", "#C8AA6E"),
+            text_color="#0A1428",
+            hover_color="#D3B679",
+            height=32,
+            corner_radius=6,
             command=self._show_add_form,
             cursor="hand2"
-        ).pack(fill="x", pady=(8, 0))
+        ).pack(fill="x", pady=(0, 4))
 
     def _offer_manual_sign_in(self, idx: int) -> None:
         """Explain the one thing that creates a session, and offer to keep it.
@@ -765,7 +820,7 @@ class AccountsTool(ctk.CTkFrame):
         """Send a log message to both toast and sidebar action log."""
         try:
             from ui.components.toast import ToastManager
-            ToastManager.get_instance().show(msg, icon="🔐", duration=3000)
+            ToastManager.get_instance().show(msg, icon="lock", duration=3000)
         except Exception as exc:
             Logger.debug("AccountsTool", "_log_message suppressed an error", exc=exc)
 
@@ -803,7 +858,7 @@ class AccountsTool(ctk.CTkFrame):
             try:
                 from ui.components.toast import ToastManager
                 ToastManager.get_instance().show(
-                    f"Removed: {label}", icon="🗑️", theme="warning"
+                    f"Removed: {label}", icon="trash", theme="warning"
                 )
             except Exception as exc:
                 Logger.debug("AccountsTool", "_delete_account suppressed an error", exc=exc)

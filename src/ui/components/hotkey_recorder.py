@@ -1,4 +1,5 @@
 import tkinter as tk
+from ui.components.glyphs import ctk_glyph
 import customtkinter as ctk  # type: ignore
 import keyboard  # type: ignore
 
@@ -170,7 +171,8 @@ class HotkeyRecorder(ctk.CTkButton):
         if success:
             # Malcolm's Infusion: Satisfying success flash
             self.configure(
-                text=f"✓ {self._hotkey_value}",
+                text=f" {self._hotkey_value}",
+                image=ctk_glyph("check", "#ffffff", 12), compound="left",
                 fg_color=get_color("colors.state.success", "#27AE60"),
                 text_color="#ffffff",
                 border_color=get_color("colors.state.success", "#27AE60"),
@@ -186,6 +188,7 @@ class HotkeyRecorder(ctk.CTkButton):
             return
         self.configure(
             text=self._hotkey_value or "Click to set",
+            image=None,
             fg_color=get_color("colors.background.card"),
             text_color=get_color("colors.text.primary"),
             border_color=get_color("colors.border.subtle"),

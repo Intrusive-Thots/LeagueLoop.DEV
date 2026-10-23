@@ -8,7 +8,7 @@ class AboutPage(ctk.CTkToplevel):
         super().__init__(master, **kwargs)
         
         self.title("About LeagueLoop")
-        self.geometry("460x420")
+        self.geometry("460x460")
         self._egg_clicks = 0
         self.resizable(False, False)
         self.attributes("-topmost", True)
@@ -54,7 +54,7 @@ class AboutPage(ctk.CTkToplevel):
         header.pack_propagate(False)
 
         ctk.CTkLabel(
-            header, text="ⓘ  INFO & ABOUT",
+            header, text="INFO & ABOUT",
             font=("Beaufort for LOL", 16, "bold"),
             text_color=get_color("colors.accent.gold", "#C8AA6E"),
         ).pack(side="left", padx=16, pady=16)
@@ -69,7 +69,7 @@ class AboutPage(ctk.CTkToplevel):
             font=get_font("body"),
             text_color=get_color("colors.text.primary"),
             justify="left"
-        ).pack(anchor="w", pady=(0, 10))
+        ).pack(anchor="w", pady=(0, 12))
 
         ctk.CTkLabel(
             body, 
@@ -115,10 +115,10 @@ class AboutPage(ctk.CTkToplevel):
             hover_color=get_color("colors.state.hover"),
             border_width=1,
             border_color=get_color("colors.border.subtle"),
-            command=self.destroy,
+            command=self.destroy, cursor="hand2",
             height=30
         )
-        btn_close.pack(fill="x", side="bottom", pady=(0, 12))
+        btn_close.pack(fill="x", side="bottom", pady=(12, 0))
 
         footer = ctk.CTkFrame(body, fg_color="transparent")
         footer.pack(fill="x", side="bottom")
@@ -139,7 +139,7 @@ class AboutPage(ctk.CTkToplevel):
         ctk.CTkLabel(
             footer, text="Banned.Malcolm@gmail.com",
             font=get_font("body", "bold"),
-            text_color=get_color("colors.text.disabled", "#4B5E73"),
+            text_color=get_color("colors.text.muted"),
         ).pack(side="right")
 
     def _on_author_click(self, event=None):
