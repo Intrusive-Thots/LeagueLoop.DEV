@@ -362,6 +362,9 @@ class LootTool(ctk.CTkFrame):
 
         self.actions_row1 = ctk.CTkFrame(self.body, fg_color="transparent")
         self.actions_row1.pack(side="bottom", fill="x", padx=12, pady=(4, 2))
+        # Equal-width pair: pack(expand=True) splits only the *spare* space, so
+        # "Refresh" ended up wider than "Claim". A uniform grid fixes it (#44).
+        self.actions_row1.grid_columnconfigure((0, 1), weight=1, uniform="loot_actions")
 
         self.btn_refresh = ctk.CTkButton(
             self.actions_row1,
@@ -377,7 +380,7 @@ class LootTool(ctk.CTkFrame):
             command=self.refresh,
             cursor="hand2",
         )
-        self.btn_refresh.pack(side="left", fill="x", expand=True, padx=(0, 4))
+        self.btn_refresh.grid(row=0, column=0, sticky="ew", padx=(0, 4))
         CTkTooltip(self.btn_refresh, "Refresh inventory from League Client")
 
         self.btn_claim = ctk.CTkButton(
@@ -394,7 +397,7 @@ class LootTool(ctk.CTkFrame):
             command=self.claim_rewards,
             cursor="hand2",
         )
-        self.btn_claim.pack(side="left", fill="x", expand=True, padx=(4, 0))
+        self.btn_claim.grid(row=0, column=1, sticky="ew", padx=(4, 0))
         CTkTooltip(self.btn_claim, "Claim pending battle pass, event pass, and mission rewards")
 
         # Scrollable inventory list

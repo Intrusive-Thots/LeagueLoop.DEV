@@ -117,8 +117,11 @@ Priority order. #23 stays parked.
   list, accounts, loot vault, arena, AutomationEditor, priority grid, activity log and
   Settings/Automations. Pins canvas height before hiding (no flip loop) + flap guard; tests in
   `tests/test_scroll_autohide.py`.
-- [ ] 44. **P3 Minor** — Loot Refresh vs Claim buttons have unequal widths; editor mixes a
-  carded row with an uncarded slider section.
+- [x] 44. **P3 Minor** — Loot Refresh/Claim now sit in a uniform 2-column grid (pack
+  `expand` only split spare space, so "Refresh" was wider). AutomationEditor puts the
+  type-specific fields in a card matching the "Show Icon on Main Page" card, captions wrap at
+  `FORM_WRAP` (300) with `_balance_captions` evening two-line captions (no "pop." / "on main
+  page" orphans); `tests/test_editor_caption_wrap.py`.
 
 ## Blocked (needs a live League client)
 23. Real LCU phase transitions + status pill; champ-select pick/ban panel and ARAM bench
