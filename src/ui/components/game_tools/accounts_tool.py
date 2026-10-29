@@ -8,6 +8,7 @@ Uses the same visual language as ArenaTool (collapsible header,
 card-based list, icon badges).
 """
 import customtkinter as ctk
+from ui.components.scroll_autohide import autohide_scrollbar
 from ui.components.glyphs import set_chevron
 import threading
 from datetime import datetime
@@ -270,6 +271,7 @@ class AccountsTool(ctk.CTkFrame):
             scrollbar_button_hover_color=get_color("colors.text.muted"),
             scrollbar_fg_color="transparent",
         )
+        autohide_scrollbar(self.list_frame)
         try:
             self.list_frame._scrollbar.configure(width=6)
         except Exception as exc:

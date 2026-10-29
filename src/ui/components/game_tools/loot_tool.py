@@ -11,6 +11,7 @@ import threading
 from typing import Any, Callable, Dict, List, Optional
 
 import customtkinter as ctk
+from ui.components.scroll_autohide import autohide_scrollbar
 from ui.components.glyphs import ctk_glyph
 
 from services.loot_service import LootService
@@ -403,6 +404,7 @@ class LootTool(ctk.CTkFrame):
             height=125,
             corner_radius=6,
         )
+        autohide_scrollbar(self.list_frame)
         self.list_frame.pack(fill="both", expand=True, padx=12, pady=(2, 4))
 
         self.empty_lbl = ctk.CTkLabel(

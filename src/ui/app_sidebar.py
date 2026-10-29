@@ -2,6 +2,7 @@
 Sidebar navigation and main layout component.
 """
 import customtkinter as ctk  # type: ignore
+from ui.components.scroll_autohide import autohide_scrollbar
 from ui.components.glyphs import ctk_glyph, set_icon
 import os
 import threading
@@ -438,6 +439,7 @@ class SidebarWidget(ctk.CTkFrame):
             scrollbar_button_hover_color=get_color("colors.text.muted"),
             scrollbar_fg_color="transparent",
         )
+        autohide_scrollbar(self.automations_scroll)
         try:
             self.automations_scroll._scrollbar.configure(width=6)
         except Exception as exc:
@@ -638,6 +640,7 @@ class SidebarWidget(ctk.CTkFrame):
 
         # ── Advanced Settings Tab Content ──
         self.advanced_scroll = ctk.CTkScrollableFrame(self.main_body, fg_color="transparent")
+        autohide_scrollbar(self.advanced_scroll)
         
         # AUTOMATION & BEHAVIOR
         card_auto = make_card(self.advanced_scroll, title="AUTOMATION & BEHAVIOR", padx=0, pady=(0, SECTION_GAP))
@@ -669,7 +672,6 @@ class SidebarWidget(ctk.CTkFrame):
             tooltip_text="After a game ends, ask the League client to download the replay (.rofl). Fully compatible with Skip Stats.",
             height=46,
         )
-        self.row_auto_save_replays.text_label.configure(wraplength=170)
         self.row_auto_save_replays.pack(fill="x", pady=(INNER_GAP, 0))
 
         self.lbl_replay_help = ctk.CTkLabel(
@@ -681,12 +683,13 @@ class SidebarWidget(ctk.CTkFrame):
             justify="left",
             anchor="w",
         )
-        self.lbl_replay_help.pack(fill="x", pady=(2, INNER_GAP))
+        self.lbl_replay_help.pack(fill="x", pady=(2, 2))
 
         self.lbl_replay_folder = ctk.CTkLabel(
             card_replays,
-            text="Replay folder: open Settings with the client running to look it up.",
+            text="Replay folder shows when League is open.",
             font=get_font("caption"),
+            height=0,  # one caption line; CTkLabel's 28px default floats it
             text_color=get_color("colors.text.muted"),
             wraplength=230,
             justify="left",
@@ -1909,7 +1912,7 @@ class SidebarWidget(ctk.CTkFrame):
                 text = (
                     f"Replay folder: {path}"
                     if path
-                    else "Replay folder: connect the League client to see it."
+                    else "Replay folder shows when League is open."
                 )
                 try:
                     label.configure(text=text)

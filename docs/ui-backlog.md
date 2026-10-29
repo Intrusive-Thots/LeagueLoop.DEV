@@ -106,14 +106,17 @@ Priority order. #23 stays parked.
   "Info & Legal" were transparent fixed-width buttons, bold text floating indented off the
   label column with no affordance. Now `SettingsActionRow`s ("Screenshots folder · Captured in
   debug mode · Open", "League Loop · Version … · Info & Legal") matching Fix Ping/Download.
-- [ ] 41. **P2 Settings row typography** — `SettingsActionRow` titles use body bold
-  (`settings_row.py:185`) while toggle/hotkey rows are regular; "Auto-save replays after each
-  match" (`app_sidebar.py` ~666, wraplength 170) wraps with a centred orphan "match".
-- [ ] 42. **P2 Replay-folder copy** — `lbl_replay_folder` says "open Settings with the client
-  running…" while the user is already in Settings → "Replay folder appears here once League is
-  running."
-- [ ] 43. **P3 Empty-state scrollbars** — friend list (Play), accounts list, loot vault and
-  AutomationEditor show scrollbar tracks/thumbs with nothing to scroll; hide until overflow.
+- [x] 41. **P2 Settings row typography** — `SettingsActionRow` titles now regular body like
+  the toggle/hotkey rows. `SettingsToggleRow` measures its label on `<Configure>` and sets a
+  balanced, left-justified wraplength (`balanced_wrap`) instead of the hard-coded 170 →
+  "Auto-save replays / after each match", no centred orphan.
+- [x] 42. **P2 Replay-folder copy** — default + empty-path text is "Replay folder shows when
+  League is open." (one line); label `height=0` so it doesn't float in CTk's 28px box.
+- [x] 43. **P3 Empty-state scrollbars** — new `ui/components/scroll_autohide.py`
+  (`autohide_scrollbar`) shows a CTkScrollableFrame's bar only on overflow; wired into friend
+  list, accounts, loot vault, arena, AutomationEditor, priority grid, activity log and
+  Settings/Automations. Pins canvas height before hiding (no flip loop) + flap guard; tests in
+  `tests/test_scroll_autohide.py`.
 - [ ] 44. **P3 Minor** — Loot Refresh vs Claim buttons have unequal widths; editor mixes a
   carded row with an uncarded slider section.
 

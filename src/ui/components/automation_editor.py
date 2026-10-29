@@ -4,6 +4,7 @@ Opens as a Toplevel dialog with dark theme styling, matching the app's aesthetic
 """
 from ui.components.glyphs import ctk_glyph
 import customtkinter as ctk  # type: ignore
+from ui.components.scroll_autohide import autohide_scrollbar
 
 from ui.components.factory import get_color, get_font  # type: ignore
 from core.constants import SPACING_SM, SPACING_MD  # type: ignore
@@ -147,6 +148,7 @@ class AutomationEditor(ctk.CTkToplevel):
             scrollbar_button_color=get_color("colors.text.disabled"),
             scrollbar_button_hover_color=get_color("colors.text.muted"),
         )
+        autohide_scrollbar(self.body)
         self.body.pack(fill="both", expand=True, padx=SPACING_MD, pady=SPACING_MD)
 
         # Common setting card for quick icon visibility on main page

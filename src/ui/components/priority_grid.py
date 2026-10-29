@@ -8,6 +8,7 @@ import os
 import tkinter as tk
 from ui.components.glyphs import ctk_glyph
 import customtkinter as ctk
+from ui.components.scroll_autohide import autohide_scrollbar
 from ui.components.glyphs import set_chevron, set_icon
 
 from utils.path_utils import get_asset_path
@@ -383,6 +384,7 @@ class PriorityIconGrid(ctk.CTkFrame):
             scrollbar_button_hover_color=get_color("colors.text.muted"),
             scrollbar_fg_color="transparent",
         )
+        autohide_scrollbar(self.scroll)
         # Slim the scrollbar track so it doesn't eat into champion icons
         try:
             self.scroll._scrollbar.configure(width=6)
@@ -470,6 +472,7 @@ class PriorityIconGrid(ctk.CTkFrame):
             scrollbar_button_color=get_color("colors.text.disabled"),
             scrollbar_button_hover_color=get_color("colors.text.muted")
         )
+        autohide_scrollbar(self.import_scroll)
         self.import_scroll.pack(fill="x", padx=4)
 
         # ── Edit-mode control bar (hidden until edit) ──

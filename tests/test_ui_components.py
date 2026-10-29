@@ -712,6 +712,14 @@ class TestUIComponents(unittest.TestCase):
         tool._render_rows(ten_rows)
         self.assertEqual(tool.list_frame.cget("height"), 170)  # clamped at max 170
 
+    def test_settings_toggle_row_balanced_wrap(self):
+        """A too-long toggle label splits into even lines, never a one-word orphan."""
+        from ui.components.settings_row import SettingsToggleRow
+        self.assertEqual(SettingsToggleRow.balanced_wrap(120, 200), 0)  # fits: no wrap
+        self.assertEqual(SettingsToggleRow.balanced_wrap(220, 170), 122)  # 2 lines of ~110
+        self.assertEqual(SettingsToggleRow.balanced_wrap(500, 170), 170)  # capped at the space
+        self.assertEqual(SettingsToggleRow.balanced_wrap(220, 0), 0)
+
     def test_settings_action_row_responsive(self):
         """Test SettingsActionRow text wrapping, reserved button width, loading and status clearing."""
         from ui.components.settings_row import SettingsActionRow

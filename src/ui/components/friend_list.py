@@ -18,6 +18,7 @@ import threading
 from core.events import EventBus
 import tkinter as tk
 import customtkinter as ctk
+from ui.components.scroll_autohide import autohide_scrollbar
 from ui.components.glyphs import set_icon
 from services import friend_presence
 
@@ -263,6 +264,7 @@ class FriendPriorityList(ctk.CTkFrame):
             scrollbar_button_hover_color=get_color("colors.text.muted"),
             scrollbar_fg_color="transparent",
         )
+        autohide_scrollbar(self.scroll)
         try:
             self.scroll._scrollbar.configure(width=6)
         except Exception as exc:
