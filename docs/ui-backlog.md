@@ -93,6 +93,30 @@ bare `ctk.CTk()` root with a stub config and a real `AssetManager`, run under
 - Kept deliberately: ●/○ status dots and ★ rank text (data, not chrome); About title 16
   (display); loot category emoji (live data only); friend-list/toast paddings that drive layout.
 
+## Pass 7 audit (2026-10-29, offline fixtures, Xvfb renders of every tab/popup/toast/menu)
+Priority order. #23 stays parked.
+
+- [x] 39. **P1 Popups open off-screen** — `about_page.py`, `automation_editor.py` centred on the
+  300px sidebar with no clamp (About/editor opened at negative x, title bar unreachable);
+  `ban_list_window.py` / `aram_list_window.py` only clamped x/y<0 to 100 and ignored
+  right/bottom edges. New `ui/components/window_place.py` (`clamp_rect`, `work_area_for` —
+  Win32 monitor rcWork, so left-hand monitors with negative coords stay valid —
+  `place_on_screen`, `centre_on`) used by all four; 5 tests in `tests/test_window_place.py`.
+- [x] 40. **P1 Settings ghost buttons** — `app_sidebar.py` "Open Screenshots Folder" and About
+  "Info & Legal" were transparent fixed-width buttons, bold text floating indented off the
+  label column with no affordance. Now `SettingsActionRow`s ("Screenshots folder · Captured in
+  debug mode · Open", "League Loop · Version … · Info & Legal") matching Fix Ping/Download.
+- [ ] 41. **P2 Settings row typography** — `SettingsActionRow` titles use body bold
+  (`settings_row.py:185`) while toggle/hotkey rows are regular; "Auto-save replays after each
+  match" (`app_sidebar.py` ~666, wraplength 170) wraps with a centred orphan "match".
+- [ ] 42. **P2 Replay-folder copy** — `lbl_replay_folder` says "open Settings with the client
+  running…" while the user is already in Settings → "Replay folder appears here once League is
+  running."
+- [ ] 43. **P3 Empty-state scrollbars** — friend list (Play), accounts list, loot vault and
+  AutomationEditor show scrollbar tracks/thumbs with nothing to scroll; hide until overflow.
+- [ ] 44. **P3 Minor** — Loot Refresh vs Claim buttons have unequal widths; editor mixes a
+  carded row with an uncarded slider section.
+
 ## Blocked (needs a live League client)
 23. Real LCU phase transitions + status pill; champ-select pick/ban panel and ARAM bench
     live highlight; loot opening/crafting results, item art, loot category icons; real

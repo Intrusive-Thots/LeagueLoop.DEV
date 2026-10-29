@@ -21,9 +21,8 @@ class AboutPage(ctk.CTkToplevel):
         
         self.update_idletasks()
         try:
-            x = master.winfo_rootx() + (master.winfo_width() // 2) - (self.winfo_width() // 2)
-            y = master.winfo_rooty() + (master.winfo_height() // 2) - (self.winfo_height() // 2)
-            self.geometry(f"+{int(x)}+{int(y)}")
+            from ui.components.window_place import centre_on
+            centre_on(self, master.winfo_toplevel(), 460, 460, set_size=False)
         except Exception as exc:
             Logger.debug("AboutPage", "__init__ suppressed an error", exc=exc)
             

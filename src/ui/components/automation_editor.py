@@ -54,9 +54,8 @@ class AutomationEditor(ctk.CTkToplevel):
         """Center the popup over the main window and enforce topmost z-order."""
         try:
             parent = self.master.winfo_toplevel()
-            px = parent.winfo_rootx() + (parent.winfo_width() // 2) - 190
-            py = parent.winfo_rooty() + (parent.winfo_height() // 2) - 240
-            self.geometry(f"380x480+{px}+{py}")
+            from ui.components.window_place import centre_on
+            centre_on(self, parent, 380, 480)
             try:
                 self.attributes("-topmost", True)
             except Exception as exc:

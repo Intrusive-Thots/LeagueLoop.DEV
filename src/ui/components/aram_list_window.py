@@ -351,10 +351,11 @@ class AramListWindow(ctk.CTkToplevel):
             except Exception:
                 x, y = 200, 150
 
-        if x < 0:
-            x = 100
-        if y < 0:
-            y = 100
+        try:
+            from ui.components.window_place import clamp_rect, work_area_for
+            x, y = clamp_rect(x, y, w, h, work_area_for(self.master.winfo_toplevel()))
+        except Exception as exc:
+            Logger.debug("AramListWindow", "screen clamp failed", exc=exc)
         self._apply_geometry(w, h, x, y)
 
     def _on_close(self):

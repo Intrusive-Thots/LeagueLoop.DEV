@@ -873,29 +873,37 @@ class SidebarWidget(ctk.CTkFrame):
             except Exception as exc:
                 Logger.debug("AppSidebar", f"Could not open screenshots dir: {exc}", exc=exc)
 
-        btn_debug_folder = make_button(
+        # A real secondary button on the label column, like Download / Fix
+        # Ping, instead of a free-floating ghost label that read as text.
+        self.row_debug_folder = SettingsActionRow(
             card_diag,
-            text="Open Screenshots Folder",
-            style="ghost",
-            font=get_font("caption", "bold"),
-            width=165,
-            height=24,
-            command=_open_screenshots_dir
+            label_text="Screenshots folder",
+            description="Captured in debug mode",
+            button_text="Open",
+            button_width=90,
+            style="secondary",
+            command=_open_screenshots_dir,
         )
-        btn_debug_folder.pack(anchor="w", pady=(0, 0))
+        self.row_debug_folder.pack(fill="x", pady=(0, 0))
 
         # ABOUT
         card_about = make_card(self.advanced_scroll, title="ABOUT", padx=0, pady=(0, SECTION_GAP))
         from core.version import __version__
-        ctk.CTkLabel(card_about, text="League Loop", font=get_font("title", "bold"), text_color=get_color("colors.text.primary")).pack(anchor="w")
-        ctk.CTkLabel(card_about, text=f"Version {__version__}", font=get_font("caption"), text_color=get_color("colors.text.muted")).pack(anchor="w", pady=(0, INNER_GAP))
-        
+
         def _open_about():
             from ui.components.about_page import AboutPage
             AboutPage(self.master)
-        
-        btn_about = make_button(card_about, text="Info & Legal", style="ghost", font=get_font("caption", "bold"), width=100, height=24, command=_open_about)
-        btn_about.pack(anchor="w")
+
+        self.row_about = SettingsActionRow(
+            card_about,
+            label_text="League Loop",
+            description=f"Version {__version__}",
+            button_text="Info & Legal",
+            button_width=90,
+            style="secondary",
+            command=_open_about,
+        )
+        self.row_about.pack(fill="x", pady=(0, 0))
 
         # ── Profile Section (Moved into Advanced Scroll) ──
         self.profile_frame = make_card(
