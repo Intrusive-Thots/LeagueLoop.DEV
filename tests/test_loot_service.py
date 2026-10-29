@@ -140,26 +140,82 @@ class TestLootServiceClaiming(unittest.TestCase):
         self.assertIn("Progression: 750 Blue Essence", res.sources)
         self.assertTrue(any("Claimed progression reward: 750 Blue Essence" in log for log in self.logs))
 
-    def test_claim_tft_pass_rewards_success(self):
+    def _tft_pass(self, *statuses, locked=False):
+        return {
+            "info": {"passId": "tft_pass_set13", "title": "Into the Arcane Pass"},
+            "milestones": [
+                {"milestoneId": f"m{i}", "status": st, "isLocked": locked,
+                 "isClaimRequestPending": False}
+                for i, st in enumerate(statuses)
+            ],
+            "bonuses": [],
+        }
+
+    def _tft_mock(self, before, after=None, put_status=200, put_body=None):
+        calls = {"put": 0, "get": 0}
+
         def mock_request(method, endpoint, data=None, silent=False):
             if method == "GET" and endpoint == "/lol-tft-pass/v1/active-passes":
-                return DummyResponse(200, [
-                    {
-                        "info": {
-                            "passId": "tft_pass_set13",
-                            "title": "Into the Arcane Pass",
-                        }
-                    }
-                ])
+                calls["get"] += 1
+                if calls["get"] > 1 and after is not None:
+                    return DummyResponse(200, [after])
+                return DummyResponse(200, [before])
             if method == "PUT" and endpoint == "/lol-tft-pass/v1/pass/tft_pass_set13/milestone/claimAllRewards":
-                return DummyResponse(200, {})
+                calls["put"] += 1
+                if put_body is None:
+                    r = DummyResponse(put_status, None)
+                    return r
+                return DummyResponse(put_status, put_body)
             return DummyResponse(404, {})
 
         self.mock_lcu.request.side_effect = mock_request
+        return calls
+
+    def test_claim_tft_pass_rewards_success(self):
+        # Two claimable milestones; the response says nothing, the re-read
+        # shows both claimed.
+        self._tft_mock(
+            self._tft_pass("REWARDABLE", "REWARDABLE", "ACTIVE"),
+            after=self._tft_pass("COMPLETE", "COMPLETE", "ACTIVE"),
+        )
+        res = self.service.claim_tft_pass_rewards()
+        self.assertEqual(res.claimed, 2)
+        self.assertIn("TFT Pass (Into the Arcane Pass)", res.sources)
+        self.assertTrue(any("Claimed 2 reward(s) from Into the Arcane Pass" in log for log in self.logs))
+
+    def test_tft_nothing_claimable_sends_no_request(self):
+        calls = self._tft_mock(self._tft_pass("UPCOMING", "ACTIVE"))
+        res = self.service.claim_tft_pass_rewards()
+        self.assertEqual((res.claimed, calls["put"]), (0, 0))
+
+    def test_tft_locked_premium_rewardable_is_not_claimable(self):
+        calls = self._tft_mock(self._tft_pass("REWARDABLE", locked=True))
+        res = self.service.claim_tft_pass_rewards()
+        self.assertEqual((res.claimed, calls["put"]), (0, 0))
+
+    def test_tft_2xx_that_claims_nothing_is_not_counted(self):
+        # The old bug: any 2xx counted as one claim.
+        before = self._tft_pass("REWARDABLE")
+        self._tft_mock(before, after=before)
+        res = self.service.claim_tft_pass_rewards()
+        self.assertEqual(res.claimed, 0)
+        self.assertEqual(res.sources, [])
+        self.assertTrue(any("nothing was claimed" in log for log in self.logs))
+
+    def test_tft_counts_from_response_milestones(self):
+        self._tft_mock(
+            self._tft_pass("REWARDABLE", "REWARDABLE"),
+            put_body=[{"milestoneId": "m0", "status": "COMPLETE"},
+                      {"milestoneId": "m1", "status": "REWARDABLE"}],
+        )
         res = self.service.claim_tft_pass_rewards()
         self.assertEqual(res.claimed, 1)
-        self.assertIn("TFT Pass (Into the Arcane Pass)", res.sources)
-        self.assertTrue(any("Claimed rewards from Into the Arcane Pass" in log for log in self.logs))
+
+    def test_tft_failed_put_is_not_counted(self):
+        self._tft_mock(self._tft_pass("REWARDABLE"), put_status=500, put_body={"message": "boom"})
+        res = self.service.claim_tft_pass_rewards()
+        self.assertEqual(res.claimed, 0)
+        self.assertTrue(any("Failed claiming" in log for log in self.logs))
 
     def test_claim_ranked_split_rewards_success(self):
         def mock_request(method, endpoint, data=None, silent=False):

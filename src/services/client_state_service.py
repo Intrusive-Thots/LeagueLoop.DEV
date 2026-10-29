@@ -37,6 +37,7 @@ from typing import Any, Callable, Optional
 
 from core.state import ConnectionStateEnum, GameflowPhase
 from utils.logger import Logger
+from services.draft.timer import phase_time_left_ms
 
 #: How often to refresh while the client is reachable.
 DEFAULT_POLL_INTERVAL_S = 1.0
@@ -375,11 +376,10 @@ class ClientStateService:
         )
 
         timer = session.get("timer") or {}
-        # The LCU reports milliseconds; every consumer here works in seconds.
-        remaining_ms = timer.get("adjustedTimeLeftInPhase")
-        if not isinstance(remaining_ms, (int, float)):
-            remaining_ms = timer.get("timeLeftInPhase") or 0
-        remaining_s = max(0.0, float(remaining_ms) / 1000.0)
+        # The LCU reports milliseconds as of `internalNowInEpochMs` and only
+        # refreshes the session on draft changes, so age the snapshot rather
+        # than trusting it (a live draft held 19.8 s for nine seconds).
+        remaining_s = phase_time_left_ms(timer) / 1000.0
 
         me = next(
             (p for p in my_team if p.get("cellId") == cell_id and cell_id >= 0),

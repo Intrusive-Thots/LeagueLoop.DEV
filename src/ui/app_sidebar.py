@@ -2395,7 +2395,7 @@ class SidebarWidget(ctk.CTkFrame):
                 queue_id = getattr(master.automation, "current_queue_id", None)
             game_mode = (session.get("gameConfig") or {}).get("gameMode", "").upper() if session else ""
             bench_enabled = session.get("benchEnabled", False) if session else False
-            is_aram = bool(bench) or bench_enabled or (queue_id in {450, 2400, 1010}) or (game_mode in {"ARAM", "ARAM_MAYHEM", "ARURF"})
+            is_aram = bool(bench) or bench_enabled or (queue_id in {450, 2400, 1010}) or (game_mode in {"ARAM", "ARAM_MAYHEM", "KIWI", "ARURF"})
 
             if is_aram and team and getattr(self, "assets", None):
                 bench_names = []

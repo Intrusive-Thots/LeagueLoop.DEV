@@ -18,6 +18,7 @@ from .api_handler import LCUClient  # type: ignore
 from .asset_manager import AssetManager, ConfigManager  # type: ignore
 from services.draft.priority_engine import PriorityEngine
 from services import friend_presence
+from services.draft.timer import phase_time_left_ms
 from utils.logger import Logger  # type: ignore
 from core.config_keys import (
     AUTO_HONOR_ENABLED,
@@ -1233,7 +1234,7 @@ class AutomationEngine:
         current_hover = action.get("championId", 0)
         
         timer = session.get("timer", {})
-        time_left_ms = timer.get("adjustedTimeLeftInPhase", 15000)
+        time_left_ms = phase_time_left_ms(timer, default=15000)
         instant_ban = self.config.get("arena_instant_ban", False)
         
         if current_hover != ban_id and (now - getattr(self, "_last_synergy_patch", 0) > 0.5):
@@ -1325,7 +1326,7 @@ class AutomationEngine:
                     mapped_me_champ = legacy_fallback
                 
         timer = session.get("timer", {})
-        time_left_ms = timer.get("adjustedTimeLeftInPhase", 15000)
+        time_left_ms = phase_time_left_ms(timer, default=15000)
         
         # Check if teammate has locked by inspecting their action
         teammate_locked = False
