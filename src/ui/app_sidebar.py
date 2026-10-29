@@ -1157,7 +1157,14 @@ class SidebarWidget(ctk.CTkFrame):
         # Focused exclusively on ARAM aspects: non-ARAM tools remain hidden
         self._pack_game_tool_container_if_needed()
 
-    def _on_mode_change(self, new_mode):
+    def _on_mode_change(self, new_mode, create_lobby=True):
+        """Switch the selected mode; `create_lobby` only for a user's choice.
+
+        Syncing the selector to a lobby the client is already in used to go
+        through here too, which left and re-created that lobby (live: the
+        first lobby event after launch sent DELETE + POST /lol-lobby/v2/lobby
+        while James sat in a Ranked lobby — it would have dropped a party).
+        """
         self.config.set("aram_mode", new_mode)
         if self.scraper:
             self.scraper.set_mode(new_mode)
@@ -1172,7 +1179,7 @@ class SidebarWidget(ctk.CTkFrame):
         except Exception:
             qid = self._get_queue_id_for_mode(new_mode)
 
-        if qid and self.lcu and getattr(self.lcu, "is_connected", False):
+        if create_lobby and qid and self.lcu and getattr(self.lcu, "is_connected", False):
             def _create_lobby_thread():
                 try:
                     # If in a friend's lobby, leave it and apply 5-minute cooldown
@@ -1212,7 +1219,7 @@ class SidebarWidget(ctk.CTkFrame):
         if detected_mode:
             current_mode = self.config.get("aram_mode", "ARAM")
             if detected_mode != current_mode:
-                self.after(0, lambda: self._on_mode_change(detected_mode))
+                self.after(0, lambda: self._on_mode_change(detected_mode, create_lobby=False))
 
     # ── Handlers ──
     def on_lcu_connection_changed(self, connected: bool):
@@ -1264,6 +1271,27 @@ class SidebarWidget(ctk.CTkFrame):
         self.estimate_label.configure(text=status, text_color=status_col)
         self.progress_bar.set(progress)
         self.progress_bar.configure(progress_color=bar_col or get_color("colors.accent.gold", "#C8AA6E"))
+
+    def _champ_select_state(self):
+        container = getattr(self.master, "container", None)
+        manager = getattr(container, "state_manager", None)
+        try:
+            return manager.state.champ_select if manager is not None else None
+        except Exception:
+            return None
+
+    def _refresh_draft_status(self):
+        """Header line during the draft: whose turn and the time left."""
+        cs = self._champ_select_state()
+        if cs is None or not getattr(cs, "active", False):
+            return
+        try:
+            from services.draft.status import draft_status
+            text, my_turn = draft_status(cs)
+            color = get_color("colors.accent.gold", "#C8AA6E") if my_turn else get_color("colors.text.muted")
+            self.estimate_label.configure(text=text, text_color=color)
+        except Exception as exc:
+            Logger.debug("AppSidebar", "draft status refresh failed", exc=exc)
 
     def set_power_state(self, state: bool):
         """Pure visual/logical toggle without user-cancel side effects."""
@@ -2337,6 +2365,7 @@ class SidebarWidget(ctk.CTkFrame):
                             self.friend_list._toggle_collapse()
                     except Exception as exc:
                         Logger.debug("AppSidebar", "Failed to collapse friend list in champ select", exc=exc)
+            self._refresh_draft_status()
             self._last_ui_phase = "ChampSelect"
 
         elif phase == "InProgress":

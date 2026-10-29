@@ -153,6 +153,11 @@ class ChampSelectState:
     #: Champions this account can pick right now. Empty means "not known",
     #: which callers must not read as "all of them".
     pickable_champion_ids: Tuple[int, ...] = ()
+    #: `timer.phase` from the session (PLANNING, BAN_PICK, FINALIZATION,
+    #: GAME_STARTING) and the wall-clock second `timer_remaining_s` was
+    #: computed at, so a display between publishes can keep counting down.
+    timer_phase: str = ""
+    timer_sampled_at: float = 0.0
 
 
 @dataclass(frozen=True)

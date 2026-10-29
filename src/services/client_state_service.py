@@ -323,6 +323,7 @@ class ClientStateService:
             self._pickable_ids = ()
             self._state.update_champ_select(
                 active=False, cell_id=-1, local_role="", timer_remaining_s=0.0,
+                timer_phase="", timer_sampled_at=0.0,
                 locked_in=False, selected_champion_id=0,
                 my_team=(), their_team=(), actions=(),
             )
@@ -427,6 +428,8 @@ class ClientStateService:
             cell_id=cell_id,
             local_role=str(me.get("assignedPosition") or ""),
             timer_remaining_s=remaining_s,
+            timer_phase=str(timer.get("phase") or ""),
+            timer_sampled_at=time.time(),
             locked_in=locked,
             selected_champion_id=int(selected or 0),
             my_team=my_team,

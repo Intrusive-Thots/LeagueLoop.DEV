@@ -185,10 +185,15 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self._queue_hotkey = None
         self._bind_hotkeys()
 
+        # Come up in the state the user left the master switch in. This
+        # always started the engine un-paused and drew "Auto on", so turning
+        # automation off never survived a restart (seen live: master off,
+        # header said "Auto on", and the draft code tried to hover a pick).
+        master_on = self._automation_master_enabled()
         if self.automation is not None:
-            self.automation.start(start_paused=False)  # type: ignore
+            self.automation.start(start_paused=not master_on)  # type: ignore
         if hasattr(self, "sidebar"):
-            self.sidebar.set_power_state(True)
+            self.sidebar.set_power_state(master_on)
 
         self.assets.start_loading()
         
@@ -224,6 +229,15 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self.sidebar = SidebarWidget(self, self.toggle_power, self.config, lcu=self.lcu, assets=self.assets, scraper=self.scraper)
         self.sidebar.pack(fill="both", expand=True)
         self.mini_player = MiniPlayer(self, self.config)
+
+    def _automation_master_enabled(self) -> bool:
+        ctrl = getattr(getattr(self, "container", None), "automation_controller", None)
+        if ctrl is not None:
+            return bool(ctrl.master_enabled())
+        try:
+            return bool(self.config.get("automation_master", True))
+        except Exception:
+            return True
 
     def toggle_power(self, state):
         if self.automation is not None:

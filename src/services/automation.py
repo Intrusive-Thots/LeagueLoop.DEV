@@ -285,9 +285,10 @@ class AutomationEngine:
 
     def _loop(self):
         while self.running:
-            if self.paused:
-                self._stop_event.wait(1)
-                continue
+            # Paused still ticks: the tick is read-only until its own pause
+            # check, and the sidebar's phase/queue display is fed from here.
+            # Skipping the whole tick froze the status while automation was
+            # off. Every handler that writes returns early when paused.
 
             if not self.lcu.is_connected:
                 if time.time() - self._last_disconnect_log > 30:
@@ -418,9 +419,7 @@ class AutomationEngine:
 
         search_state = None
         if phase == "Matchmaking":
-            search_req = self.lcu.request("GET", "/lol-lobby/v2/lobby/matchmaking/search-state")
-            if search_req and search_req.status_code == 200:
-                search_state = search_req.json()
+            search_state = self._read_search_state()
 
         qf = self.queue_func
         if qf is not None:
@@ -570,6 +569,30 @@ class AutomationEngine:
                 # Throttled wake: avoid slamming if websocket sends 10 events a second
                 time.sleep(0.1) 
                 break
+
+    def _read_search_state(self):
+        """Matchmaking search state with the queue clock.
+
+        `/lol-lobby/v2/lobby/matchmaking/search-state` carries only
+        `searchState` (captured live: no `timeInQueue`, no
+        `estimatedQueueTime`), so the sidebar always started at 0:00 and
+        estimated 2:00. `/lol-matchmaking/v1/search` has all three.
+        """
+        try:
+            req = self.lcu.request("GET", "/lol-matchmaking/v1/search", None, True)
+            if req and req.status_code == 200:
+                data = req.json()
+                if isinstance(data, dict) and data.get("searchState"):
+                    return data
+        except Exception as exc:
+            Logger.debug("Automation", "matchmaking search read failed", exc=exc)
+        try:
+            req = self.lcu.request("GET", "/lol-lobby/v2/lobby/matchmaking/search-state")
+            if req and req.status_code == 200:
+                return req.json()
+        except Exception as exc:
+            Logger.debug("Automation", "search-state read failed", exc=exc)
+        return None
 
     def _handle_ready_check(self, phase):
         if phase != "ReadyCheck":
