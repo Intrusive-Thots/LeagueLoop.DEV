@@ -201,11 +201,13 @@ class RiotClientAPI:
             Logger.info("RiotClientAPI", "Signed out successfully")
             return True
 
-        # Log the actual error for debugging
-        if res:
+        # Log the actual error for debugging. `if res:` was wrong here: a
+        # requests.Response is falsy for any 4xx/5xx, so Riot's real refusal
+        # (400 while League was still closing) was logged as "no response".
+        if res is not None:
             try:
-                body = res.json()
-                msg = body.get("message", "")
+                body = res.json() or {}
+                msg = body.get("message", "") or body.get("errorCode", "")
                 Logger.warning("RiotClientAPI", f"Sign out failed ({res.status_code}): {msg}")
             except Exception:
                 Logger.warning("RiotClientAPI", f"Sign out failed: {res.status_code}")

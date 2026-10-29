@@ -126,6 +126,20 @@ class RiotClientApiReadBackTests(unittest.TestCase):
         self.assertEqual(kwargs.get("max_attempts"), 1)
         self.assertGreaterEqual(kwargs.get("timeout"), 10.0)
 
+    def test_a_refused_sign_out_is_logged_as_refused_not_as_no_response(self):
+        import requests
+        from unittest.mock import patch
+        res = requests.Response()
+        res.status_code = 400
+        res._content = b'{"errorCode":"sign_out_failed_other_games_running"}'
+        api = self._api(res)
+        with patch("services.account_manager.Logger") as log:
+            self.assertFalse(api.sign_out())
+        text = " ".join(str(c) for c in log.warning.call_args_list)
+        self.assertIn("400", text)
+        self.assertIn("other_games_running", text)
+        self.assertNotIn("no response", text)
+
 
 if __name__ == "__main__":
     unittest.main()
