@@ -410,8 +410,8 @@ class AccountSwitcher:
           press Play again.
         * League opens on a different account, or still cannot log in after
           that (Riot's login queue rejected the Riot Client's token: "Invalid
-          JTI claim"). Remedy: a full Riot Client restart and a fresh
-          sign-in.
+          JTI claim"). Remedy: close League, restart the Riot Client, a
+          verified sign-out, and a fresh typed sign-in.
 
         If League is still wrong or still not logged in after that, the
         switch fails. It is never reported as a success.
@@ -456,15 +456,16 @@ class AccountSwitcher:
         if not self.session.wait_until_client_ready(self._client_timeout_s):
             return self._fail(SwitchOutcome.CLIENT_NOT_RUNNING, SwitchPhase.WAITING_FOR_CLIENT, index, label)
 
-        if not self._already_active(key):
-            if not self.session.signed_out_confirmed():
-                # Came back signed in (or unclear): sign out, verified, first.
-                out = self._ensure_signed_out(index)
-                if out is not None:
-                    return self._fail(out, SwitchPhase.SIGNING_OUT, index, label)
-            failed = self._sign_in_with_form(index, label, username, key)
-            if failed is not None:
-                return failed
+        # Always a real sign-out and a fresh typed sign-in here, even when the
+        # client comes back "already signed in": that remembered session is
+        # exactly what League's login just rejected, so keeping it would only
+        # repeat the failure.
+        out = self._ensure_signed_out(index)
+        if out is not None:
+            return self._fail(out, SwitchPhase.SIGNING_OUT, index, label)
+        failed = self._sign_in_with_form(index, label, username, key)
+        if failed is not None:
+            return failed
         if self._on_success:
             self._safely(self._on_success, index)
 

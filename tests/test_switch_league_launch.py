@@ -184,6 +184,24 @@ class AccountMatchTests(unittest.TestCase):
         self.assertIn("League still can't log in - restarting the Riot Client",
                       " | ".join(h.messages()))
 
+    def test_riot_remembering_the_session_after_restart_still_signs_out_and_retypes(self):
+        # James's diagnosis: the old session survives a window close. When the
+        # Riot Client comes back still signed in to the same account, that
+        # session is the one League just rejected - it must be signed out
+        # (verified) and the account typed in again, not reused.
+        h, w, restarts = make(login_as=["pending", "pending", "same"])
+        def _restart_keeps_session():
+            restarts.append(1)
+            w.running = False
+            h.api.running = False  # client closes, but remembers who was signed in
+        h.switcher._restart_riot_client = _restart_keeps_session
+        r = h.switcher.switch_to(1)
+        self.assertIs(r.outcome, SwitchOutcome.SUCCESS, r)
+        self.assertEqual(len(restarts), 1)
+        self.assertEqual(h.api.calls.count("sign_out"), 2)  # initial switch + after restart
+        self.assertEqual(len(h.form.typed), 2)
+        self.assertTrue(all(who is None for _, who in h.form.events))
+
     def test_never_logging_in_is_a_failure_not_a_success(self):
         h, w, restarts = make(login_as=["pending", "pending", "pending"])
         r = h.switcher.switch_to(1)
