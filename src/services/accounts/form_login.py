@@ -546,6 +546,11 @@ class Win32Desktop(Desktop):
                 pw = el
             elif user is None and ("username" in name or "user name" in name):
                 user = el
+        if user is None or pw is None:
+            # The Riot Client (Chromium) usually exposes only empty panes to
+            # UI Automation. Seeing no fields means "can't look", not "the
+            # form isn't there" - fall back to autofocus + Tab.
+            return None
         return FormFields(user, pw)
 
     def focus_field(self, field: Any) -> bool:
@@ -560,10 +565,15 @@ class Win32Desktop(Desktop):
         if win is None:
             return None
         try:
+            saw_content = False
             for el in win.descendants():
-                if "captcha" in self._name(el):
+                name = self._name(el)
+                if "captcha" in name:
                     return True
-            return False
+                saw_content = saw_content or bool(name.strip())
+            # Only empty panes: UI Automation can't see the page, so it
+            # can't rule a captcha out either.
+            return False if saw_content else None
         except Exception:
             return None
 

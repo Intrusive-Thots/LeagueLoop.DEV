@@ -136,3 +136,58 @@ class FormFillTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class _El:
+    def __init__(self, name="", aid=""):
+        self.element_info = type("I", (), {"name": name, "automation_id": aid})()
+
+
+class _Win:
+    def __init__(self, edits, all_=None):
+        self.edits, self.all = edits, all_ if all_ is not None else edits
+
+    def descendants(self, control_type=None):
+        return self.edits if control_type == "Edit" else self.all
+
+
+def _stub(win):
+    from services.accounts.form_login import Win32Desktop
+    import types
+    return types.SimpleNamespace(_uia_window=lambda h: win, _name=Win32Desktop._name)
+
+
+class UiaBlindnessTests(unittest.TestCase):
+    """The live Riot Client exposes only nine empty panes to UI Automation.
+    That must read as "can't tell", never as "form not there" or "no captcha"."""
+
+    def test_no_visible_fields_means_unknown_not_missing(self):
+        from services.accounts.form_login import Win32Desktop
+        blind = _Win([], [_El(), _El()])
+        self.assertIsNone(Win32Desktop.find_fields(_stub(blind), 1))
+
+    def test_form_ready_is_unknown_when_uia_is_blind(self):
+        class Blind(FakeDesktop):
+            def find_fields(self, hwnd):
+                return None
+        self.assertIsNone(RiotFormFiller(Blind()).form_ready(1))
+
+    def test_both_named_fields_are_targeted(self):
+        from services.accounts.form_login import Win32Desktop
+        u, p = _El("USERNAME"), _El("PASSWORD")
+        f = Win32Desktop.find_fields(_stub(_Win([u, p])), 1)
+        self.assertIs(f.username, u)
+        self.assertIs(f.password, p)
+
+    def test_one_field_only_falls_back_to_autofocus(self):
+        from services.accounts.form_login import Win32Desktop
+        self.assertIsNone(Win32Desktop.find_fields(_stub(_Win([_El("PASSWORD")])), 1))
+
+    def test_captcha_unknown_when_only_empty_panes(self):
+        from services.accounts.form_login import Win32Desktop
+        self.assertIsNone(Win32Desktop.captcha_visible(_stub(_Win([], [_El()] * 9)), 1))
+
+    def test_captcha_seen_and_ruled_out(self):
+        from services.accounts.form_login import Win32Desktop
+        self.assertTrue(Win32Desktop.captcha_visible(_stub(_Win([], [_El("hCaptcha challenge")])), 1))
+        self.assertFalse(Win32Desktop.captcha_visible(_stub(_Win([], [_El("Sign in")])), 1))
