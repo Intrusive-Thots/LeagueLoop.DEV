@@ -7,3 +7,5 @@ pillow
 psutil
 pywinctl
 customtkinter
+# Optional: lets the account switcher find the Riot USERNAME/PASSWORD boxes by name and spot an hCaptcha.
+pywinauto>=0.6.8; sys_platform == "win32"

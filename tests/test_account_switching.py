@@ -1,53 +1,51 @@
 """
-Account switching, driven against a fake Riot Client and a fake session vault.
+Account switching, driven against a fake Riot Client and a fake sign-in form.
 
-The switch is no longer "sign out, then send the password": Riot's credential
-sign-in carries an hCaptcha challenge, so that request is refused with
-`invalid_prompt`. A switch is now a file operation — stop the client, swap the
-saved session files, start it again — and these tests cover the branches that
-sequence can take.
+The switch is: sign the current account out, wait for the Riot sign-in form,
+type the stored username + password into it, submit, and wait for Riot to
+confirm. (Restoring saved session files was tried and does not work: without
+"Stay signed in" the client keeps no reusable session - every restore landed
+on the sign-in screen.)
 
-The properties worth protecting, and the failure each one prevents:
+Properties protected here, and the failure each one prevents:
 
-* a switch that cannot succeed must not close your running client to find out
-* switching away must not lose the account you left
-* the client must be *observed* gone before the files are swapped, because a
-  swap underneath a live client is silently undone
-* a restored-but-rejected session must not be reported as success
+* a switch that cannot work (no password) does not sign you out first
+* the current account is signed out *before* anything is typed
+* nothing is typed before the sign-in window is there
+* a submitted form is not reported as success until Riot says so
+* 2FA, captcha, wrong password and rate limiting are reported as such
+* the password never appears in a progress message, result or log line
 """
-import os
-import shutil
-import tempfile
-import time
+import threading
 import unittest
+from unittest.mock import patch
 
 from services.accounts import AccountSwitcher, RiotSession, SwitchOutcome, SwitchPhase
+from services.accounts.form_login import FillResult, FillStatus
 from services.accounts.results import NEEDS_MANUAL_SIGN_IN, OUTCOME_MESSAGES, RETRYABLE
-from services.accounts.vault import SESSION_FILE, SessionVault
+
+SECRET = "hunter2-S3cr3t!"
 
 
 class FakeApi:
     """Stands in for RiotClientAPI."""
 
     def __init__(self, running=True, signed_in_as=None, sign_out_works=True,
-                 connectable=True, accepts_session=True):
+                 connectable=True):
         self.running = running
         self.signed_in_as = signed_in_as
         self.sign_out_works = sign_out_works
         self.connectable = connectable
         self.is_connected = connectable
-        #: Whether a restored session is honoured when the client restarts.
-        #: False models an expired session: the client comes up logged out.
-        self.accepts_session = accepts_session
-        self.pending_account = None
+        self.auth = None
         self.calls = []
 
     def is_riot_client_running(self):
         return self.running
 
     def connect(self):
-        self.is_connected = self.connectable
-        return self.connectable
+        self.is_connected = self.connectable and self.running
+        return self.is_connected
 
     def is_signed_in(self):
         return self.signed_in_as is not None
@@ -57,77 +55,102 @@ class FakeApi:
             return None
         return {"preferred_username": self.signed_in_as}
 
+    def get_authenticator_state(self):
+        return self.auth
+
     def sign_out(self):
-        self.calls.append(("sign_out", None))
+        self.calls.append("sign_out")
         if self.sign_out_works:
             self.signed_in_as = None
         return self.sign_out_works
 
+    def launch_league_of_legends(self):
+        self.calls.append("launch_league")
+        return True
+
+
+class FakeForm:
+    """Stands in for RiotFormFiller. `riot` decides what Riot does on submit."""
+
+    def __init__(self, api, riot="accept", window=True, status=FillStatus.SUBMITTED):
+        self.api = api
+        self.riot = riot
+        self.window = window
+        self.status = status
+        self.typed = []
+        self.events = []
+
+    def available(self):
+        return True
+
+    def wait_for_window(self, timeout_s=None):
+        return 7 if self.window else 0
+
+    def form_ready(self, hwnd):
+        return None
+
+    def captcha_visible(self):
+        return True if self.riot == "captcha" else None
+
+    def fill_and_submit(self, username, password, on_step=None):
+        # The ordering guarantee: nobody is signed in while we type.
+        self.events.append(("signed_in_while_typing", self.api.signed_in_as))
+        self.typed.append((username, password))
+        if self.status is not FillStatus.SUBMITTED:
+            return FillResult(self.status, 3)
+        if self.riot == "accept":
+            self.api.signed_in_as = username.lower()
+        elif self.riot == "other":
+            self.api.signed_in_as = "someone_else"
+        elif self.riot == "bad_password":
+            self.api.auth = {"type": "auth", "error": "auth_failure"}
+        elif self.riot == "rate_limited":
+            self.api.auth = {"type": "auth", "error": "rate_limited"}
+        elif self.riot == "2fa":
+            self.api.auth = {"type": "multifactor", "multifactor": {"method": "email"}}
+        return FillResult(FillStatus.SUBMITTED, 1)
+
 
 ACCOUNTS = [
     {"label": "Main", "username": "main_user"},
-    {"label": "Smurf", "username": "smurf_user"},
+    {"label": "Smurf", "username": "Smurf_User"},
+    {"label": "NoPw", "username": "nopw_user"},
 ]
+PASSWORDS = {0: "main-pw", 1: SECRET, 2: ""}
 
 
 class Harness:
-    """A switcher wired to a fake client and a real vault on a temp directory."""
-
-    def __init__(self, api, accounts=None, saved=(), can_observe_client=True,
-                 client_stops=True):
+    def __init__(self, api, riot="accept", window=True, status=FillStatus.SUBMITTED,
+                 verify_timeout_s=0.3):
         self.api = api
-        self.tmp = tempfile.mkdtemp()
-        self.live = os.path.join(self.tmp, "riot-data")
-        os.makedirs(self.live)
-        self.vault = SessionVault(os.path.join(self.tmp, "app"), data_dir=self.live)
-        self.state = {
-            "active": None, "signed_out": 0, "killed": 0,
-            "stopped": 0, "launched": 0, "launched_league": None,
-        }
-        self._client_stops = client_stops
+        self.form = FakeForm(api, riot, window, status)
+        self.state = {"active": None, "signed_out": 0, "killed": 0, "launched": []}
+        self.progress = []
+        harness = self
 
-        if api.signed_in_as:
-            self.write_live_session(api.signed_in_as)
-        for name in saved:
-            self.write_live_session(name)
-            self.vault.capture(name)
-        if api.signed_in_as:
-            self.write_live_session(api.signed_in_as)
-        elif saved:
-            self._clear_live()
+        class Bus:
+            def emit(self, channel, payload):
+                harness.progress.append((channel, payload))
 
         self.switcher = AccountSwitcher(
             session=RiotSession(api),
-            accounts_provider=lambda: accounts if accounts is not None else ACCOUNTS,
-            vault=self.vault,
+            accounts_provider=lambda: ACCOUNTS,
+            password_provider=lambda i: PASSWORDS.get(i, ""),
+            form_filler=self.form,
             on_success=self._on_success,
             on_signed_out=self._on_signed_out,
             kill_games=self._kill,
-            stop_client=self._stop,
-            client_running=(self._running if can_observe_client else None),
+            client_running=lambda: api.running,
             launch_client=self._launch,
+            bus=Bus(),
             sign_out_timeout_s=0.05,
             client_timeout_s=0.2,
-            shutdown_timeout_s=0.3,
-            settle_s=0.0,
+            sign_in_screen_timeout_s=0.2,
+            verify_timeout_s=verify_timeout_s,
+            nudge_after_s=0.05,
+            reopen_after_s=0.05,
+            poll_s=0.01,
         )
-
-    # -- fake machine ----------------------------------------------------
-    def write_live_session(self, name):
-        with open(os.path.join(self.live, SESSION_FILE), "w", encoding="utf-8") as f:
-            f.write("ssid: %s\n" % name)
-
-    def _clear_live(self):
-        path = os.path.join(self.live, SESSION_FILE)
-        if os.path.exists(path):
-            os.remove(path)
-
-    def live_owner(self):
-        path = os.path.join(self.live, SESSION_FILE)
-        if not os.path.exists(path):
-            return None
-        with open(path, encoding="utf-8") as f:
-            return f.read().strip().split(": ")[1]
 
     def _on_success(self, i):
         self.state["active"] = i
@@ -139,301 +162,259 @@ class Harness:
         self.state["killed"] += 1
         return True
 
-    def _stop(self):
-        self.state["stopped"] += 1
-        if self._client_stops:
-            self.api.running = False
-            self.api.signed_in_as = None
-        return True
-
-    def _running(self):
-        return self.api.running
-
     def _launch(self, league=True):
-        self.state["launched"] += 1
-        self.state["launched_league"] = league
+        self.state["launched"].append(league)
         self.api.running = True
-        # The client comes back up as whoever the restored session names —
-        # unless that session is no longer accepted.
-        if self.api.accepts_session:
-            self.api.signed_in_as = self.live_owner()
 
-    def close(self):
-        shutil.rmtree(self.tmp, ignore_errors=True)
+    def messages(self):
+        return [getattr(p, "message", "") for _, p in self.progress]
+
+    def phases(self):
+        return [getattr(p, "phase", None) for _, p in self.progress]
 
 
 class SwitchSequenceTests(unittest.TestCase):
-    def tearDown(self):
-        harness = getattr(self, "h", None)
-        if harness:
-            harness.close()
+    def test_signs_out_then_types_the_target_credentials_then_launches_league(self):
+        h = Harness(FakeApi(signed_in_as="main_user"))
+        result = h.switcher.switch_to(1)
+        self.assertIs(result.outcome, SwitchOutcome.SUCCESS, result)
+        self.assertEqual(h.form.typed, [("Smurf_User", SECRET)])
+        self.assertEqual(h.form.events, [("signed_in_while_typing", None)])
+        self.assertEqual(h.api.calls, ["sign_out", "launch_league"])
+        self.assertEqual(h.state["active"], 1)
+        self.assertGreaterEqual(h.state["killed"], 1)  # League closed before sign-out
 
-    def test_a_saved_session_is_restored_and_the_client_restarted(self):
-        self.h = Harness(FakeApi(signed_in_as="main_user"), saved=["smurf_user"])
-        result = self.h.switcher.switch_to(1)
-        self.assertIs(result.outcome, SwitchOutcome.SUCCESS)
-        self.assertEqual(self.h.live_owner(), "smurf_user")
-        self.assertEqual(self.h.state["active"], 1)
-        self.assertEqual(self.h.state["launched"], 1)
+    def test_every_step_is_announced_in_order(self):
+        h = Harness(FakeApi(signed_in_as="main_user"))
+        h.switcher.switch_to(1)
+        phases = [p for p in h.phases() if p]
+        order = [SwitchPhase.SIGNING_OUT, SwitchPhase.WAITING_FOR_SIGN_IN,
+                 SwitchPhase.FILLING_FORM, SwitchPhase.VERIFYING, SwitchPhase.LAUNCHING]
+        positions = [phases.index(p) for p in order]
+        self.assertEqual(positions, sorted(positions), phases)
+        joined = " | ".join(h.messages())
+        self.assertIn("Signing out main_user", joined)
+        self.assertIn("Waiting for the Riot sign-in screen", joined)
+        self.assertIn("don't click other windows", joined)
 
-    def test_no_password_is_ever_asked_for_or_sent(self):
-        """Riot refuses a credential sign-in without a solved captcha, so a
-        password is not merely unnecessary here — it cannot work. The switcher
-        must not take one, hold one, or call anything that sends one."""
-        import inspect
-        import re
-
-        signature = inspect.signature(AccountSwitcher.__init__)
-        self.assertNotIn("password_provider", signature.parameters)
-        for name in signature.parameters:
-            self.assertNotIn("password", name.lower())
-
-        source = inspect.getsource(AccountSwitcher)
-        code = "\n".join(
-            line for line in source.split("\n")
-            if not line.strip().startswith("#")
-        )
-        self.assertIsNone(
-            re.search(r"\.sign_in\s*\(", code),
-            "the switcher still calls a credential sign-in",
-        )
-        self.assertIsNone(
-            re.search(r"self\._password", code),
-            "the switcher still holds a password provider",
-        )
-
-    def test_an_account_with_no_saved_session_fails_before_closing_anything(self):
-        """A switch that cannot succeed must not take your client down first."""
-        self.h = Harness(FakeApi(signed_in_as="main_user"))
-        result = self.h.switcher.switch_to(1)
-        self.assertIs(result.outcome, SwitchOutcome.NO_SAVED_SESSION)
-        self.assertIs(result.phase, SwitchPhase.PREPARING)
-        self.assertEqual(self.h.state["stopped"], 0)
-        self.assertEqual(self.h.state["killed"], 0)
-        self.assertTrue(self.h.api.running)
-
-    def test_an_expired_session_fails_before_closing_anything(self):
-        self.h = Harness(FakeApi(signed_in_as="main_user"), saved=["smurf_user"])
-        slot = self.h.vault._slot("smurf_user")
-        os.remove(os.path.join(slot, "session.json"))
-        ancient = time.time() - 60 * 86400
-        os.utime(os.path.join(slot, SESSION_FILE), (ancient, ancient))
-
-        result = self.h.switcher.switch_to(1)
-        self.assertIs(result.outcome, SwitchOutcome.SESSION_EXPIRED)
-        self.assertEqual(self.h.state["stopped"], 0)
-
-    def test_switching_away_keeps_the_account_being_left(self):
-        """A → B → A must not need a manual sign-in for A."""
-        self.h = Harness(FakeApi(signed_in_as="main_user"), saved=["smurf_user"])
-        self.assertFalse(self.h.vault.info("main_user").exists)
-
-        self.h.switcher.switch_to(1)
-        self.assertTrue(
-            self.h.vault.info("main_user").exists,
-            "the outgoing account's session was lost",
-        )
-
-        result = self.h.switcher.switch_to(0)
-        self.assertIs(result.outcome, SwitchOutcome.SUCCESS)
-        self.assertEqual(self.h.live_owner(), "main_user")
+    def test_no_password_means_nothing_is_signed_out(self):
+        h = Harness(FakeApi(signed_in_as="main_user"))
+        result = h.switcher.switch_to(2)
+        self.assertIs(result.outcome, SwitchOutcome.NO_CREDENTIALS)
+        self.assertEqual(h.api.calls, [])
+        self.assertEqual(h.api.signed_in_as, "main_user")
+        self.assertIn("Edit", result.message)
 
     def test_already_active_is_a_no_op(self):
-        self.h = Harness(FakeApi(signed_in_as="main_user"), saved=["main_user"])
-        result = self.h.switcher.switch_to(0)
+        h = Harness(FakeApi(signed_in_as="smurf_user"))
+        result = h.switcher.switch_to(1)
         self.assertIs(result.outcome, SwitchOutcome.ALREADY_ACTIVE)
-        self.assertEqual(self.h.state["stopped"], 0)
-        self.assertEqual(self.h.state["active"], 0)
+        self.assertNotIn("sign_out", h.api.calls)
+        self.assertEqual(h.form.typed, [])
 
-    def test_a_client_that_will_not_close_stops_the_switch(self):
-        """Swapping the files underneath a live client is silently undone."""
-        self.h = Harness(
-            FakeApi(signed_in_as="main_user"), saved=["smurf_user"],
-            client_stops=False,
-        )
-        result = self.h.switcher.switch_to(1)
-        self.assertIs(result.outcome, SwitchOutcome.CLIENT_STILL_RUNNING)
-        self.assertIs(result.phase, SwitchPhase.CLOSING_CLIENT)
-        self.assertEqual(self.h.live_owner(), "main_user", "the session was swapped anyway")
+    def test_a_signed_out_client_goes_straight_to_the_form(self):
+        h = Harness(FakeApi(signed_in_as=None))
+        result = h.switcher.switch_to(1)
+        self.assertIs(result.outcome, SwitchOutcome.SUCCESS)
+        self.assertNotIn("sign_out", h.api.calls)
 
-    def test_a_rejected_session_is_reported_as_expired_not_success(self):
-        """The client comes back up on a login screen. Calling that success is
-        the most misleading thing this sequence could do."""
-        self.h = Harness(
-            FakeApi(signed_in_as="main_user", accepts_session=False),
-            saved=["smurf_user"],
-        )
-        result = self.h.switcher.switch_to(1)
-        self.assertIs(result.outcome, SwitchOutcome.SESSION_EXPIRED)
-        self.assertIs(result.phase, SwitchPhase.VERIFYING)
-        self.assertIsNone(self.h.state["active"])
+    def test_a_closed_riot_client_is_started_first(self):
+        h = Harness(FakeApi(running=False))
+        result = h.switcher.switch_to(1)
+        self.assertIs(result.outcome, SwitchOutcome.SUCCESS, result)
+        self.assertEqual(h.state["launched"][0], False)  # client only, not League yet
 
-    def test_a_successful_switch_recaptures_and_resets_the_clock(self):
-        """The client rewrites the session on sign-in, so what is on disk is
-        fresher than what we restored. Re-capturing is why regular use keeps a
-        session alive."""
-        self.h = Harness(FakeApi(signed_in_as="main_user"), saved=["smurf_user"])
-        slot = self.h.vault._slot("smurf_user")
-        os.utime(os.path.join(slot, SESSION_FILE), (1000, 1000))
-        before = self.h.vault.info("smurf_user").captured_at
+    def test_a_refused_sign_out_stops_before_typing(self):
+        h = Harness(FakeApi(signed_in_as="main_user", sign_out_works=False))
+        result = h.switcher.switch_to(1)
+        self.assertIs(result.outcome, SwitchOutcome.SIGN_OUT_FAILED)
+        self.assertEqual(h.form.typed, [])
+        self.assertEqual(h.api.calls.count("sign_out"), 2)  # one retry
 
-        self.h.switcher.switch_to(1)
-        self.assertGreater(self.h.vault.info("smurf_user").captured_at, before)
+    def test_no_sign_in_window_stops_before_typing(self):
+        h = Harness(FakeApi(signed_in_as="main_user"), window=False)
+        result = h.switcher.switch_to(1)
+        self.assertIs(result.outcome, SwitchOutcome.LOGIN_FORM_NOT_FOUND)
+        self.assertEqual(h.form.typed, [])
+        self.assertIn(False, h.state["launched"])  # asked the client to open once
 
-    def test_an_invalid_index_is_rejected(self):
-        self.h = Harness(FakeApi(signed_in_as="main_user"))
-        self.assertIs(
-            self.h.switcher.switch_to(9).outcome, SwitchOutcome.INVALID_ACCOUNT
-        )
+    def test_focus_lost_on_every_attempt_is_reported(self):
+        h = Harness(FakeApi(signed_in_as="main_user"), status=FillStatus.FOCUS_LOST)
+        result = h.switcher.switch_to(1)
+        self.assertIs(result.outcome, SwitchOutcome.FOCUS_LOST)
+        self.assertIn("other windows", result.message)
+        self.assertTrue(result.retryable)
+
+    def test_wrong_password(self):
+        h = Harness(FakeApi(signed_in_as="main_user"), riot="bad_password")
+        self.assertIs(h.switcher.switch_to(1).outcome, SwitchOutcome.BAD_CREDENTIALS)
+
+    def test_rate_limited(self):
+        h = Harness(FakeApi(signed_in_as="main_user"), riot="rate_limited")
+        self.assertIs(h.switcher.switch_to(1).outcome, SwitchOutcome.RATE_LIMITED)
+
+    def test_two_factor_is_announced_and_waited_for(self):
+        h = Harness(FakeApi(signed_in_as="main_user"), riot="2fa")
+        result = h.switcher.switch_to(1)
+        self.assertIs(result.outcome, SwitchOutcome.NEEDS_2FA)
+        self.assertTrue(any("two-factor" in m for m in h.messages()))
+
+    def test_two_factor_entered_by_the_user_finishes_the_switch(self):
+        api = FakeApi(signed_in_as="main_user")
+        h = Harness(api, riot="2fa", verify_timeout_s=2.0)
+        timer = threading.Timer(0.15, lambda: setattr(api, "signed_in_as", "smurf_user"))
+        timer.start()
+        try:
+            self.assertIs(h.switcher.switch_to(1).outcome, SwitchOutcome.SUCCESS)
+        finally:
+            timer.cancel()
+
+    def test_captcha_is_announced_and_reported(self):
+        h = Harness(FakeApi(signed_in_as="main_user"), riot="captcha")
+        result = h.switcher.switch_to(1)
+        self.assertIs(result.outcome, SwitchOutcome.CAPTCHA_REQUIRED)
+        self.assertTrue(any("captcha" in m.lower() for m in h.messages()))
+        self.assertIn("captcha", result.message.lower())
+
+    def test_captcha_from_the_authenticator_state_is_recognised(self):
+        api = FakeApi(signed_in_as="main_user")
+        h = Harness(api, riot="silent")
+        original = h.form.fill_and_submit
+
+        def submit(u, p, on_step=None):
+            r = original(u, p, on_step)
+            api.auth = {"type": "auth", "error": "invalid_prompt"}
+            return r
+
+        h.form.fill_and_submit = submit
+        self.assertIs(h.switcher.switch_to(1).outcome, SwitchOutcome.CAPTCHA_REQUIRED)
+
+    def test_a_stale_error_from_before_the_attempt_is_ignored(self):
+        api = FakeApi(signed_in_as="main_user")
+        api.auth = {"type": "auth", "error": "auth_failure"}
+        h = Harness(api, riot="accept")
+        self.assertIs(h.switcher.switch_to(1).outcome, SwitchOutcome.SUCCESS)
+
+    def test_silence_nudges_then_times_out(self):
+        h = Harness(FakeApi(signed_in_as="main_user"), riot="silent")
+        result = h.switcher.switch_to(1)
+        self.assertIs(result.outcome, SwitchOutcome.TIMED_OUT)
+        self.assertTrue(any("Still waiting for Riot" in m for m in h.messages()))
+        self.assertIsNot(h.state["active"], 1)
+
+    def test_signed_in_as_someone_else_is_not_success(self):
+        h = Harness(FakeApi(signed_in_as="main_user"), riot="other")
+        self.assertIs(h.switcher.switch_to(1).outcome, SwitchOutcome.WRONG_ACCOUNT)
 
     def test_league_is_launched_only_when_asked(self):
-        self.h = Harness(FakeApi(signed_in_as="main_user"), saved=["smurf_user"])
-        self.h.switcher.switch_to(1, launch_league=False)
-        self.assertIs(self.h.state["launched_league"], False)
+        h = Harness(FakeApi(signed_in_as="main_user"))
+        h.switcher.switch_to(1, launch_league=False)
+        self.assertNotIn("launch_league", h.api.calls)
 
-    def test_a_session_is_filed_under_the_username_not_the_label(self):
-        """Renaming the display label must not orphan the saved session."""
-        self.assertEqual(
-            AccountSwitcher.account_key({"label": "Main", "username": "Main_User"}),
-            "main_user",
-        )
-        self.assertEqual(
-            AccountSwitcher.account_key({"label": "Only A Label"}), "only a label"
-        )
+    def test_an_invalid_index_is_rejected(self):
+        h = Harness(FakeApi())
+        self.assertIs(h.switcher.switch_to(9).outcome, SwitchOutcome.INVALID_ACCOUNT)
 
 
-class CaptureTests(unittest.TestCase):
-    def tearDown(self):
-        self.h.close()
+class PasswordHygieneTests(unittest.TestCase):
+    def test_the_password_is_never_in_messages_results_or_logs(self):
+        logged = []
 
-    def test_capturing_after_a_manual_sign_in_is_the_way_sessions_appear(self):
-        self.h = Harness(FakeApi(signed_in_as="main_user"))
-        self.h.write_live_session("main_user")
-        self.assertTrue(self.h.switcher.capture_current(0))
-        self.assertTrue(self.h.vault.info("main_user").exists)
+        def grab(*args, **kwargs):
+            logged.append(" ".join(str(a) for a in args) + " " + " ".join(
+                "%s=%s" % kv for kv in kwargs.items()))
 
-    def test_session_info_is_offered_per_account_row(self):
-        self.h = Harness(FakeApi(signed_in_as="main_user"), saved=["main_user"])
-        info = self.h.switcher.session_info(0)
-        self.assertTrue(info.exists)
-        self.assertIn("session", info.describe().lower())
-        self.assertIsNone(self.h.switcher.session_info(9))
+        for riot in ("accept", "bad_password", "silent", "captcha", "2fa"):
+            with patch("utils.logger.Logger.info", side_effect=grab), \
+                 patch("utils.logger.Logger.warning", side_effect=grab), \
+                 patch("utils.logger.Logger.error", side_effect=grab), \
+                 patch("utils.logger.Logger.debug", side_effect=grab), \
+                 patch("utils.logger.Logger.action", side_effect=grab):
+                h = Harness(FakeApi(signed_in_as="main_user"), riot=riot, verify_timeout_s=0.1)
+                result = h.switcher.switch_to(1)
+            blob = " ".join(logged) + " ".join(h.messages()) + str(result) + result.detail
+            self.assertNotIn(SECRET, blob, riot)
+
+    def test_a_crash_while_typing_does_not_echo_the_exception_text(self):
+        h = Harness(FakeApi(signed_in_as="main_user"))
+
+        def boom(u, p, on_step=None):
+            raise RuntimeError("typed " + p)
+
+        h.form.fill_and_submit = boom
+        result = h.switcher.switch_to(1)
+        self.assertIs(result.outcome, SwitchOutcome.ERROR)
+        self.assertNotIn(SECRET, str(result) + result.detail)
 
 
 class SignOutTests(unittest.TestCase):
-    def tearDown(self):
-        self.h.close()
-
     def test_sign_out_closes_league_first(self):
-        """The Riot Client refuses sign-out with other games running."""
-        self.h = Harness(FakeApi(signed_in_as="main_user"))
-        result = self.h.switcher.sign_out()
-        self.assertIs(result.outcome, SwitchOutcome.SUCCESS)
-        self.assertEqual(self.h.state["killed"], 1)
-        self.assertEqual(self.h.state["signed_out"], 1)
-
-    def test_sign_out_keeps_the_session_it_is_signing_out_of(self):
-        """Otherwise signing out silently costs the ability to switch back."""
-        self.h = Harness(FakeApi(signed_in_as="main_user"))
-        self.h.write_live_session("main_user")
-        self.h.switcher.sign_out()
-        self.assertTrue(self.h.vault.info("main_user").exists)
+        h = Harness(FakeApi(signed_in_as="main_user"))
+        self.assertIs(h.switcher.sign_out().outcome, SwitchOutcome.SUCCESS)
+        self.assertEqual(h.state["killed"], 1)
+        self.assertEqual(h.state["signed_out"], 1)
 
     def test_sign_out_when_nobody_is_signed_in_is_success(self):
-        self.h = Harness(FakeApi(signed_in_as=None))
-        self.assertIs(self.h.switcher.sign_out().outcome, SwitchOutcome.SUCCESS)
+        h = Harness(FakeApi(signed_in_as=None))
+        self.assertIs(h.switcher.sign_out().outcome, SwitchOutcome.SUCCESS)
 
     def test_a_refused_sign_out_is_reported(self):
-        self.h = Harness(FakeApi(signed_in_as="main_user", sign_out_works=False))
-        result = self.h.switcher.sign_out()
-        self.assertIs(result.outcome, SwitchOutcome.SIGN_OUT_FAILED)
+        h = Harness(FakeApi(signed_in_as="main_user", sign_out_works=False))
+        self.assertIs(h.switcher.sign_out().outcome, SwitchOutcome.SIGN_OUT_FAILED)
 
 
-class OutcomeVocabularyTests(unittest.TestCase):
+class VocabularyTests(unittest.TestCase):
     def test_every_outcome_has_a_sentence(self):
         for outcome in SwitchOutcome:
             self.assertIn(outcome, OUTCOME_MESSAGES, outcome)
             self.assertTrue(OUTCOME_MESSAGES[outcome].strip())
 
-    def test_the_session_outcomes_tell_the_user_to_sign_in_by_hand(self):
+    def test_outcomes_only_a_person_can_clear_say_by_hand(self):
         for outcome in NEEDS_MANUAL_SIGN_IN:
             self.assertIn("hand", OUTCOME_MESSAGES[outcome].lower(), outcome)
 
     def test_an_unclearable_outcome_is_not_also_offered_as_retryable(self):
-        """Retrying these is a spinner that never ends."""
         self.assertEqual(NEEDS_MANUAL_SIGN_IN & RETRYABLE, frozenset())
+
+    def test_auth_state_classification(self):
+        c = RiotSession.classify_auth_state
+        self.assertEqual(c(None), "")
+        self.assertEqual(c({"type": "success"}), "success")
+        self.assertEqual(c({"type": "multifactor"}), "multifactor")
+        self.assertEqual(c({"type": "auth", "error": "auth_failure"}), "auth_failure")
+        self.assertEqual(c({"type": "auth", "error": {"errorCode": "rate_limited"}}), "rate_limited")
+        self.assertEqual(c({"type": "auth", "error": "invalid_prompt"}), "captcha")
+        self.assertEqual(c({"type": "auth", "error": "something_new"}), "")
+        self.assertEqual(c("not a dict"), "")
 
 
 class ConcurrencyTests(unittest.TestCase):
-    def tearDown(self):
-        self.h.close()
-
     def test_one_lock_covers_switch_and_sign_out(self):
-        """The old code had a login-only flag that sign_out ignored, so you
-        could sign out halfway through a login."""
-        import threading
-
-        self.h = Harness(FakeApi(signed_in_as="main_user"), saved=["smurf_user"])
+        h = Harness(FakeApi(signed_in_as="main_user"))
         started, release = threading.Event(), threading.Event()
-        outcomes = []
+        original = h.form.fill_and_submit
 
-        original = self.h.vault.restore
-
-        def slow_restore(key):
+        def slow(u, p, on_step=None):
             started.set()
             release.wait(2.0)
-            return original(key)
+            return original(u, p, on_step)
 
-        self.h.vault.restore = slow_restore
-        worker = threading.Thread(
-            target=lambda: outcomes.append(self.h.switcher.switch_to(1))
-        )
+        h.form.fill_and_submit = slow
+        worker = threading.Thread(target=lambda: h.switcher.switch_to(1))
         worker.start()
         started.wait(2.0)
         try:
-            self.assertIs(self.h.switcher.sign_out().outcome, SwitchOutcome.BUSY)
+            self.assertIs(h.switcher.sign_out().outcome, SwitchOutcome.BUSY)
         finally:
             release.set()
             worker.join(5.0)
 
-
-class EventTests(unittest.TestCase):
-    def tearDown(self):
-        self.h.close()
-
-    def test_every_phase_of_a_switch_is_announced(self):
-        seen = []
-
-        class Bus:
-            def emit(self, channel, payload):
-                seen.append((channel, getattr(payload, "phase", None)))
-
-        self.h = Harness(FakeApi(signed_in_as="main_user"), saved=["smurf_user"])
-        self.h.switcher._bus = Bus()
-        self.h.switcher.switch_to(1)
-
-        phases = [phase for _, phase in seen if phase]
-        for expected in (
-            SwitchPhase.CAPTURING, SwitchPhase.CLOSING_CLIENT,
-            SwitchPhase.RESTORING_SESSION, SwitchPhase.LAUNCHING,
-            SwitchPhase.VERIFYING,
-        ):
-            self.assertIn(expected, phases, expected)
-
     def test_a_finished_event_is_emitted_even_when_the_switch_fails(self):
-        """Without it the UI sits disabled forever."""
         from services.accounts.results import EVENT_SWITCH_FINISHED
 
-        channels = []
-
-        class Bus:
-            def emit(self, channel, payload):
-                channels.append(channel)
-
-        self.h = Harness(FakeApi(signed_in_as="main_user"))
-        self.h.switcher._bus = Bus()
-        self.h.switcher.switch_to(1)
-        self.assertIn(EVENT_SWITCH_FINISHED, channels)
+        h = Harness(FakeApi(signed_in_as="main_user"), riot="bad_password")
+        h.switcher.switch_to(1)
+        self.assertIn(EVENT_SWITCH_FINISHED, [c for c, _ in h.progress])
 
 
 if __name__ == "__main__":

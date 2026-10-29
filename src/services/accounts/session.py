@@ -69,6 +69,41 @@ class RiotSession:
         except Exception:
             return False
 
+    def auth_state(self) -> Optional[Dict[str, Any]]:
+        """The Riot authenticator's state (GET only), or None if unreadable."""
+        try:
+            fn = getattr(self.api, "get_authenticator_state", None)
+            return fn() if callable(fn) else None
+        except Exception:
+            return None
+
+    @staticmethod
+    def classify_auth_state(state: Optional[Dict[str, Any]]) -> str:
+        """Reduce an authenticator payload to one word.
+
+        One of: "" (nothing to report), "success", "multifactor",
+        "auth_failure", "rate_limited", "captcha". Only explicit fields are
+        trusted; an unknown shape is "" rather than a guess.
+        """
+        if not isinstance(state, dict):
+            return ""
+        kind = str(state.get("type") or "").lower()
+        if kind in ("success", "multifactor"):
+            return kind
+        error = state.get("error")
+        if isinstance(error, dict):
+            error = error.get("errorCode") or error.get("code") or error.get("message")
+        error = str(error or state.get("errorCode") or "").lower()
+        if not error:
+            return ""
+        if "captcha" in error or "invalid_prompt" in error:
+            return "captcha"
+        if "rate" in error or "too_many" in error:
+            return "rate_limited"
+        if "auth_failure" in error or "invalid_credentials" in error or "credentials_invalid" in error:
+            return "auth_failure"
+        return ""
+
     def launch_league(self) -> bool:
         try:
             if hasattr(self.api, "launch_league_of_legends"):

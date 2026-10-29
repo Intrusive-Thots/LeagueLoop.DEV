@@ -245,12 +245,24 @@ class RiotClientAPI:
     # with `invalid_prompt` — the error this project chased through three
     # separate implementations before finding out why.
     #
-    # It is deleted rather than left dormant for the same reason the keyboard
-    # login above it was: a credential path that still exists in the binary
-    # can be re-enabled by a future "fallback" change, and this one handles
-    # the password. Switching goes through `services/accounts/vault.py`,
-    # which moves the session the client already has and never sees a
-    # password at all.
+    # Do not bring it back. Switching now types the stored credentials into
+    # the on-screen sign-in form instead (services/accounts/form_login.py),
+    # which is the path Riot accepts and lets the user solve a captcha.
+
+    def get_authenticator_state(self) -> Optional[dict]:
+        """Read (GET) the sign-in form's state: multifactor, errors, captcha.
+
+        Read-only. Used after LeagueLoop submits the on-screen sign-in form,
+        to tell "wrong password" from "2FA code needed" from "captcha".
+        """
+        res = self.request("GET", self.RSO_RESET, silent=True)
+        if res is not None and res.status_code == 200:
+            try:
+                body = res.json()
+                return body if isinstance(body, dict) else None
+            except Exception:
+                return None
+        return None
 
     def get_session(self) -> Optional[dict]:
         """Get the current RSO session state."""
@@ -351,18 +363,22 @@ class AccountManager:
             Logger.error("AccountManager", f"Account switcher unavailable: {exc}")
             return None
 
+        from services.accounts.form_login import RiotFormFiller  # type: ignore
         from services.accounts.vault import SessionVault  # type: ignore
 
+        # Diagnostics only (check_accounts); switching no longer restores
+        # saved sessions - see services/accounts/switcher.py.
         self.vault = SessionVault(_DATA_DIR)
 
         return AccountSwitcher(
             session=RiotSession(self.riot_client),
             accounts_provider=lambda: list(self._accounts),
+            password_provider=self.get_password,
+            form_filler=RiotFormFiller(),
             vault=self.vault,
             on_success=self._mark_active,
             on_signed_out=self._mark_signed_out,
             kill_games=lambda: self._kill_game_processes(None),
-            stop_client=self._stop_riot_client,
             client_running=self.riot_client.is_riot_client_running,
             launch_client=self._launch_riot_client,
             bus=EventBus,
@@ -811,18 +827,6 @@ class AccountManager:
                     self._accounts[match.index]["tagline"] = fill
                     dirty = True
 
-                # Auto-capture live session if vault has no usable session for this active account
-                if self._switcher and not self.can_switch_to(match.index):
-                    try:
-                        captured = self._switcher.capture_current(match.index)
-                        if captured:
-                            Logger.info(
-                                "AccountManager",
-                                f"Auto-captured live session for active account #{match.index} ({identity.display_name()})"
-                            )
-                    except Exception as exc:
-                        Logger.debug("AccountManager", "Auto-capture session failed", exc=exc)
-
             elif match.found:
                 # A label that happens to equal an in-game name is a
                 # coincidence, not an identification. Report it, do not act
@@ -951,46 +955,33 @@ class AccountManager:
             return None
         return self._switcher.session_info(idx)
 
-    def session_summary(self, idx: int) -> str:
-        """One sentence for the account row."""
-        info = self.session_info(idx)
-        return info.describe() if info is not None else ""
-
     def can_switch_to(self, idx: int) -> bool:
-        """True when this account has a session worth restoring.
+        """True when a one-click switch can work: username + stored password."""
+        return self.has_valid_credentials(idx)
 
-        This replaces `has_valid_credentials()` as the question the UI should
-        ask before offering a one-click switch — a stored password no longer
-        makes a switch possible.
-        """
-        info = self.session_info(idx)
-        return bool(info is not None and info.usable)
-
-    def capture_session(self, idx: int) -> bool:
-        """Remember the sign-in that is live right now as this account's.
-
-        The only moment a session can be created. Called after the user signs
-        in by hand, and automatically after a successful switch.
-        """
-        if self._switcher is None:
-            return False
-        captured = self._switcher.capture_current(idx)
-        if captured:
-            self._mark_active(idx)
-        return captured
+    def credential_summary(self, idx: int) -> str:
+        """One sentence for the account row - only when a switch cannot work."""
+        if not (0 <= idx < len(self._accounts)):
+            return ""
+        if not self._accounts[idx].get("username"):
+            return "No username saved - press Edit to add it."
+        if not self._accounts[idx].get("password_enc"):
+            return "No password saved - press Edit to add it."
+        if not self.has_valid_credentials(idx):
+            return ("The saved password can't be read on this PC - press Edit "
+                    "and enter it again.")
+        return ""
 
     def login_account(self, idx: int, log_func=None, completion_func=None,
                       launch_league: bool = True):
         """
         Log into a specific account, on a background thread.
 
-        Rewritten: this now performs the full, consistent sequence - reach the
-        client, sign the current account out, authenticate through the Riot
-        Client API, verify, then optionally launch League.
-
-        Previously it typed the username and password as keystrokes into
-        whatever window held focus and never signed out first, so switching
-        only worked from an already-signed-out state.
+        The sequence (services/accounts/switcher.py): make sure the Riot
+        Client is up, close League, sign the current account out, wait for the
+        sign-in form, type the stored username and password into it (focus
+        checked before every key), submit, then wait for Riot to confirm -
+        reporting 2FA, captcha, a wrong password or a timeout as such.
 
         `log_func` / `completion_func` are kept so existing callers keep
         working; new code should use `switch_to()` or listen for the
@@ -1077,20 +1068,13 @@ class AccountManager:
         except Exception:
             return None
 
-    # ─────────── Removed: keyboard login ───────────
+    # ─────────── Keyboard login ───────────
     #
-    # `_keyboard_login()` and its helpers (`_find_riot_client_window`,
-    # `_wait_for_auth_result`, `_record_login_success`) typed the username and
-    # password into the Riot Client with `pyautogui.write()`. That sends the
-    # password as keystrokes to whatever window holds focus at that instant -
-    # a notification, the client repainting, or another app stealing focus
-    # mid-type means the password lands somewhere else entirely.
-    #
-    # It was already off the login path; sign-in goes through the local client
-    # API in `services.accounts.RiotSession.sign_in`. Keeping a dormant copy
-    # meant the credential-leak path still existed in the binary and could be
-    # re-enabled by a future "fallback" change, so it is gone rather than
-    # deprecated. Git history has it if it is ever genuinely needed.
+    # The old `_keyboard_login()` used `pyautogui.write()` blind: no focus
+    # check, layout-dependent keys, fixed sleeps. Its replacement is
+    # `services/accounts/form_login.py`, which checks the Riot Client is the
+    # foreground window before every character, sends Unicode key events,
+    # retries on focus loss and never logs the password.
 
     def launch_league(self) -> bool:
         """Trigger League of Legends launch directly via the active Riot Client."""
