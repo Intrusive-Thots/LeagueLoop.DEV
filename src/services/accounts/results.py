@@ -85,6 +85,10 @@ class SwitchOutcome(Enum):
     #: The Riot Client is on the right account but League opened on another
     #: one (stale product tokens), and a full Riot restart did not fix it.
     LEAGUE_WRONG_ACCOUNT = "league_wrong_account"
+    #: League started but never finished logging in, even after restarting
+    #: League and then the Riot Client (seen live: Riot's login queue
+    #: rejected the token with "Invalid JTI claim").
+    LEAGUE_LOGIN_FAILED = "league_login_failed"
     ERROR = "error"
 
 
@@ -97,6 +101,7 @@ RETRYABLE = frozenset({
     SwitchOutcome.LOGIN_FORM_NOT_FOUND,
     SwitchOutcome.FOCUS_LOST,
     SwitchOutcome.LEAGUE_WRONG_ACCOUNT,
+    SwitchOutcome.LEAGUE_LOGIN_FAILED,
     SwitchOutcome.ERROR,
 })
 
@@ -162,6 +167,11 @@ OUTCOME_MESSAGES = {
         "The Riot Client is on the right account, but League opened on a "
         "different one, even after restarting the Riot Client. Close League "
         "and the Riot Client, then press Switch again."
+    ),
+    SwitchOutcome.LEAGUE_LOGIN_FAILED: (
+        "The Riot Client signed in, but League couldn't finish logging in, "
+        "even after restarting League and the Riot Client. Close both, open "
+        "the Riot Client, check you're signed in, then press Play."
     ),
     SwitchOutcome.ERROR: "Account switch failed.",
 }

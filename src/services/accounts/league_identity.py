@@ -17,6 +17,8 @@ from utils.logger import Logger
 
 TAG = "LeagueIdentity"
 LOGIN_SESSION = "/lol-login/v1/session"
+#: Last failure kind logged by `league_login_puuid` (keeps the log quiet).
+_last_error: Optional[str] = None
 
 
 def _default_credentials() -> Dict[str, Any]:
@@ -60,5 +62,11 @@ def league_login_puuid(
         puuid = str(body.get("puuid") or "").strip().lower()
         return puuid or None
     except Exception as exc:
-        Logger.debug(TAG, "Could not read League's login session", exc=exc)
+        # Polled every half second while League starts: log each kind of
+        # failure once (no traceback), not once per poll.
+        global _last_error
+        kind = type(exc).__name__
+        if kind != _last_error:
+            _last_error = kind
+            Logger.debug(TAG, "Could not read League's login session yet ({})".format(kind))
         return None

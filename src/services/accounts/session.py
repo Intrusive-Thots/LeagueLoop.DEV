@@ -48,6 +48,26 @@ class RiotSession:
         except Exception:
             return False
 
+    def signed_out_confirmed(self) -> bool:
+        """True only when the Riot Client positively reports nobody signed in.
+
+        No answer, a timeout or an unknown shape is *not* signed out: the
+        old check (`not is_signed_in()`) read a failed request as success,
+        which let a switch type over a session that was still alive.
+        """
+        state_fn = getattr(self.api, "signed_out_state", None)
+        if not callable(state_fn):
+            return not self.is_signed_in()
+        try:
+            if state_fn() is not True:
+                return False
+            auth_fn = getattr(self.api, "authorization_present", None)
+            if callable(auth_fn) and auth_fn() is not False:
+                return False
+        except Exception:
+            return False
+        return True
+
     def current_user(self) -> Optional[Dict[str, Any]]:
         try:
             return self.api.get_current_user()
@@ -150,7 +170,7 @@ class RiotSession:
             sleep(interval_s)
 
     def wait_until_signed_out(self, timeout_s: float = 12.0, **kw) -> bool:
-        return self.wait_until(lambda: not self.is_signed_in(), timeout_s, **kw)
+        return self.wait_until(self.signed_out_confirmed, timeout_s, **kw)
 
     def wait_until_signed_in(self, timeout_s: float = 20.0, **kw) -> bool:
         return self.wait_until(self.is_signed_in, timeout_s, **kw)

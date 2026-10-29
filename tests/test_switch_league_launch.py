@@ -159,13 +159,60 @@ class AccountMatchTests(unittest.TestCase):
         r = h.switcher.switch_to(1)
         self.assertIs(r.outcome, SwitchOutcome.LEAGUE_WRONG_ACCOUNT)
 
-    def test_league_stuck_logging_in_is_reported_as_still_loading(self):
+    # Seen live 29 Oct 2026: Riot Client on the main, League stuck with no
+    # login (404, "<unknown player>"), switch still reported "Signed in".
+    def test_stuck_league_login_is_fixed_by_restarting_league_only(self):
+        h, w, restarts = make(login_as=["pending", "same"])
+        r = h.switcher.switch_to(1)
+        self.assertIs(r.outcome, SwitchOutcome.SUCCESS, r)
+        self.assertIs(r.league_account_ok, True)
+        self.assertFalse(r.league_login_pending)
+        self.assertEqual(restarts, [])  # the Riot Client was left alone
+        self.assertEqual(len(h.form.typed), 1)
+        self.assertEqual(w.api_calls, 2)  # Play pressed once more
+        self.assertIn("pressing Play again", " | ".join(h.messages()))
+
+    def test_still_stuck_after_league_restart_does_one_full_riot_restart(self):
+        # The League relaunch also failed live: Riot's login queue refused
+        # the token ("Invalid JTI claim"). A fresh Riot sign-in is the fix.
+        h, w, restarts = make(login_as=["pending", "pending", "same"])
+        r = h.switcher.switch_to(1)
+        self.assertIs(r.outcome, SwitchOutcome.SUCCESS, r)
+        self.assertIs(r.league_account_ok, True)
+        self.assertEqual(len(restarts), 1)
+        self.assertEqual(len(h.form.typed), 2)
+        self.assertIn("League still can't log in - restarting the Riot Client",
+                      " | ".join(h.messages()))
+
+    def test_never_logging_in_is_a_failure_not_a_success(self):
+        h, w, restarts = make(login_as=["pending", "pending", "pending"])
+        r = h.switcher.switch_to(1)
+        self.assertIs(r.outcome, SwitchOutcome.LEAGUE_LOGIN_FAILED)
+        self.assertFalse(r.ok)
+        self.assertTrue(r.retryable)
+        self.assertNotIn("Signed in as", r.message)
+        self.assertEqual(len(restarts), 1)
+
+    def test_stuck_login_without_restart_hooks_fails_honestly(self):
+        h, w, restarts = make(login_as=["pending", "pending"], restart=False)
+        h.switcher._kill_games = None
+        r = h.switcher.switch_to(1)
+        self.assertIs(r.outcome, SwitchOutcome.LEAGUE_LOGIN_FAILED)
+        self.assertEqual(w.api_calls, 1)
+
+    def test_league_not_coming_back_after_its_restart_is_reported(self):
         h, w, restarts = make(login_as=["pending"])
+        orig = w._api
+        def api_once():
+            if w.api_calls >= 1:
+                w.api_calls += 1
+                return True  # second Play does nothing
+            return orig()
+        h.api.launch_league_of_legends = api_once
         r = h.switcher.switch_to(1)
         self.assertIs(r.outcome, SwitchOutcome.SUCCESS)
-        self.assertIsNone(r.league_account_ok)
-        self.assertTrue(r.league_login_pending)
-        self.assertIn("still loading", r.message)
+        self.assertIs(r.league_started, False)
+        self.assertIn("press Play", r.message)
         self.assertEqual(restarts, [])
 
     def test_already_active_account_is_also_checked(self):
@@ -209,6 +256,16 @@ class LeagueIdentityTests(unittest.TestCase):
         get = MagicMock()
         self.assertIsNone(league_login_puuid(lambda: {"port": None, "token": None}, get))
         get.assert_not_called()
+
+    def test_repeated_errors_are_logged_once_without_traceback(self):
+        import services.accounts.league_identity as li
+        li._last_error = None
+        get = MagicMock(side_effect=OSError("refused"))
+        with patch.object(li.Logger, "debug") as dbg:
+            for _ in range(5):
+                league_login_puuid(lambda: {"port": "1", "token": "t"}, get)
+        self.assertEqual(dbg.call_count, 1)
+        self.assertNotIn("exc", dbg.call_args.kwargs)
 
     def test_errors_are_none(self):
         get = MagicMock(side_effect=OSError("refused"))

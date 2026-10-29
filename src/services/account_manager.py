@@ -193,8 +193,11 @@ class RiotClientAPI:
         NOTE: This will FAIL with 'sign_out_failed_other_games_running'
         if LeagueClient.exe is still running. Caller must kill it first.
         """
-        res = self.request("DELETE", "/rso-auth/v1/session")
-        if res and res.status_code in [200, 204]:
+        # What the Riot Client's own "Sign out" does. It can hold the
+        # request open while it tears the session down, so give it time and
+        # never fire it twice on a timeout; the caller verifies the result.
+        res = self.request("DELETE", "/rso-auth/v1/session", timeout=15.0, max_attempts=1)
+        if res is not None and res.status_code in [200, 204]:
             Logger.info("RiotClientAPI", "Signed out successfully")
             return True
 
@@ -283,6 +286,41 @@ class RiotClientAPI:
                 return res.json()
             except Exception as e:
                 Logger.debug("RiotClientAPI", f"Failed to parse session response: {e}")
+        return None
+
+    def signed_out_state(self) -> Optional[bool]:
+        """True only when the Riot Client positively reports no session.
+
+        False = still signed in; None = no answer / unknown shape. A failed
+        or timed-out request is never read as "signed out".
+        """
+        res = self.request("GET", "/rso-auth/v1/session", silent=True)
+        if res is None:
+            return None
+        if res.status_code == 404:
+            return True
+        if res.status_code != 200:
+            return None
+        try:
+            body = res.json()
+        except Exception:
+            return None
+        if not isinstance(body, dict):
+            return None
+        kind = str(body.get("type") or "").lower()
+        if kind == "authenticated":
+            return False
+        return True if kind else None
+
+    def authorization_present(self) -> Optional[bool]:
+        """Does the Riot Client still hold an RSO authorization? None = can't tell."""
+        res = self.request("GET", "/rso-auth/v1/authorization", silent=True)
+        if res is None:
+            return None
+        if res.status_code == 200:
+            return True
+        if res.status_code == 404:
+            return False
         return None
 
     def get_current_user(self) -> Optional[dict]:

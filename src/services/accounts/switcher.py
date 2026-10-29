@@ -76,6 +76,8 @@ LEAGUE_SETTLE_S = 5.0
 #: After League starts, how long to wait for its login to finish so the
 #: account can be compared with the Riot Client's.
 DEFAULT_LEAGUE_LOGIN_TIMEOUT_S = 60.0
+#: How long to wait for League's processes to exit after closing them.
+LEAGUE_CLOSE_TIMEOUT_S = 10.0
 
 
 class AccountSwitcher:
@@ -398,12 +400,21 @@ class AccountSwitcher:
     # ---------------------------------------------------- launch + confirm
     def _launch_and_confirm(self, outcome, index, label, username, key,
                             launch_league, first_message, settle) -> SwitchResult:
-        """Start League, then make sure it is on the same account as the Riot Client.
+        """Start League, then make sure it is logged in as the Riot Client's account.
 
-        The Riot Client can hand League the previous account's tokens. When
-        that happens, the only fix seen to work is a full Riot Client
-        restart and a fresh sign-in - done once. A second mismatch is a
-        failure, never a success.
+        Two failure modes have been seen live, each with its own remedy,
+        each tried at most once:
+
+        * League never finishes logging in (``/lol-login/v1/session`` stays
+          404, "<unknown player>"). First remedy: close League only and
+          press Play again.
+        * League opens on a different account, or still cannot log in after
+          that (Riot's login queue rejected the Riot Client's token: "Invalid
+          JTI claim"). Remedy: a full Riot Client restart and a fresh
+          sign-in.
+
+        If League is still wrong or still not logged in after that, the
+        switch fails. It is never reported as a success.
         """
         if not launch_league:
             return self._finish(SwitchResult(outcome, SwitchPhase.DONE, index, label))
@@ -414,16 +425,26 @@ class AccountSwitcher:
                                              league_started=started))
 
         verdict = self._confirm_league_account(index)
-        if verdict != "mismatch":
+        if verdict == "unknown":
+            verdict = self._restart_league_once(index)
+            if verdict is None:
+                return self._finish(SwitchResult(outcome, SwitchPhase.DONE, index, label,
+                                                 league_started=False))
+        if verdict == "match":
             return self._confirm_result(outcome, index, label, started, verdict)
 
-        # --- League is on another account: one full Riot restart ------------
-        Logger.warning(TAG, "League opened on a different account than the Riot Client")
+        # --- wrong account, or League still can't log in: full Riot restart -
+        stuck = verdict == "unknown"
+        failed_outcome = (SwitchOutcome.LEAGUE_LOGIN_FAILED if stuck
+                          else SwitchOutcome.LEAGUE_WRONG_ACCOUNT)
+        Logger.warning(TAG, "League still could not log in after a restart" if stuck
+                       else "League opened on a different account than the Riot Client")
         if self._restart_riot_client is None:
-            return self._fail(SwitchOutcome.LEAGUE_WRONG_ACCOUNT, SwitchPhase.LAUNCHING, index, label)
+            return self._fail(failed_outcome, SwitchPhase.LAUNCHING, index, label)
         self._progress(
             SwitchPhase.LAUNCHING,
-            "League opened on a different account - restarting the Riot Client",
+            ("League still can't log in - restarting the Riot Client" if stuck
+             else "League opened on a different account - restarting the Riot Client"),
             index,
         )
         if self._kill_games:
@@ -436,8 +457,8 @@ class AccountSwitcher:
             return self._fail(SwitchOutcome.CLIENT_NOT_RUNNING, SwitchPhase.WAITING_FOR_CLIENT, index, label)
 
         if not self._already_active(key):
-            if self.session.is_signed_in():
-                # Came back on some other account: sign it out first.
+            if not self.session.signed_out_confirmed():
+                # Came back signed in (or unclear): sign out, verified, first.
                 out = self._ensure_signed_out(index)
                 if out is not None:
                     return self._fail(out, SwitchPhase.SIGNING_OUT, index, label)
@@ -454,7 +475,29 @@ class AccountSwitcher:
         verdict = self._confirm_league_account(index)
         if verdict == "mismatch":
             return self._fail(SwitchOutcome.LEAGUE_WRONG_ACCOUNT, SwitchPhase.LAUNCHING, index, label)
+        if verdict == "unknown":
+            return self._fail(SwitchOutcome.LEAGUE_LOGIN_FAILED, SwitchPhase.LAUNCHING, index, label)
         return self._confirm_result(outcome, index, label, started, verdict)
+
+    def _restart_league_once(self, index: int) -> Optional[str]:
+        """Close League (never the Riot Client), press Play again, re-check.
+
+        Returns the new verdict, "unknown" when League can't be closed here,
+        or None when League did not come back.
+        """
+        if self._kill_games is None:
+            return "unknown"
+        Logger.warning(TAG, "League did not finish logging in - restarting League once")
+        self._progress(
+            SwitchPhase.LAUNCHING,
+            "League didn't finish logging in - closing it and pressing Play again",
+            index,
+        )
+        self._close_league()
+        started = self._start_league(index, "Relaunching League of Legends", settle=True)
+        if not started:
+            return None
+        return self._confirm_league_account(index)
 
     def _confirm_result(self, outcome, index, label, started, verdict) -> SwitchResult:
         return self._finish(SwitchResult(
@@ -583,7 +626,7 @@ class AccountSwitcher:
         reopened = False
         while True:
             hwnd = self.form.wait_for_window(timeout_s=0)
-            if hwnd and not self.session.is_signed_in():
+            if hwnd and self.session.signed_out_confirmed():
                 ready = self.form.form_ready(hwnd)
                 # None: UI Automation cannot look; trust the window + settle.
                 if ready is None or ready:
@@ -666,15 +709,19 @@ class AccountSwitcher:
             time.sleep(self._poll_s)
 
     def _ensure_signed_out(self, index: int = -1) -> Optional[SwitchOutcome]:
-        """Sign out whoever is signed in. Returns None on success, else why not.
+        """Sign out the way a person does. None once verified, else why not.
 
-        League must be closed first - the Riot Client refuses sign-out with
-        `sign_out_failed_other_games_running` while it is up.
+        1. close League and wait until it is really gone - the Riot Client
+           refuses sign-out (`sign_out_failed_other_games_running`) or
+           leaves the request hanging while it is up;
+        2. the Riot Client's own sign-out (DELETE /rso-auth/v1/session);
+        3. verify: the client must positively report no session and no
+           authorization. A failed or unanswered request is never success.
         """
         if not self.session.connect():
             return SwitchOutcome.CLIENT_UNREACHABLE
 
-        if not self.session.is_signed_in():
+        if self.session.signed_out_confirmed():
             return None
 
         current = ""
@@ -684,26 +731,43 @@ class AccountSwitcher:
             current = ""
 
         self._progress(SwitchPhase.SIGNING_OUT, "Closing League", index)
-        if self._kill_games:
-            self._safely(self._kill_games)
+        self._close_league()
 
         self._progress(
             SwitchPhase.SIGNING_OUT,
             "Signing out {}".format(current) if current else "Signing out",
             index,
         )
-        self.session.sign_out()
-        if not self.session.wait_until_signed_out(self._sign_out_timeout_s):
-            # One retry: League can take a moment to release the client.
-            if self._kill_games:
-                self._safely(self._kill_games)
-            self.session.sign_out()
-            if not self.session.wait_until_signed_out(self._sign_out_timeout_s):
-                return SwitchOutcome.SIGN_OUT_FAILED
+        for attempt in (1, 2):
+            accepted = bool(self.session.sign_out())
+            if self.session.wait_until_signed_out(self._sign_out_timeout_s):
+                break
+            Logger.warning(
+                TAG,
+                "Sign-out not confirmed by the Riot Client (attempt {}, request "
+                "{})".format(attempt, "accepted" if accepted else "failed"),
+            )
+            if attempt == 1:
+                # League can take a moment to release the client.
+                self._close_league()
+        else:
+            return SwitchOutcome.SIGN_OUT_FAILED
 
+        Logger.info(TAG, "Signed out - verified with the Riot Client")
         if self._on_signed_out:
             self._safely(self._on_signed_out)
         return None
+
+    def _close_league(self) -> None:
+        """Kill League's processes and wait (bounded) for them to exit."""
+        if not self._kill_games:
+            return
+        self._safely(self._kill_games)
+        if self._league_running is None:
+            return
+        deadline = time.monotonic() + LEAGUE_CLOSE_TIMEOUT_S
+        while self._league_is_running() and time.monotonic() < deadline:
+            time.sleep(self._poll_s)
 
     @staticmethod
     def _safely(fn: Callable, *args) -> Any:

@@ -133,11 +133,11 @@ class TestAccountSwitcherUnit(unittest.TestCase):
 
         # Client reachable but not signed in
         self.session.connect.return_value = True
-        self.session.is_signed_in.return_value = False
+        self.session.signed_out_confirmed.return_value = True
         self.assertIsNone(self.switcher._ensure_signed_out())
 
         # Sign out failed timeout
-        self.session.is_signed_in.return_value = True
+        self.session.signed_out_confirmed.return_value = False
         self.session.wait_until_signed_out.return_value = False
         self.assertEqual(self.switcher._ensure_signed_out(), SwitchOutcome.SIGN_OUT_FAILED)
 
