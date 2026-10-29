@@ -2335,10 +2335,13 @@ class LCUClient:
                 return False
             if not league.get("connected"):
                 return False  # let request failures / connect() handle a closed client
+            # Port and token belong to LeagueClient.exe and change only when it
+            # restarts. The PID does not identify the session: the scan prefers
+            # LeagueClientUx, which League closes during a game and reopens
+            # after it, so comparing PIDs flagged a "restart" at every game.
             same = (
                 str(league.get("port")) == str(self.port)
                 and league.get("token") == self.auth_token
-                and (self._client_pid is None or league.get("pid") == self._client_pid)
             )
             if same:
                 return False

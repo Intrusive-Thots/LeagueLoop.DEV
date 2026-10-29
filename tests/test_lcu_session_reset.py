@@ -59,9 +59,17 @@ class CheckClientChangedTests(unittest.TestCase):
         self.assertEqual(c._last_scan_time, 0.0)
         emit.assert_called_once_with("lcu_connected", False)
 
-    def test_new_pid_alone_counts(self):
+    def test_ux_pid_change_alone_is_not_a_restart(self):
+        # League closes LeagueClientUx during a game; port and token stay.
         c = _lcu()
-        changed, _ = self._run(c, {"connected": True, "port": 1111, "token": "t-old", "pid": 99})
+        changed, emit = self._run(c, {"connected": True, "port": 1111, "token": "t-old", "pid": 99})
+        self.assertFalse(changed)
+        self.assertTrue(c.is_connected)
+        emit.assert_not_called()
+
+    def test_new_token_same_port_counts(self):
+        c = _lcu()
+        changed, _ = self._run(c, {"connected": True, "port": 1111, "token": "t-new", "pid": 10})
         self.assertTrue(changed)
 
     def test_not_connected_or_no_client_is_noop(self):
