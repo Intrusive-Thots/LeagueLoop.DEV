@@ -26,6 +26,7 @@ from core.container import ApplicationContainer  # type: ignore
 from services.automation import AutomationEngine  # type: ignore
 from utils.logger import Logger  # type: ignore
 from utils.path_utils import get_asset_path  # type: ignore
+from services.lcu_session import lcu_session_key  # type: ignore
 from core.constants import (  # type: ignore
     SIDEBAR_WIDTH, SIDEBAR_HEIGHT, DOCKING_POLL_INTERVAL, DOCKING_IDLE_INTERVAL,
     CONNECTION_POLL_INTERVAL, CONNECTION_ERROR_INTERVAL,
@@ -258,18 +259,32 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
                 "this run.",
             )
             return
-        if not self.lcu.is_connected:
-            default_idx = self.account_manager.get_default_account_index()
-            if default_idx >= 0:
-                Logger.info("SYS", "Auto-loading default account...")
-                if hasattr(self, "sidebar") and self.sidebar.winfo_exists():
-                    self.sidebar.update_action_log("Auto-loading default account...")
-                if not self.account_manager.riot_client.is_riot_client_running():
-                    self._hotkey_launch_client()
-                self.after(3000, lambda: self.account_manager.login_account(
-                    default_idx,
-                    log_func=self.sidebar.update_action_log if hasattr(self, "sidebar") else None
-                ))
+        if self.lcu.is_connected:
+            return
+        ok, why = self.account_manager.should_auto_login_default()
+        if not ok:
+            Logger.info("SYS", f"Skipping auto-login: {why}.")
+            return
+        default_idx = self.account_manager.get_default_account_index()
+        Logger.info("SYS", "Auto-loading default account...")
+        if hasattr(self, "sidebar") and self.sidebar.winfo_exists():
+            self.sidebar.update_action_log("Auto-loading default account...")
+        if not self.account_manager.riot_client.is_riot_client_running():
+            self._hotkey_launch_client()
+
+        def _go():
+            # Checked again: a Riot Client started a moment ago may have
+            # signed itself in ("Stay signed in"), and typing would sign it out.
+            ok_now, why_now = self.account_manager.should_auto_login_default()
+            if not ok_now or self.lcu.is_connected:
+                Logger.info("SYS", f"Skipping auto-login: {why_now or 'League is already running'}.")
+                return
+            self.account_manager.login_account(
+                default_idx,
+                log_func=self.sidebar.update_action_log if hasattr(self, "sidebar") else None
+            )
+
+        self.after(3000, _go)
 
     def _ensure_taskbar_presence(self):
         """Ensure borderless overrideredirect window is visible in the Windows taskbar."""
@@ -533,13 +548,20 @@ class LeagueLoopApp(ctk.CTk, TkinterDnD.DnDWrapper):
 
     def connection_loop(self):
         """Poll LCU connection and keep state in sync."""
-        last_connected = None
+        last_key = None
         while self.running:
             try:
+                checker = getattr(self.lcu, "check_client_changed", None)
+                if callable(checker):
+                    checker()
                 self.lcu.connect(silent=True)
                 now = bool(self.lcu.is_connected)
-                if last_connected != now:
-                    last_connected = now
+                # The generation moves on every new connection, so a League
+                # restart between two polls (connected -> connected) still
+                # counts as a change and the sidebar drops the old session.
+                key = lcu_session_key(now, getattr(self.lcu, "connection_generation", None))
+                if last_key != key:
+                    last_key = key
                     if hasattr(self, "sidebar") and self.sidebar.winfo_exists():
                         status = "Connected" if now else "Disconnected"
                         self.after(0, lambda s=status: self.sidebar.update_action_log(f"LCU {s}") if hasattr(self.sidebar, "update_action_log") else None)

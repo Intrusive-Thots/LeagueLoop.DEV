@@ -59,6 +59,17 @@ class RiotSession:
         info = self.current_user() or {}
         return str(info.get("preferred_username") or "").lower()
 
+    def current_subject(self) -> str:
+        """The signed-in account's PUUID (RSO subject), lowercased, or ""."""
+        try:
+            fn = getattr(self.api, "get_auth_status", None)
+            data = fn() if callable(fn) else None
+        except Exception:
+            return ""
+        if not isinstance(data, dict):
+            return ""
+        return str(data.get("subject") or "").strip().lower()
+
     # `sign_in()` lived here and is gone: Riot's credential flow requires a
     # solved captcha, so there is no request this object could make that would
     # sign anybody in. Sessions are restored by `services/accounts/vault.py`.

@@ -67,6 +67,9 @@ class SidebarWidget(ctk.CTkFrame):
         self._play_again_in_flight = False
         
         EventBus.on("lobby_event", self._on_lobby_event)
+        # A finished switch means a different account: nothing account-scoped
+        # on screen (friends, header, loot) is valid any more.
+        EventBus.on("account_switch_finished", self._on_account_switch_finished)
 
         self._setup_ui()
         self.after(100, self._load_icons_async)
@@ -1222,9 +1225,50 @@ class SidebarWidget(ctk.CTkFrame):
                 self.after(0, lambda: self._on_mode_change(detected_mode, create_lobby=False))
 
     # ── Handlers ──
+    def _on_account_switch_finished(self, result=None):
+        """EventBus (worker thread): a switch ended - drop the old account's view."""
+        if result is not None and not getattr(result, "ok", False):
+            return
+        try:
+            EventBus.invoke_thread_safe(self, self.reset_client_scope)
+        except Exception as exc:
+            Logger.debug("AppSidebar", "_on_account_switch_finished suppressed an error", exc=exc)
+
+    def reset_client_scope(self):
+        """Forget everything tied to the previous League session or account.
+
+        Without this the header kept "Client not running / Offline" after a
+        reconnect (phase dedup saw None -> None and never repainted) and the
+        friend list kept the previous account's friends.
+        """
+        try:
+            if not self.winfo_exists():
+                return
+        except Exception:
+            return
+        lcu = getattr(self, "lcu", None) or getattr(self.master, "lcu", None)
+        connected = bool(lcu is not None and getattr(lcu, "is_connected", False) is True)
+        self._last_ui_phase = None
+        self._current_game_phase = "None"
+        try:
+            self._stop_local_queue_timer()
+        except Exception as exc:
+            Logger.debug("AppSidebar", "reset_client_scope timer suppressed an error", exc=exc)
+        try:
+            self._set_header_state("idle" if connected else "offline")
+        except Exception as exc:
+            Logger.debug("AppSidebar", "reset_client_scope header suppressed an error", exc=exc)
+        fl = getattr(self, "friend_list", None)
+        if fl is not None and hasattr(fl, "reset_for_new_session"):
+            try:
+                fl.reset_for_new_session(fetch=connected)
+            except Exception as exc:
+                Logger.debug("AppSidebar", "reset_client_scope friends suppressed an error", exc=exc)
+
     def on_lcu_connection_changed(self, connected: bool):
-        """Handles LCU connection state changes."""
+        """Handles LCU connection state changes (incl. a new session while connected)."""
         if not self.winfo_exists(): return
+        self.reset_client_scope()
         if connected:
             def _update_queues_bg():
                 try:

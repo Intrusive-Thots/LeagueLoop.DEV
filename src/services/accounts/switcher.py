@@ -66,6 +66,18 @@ NUDGE_AFTER_S = 8.0
 POLL_S = 0.5
 
 
+#: After sign-in, how long to keep trying to get League on screen.
+DEFAULT_LEAGUE_START_TIMEOUT_S = 60.0
+#: Ask again (API, then RiotClientServices.exe) if League hasn't appeared.
+LEAGUE_RETRY_AFTER_S = 12.0
+#: The Riot Client is still loading the account's products right after
+#: sign-in; a launch request sent in that instant is silently dropped.
+LEAGUE_SETTLE_S = 5.0
+#: After League starts, how long to wait for its login to finish so the
+#: account can be compared with the Riot Client's.
+DEFAULT_LEAGUE_LOGIN_TIMEOUT_S = 60.0
+
+
 class AccountSwitcher:
     """Runs account switches as one ordered, observable sequence."""
 
@@ -88,6 +100,14 @@ class AccountSwitcher:
         nudge_after_s: float = NUDGE_AFTER_S,
         reopen_after_s: float = REOPEN_AFTER_S,
         poll_s: float = POLL_S,
+        league_running: Optional[Callable[[], bool]] = None,
+        launch_league_exe: Optional[Callable[[], bool]] = None,
+        league_start_timeout_s: float = DEFAULT_LEAGUE_START_TIMEOUT_S,
+        league_retry_after_s: float = LEAGUE_RETRY_AFTER_S,
+        league_settle_s: float = LEAGUE_SETTLE_S,
+        league_identity: Optional[Callable[[], Optional[str]]] = None,
+        restart_riot_client: Optional[Callable[[], Any]] = None,
+        league_login_timeout_s: float = DEFAULT_LEAGUE_LOGIN_TIMEOUT_S,
         vault: Any = None,
         **_legacy: Any,
     ):
@@ -110,6 +130,16 @@ class AccountSwitcher:
         self._nudge_after_s = nudge_after_s
         self._reopen_after_s = reopen_after_s
         self._poll_s = poll_s
+        self._league_running = league_running
+        self._launch_league_exe = launch_league_exe
+        self._league_start_timeout_s = league_start_timeout_s
+        self._league_retry_after_s = league_retry_after_s
+        self._league_settle_s = league_settle_s
+        #: Returns League's signed-in PUUID once its login finished, else None.
+        self._league_identity = league_identity
+        #: Stops the Riot Client completely (used once, on an account mismatch).
+        self._restart_riot_client = restart_riot_client
+        self._league_login_timeout_s = league_login_timeout_s
 
         self._lock = threading.Lock()
         self._phase = SwitchPhase.IDLE
@@ -301,11 +331,9 @@ class AccountSwitcher:
         if self._already_active(key):
             if self._on_success:
                 self._safely(self._on_success, index)
-            if launch_league:
-                self._progress(SwitchPhase.LAUNCHING, "Launching League of Legends", index)
-                self.session.launch_league()
-            return self._finish(
-                SwitchResult(SwitchOutcome.ALREADY_ACTIVE, SwitchPhase.DONE, index, label)
+            return self._launch_and_confirm(
+                SwitchOutcome.ALREADY_ACTIVE, index, label, username, key,
+                launch_league, "Launching League of Legends", settle=False,
             )
 
         # --- 4. sign the current account out ---------------------------------
@@ -313,6 +341,20 @@ class AccountSwitcher:
         if outcome is not None:
             return self._fail(outcome, SwitchPhase.SIGNING_OUT, index, label)
 
+        # --- 5-7. sign-in form, type, verify ---------------------------------
+        failed = self._sign_in_with_form(index, label, username, key)
+        if failed is not None:
+            return failed
+
+        if self._on_success:
+            self._safely(self._on_success, index)
+        return self._launch_and_confirm(
+            SwitchOutcome.SUCCESS, index, label, username, key,
+            launch_league, "Signed in - launching League of Legends", settle=True,
+        )
+
+    def _sign_in_with_form(self, index: int, label: str, username: str, key: str) -> Optional[SwitchResult]:
+        """Wait for the sign-in form, type, submit, verify. None on success."""
         # --- 5. wait for the sign-in form -----------------------------------
         self._progress(SwitchPhase.WAITING_FOR_SIGN_IN, "Waiting for the Riot sign-in screen", index)
         if not self._wait_for_sign_in_screen():
@@ -351,13 +393,157 @@ class AccountSwitcher:
         if verdict is not None:
             outcome, detail = verdict
             return self._fail(outcome, SwitchPhase.VERIFYING, index, label, detail)
+        return None
 
+    # ---------------------------------------------------- launch + confirm
+    def _launch_and_confirm(self, outcome, index, label, username, key,
+                            launch_league, first_message, settle) -> SwitchResult:
+        """Start League, then make sure it is on the same account as the Riot Client.
+
+        The Riot Client can hand League the previous account's tokens. When
+        that happens, the only fix seen to work is a full Riot Client
+        restart and a fresh sign-in - done once. A second mismatch is a
+        failure, never a success.
+        """
+        if not launch_league:
+            return self._finish(SwitchResult(outcome, SwitchPhase.DONE, index, label))
+
+        started = self._start_league(index, first_message, settle=settle)
+        if not started or self._league_identity is None:
+            return self._finish(SwitchResult(outcome, SwitchPhase.DONE, index, label,
+                                             league_started=started))
+
+        verdict = self._confirm_league_account(index)
+        if verdict != "mismatch":
+            return self._confirm_result(outcome, index, label, started, verdict)
+
+        # --- League is on another account: one full Riot restart ------------
+        Logger.warning(TAG, "League opened on a different account than the Riot Client")
+        if self._restart_riot_client is None:
+            return self._fail(SwitchOutcome.LEAGUE_WRONG_ACCOUNT, SwitchPhase.LAUNCHING, index, label)
+        self._progress(
+            SwitchPhase.LAUNCHING,
+            "League opened on a different account - restarting the Riot Client",
+            index,
+        )
+        if self._kill_games:
+            self._safely(self._kill_games)
+        self._safely(self._restart_riot_client)
+        if self._launch_client:
+            self._safely(self._launch_client, False)
+        self._progress(SwitchPhase.WAITING_FOR_CLIENT, "Waiting for the Riot Client to start", index)
+        if not self.session.wait_until_client_ready(self._client_timeout_s):
+            return self._fail(SwitchOutcome.CLIENT_NOT_RUNNING, SwitchPhase.WAITING_FOR_CLIENT, index, label)
+
+        if not self._already_active(key):
+            if self.session.is_signed_in():
+                # Came back on some other account: sign it out first.
+                out = self._ensure_signed_out(index)
+                if out is not None:
+                    return self._fail(out, SwitchPhase.SIGNING_OUT, index, label)
+            failed = self._sign_in_with_form(index, label, username, key)
+            if failed is not None:
+                return failed
         if self._on_success:
             self._safely(self._on_success, index)
-        if launch_league:
-            self._progress(SwitchPhase.LAUNCHING, "Signed in - launching League of Legends", index)
-            self.session.launch_league()
-        return self._finish(SwitchResult(SwitchOutcome.SUCCESS, SwitchPhase.DONE, index, label))
+
+        started = self._start_league(index, "Signed in again - launching League of Legends", settle=True)
+        if not started:
+            return self._finish(SwitchResult(outcome, SwitchPhase.DONE, index, label,
+                                             league_started=started))
+        verdict = self._confirm_league_account(index)
+        if verdict == "mismatch":
+            return self._fail(SwitchOutcome.LEAGUE_WRONG_ACCOUNT, SwitchPhase.LAUNCHING, index, label)
+        return self._confirm_result(outcome, index, label, started, verdict)
+
+    def _confirm_result(self, outcome, index, label, started, verdict) -> SwitchResult:
+        return self._finish(SwitchResult(
+            outcome, SwitchPhase.DONE, index, label,
+            league_started=started,
+            league_account_ok=True if verdict == "match" else None,
+            league_login_pending=verdict == "unknown",
+        ))
+
+    def _confirm_league_account(self, index: int) -> str:
+        """"match", "mismatch" or "unknown" (League never finished logging in)."""
+        self._progress(SwitchPhase.LAUNCHING, "Checking League is on the same account", index)
+        deadline = time.monotonic() + self._league_login_timeout_s
+        while True:
+            league = self._safely(self._league_identity)
+            if league:
+                riot = self.session.current_subject()
+                if not riot:
+                    return "unknown"
+                same = str(league).strip().lower() == riot
+                Logger.info(TAG, "League account matches the Riot Client" if same
+                            else "League account differs from the Riot Client")
+                return "match" if same else "mismatch"
+            if time.monotonic() >= deadline:
+                Logger.warning(TAG, "League did not finish logging in; account not confirmed")
+                return "unknown"
+            time.sleep(self._poll_s)
+
+    # ------------------------------------------------------------- League
+    def _league_is_running(self) -> bool:
+        return bool(self._safely(self._league_running)) if self._league_running else False
+
+    def _start_league(self, index: int, first_message: str, settle: bool = False) -> Optional[bool]:
+        """Press Play: ask the Riot Client to launch League, and make sure it did.
+
+        The local API launch (what the Play button does) is tried first. The
+        Riot Client often answers it late or not at all - and right after a
+        sign-in it can drop it while it is still loading the account - so
+        success is judged by the League process appearing, not by the
+        response. If League has not appeared after a while the request is
+        repeated, then handed to RiotClientServices.exe
+        (--launch-product=league_of_legends --launch-patchline=live).
+
+        Returns True/False when it could check, None when it cannot see
+        processes (then the API answer is all there is).
+        """
+        self._progress(SwitchPhase.LAUNCHING, first_message, index)
+        if self._league_running is None:
+            return bool(self._safely(self.session.launch_league)) or None
+        if self._league_is_running():
+            return True
+        if settle and self._league_settle_s > 0:
+            time.sleep(self._league_settle_s)
+            if self._league_is_running():
+                return True
+
+        steps = [("api", None),
+                 ("api", "League hasn't opened yet - asking the Riot Client again"),
+                 ("exe", "Still no League - starting it through RiotClientServices")]
+        deadline = time.monotonic() + self._league_start_timeout_s
+        # The launch request can block for many seconds; it runs on its own
+        # thread so League appearing is noticed while it is still open.
+        pending: Optional[threading.Thread] = None
+        for n, (how, message) in enumerate(steps):
+            if how == "api" and pending is not None and pending.is_alive():
+                continue  # the first request is still open: don't press Play twice
+            if message:
+                self._progress(SwitchPhase.LAUNCHING, message, index)
+            if how == "api":
+                pending = threading.Thread(
+                    target=self._safely, args=(self.session.launch_league,),
+                    name="LeagueLaunch", daemon=True,
+                )
+                pending.start()
+            elif self._launch_league_exe is not None:
+                self._safely(self._launch_league_exe)
+            last = n == len(steps) - 1
+            wait_until = deadline if last else min(deadline, time.monotonic() + self._league_retry_after_s)
+            while time.monotonic() < wait_until:
+                if self._league_is_running():
+                    self._progress(SwitchPhase.LAUNCHING, "League of Legends is starting", index)
+                    return True
+                time.sleep(self._poll_s)
+            if time.monotonic() >= deadline:
+                break
+        if self._league_is_running():
+            return True
+        Logger.warning(TAG, "League did not start after sign-in (API x2 and RiotClientServices tried)")
+        return False
 
     # ------------------------------------------------------------- helpers
     def _has_password(self, index: int) -> bool:
@@ -442,7 +628,12 @@ class AccountSwitcher:
                     "Client. LeagueLoop is still waiting.",
                     index,
                 )
-            captcha = kind == "captcha" or self.form.captcha_visible() is True
+            # The sign-in page always carries hCaptcha markup, so what the
+            # window shows only counts once Riot has been quiet for a while.
+            now = time.monotonic()
+            ui_captcha = (now - start >= self._nudge_after_s
+                          and self.form.captcha_visible() is True)
+            captcha = kind == "captcha" or ui_captcha
             if captcha and not told_captcha:
                 told_captcha = True
                 self._progress(

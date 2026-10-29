@@ -2317,6 +2317,43 @@ class LCUClient:
 
             return False
 
+    def check_client_changed(self) -> bool:
+        """Drop the connection if League restarted under us. True if it did.
+
+        `connect()` returns early while `is_connected` is set, so a League
+        restart (new PID, port and token - e.g. after an account switch) was
+        never seen as a new connection, and everything account-scoped kept
+        the previous session's data. Cheap: `scan_clients` is cached.
+        """
+        with self._lock:
+            if not self.is_connected:
+                return False
+            try:
+                league = scan_clients().get("league", {}) or {}
+            except Exception as exc:
+                Logger.debug("LCU", "check_client_changed scan failed", exc=exc)
+                return False
+            if not league.get("connected"):
+                return False  # let request failures / connect() handle a closed client
+            same = (
+                str(league.get("port")) == str(self.port)
+                and league.get("token") == self.auth_token
+                and (self._client_pid is None or league.get("pid") == self._client_pid)
+            )
+            if same:
+                return False
+            Logger.info("LCU", "League Client restarted; reconnecting.")
+            self.is_connected = False
+            self._connection_state = ConnectionStateEnum.DISCONNECTED
+            self._last_scan_time = 0.0  # reconnect now, not after the backoff
+            self._backoff = 1.0
+        try:
+            from core.events import EventBus
+            EventBus.emit("lcu_connected", False)
+        except Exception as exc:
+            Logger.debug("LCU", "check_client_changed emit failed", exc=exc)
+        return True
+
     def reset_sleep_wake_backoff(self) -> None:
         """Resets reconnection backoff and scanning throttle after system sleep or wake events."""
         with self._lock:

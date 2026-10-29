@@ -111,8 +111,13 @@ class RiotClientAPI:
         data=None,
         silent: bool = False,
         timeout: float = 3.0,
+        max_attempts: int = 3,
     ) -> Optional[requests.Response]:
-        """Make a request to the Riot Client API with rate-limiting and exponential back-off."""
+        """Make a request to the Riot Client API with rate-limiting and exponential back-off.
+
+        `max_attempts=1` for requests that must not be repeated on a timeout -
+        the League launch, where a slow answer usually means it worked.
+        """
         if not self.is_connected:
             if not self.connect():
                 return None
@@ -132,7 +137,7 @@ class RiotClientAPI:
             time.sleep(sleep_time)
 
         url = f"{self.base_url}{endpoint}"
-        max_attempts = 3
+        max_attempts = max(1, int(max_attempts))
         for attempt in range(max_attempts):
             try:
                 if not silent and attempt == 0:
@@ -214,6 +219,12 @@ class RiotClientAPI:
             "POST",
             "/product-launcher/v1/products/league_of_legends/patchlines/live",
             data={},
+            # The client holds this request open while it starts League
+            # (7-10 s seen live); 3 s timed out even when the launch went
+            # through. Never repeated on a timeout: that is how one Play
+            # became three.
+            timeout=30.0,
+            max_attempts=1,
         )
         if res and res.status_code in [200, 204]:
             Logger.info("RiotClientAPI", "Successfully requested Riot Client to launch League of Legends.")
@@ -365,6 +376,7 @@ class AccountManager:
 
         from services.accounts.form_login import RiotFormFiller  # type: ignore
         from services.accounts.vault import SessionVault  # type: ignore
+        from services.accounts.league_identity import league_login_puuid as _league_login_puuid  # type: ignore
 
         # Diagnostics only (check_accounts); switching no longer restores
         # saved sessions - see services/accounts/switcher.py.
@@ -381,6 +393,10 @@ class AccountManager:
             kill_games=lambda: self._kill_game_processes(None),
             client_running=self.riot_client.is_riot_client_running,
             launch_client=self._launch_riot_client,
+            league_running=self._league_client_running,
+            launch_league_exe=self._launch_league_via_riot_client_services,
+            league_identity=_league_login_puuid,
+            restart_riot_client=lambda: self._stop_riot_client(None),
             bus=EventBus,
         )
 
@@ -598,6 +614,26 @@ class AccountManager:
 
     def get_active_index(self) -> int:
         return self._active_idx
+
+    def should_auto_login_default(self) -> Tuple[bool, str]:
+        """Is it safe to sign in to the default account at startup?
+
+        Auto-login types into the sign-in form, which first signs out whoever
+        is signed in. Opening LeagueLoop must never do that: if the Riot
+        Client is already signed in - to any account - leave it alone.
+        """
+        idx = self.get_default_account_index()
+        if idx < 0:
+            return False, "no default account"
+        try:
+            rc = self.riot_client
+            if rc.is_riot_client_running() and rc.connect() and rc.is_signed_in():
+                return False, "the Riot Client is already signed in"
+        except Exception as exc:
+            Logger.debug("AccountManager", "Auto-login check failed", exc=exc)
+            # Unknown is not "signed out": do nothing rather than sign out.
+            return False, "could not read the Riot Client"
+        return True, ""
 
     def get_default_account_index(self) -> int:
         """Return the index of the default account, or -1 if none is set."""
@@ -1075,6 +1111,37 @@ class AccountManager:
     # `services/accounts/form_login.py`, which checks the Riot Client is the
     # foreground window before every character, sends Unicode key events,
     # retries on focus loss and never logs the password.
+
+    @staticmethod
+    def _league_client_running() -> bool:
+        """Is the League client (not just the Riot Client) up?"""
+        try:
+            import psutil
+            names = {"leagueclient.exe", "leagueclientux.exe"}
+            return any((p.info.get("name") or "").lower() in names
+                       for p in psutil.process_iter(["name"]))
+        except Exception as exc:
+            Logger.debug("AccountManager", "League process check failed", exc=exc)
+            return False
+
+    @staticmethod
+    def _launch_league_via_riot_client_services() -> bool:
+        """Same as pressing Play: hand the launch to RiotClientServices.exe."""
+        try:
+            from utils.client_detector import get_riot_executable_path
+            exe = get_riot_executable_path()
+            if not exe:
+                Logger.warning("AccountManager", "RiotClientServices.exe not found; cannot start League")
+                return False
+            subprocess.Popen(
+                [exe, "--launch-product=league_of_legends", "--launch-patchline=live"],
+                creationflags=NO_WINDOW,
+            )
+            Logger.info("AccountManager", "Asked RiotClientServices.exe to launch League")
+            return True
+        except Exception as exc:
+            Logger.warning("AccountManager", f"RiotClientServices launch failed ({type(exc).__name__})")
+            return False
 
     def launch_league(self) -> bool:
         """Trigger League of Legends launch directly via the active Riot Client."""

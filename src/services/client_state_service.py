@@ -121,6 +121,7 @@ class ClientStateService:
         self._last_queue: Optional[tuple] = None
         self._last_automation: Optional[tuple] = None
         self._summoner_loaded = False
+        self._last_generation: Optional[int] = None
         #: Fetched once per draft, not once per tick — the set does not change
         #: while a draft is running.
         self._pickable_ids: tuple = ()
@@ -203,6 +204,8 @@ class ClientStateService:
         """One poll cycle. Returns whether the client is currently reachable."""
         self._mirror_automation()
         connected = self._ensure_connected()
+        if connected:
+            self._notice_new_session()
         self._publish_connection(connected)
 
         if not connected:
@@ -220,6 +223,24 @@ class ClientStateService:
         if phase == GameflowPhase.CHAMP_SELECT.value:
             self._read_and_publish_champ_select()
         return True
+
+    def _notice_new_session(self) -> None:
+        """A new LCU connection (League restarted, e.g. after a switch) while we
+        were not looking: forget the old summoner so it is read again."""
+        try:
+            gen = getattr(self._lcu, "connection_generation", None)
+        except Exception:
+            gen = None
+        if not isinstance(gen, int) or isinstance(gen, bool):
+            return
+        last = getattr(self, "_last_generation", None)
+        self._last_generation = gen
+        if last is None or last == gen:
+            return
+        self.resync()
+        self._state.update_client(
+            summoner_name=None, summoner_id=None, puuid=None, profile_icon_id=0
+        )
 
     def _mirror_automation(self) -> None:
         """Republish automation flags only when the engine's reality moved."""

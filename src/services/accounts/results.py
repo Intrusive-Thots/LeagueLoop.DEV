@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import Optional
 
 # --- EventBus channel names -------------------------------------------------
 # Defined here rather than in core.events so the accounts subsystem can add
@@ -81,6 +82,9 @@ class SwitchOutcome(Enum):
     CAPTCHA_REQUIRED = "captcha_required"
     #: The client signed in, but as a different Riot account.
     WRONG_ACCOUNT = "wrong_account"
+    #: The Riot Client is on the right account but League opened on another
+    #: one (stale product tokens), and a full Riot restart did not fix it.
+    LEAGUE_WRONG_ACCOUNT = "league_wrong_account"
     ERROR = "error"
 
 
@@ -92,6 +96,7 @@ RETRYABLE = frozenset({
     SwitchOutcome.CLIENT_STILL_RUNNING,
     SwitchOutcome.LOGIN_FORM_NOT_FOUND,
     SwitchOutcome.FOCUS_LOST,
+    SwitchOutcome.LEAGUE_WRONG_ACCOUNT,
     SwitchOutcome.ERROR,
 })
 
@@ -153,6 +158,11 @@ OUTCOME_MESSAGES = {
         "The Riot Client signed in to a different account than the one "
         "selected. Check this account's username."
     ),
+    SwitchOutcome.LEAGUE_WRONG_ACCOUNT: (
+        "The Riot Client is on the right account, but League opened on a "
+        "different one, even after restarting the Riot Client. Close League "
+        "and the Riot Client, then press Switch again."
+    ),
     SwitchOutcome.ERROR: "Account switch failed.",
 }
 
@@ -195,6 +205,13 @@ class SwitchResult:
     account_label: str = ""
     detail: str = ""
     operation: str = OP_SWITCH
+    #: After a successful switch: did League start? None = not asked / can't tell.
+    league_started: Optional[bool] = None
+    #: Is League signed in as the same account as the Riot Client?
+    #: True = checked and equal; None = not checked / League still loading.
+    league_account_ok: Optional[bool] = None
+    #: League started but had not finished logging in when we stopped waiting.
+    league_login_pending: bool = False
 
     @property
     def ok(self) -> bool:
@@ -211,7 +228,15 @@ class SwitchResult:
             if self.operation == OP_SIGN_OUT:
                 return "Signed out."
             if self.account_label:
+                if self.league_started is False:
+                    return ("Signed in as {}, but League didn't start - press Play "
+                            "in the Riot Client.".format(self.account_label))
+                if self.league_started and self.league_login_pending:
+                    return ("Signed in as {}. League is still loading - if it "
+                            "stays stuck, close it and press Play.".format(self.account_label))
                 return "Signed in as {}.".format(self.account_label)
+        if self.outcome is SwitchOutcome.ALREADY_ACTIVE and self.league_started is False:
+            return base + " League didn't start - press Play in the Riot Client."
         if self.detail and self.outcome in DETAILED_OUTCOMES:
             return "{} {}".format(base, self.detail)
         return base
