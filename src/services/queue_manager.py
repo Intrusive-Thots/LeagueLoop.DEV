@@ -29,6 +29,7 @@ BASELINE_QUEUE_MAP: Dict[int, str] = {
     1400: "Ultimate Spellbook",
     1700: "Arena",
     1710: "Arena 3v6",
+    1740: "Bravery Arena",
     1750: "Arena 3x6",
     2300: "Brawl",
     2400: "ARAM: Mayhem",

@@ -493,6 +493,7 @@ class AutomationEngine:
                 if l_req and l_req.status_code == 200:
                     lobby_data = l_req.json()
                     self.current_queue_id = lobby_data.get("gameConfig", {}).get("queueId")
+                    self.current_game_mode = lobby_data.get("gameConfig", {}).get("gameMode")
                     # Emit so UI components stay in sync even on startup
                     try:
                         from core.events import EventBus
@@ -923,7 +924,11 @@ class AutomationEngine:
         )
         if queue_id:
             self.current_queue_id = queue_id
-        is_arena = queue_id in {QUEUE_ARENA, QUEUE_ARENA_16, QUEUE_ARENA_3V3}
+        # Queue ids alone missed Bravery Arena (1740), which then ran the 5v5
+        # draft assistant over an 18-player lobby. The lobby's gameMode
+        # (CHERRY) catches Arena queues we don't have an id for yet.
+        from services.draft.arena import is_arena as _is_arena
+        is_arena = _is_arena(queue_id, getattr(self, "current_game_mode", None))
 
         if is_arena:
             if self.config.get("arena_synergy_enabled", True):
@@ -1227,10 +1232,20 @@ class AutomationEngine:
             return
 
         # Cache banned IDs once for both phases
+        # Real sessions carry bans in `bans.{myTeamBans,theirTeamBans}` and as
+        # completed ban actions; `bannedChampions` never appeared in a capture.
         banned_ids = [
             b.get("championId", 0) if isinstance(b, dict) else b
             for b in session.get("bannedChampions", [])
         ]
+        bans = session.get("bans") or {}
+        banned_ids += list(bans.get("myTeamBans") or []) + list(bans.get("theirTeamBans") or [])
+        banned_ids += [
+            a.get("championId", 0)
+            for row in actions for a in row
+            if a.get("type") == "ban" and a.get("completed")
+        ]
+        banned_ids = [b for b in banned_ids if isinstance(b, int) and b > 0]
 
         action_type = my_action.get("type", "")
         if action_type == "ban":
@@ -1280,19 +1295,16 @@ class AutomationEngine:
 
     def _handle_arena_pick(self, session, me, action, banned_ids):
         action_id = action.get("id", 0)
-        current_hover = action.get("championId", 0)
+        # -3 is the Bravery placeholder; never hover or lock it as a champion.
+        current_hover = max(0, int(action.get("championId") or 0))
         now = time.time()
         
-        my_team = session.get("myTeam", [])
-        teammate = next((p for p in my_team if p.get("cellId") != me.get("cellId")), None)
-        
-        target_id = 0
-        if teammate:
-            teammate_champ_id = teammate.get("championId", 0)
-            teammate_intent = teammate.get("championPickIntent", 0)
-            target_id = teammate_champ_id if teammate_champ_id != 0 else teammate_intent
-        
-        pairs = self.config.get("arena_pairs", [])
+        pairs = self.config.get("arena_pairs", []) or []
+        from services.draft.arena import champion_of, partner_target
+        pair_names = {str(p.get("teammate", "")).lower() for p in pairs if p.get("enabled", True)}
+        teammate = partner_target(session, pair_names, self.assets.get_champ_name)
+        target_id = champion_of(teammate) if teammate else 0
+
         mapped_me_list = []
         
         if target_id != 0:
@@ -1365,7 +1377,7 @@ class AutomationEngine:
                     break
                     
         # Fallback to championId check just in case
-        if not teammate_locked and target_id != 0 and teammate and teammate.get("championId", 0) != 0:
+        if not teammate_locked and target_id != 0 and teammate and (teammate.get("championId") or 0) > 0:
             teammate_locked = True
 
         # Handle Hovering
@@ -2140,7 +2152,10 @@ class AutomationEngine:
                                 "queue_id": data.get("queueId", getattr(self, "current_queue_id", None)),
                                 "champion_id": champ_id,
                                 "champion_name": champ_name,
-                                "role": local_player.get("role", "") or local_player.get("position", ""),
+                                # Real eog-stats-block has selectedPosition/detectedTeamPosition,
+                                # not role/position (ranked capture 2026-10-29).
+                                "role": (local_player.get("selectedPosition") or local_player.get("detectedTeamPosition")
+                                         or local_player.get("role", "") or local_player.get("position", "")),
                                 "win": is_win,
                                 "kills": stats.get("CHAMPIONS_KILLED", 0),
                                 "deaths": stats.get("NUM_DEATHS", 0),

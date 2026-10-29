@@ -152,3 +152,36 @@ Priority order. #23 stays parked.
 - **Live-verified:** ranked bans appear only in `actions` (all 10 at once, `hasSimultaneousBans`); `session.bans` stays empty; a `ten_bans_reveal` action follows; picks run in pairs with both `isInProgress`; PLANNING marks every ban action in progress (it's not a ban turn); the timer is still a stale snapshot (same `internalNowInEpochMs` across up to 9 reads).
 - **Fixtures:** `tests/fixtures/lcu/champ_select_ranked_{planning,ban_turn,bans_reveal,my_pick,team_pick,enemy_pick,finalization}.json`, `matchmaking_search_ranked.json`, `lobby_matchmaking_search_state.json`, `ready_check_ranked.json`; `tests/test_ranked_live_pass.py`.
 - **Still open:** a full pick/ban panel (portraits per ban slot) — the sidebar has only the status line; arena synergy (needs an Arena draft); classic ARAM (450) reroll; loot opening art; EndOfGame payload checks. The ready-check accept button and auto-honor were not exercised with real writes.
+
+### #23 live-client pass 4 (Arena: Bravery Arena, queue 1740), 2026-10-29
+
+Captured live under the read-only launcher (GET-only poller + screenshots).
+Anonymized fixtures: `tests/fixtures/lcu/*arena_bravery*.json`,
+`live_client_arena_bravery.json`, `end_of_game_ranked.json`.
+
+Real shape: all 18 players in `myTeam` (`team: 1`), `theirTeam` empty, 18
+simultaneous picks (40 s) then FINALIZATION (10 s), no bans. The local trio
+(cells 9-11) are the only rows with visible spells/intent. `-3` = Bravery.
+Live client data (`/liveclientdata/allgamedata`): every player is team ORDER;
+no subteam, augment or placement fields, so in-game augments can't be shown
+from that API.
+
+Fixed:
+- [x] Queue 1740 / gameMode CHERRY not detected as Arena: it ran the 5v5
+  draft assistant over the 18-player lobby (old build sent 3 hover PATCHes,
+  all blocked). Detection now uses `ARENA_QUEUES` or the lobby `gameMode`.
+- [x] Arena "teammate" was the first other cell (a hidden stranger), so pairs
+  never fired. `services/draft/arena.py` finds the visible trio/partner and
+  prefers the teammate whose champion has a configured pair.
+- [x] `-3` treated as a champion (target, hover, lock). Now ignored.
+- [x] Banned ids read only `bannedChampions` (never present); now also
+  `bans.*TeamBans` and completed ban actions.
+- [x] End-of-game record: `role` was always blank (real block has
+  `selectedPosition` / `detectedTeamPosition`).
+- [x] Queue name map: 1740 "Bravery Arena" (the mode label read "Queue 1740").
+
+Still open:
+- [ ] Arena tool is never shown in the sidebar (`_update_game_tool_visibility`
+  hides it on purpose); no live partner/synergy display yet.
+- [ ] Arena in-game augments: not in the live client API; needs another source.
+- [ ] Bravery: should a pair allow choosing the -3 Bravery option itself?
