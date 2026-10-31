@@ -1,0 +1,19 @@
+{
+ "phase": "ChampSelect",
+ "map": {
+  "id": 12,
+  "gameMode": "KIWI",
+  "mapStringId": "HA",
+  "name": "Random Map"
+ },
+ "gameData": {
+  "queue": {
+   "id": 2400,
+   "gameMode": "KIWI",
+   "description": "ARAM: Mayhem",
+   "type": "KIWI",
+   "isRanked": false,
+   "mapId": 12
+  }
+ }
+}

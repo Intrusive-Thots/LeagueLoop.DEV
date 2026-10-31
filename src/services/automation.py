@@ -18,6 +18,7 @@ from .api_handler import LCUClient  # type: ignore
 from .asset_manager import AssetManager, ConfigManager  # type: ignore
 from services.draft.priority_engine import PriorityEngine
 from services import friend_presence
+from services.draft.timer import phase_time_left_ms
 from utils.logger import Logger  # type: ignore
 from core.config_keys import (
     AUTO_HONOR_ENABLED,
@@ -284,9 +285,10 @@ class AutomationEngine:
 
     def _loop(self):
         while self.running:
-            if self.paused:
-                self._stop_event.wait(1)
-                continue
+            # Paused still ticks: the tick is read-only until its own pause
+            # check, and the sidebar's phase/queue display is fed from here.
+            # Skipping the whole tick froze the status while automation was
+            # off. Every handler that writes returns early when paused.
 
             if not self.lcu.is_connected:
                 if time.time() - self._last_disconnect_log > 30:
@@ -417,9 +419,7 @@ class AutomationEngine:
 
         search_state = None
         if phase == "Matchmaking":
-            search_req = self.lcu.request("GET", "/lol-lobby/v2/lobby/matchmaking/search-state")
-            if search_req and search_req.status_code == 200:
-                search_state = search_req.json()
+            search_state = self._read_search_state()
 
         qf = self.queue_func
         if qf is not None:
@@ -493,6 +493,7 @@ class AutomationEngine:
                 if l_req and l_req.status_code == 200:
                     lobby_data = l_req.json()
                     self.current_queue_id = lobby_data.get("gameConfig", {}).get("queueId")
+                    self.current_game_mode = lobby_data.get("gameConfig", {}).get("gameMode")
                     # Emit so UI components stay in sync even on startup
                     try:
                         from core.events import EventBus
@@ -569,6 +570,30 @@ class AutomationEngine:
                 # Throttled wake: avoid slamming if websocket sends 10 events a second
                 time.sleep(0.1) 
                 break
+
+    def _read_search_state(self):
+        """Matchmaking search state with the queue clock.
+
+        `/lol-lobby/v2/lobby/matchmaking/search-state` carries only
+        `searchState` (captured live: no `timeInQueue`, no
+        `estimatedQueueTime`), so the sidebar always started at 0:00 and
+        estimated 2:00. `/lol-matchmaking/v1/search` has all three.
+        """
+        try:
+            req = self.lcu.request("GET", "/lol-matchmaking/v1/search", None, True)
+            if req and req.status_code == 200:
+                data = req.json()
+                if isinstance(data, dict) and data.get("searchState"):
+                    return data
+        except Exception as exc:
+            Logger.debug("Automation", "matchmaking search read failed", exc=exc)
+        try:
+            req = self.lcu.request("GET", "/lol-lobby/v2/lobby/matchmaking/search-state")
+            if req and req.status_code == 200:
+                return req.json()
+        except Exception as exc:
+            Logger.debug("Automation", "search-state read failed", exc=exc)
+        return None
 
     def _handle_ready_check(self, phase):
         if phase != "ReadyCheck":
@@ -899,7 +924,11 @@ class AutomationEngine:
         )
         if queue_id:
             self.current_queue_id = queue_id
-        is_arena = queue_id in {QUEUE_ARENA, QUEUE_ARENA_16, QUEUE_ARENA_3V3}
+        # Queue ids alone missed Bravery Arena (1740), which then ran the 5v5
+        # draft assistant over an 18-player lobby. The lobby's gameMode
+        # (CHERRY) catches Arena queues we don't have an id for yet.
+        from services.draft.arena import is_arena as _is_arena
+        is_arena = _is_arena(queue_id, getattr(self, "current_game_mode", None))
 
         if is_arena:
             if self.config.get("arena_synergy_enabled", True):
@@ -1203,10 +1232,20 @@ class AutomationEngine:
             return
 
         # Cache banned IDs once for both phases
+        # Real sessions carry bans in `bans.{myTeamBans,theirTeamBans}` and as
+        # completed ban actions; `bannedChampions` never appeared in a capture.
         banned_ids = [
             b.get("championId", 0) if isinstance(b, dict) else b
             for b in session.get("bannedChampions", [])
         ]
+        bans = session.get("bans") or {}
+        banned_ids += list(bans.get("myTeamBans") or []) + list(bans.get("theirTeamBans") or [])
+        banned_ids += [
+            a.get("championId", 0)
+            for row in actions for a in row
+            if a.get("type") == "ban" and a.get("completed")
+        ]
+        banned_ids = [b for b in banned_ids if isinstance(b, int) and b > 0]
 
         action_type = my_action.get("type", "")
         if action_type == "ban":
@@ -1233,7 +1272,7 @@ class AutomationEngine:
         current_hover = action.get("championId", 0)
         
         timer = session.get("timer", {})
-        time_left_ms = timer.get("adjustedTimeLeftInPhase", 15000)
+        time_left_ms = phase_time_left_ms(timer, default=15000)
         instant_ban = self.config.get("arena_instant_ban", False)
         
         if current_hover != ban_id and (now - getattr(self, "_last_synergy_patch", 0) > 0.5):
@@ -1256,19 +1295,16 @@ class AutomationEngine:
 
     def _handle_arena_pick(self, session, me, action, banned_ids):
         action_id = action.get("id", 0)
-        current_hover = action.get("championId", 0)
+        # -3 is the Bravery placeholder; never hover or lock it as a champion.
+        current_hover = max(0, int(action.get("championId") or 0))
         now = time.time()
         
-        my_team = session.get("myTeam", [])
-        teammate = next((p for p in my_team if p.get("cellId") != me.get("cellId")), None)
-        
-        target_id = 0
-        if teammate:
-            teammate_champ_id = teammate.get("championId", 0)
-            teammate_intent = teammate.get("championPickIntent", 0)
-            target_id = teammate_champ_id if teammate_champ_id != 0 else teammate_intent
-        
-        pairs = self.config.get("arena_pairs", [])
+        pairs = self.config.get("arena_pairs", []) or []
+        from services.draft.arena import champion_of, partner_target
+        pair_names = {str(p.get("teammate", "")).lower() for p in pairs if p.get("enabled", True)}
+        teammate = partner_target(session, pair_names, self.assets.get_champ_name)
+        target_id = champion_of(teammate) if teammate else 0
+
         mapped_me_list = []
         
         if target_id != 0:
@@ -1325,7 +1361,7 @@ class AutomationEngine:
                     mapped_me_champ = legacy_fallback
                 
         timer = session.get("timer", {})
-        time_left_ms = timer.get("adjustedTimeLeftInPhase", 15000)
+        time_left_ms = phase_time_left_ms(timer, default=15000)
         
         # Check if teammate has locked by inspecting their action
         teammate_locked = False
@@ -1341,7 +1377,7 @@ class AutomationEngine:
                     break
                     
         # Fallback to championId check just in case
-        if not teammate_locked and target_id != 0 and teammate and teammate.get("championId", 0) != 0:
+        if not teammate_locked and target_id != 0 and teammate and (teammate.get("championId") or 0) > 0:
             teammate_locked = True
 
         # Handle Hovering
@@ -2116,7 +2152,10 @@ class AutomationEngine:
                                 "queue_id": data.get("queueId", getattr(self, "current_queue_id", None)),
                                 "champion_id": champ_id,
                                 "champion_name": champ_name,
-                                "role": local_player.get("role", "") or local_player.get("position", ""),
+                                # Real eog-stats-block has selectedPosition/detectedTeamPosition,
+                                # not role/position (ranked capture 2026-10-29).
+                                "role": (local_player.get("selectedPosition") or local_player.get("detectedTeamPosition")
+                                         or local_player.get("role", "") or local_player.get("position", "")),
                                 "win": is_win,
                                 "kills": stats.get("CHAMPIONS_KILLED", 0),
                                 "deaths": stats.get("NUM_DEATHS", 0),

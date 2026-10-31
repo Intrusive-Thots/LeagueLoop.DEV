@@ -100,13 +100,13 @@ class TestAccountSwitcherUnit(unittest.TestCase):
         with patch.object(self.switcher, "_switch_locked", side_effect=RuntimeError("Unexpected error")):
             res = self.switcher.switch_to(0)
             self.assertEqual(res.outcome, SwitchOutcome.ERROR)
-            self.assertEqual(res.detail, "Unexpected error")
+            self.assertEqual(res.detail, "RuntimeError")
 
     def test_sign_out_exception_during_execution(self):
         with patch.object(self.switcher, "_ensure_signed_out", side_effect=RuntimeError("Signout crash")):
             res = self.switcher.sign_out()
             self.assertEqual(res.outcome, SwitchOutcome.ERROR)
-            self.assertEqual(res.detail, "Signout crash")
+            self.assertEqual(res.detail, "RuntimeError")
             self.assertEqual(res.operation, OP_SIGN_OUT)
 
     def test_already_active_edge_cases(self):
@@ -126,37 +126,6 @@ class TestAccountSwitcherUnit(unittest.TestCase):
         self.session.current_login_name.side_effect = RuntimeError("API error")
         self.assertFalse(self.switcher._already_active("main_user"))
 
-    def test_capture_outgoing_edge_cases(self):
-        # Live session not present
-        self.vault.live_session_present.return_value = False
-        self.switcher._capture_outgoing(0)
-        self.vault.capture.assert_not_called()
-
-        # Exception when getting current login name
-        self.vault.live_session_present.return_value = True
-        self.session.current_login_name.side_effect = Exception("Read error")
-        self.switcher._capture_outgoing(0)
-        self.vault.capture.assert_not_called()
-
-        # Empty login name
-        self.session.current_login_name.side_effect = None
-        self.session.current_login_name.return_value = ""
-        self.switcher._capture_outgoing(0)
-        self.vault.capture.assert_not_called()
-
-    def test_shut_down_client_edge_cases(self):
-        # No client_running callback provided
-        self.switcher._client_running = None
-        self.assertTrue(self.switcher._shut_down_client())
-
-        # Client running callback raises exception
-        self.switcher._client_running = MagicMock(side_effect=RuntimeError("Process error"))
-        self.assertTrue(self.switcher._shut_down_client())
-
-        # Client running remains True until timeout
-        self.switcher._client_running = MagicMock(return_value=True)
-        self.assertFalse(self.switcher._shut_down_client())
-
     def test_ensure_signed_out_edge_cases(self):
         # Client unreachable
         self.session.connect.return_value = False
@@ -164,11 +133,11 @@ class TestAccountSwitcherUnit(unittest.TestCase):
 
         # Client reachable but not signed in
         self.session.connect.return_value = True
-        self.session.is_signed_in.return_value = False
+        self.session.signed_out_confirmed.return_value = True
         self.assertIsNone(self.switcher._ensure_signed_out())
 
         # Sign out failed timeout
-        self.session.is_signed_in.return_value = True
+        self.session.signed_out_confirmed.return_value = False
         self.session.wait_until_signed_out.return_value = False
         self.assertEqual(self.switcher._ensure_signed_out(), SwitchOutcome.SIGN_OUT_FAILED)
 
@@ -181,22 +150,27 @@ class TestAccountSwitcherUnit(unittest.TestCase):
         res2 = AccountSwitcher._safely(working_fn, "arg")
         self.assertEqual(res2, 42)
 
-    def test_switch_sequence_vault_restore_failure(self):
-        info_mock = MagicMock(exists=True, usable=True)
-        self.vault.info.return_value = info_mock
-        self.session.connect.return_value = False
-        self.vault.restore.return_value = False
-        self.switcher._client_running = lambda: False
+    def _credentialed(self, filler=None):
+        from services.accounts.form_login import FillResult, FillStatus
+        self.filler = filler or MagicMock()
+        self.filler.available.return_value = True
+        if filler is None:
+            self.filler.fill_and_submit.return_value = FillResult(FillStatus.SUBMITTED, 1)
+            self.filler.wait_for_window.return_value = 101
+            self.filler.form_ready.return_value = None
+            self.filler.captcha_visible.return_value = None
+        self.switcher.form = self.filler
+        self.switcher._password = lambda i: "pw-%d" % i
 
+    def test_switch_without_a_password_fails_before_touching_the_client(self):
+        self.switcher._password = lambda i: ""
         res = self.switcher.switch_to(0)
-        self.assertEqual(res.outcome, SwitchOutcome.ERROR)
-        self.assertEqual(res.phase, SwitchPhase.RESTORING_SESSION)
+        self.assertEqual(res.outcome, SwitchOutcome.NO_CREDENTIALS)
+        self.assertEqual(res.phase, SwitchPhase.PREPARING)
+        self.session.sign_out.assert_not_called()
 
     def test_switch_sequence_client_wait_failure(self):
-        info_mock = MagicMock(exists=True, usable=True)
-        self.vault.info.return_value = info_mock
-        self.session.connect.return_value = False
-        self.vault.restore.return_value = True
+        self._credentialed()
         self.switcher._client_running = lambda: False
         self.session.wait_until_client_ready.return_value = False
 
@@ -204,18 +178,32 @@ class TestAccountSwitcherUnit(unittest.TestCase):
         self.assertEqual(res.outcome, SwitchOutcome.CLIENT_NOT_RUNNING)
         self.assertEqual(res.phase, SwitchPhase.WAITING_FOR_CLIENT)
 
-    def test_switch_sequence_session_verification_failure(self):
-        info_mock = MagicMock(exists=True, usable=True)
-        self.vault.info.return_value = info_mock
-        self.session.connect.return_value = False
-        self.vault.restore.return_value = True
-        self.switcher._client_running = lambda: False
-        self.session.wait_until_client_ready.return_value = True
-        self.session.wait_until_signed_in.return_value = False
+    def test_switch_sequence_sign_in_screen_never_appears(self):
+        self._credentialed()
+        self.switcher._client_running = lambda: True
+        self.switcher._sign_in_screen_timeout_s = 0.05
+        self.switcher._poll_s = 0.01
+        self.session.connect.return_value = True
+        self.session.is_signed_in.return_value = False
+        self.filler.wait_for_window.return_value = 0
 
         res = self.switcher.switch_to(0)
-        self.assertEqual(res.outcome, SwitchOutcome.SESSION_EXPIRED)
+        self.assertEqual(res.outcome, SwitchOutcome.LOGIN_FORM_NOT_FOUND)
+        self.filler.fill_and_submit.assert_not_called()
+
+    def test_switch_sequence_verification_timeout(self):
+        self._credentialed()
+        self.switcher._client_running = lambda: True
+        self.switcher._verify_timeout_s = 0.05
+        self.switcher._poll_s = 0.01
+        self.session.connect.return_value = True
+        self.session.is_signed_in.return_value = False
+        self.session.auth_state.return_value = None
+
+        res = self.switcher.switch_to(0)
+        self.assertEqual(res.outcome, SwitchOutcome.TIMED_OUT)
         self.assertEqual(res.phase, SwitchPhase.VERIFYING)
+        self.assertIn("Switch again", res.message)
 
     def test_finish_logging_session_expired_as_warning(self):
         """SESSION_EXPIRED must log via Logger.warning with clean ASCII hyphen separator."""

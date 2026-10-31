@@ -8,6 +8,7 @@ Uses the same visual language as ArenaTool (collapsible header,
 card-based list, icon badges).
 """
 import customtkinter as ctk
+from ui.components.scroll_autohide import autohide_scrollbar
 from ui.components.glyphs import set_chevron
 import threading
 from datetime import datetime
@@ -270,6 +271,7 @@ class AccountsTool(ctk.CTkFrame):
             scrollbar_button_hover_color=get_color("colors.text.muted"),
             scrollbar_fg_color="transparent",
         )
+        autohide_scrollbar(self.list_frame)
         try:
             self.list_frame._scrollbar.configure(width=6)
         except Exception as exc:
@@ -514,32 +516,32 @@ class AccountsTool(ctk.CTkFrame):
             # Login / Sign-Out button
             # Check LCU connection — if disconnected, always show Login even for active account
             lcu_connected = self.lcu.is_connected if self.lcu else False
-            # What makes a one-click switch possible is a saved *session*, not
-            # a stored password: Riot's credential sign-in carries a captcha,
-            # so a password cannot be replayed. Asking the old question here
-            # offered a Login button that could only ever fail.
+            # A switch signs the current account out and types this
+            # account's stored username + password into the Riot sign-in
+            # form, so what makes it possible is a saved password.
             can_switch = bool(
                 self.acct_mgr and self.acct_mgr.can_switch_to(i)
             )
 
             if not is_active or not lcu_connected:
-                btn_text = " Switch" if can_switch else " Sign in"
+                btn_text = " Switch" if can_switch else " Add password"
                 btn_color = (
                     get_color("colors.accent.primary") if can_switch
                     else get_color("colors.state.warning", "#FFA726")
                 )
                 btn_cmd = (
                     (lambda idx=i: self._login_account(idx)) if can_switch
-                    else (lambda idx=i: self._offer_manual_sign_in(idx))
+                    else (lambda idx=i: self._show_edit_form(idx))
                 )
                 btn_tooltip = (
-                    f"Switch to {label_text}" if can_switch
-                    else "No usable saved session. Sign in to this account "
-                         "once in the Riot Client, then press Remember."
+                    f"Sign out the current account and sign in to {label_text}"
+                    if can_switch
+                    else "No saved password for this account. Add it to "
+                         "switch with one click."
                 )
 
                 login_btn = ctk.CTkButton(
-                    top, text=btn_text, width=56, height=20,
+                    top, text=btn_text, width=56 if can_switch else 96, height=20,
                     corner_radius=get_radius("sm"),
                     font=get_font("caption", "bold"),
                     # Dark-on-gold primary / amber outline (#30): white on gold
@@ -592,14 +594,15 @@ class AccountsTool(ctk.CTkFrame):
                 anchor="w"
             ).pack(side="left", fill="x", expand=True)
 
-            # Session state — the thing that decides whether a switch can work
-            # at all, so it belongs on the row rather than in a tooltip.
+            # Only say something when a switch cannot work. (This used to
+            # read "Session saved today." on every row, which promised a
+            # session restore that the Riot Client never honoured.)
             summary = ""
-            if self.acct_mgr:
+            if self.acct_mgr and not can_switch:
                 try:
-                    summary = self.acct_mgr.session_summary(i) or ""
+                    summary = self.acct_mgr.credential_summary(i) or ""
                 except Exception as exc:
-                    Logger.debug("AccountsTool", "No session summary", exc=exc)
+                    Logger.debug("AccountsTool", "No credential summary", exc=exc)
             if summary:
                 ctk.CTkLabel(
                     card, text=summary,
@@ -776,35 +779,6 @@ class AccountsTool(ctk.CTkFrame):
             command=self._show_add_form,
             cursor="hand2"
         ).pack(fill="x", pady=(0, 4))
-
-    def _offer_manual_sign_in(self, idx: int) -> None:
-        """Explain the one thing that creates a session, and offer to keep it.
-
-        There is no way for the app to sign in on the user's behalf any more,
-        so the honest interaction is: you sign in, then press this and the
-        sign-in is remembered.
-        """
-        if not self.available:
-            return
-        captured = False
-        try:
-            captured = bool(self.acct_mgr.capture_session(idx))
-        except Exception as exc:
-            Logger.error(
-                "AccountsTool", "Could not remember the current sign-in.", exc=exc,
-            )
-        if captured:
-            self._log_message(
-                "Remembered this sign-in. Switching to it will not need a "
-                "password."
-            )
-            self._launch_league_client()
-        else:
-            self._log_message(
-                "Nothing to remember yet — sign in to this account in the "
-                "Riot Client first, then press Sign in again."
-            )
-        self._render_accounts()
 
     # ─────────── Actions ───────────
     def _get_sidebar(self):

@@ -628,24 +628,115 @@ class LootService:
                             self.log(f"Failed selecting progression grant {gid[:8]}: {err}")
         return res
 
+    @staticmethod
+    def _tft_claimable_ids(tft_pass: Any) -> set:
+        """Milestone ids on a TFT pass that this account can claim right now.
+
+        Live payload (tests/fixtures/lcu/tft_active_passes.json): statuses are
+        UPCOMING / ACTIVE / REWARDABLE, and a REWARDABLE premium milestone is
+        still `isLocked` when the pass is not owned. Only unlocked, not
+        already-pending REWARDABLE milestones count.
+        """
+        ids = set()
+        if not isinstance(tft_pass, dict):
+            return ids
+        for key in ("milestones", "bonuses"):
+            for ms in tft_pass.get(key) or ():
+                if not isinstance(ms, dict):
+                    continue
+                if str(ms.get("status") or "").upper() != "REWARDABLE":
+                    continue
+                if ms.get("isLocked") or ms.get("isClaimRequestPending"):
+                    continue
+                mid = ms.get("milestoneId") or ms.get("id")
+                if mid:
+                    ids.add(str(mid))
+        return ids
+
+    @staticmethod
+    def _tft_pass_id(tft_pass: Any) -> Optional[str]:
+        if not isinstance(tft_pass, dict):
+            return None
+        info = tft_pass.get("info") or {}
+        pid = info.get("passId") or tft_pass.get("passId") or tft_pass.get("id")
+        return str(pid) if pid else None
+
     def claim_tft_pass_rewards(self) -> ClaimResult:
-        """Claim TFT Battle Pass and Season Pass rewards."""
+        """Claim TFT pass milestones, counting only what actually got claimed.
+
+        This used to PUT claimAllRewards on every active pass and count any
+        2xx as one claim, so a pass with nothing claimable (James's live pass:
+        one REWARDABLE milestone, but premium and locked) "claimed" a phantom
+        reward every run. Now: skip passes with nothing claimable, then count
+        claimed milestones from the response, or, if the response does not
+        list them, from a re-read of the pass.
+        """
         res = ClaimResult()
         passes = self._get_json("/lol-tft-pass/v1/active-passes") or []
-        if isinstance(passes, list):
-            for p in passes:
-                if not isinstance(p, dict):
-                    continue
-                info = p.get("info", {})
-                pass_id = info.get("passId") or p.get("id")
-                title = info.get("title", "TFT Pass")
-                if pass_id:
-                    ok, _, _ = self._put(f"/lol-tft-pass/v1/pass/{pass_id}/milestone/claimAllRewards", body={})
-                    if ok:
-                        res.claimed += 1
-                        res.sources.append(f"TFT Pass ({title})")
-                        self.log(f"Claimed rewards from {title}")
+        if not isinstance(passes, list):
+            return res
+        for p in passes:
+            if not isinstance(p, dict):
+                continue
+            pass_id = self._tft_pass_id(p)
+            title = (p.get("info") or {}).get("title") or "TFT Pass"
+            before = self._tft_claimable_ids(p)
+            if not pass_id or not before:
+                continue
+            ok, payload, err = self._put(
+                f"/lol-tft-pass/v1/pass/{pass_id}/milestone/claimAllRewards", body={}
+            )
+            if not ok:
+                self.log(f"Failed claiming {title}: {err}")
+                continue
+            claimed = self._tft_claimed_from_response(payload, before)
+            if claimed is None:
+                claimed = self._tft_claimed_from_reread(pass_id, before)
+            if claimed > 0:
+                res.claimed += claimed
+                res.sources.append(f"TFT Pass ({title})")
+                self.log(f"Claimed {claimed} reward(s) from {title}")
+            else:
+                self.log(f"{title}: claim request accepted but nothing was claimed")
         return res
+
+    def _tft_claimed_from_response(self, payload: Any, before: set) -> Optional[int]:
+        """Claimed count read from the claim response, or None if it does not say."""
+        if isinstance(payload, bool):
+            return None
+        if isinstance(payload, (int, float)):
+            return max(0, int(payload))
+        milestones = None
+        if isinstance(payload, list):
+            milestones = payload
+        elif isinstance(payload, dict):
+            for key in ("claimedMilestones", "milestones", "rewards"):
+                if isinstance(payload.get(key), list):
+                    milestones = payload[key]
+                    break
+            if milestones is None and isinstance(payload.get("info"), dict):
+                # The pass itself came back: diff its claimable milestones.
+                return len(before - self._tft_claimable_ids(payload))
+        if milestones is None:
+            return None
+        if milestones and all(isinstance(m, dict) for m in milestones) and any(
+            "status" in m for m in milestones
+        ):
+            # A milestone list with statuses: count the ones we expected to
+            # claim that are no longer REWARDABLE.
+            still = self._tft_claimable_ids({"milestones": milestones})
+            listed = {str(m.get("milestoneId") or m.get("id")) for m in milestones}
+            return len((before & listed) - still)
+        return len(milestones)
+
+    def _tft_claimed_from_reread(self, pass_id: str, before: set) -> int:
+        passes = self._get_json("/lol-tft-pass/v1/active-passes")
+        if not isinstance(passes, list):
+            return 0
+        for p in passes:
+            if self._tft_pass_id(p) == pass_id:
+                return len(before - self._tft_claimable_ids(p))
+        return 0
 
     def claim_ranked_split_rewards(self) -> ClaimResult:
         """Claim ranked season split rewards."""

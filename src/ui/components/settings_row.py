@@ -15,6 +15,7 @@ class SettingsToggleRow(ctk.CTkFrame):
             text=label_text, 
             font=get_font("body"), 
             anchor="w", 
+            justify="left",
             text_color=get_color("colors.text.primary")
         )
         self.text_label.pack(side="left")
@@ -27,6 +28,38 @@ class SettingsToggleRow(ctk.CTkFrame):
         
         if tooltip_text:
             CTkTooltip(self.toggle, tooltip_text)
+
+        self.bind("<Configure>", self._on_configure)
+
+    @staticmethod
+    def balanced_wrap(text_w: int, avail_w: int, slack: int = 12) -> int:
+        """Wrap width that splits a too-long label into even lines.
+
+        Returns 0 (no wrap) when the text fits; otherwise the width of
+        ``ceil(text_w / avail_w)`` equal lines plus *slack* for word breaks,
+        capped at *avail_w*, so a two-line label never leaves a one-word
+        orphan on its second line.
+        """
+        if avail_w <= 0 or text_w <= avail_w:
+            return 0
+        lines = -(-text_w // avail_w)
+        return min(avail_w, text_w // lines + slack)
+
+    def _on_configure(self, event=None):
+        """Wrap the label in balanced lines when the row is too narrow for it."""
+        try:
+            total_w = self.winfo_width()
+            if total_w <= 1:
+                return
+            import tkinter.font as tkfont
+            scale = self.text_label._get_widget_scaling()
+            label_font = self.text_label._label.cget("font")
+            text_w = tkfont.Font(root=self, font=label_font).measure(self.text_label.cget("text"))
+            avail_w = total_w - self.toggle.winfo_reqwidth() - 12
+            wrap = self.balanced_wrap(text_w, avail_w)
+            self.text_label.configure(wraplength=int(wrap / scale) if wrap else 0)
+        except Exception as exc:
+            Logger.debug("SettingsToggleRow", f"Error in _on_configure: {exc}", exc=exc)
 
 class SettingsSliderRow(ctk.CTkFrame):
     """A reusable component for a slider row with label and value display."""
@@ -182,7 +215,7 @@ class SettingsActionRow(ctk.CTkFrame):
         self.text_label = ctk.CTkLabel(
             self.left_frame,
             text=label_text,
-            font=get_font("body", "bold"),
+            font=get_font("body"),
             anchor="w",
             justify="left",
             wraplength=init_text_w,

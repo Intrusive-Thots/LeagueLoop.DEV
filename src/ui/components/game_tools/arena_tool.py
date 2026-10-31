@@ -1,6 +1,7 @@
 import os
 from ui.components.glyphs import ctk_glyph
 import customtkinter as ctk
+from ui.components.scroll_autohide import autohide_scrollbar
 
 from ui.components.factory import get_color, get_font
 from ui.components.champion_input import ChampionInput
@@ -165,6 +166,7 @@ class ArenaTool(ctk.CTkFrame):
             scrollbar_button_color=get_color("colors.text.disabled"),
             scrollbar_button_hover_color=get_color("colors.text.muted"), scrollbar_fg_color="transparent"
         )
+        autohide_scrollbar(self.list_frame)
         try:
             # Reaching into CustomTkinter's private `_scrollbar` is fragile by
             # nature — it is not API and has moved between releases — so a

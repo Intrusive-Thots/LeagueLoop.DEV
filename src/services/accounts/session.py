@@ -48,6 +48,26 @@ class RiotSession:
         except Exception:
             return False
 
+    def signed_out_confirmed(self) -> bool:
+        """True only when the Riot Client positively reports nobody signed in.
+
+        No answer, a timeout or an unknown shape is *not* signed out: the
+        old check (`not is_signed_in()`) read a failed request as success,
+        which let a switch type over a session that was still alive.
+        """
+        state_fn = getattr(self.api, "signed_out_state", None)
+        if not callable(state_fn):
+            return not self.is_signed_in()
+        try:
+            if state_fn() is not True:
+                return False
+            auth_fn = getattr(self.api, "authorization_present", None)
+            if callable(auth_fn) and auth_fn() is not False:
+                return False
+        except Exception:
+            return False
+        return True
+
     def current_user(self) -> Optional[Dict[str, Any]]:
         try:
             return self.api.get_current_user()
@@ -59,6 +79,17 @@ class RiotSession:
         info = self.current_user() or {}
         return str(info.get("preferred_username") or "").lower()
 
+    def current_subject(self) -> str:
+        """The signed-in account's PUUID (RSO subject), lowercased, or ""."""
+        try:
+            fn = getattr(self.api, "get_auth_status", None)
+            data = fn() if callable(fn) else None
+        except Exception:
+            return ""
+        if not isinstance(data, dict):
+            return ""
+        return str(data.get("subject") or "").strip().lower()
+
     # `sign_in()` lived here and is gone: Riot's credential flow requires a
     # solved captcha, so there is no request this object could make that would
     # sign anybody in. Sessions are restored by `services/accounts/vault.py`.
@@ -68,6 +99,41 @@ class RiotSession:
             return bool(self.api.sign_out())
         except Exception:
             return False
+
+    def auth_state(self) -> Optional[Dict[str, Any]]:
+        """The Riot authenticator's state (GET only), or None if unreadable."""
+        try:
+            fn = getattr(self.api, "get_authenticator_state", None)
+            return fn() if callable(fn) else None
+        except Exception:
+            return None
+
+    @staticmethod
+    def classify_auth_state(state: Optional[Dict[str, Any]]) -> str:
+        """Reduce an authenticator payload to one word.
+
+        One of: "" (nothing to report), "success", "multifactor",
+        "auth_failure", "rate_limited", "captcha". Only explicit fields are
+        trusted; an unknown shape is "" rather than a guess.
+        """
+        if not isinstance(state, dict):
+            return ""
+        kind = str(state.get("type") or "").lower()
+        if kind in ("success", "multifactor"):
+            return kind
+        error = state.get("error")
+        if isinstance(error, dict):
+            error = error.get("errorCode") or error.get("code") or error.get("message")
+        error = str(error or state.get("errorCode") or "").lower()
+        if not error:
+            return ""
+        if "captcha" in error or "invalid_prompt" in error:
+            return "captcha"
+        if "rate" in error or "too_many" in error:
+            return "rate_limited"
+        if "auth_failure" in error or "invalid_credentials" in error or "credentials_invalid" in error:
+            return "auth_failure"
+        return ""
 
     def launch_league(self) -> bool:
         try:
@@ -104,7 +170,7 @@ class RiotSession:
             sleep(interval_s)
 
     def wait_until_signed_out(self, timeout_s: float = 12.0, **kw) -> bool:
-        return self.wait_until(lambda: not self.is_signed_in(), timeout_s, **kw)
+        return self.wait_until(self.signed_out_confirmed, timeout_s, **kw)
 
     def wait_until_signed_in(self, timeout_s: float = 20.0, **kw) -> bool:
         return self.wait_until(self.is_signed_in, timeout_s, **kw)

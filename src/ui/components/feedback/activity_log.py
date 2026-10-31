@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from ui.components.scroll_autohide import autohide_scrollbar
 from ui.components.factory import get_color, get_font
 from ui.components.cards import Card, CardHeader, CardContent
 
@@ -17,6 +18,7 @@ class ActivityLogPanel(Card):
             scrollbar_button_color=get_color("colors.background.card", "#1E2328"),
             scrollbar_button_hover_color=get_color("colors.text.disabled", "#3A4654")
         )
+        autohide_scrollbar(self.scroll)
         self.scroll.pack(fill="both", expand=True)
 
     def add_log(self, text, level="info"):

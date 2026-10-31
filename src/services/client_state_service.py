@@ -37,6 +37,7 @@ from typing import Any, Callable, Optional
 
 from core.state import ConnectionStateEnum, GameflowPhase
 from utils.logger import Logger
+from services.draft.timer import phase_time_left_ms
 
 #: How often to refresh while the client is reachable.
 DEFAULT_POLL_INTERVAL_S = 1.0
@@ -120,6 +121,7 @@ class ClientStateService:
         self._last_queue: Optional[tuple] = None
         self._last_automation: Optional[tuple] = None
         self._summoner_loaded = False
+        self._last_generation: Optional[int] = None
         #: Fetched once per draft, not once per tick — the set does not change
         #: while a draft is running.
         self._pickable_ids: tuple = ()
@@ -202,6 +204,8 @@ class ClientStateService:
         """One poll cycle. Returns whether the client is currently reachable."""
         self._mirror_automation()
         connected = self._ensure_connected()
+        if connected:
+            self._notice_new_session()
         self._publish_connection(connected)
 
         if not connected:
@@ -219,6 +223,24 @@ class ClientStateService:
         if phase == GameflowPhase.CHAMP_SELECT.value:
             self._read_and_publish_champ_select()
         return True
+
+    def _notice_new_session(self) -> None:
+        """A new LCU connection (League restarted, e.g. after a switch) while we
+        were not looking: forget the old summoner so it is read again."""
+        try:
+            gen = getattr(self._lcu, "connection_generation", None)
+        except Exception:
+            gen = None
+        if not isinstance(gen, int) or isinstance(gen, bool):
+            return
+        last = getattr(self, "_last_generation", None)
+        self._last_generation = gen
+        if last is None or last == gen:
+            return
+        self.resync()
+        self._state.update_client(
+            summoner_name=None, summoner_id=None, puuid=None, profile_icon_id=0
+        )
 
     def _mirror_automation(self) -> None:
         """Republish automation flags only when the engine's reality moved."""
@@ -322,6 +344,7 @@ class ClientStateService:
             self._pickable_ids = ()
             self._state.update_champ_select(
                 active=False, cell_id=-1, local_role="", timer_remaining_s=0.0,
+                timer_phase="", timer_sampled_at=0.0,
                 locked_in=False, selected_champion_id=0,
                 my_team=(), their_team=(), actions=(),
             )
@@ -375,11 +398,10 @@ class ClientStateService:
         )
 
         timer = session.get("timer") or {}
-        # The LCU reports milliseconds; every consumer here works in seconds.
-        remaining_ms = timer.get("adjustedTimeLeftInPhase")
-        if not isinstance(remaining_ms, (int, float)):
-            remaining_ms = timer.get("timeLeftInPhase") or 0
-        remaining_s = max(0.0, float(remaining_ms) / 1000.0)
+        # The LCU reports milliseconds as of `internalNowInEpochMs` and only
+        # refreshes the session on draft changes, so age the snapshot rather
+        # than trusting it (a live draft held 19.8 s for nine seconds).
+        remaining_s = phase_time_left_ms(timer) / 1000.0
 
         me = next(
             (p for p in my_team if p.get("cellId") == cell_id and cell_id >= 0),
@@ -427,6 +449,8 @@ class ClientStateService:
             cell_id=cell_id,
             local_role=str(me.get("assignedPosition") or ""),
             timer_remaining_s=remaining_s,
+            timer_phase=str(timer.get("phase") or ""),
+            timer_sampled_at=time.time(),
             locked_in=locked,
             selected_champion_id=int(selected or 0),
             my_team=my_team,

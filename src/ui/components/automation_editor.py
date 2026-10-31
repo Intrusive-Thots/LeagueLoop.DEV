@@ -4,10 +4,26 @@ Opens as a Toplevel dialog with dark theme styling, matching the app's aesthetic
 """
 from ui.components.glyphs import ctk_glyph
 import customtkinter as ctk  # type: ignore
+from ui.components.scroll_autohide import autohide_scrollbar
 
 from ui.components.factory import get_color, get_font  # type: ignore
 from core.constants import SPACING_SM, SPACING_MD  # type: ignore
 from utils.logger import Logger
+
+def _wrapped_lines(text, measure, width):
+    """Line count of greedy word wrap of *text* at *width* px (Tk-style)."""
+    lines, cur = 1, ""
+    for word in text.split():
+        trial = f"{cur} {word}" if cur else word
+        if cur and measure(trial) > width:
+            lines, cur = lines + 1, word
+        else:
+            cur = trial
+    return lines
+
+
+# Caption wrap inside the 380px dialog's 12px-padded cards (body − scrollbar − padding).
+FORM_WRAP = 300
 
 
 class AutomationEditor(ctk.CTkToplevel):
@@ -54,9 +70,8 @@ class AutomationEditor(ctk.CTkToplevel):
         """Center the popup over the main window and enforce topmost z-order."""
         try:
             parent = self.master.winfo_toplevel()
-            px = parent.winfo_rootx() + (parent.winfo_width() // 2) - 190
-            py = parent.winfo_rooty() + (parent.winfo_height() // 2) - 240
-            self.geometry(f"380x480+{px}+{py}")
+            from ui.components.window_place import centre_on
+            centre_on(self, parent, 380, 480)
             try:
                 self.attributes("-topmost", True)
             except Exception as exc:
@@ -148,6 +163,7 @@ class AutomationEditor(ctk.CTkToplevel):
             scrollbar_button_color=get_color("colors.text.disabled"),
             scrollbar_button_hover_color=get_color("colors.text.muted"),
         )
+        autohide_scrollbar(self.body)
         self.body.pack(fill="both", expand=True, padx=SPACING_MD, pady=SPACING_MD)
 
         # Common setting card for quick icon visibility on main page
@@ -156,6 +172,19 @@ class AutomationEditor(ctk.CTkToplevel):
         # Build form fields based on automation type
         builder = getattr(self, f"_build_{self._automation_key}", None)
         if builder:
+            # Type-specific fields sit in the same card treatment as the
+            # show-icon row above, so the dialog reads as two matching
+            # sections instead of one card + loose fields (#44).
+            form_card = ctk.CTkFrame(
+                self.body,
+                fg_color=get_color("colors.background.card", "#192230"),
+                corner_radius=8,
+                border_width=1,
+                border_color="#1E2838",
+            )
+            form_card.pack(fill="x")
+            self.form = ctk.CTkFrame(form_card, fg_color="transparent")
+            self.form.pack(fill="x", padx=12, pady=12)
             builder()
         else:
             ctk.CTkLabel(
@@ -163,6 +192,8 @@ class AutomationEditor(ctk.CTkToplevel):
                 font=get_font("body"),
                 text_color=get_color("colors.text.muted")
             ).pack(pady=SPACING_MD)
+
+        self._balance_captions()
 
         # ── Footer ──
         footer = ctk.CTkFrame(self.outer_frame, fg_color="transparent", height=50)
@@ -192,12 +223,53 @@ class AutomationEditor(ctk.CTkToplevel):
             cursor="hand2",
         ).pack(side="right")
 
+    def _balance_captions(self):
+        """Even out two-line captions so none ends on a one-word orphan.
+
+        Captions wrap at FORM_WRAP; a sentence just over that width left
+        "pop." / "on main page" dangling. Re-wrap single-paragraph captions
+        at the balanced width the Settings rows use (#41/#44).
+        """
+        try:
+            import tkinter.font as tkfont
+            from ui.components.settings_row import SettingsToggleRow
+        except Exception:
+            return
+        stack = list(self.body.winfo_children())
+        while stack:
+            w = stack.pop()
+            stack.extend(w.winfo_children())
+            if not isinstance(w, ctk.CTkLabel):
+                continue
+            try:
+                if int(w.cget("wraplength")) != FORM_WRAP:
+                    continue
+                text = w.cget("text") or ""
+                if "\n" in text:
+                    continue
+                scale = w._get_widget_scaling()
+                font = tkfont.Font(root=self, font=w._label.cget("font"))
+                avail = int(FORM_WRAP * scale)
+                wrap = SettingsToggleRow.balanced_wrap(font.measure(text), avail)
+                if not wrap:
+                    continue
+                # Grow from the even split until greedy wrapping needs no more
+                # lines than the full width does (never adds a line).
+                target = _wrapped_lines(text, font.measure, avail)
+                # 8px margin: Tk's own line breaking runs a few px tighter than
+                # Font.measure, so a "just fits" width still spilled a word.
+                while wrap < avail and _wrapped_lines(text, font.measure, wrap - 8) > target:
+                    wrap += 4
+                w.configure(wraplength=int(min(wrap, avail) / scale))
+            except Exception as exc:
+                Logger.debug("AutomationEditor", "_balance_captions skipped a label", exc=exc)
+
     # ── Builders for Automation Settings ──
 
     def _build_auto_accept(self):
         """Auto Accept settings form."""
         ctk.CTkLabel(
-            self.body, text="Accept Delay (Seconds)",
+            self.form, text="Accept Delay (Seconds)",
             font=get_font("body", "bold"), text_color=get_color("colors.text.primary")
         ).pack(anchor="w", pady=(0, 4))
 
@@ -205,7 +277,7 @@ class AutomationEditor(ctk.CTkToplevel):
         self._delay_var = ctk.DoubleVar(value=val)
         
         self.lbl_delay = ctk.CTkLabel(
-            self.body, text=f"{val:.1f}s",
+            self.form, text=f"{val:.1f}s",
             font=get_font("title", "bold"), text_color=get_color("colors.accent.gold", "#C8AA6E")
         )
         self.lbl_delay.pack(anchor="w", pady=(0, 8))
@@ -214,17 +286,17 @@ class AutomationEditor(ctk.CTkToplevel):
             self.lbl_delay.configure(text=f"{round(v, 1):.1f}s")
 
         slider = ctk.CTkSlider(
-            self.body, from_=0.0, to=8.0, number_of_steps=16,
+            self.form, from_=0.0, to=8.0, number_of_steps=16,
             variable=self._delay_var, command=_update_delay_label,
             button_color=get_color("colors.accent.gold", "#C8AA6E")
         )
         slider.pack(fill="x", pady=(0, 16))
 
         ctk.CTkLabel(
-            self.body,
+            self.form,
             text="Adds a natural human-like delay before accepting the match pop.",
             font=get_font("caption"), text_color=get_color("colors.text.muted"),
-            wraplength=320, justify="left"
+            wraplength=FORM_WRAP, justify="left"
         ).pack(anchor="w")
 
     def _build_auto_join(self):
@@ -232,7 +304,7 @@ class AutomationEditor(ctk.CTkToplevel):
         self._vip_only_var = ctk.BooleanVar(value=bool(self.config.get("vip_invites_only", False)))
         
         sw = ctk.CTkSwitch(
-            self.body, text="VIP Invites Only",
+            self.form, text="VIP Invites Only",
             font=get_font("body", "bold"),
             variable=self._vip_only_var,
             progress_color=get_color("colors.accent.gold", "#C8AA6E")
@@ -240,13 +312,13 @@ class AutomationEditor(ctk.CTkToplevel):
         sw.pack(anchor="w", pady=(0, 12))
 
         ctk.CTkLabel(
-            self.body, text="VIP Invite List (Comma Separated)",
+            self.form, text="VIP Invite List (Comma Separated)",
             font=get_font("body", "bold"), text_color=get_color("colors.text.primary")
         ).pack(anchor="w", pady=(0, 4))
 
         self._vip_list_var = ctk.StringVar(value=self.config.get("vip_invite_list", ""))
         entry = ctk.CTkEntry(
-            self.body,
+            self.form,
             textvariable=self._vip_list_var,
             placeholder_text="e.g. Faker, Doublelift...",
             font=get_font("body"),
@@ -257,16 +329,16 @@ class AutomationEditor(ctk.CTkToplevel):
         entry.pack(fill="x", pady=(0, 16))
 
         ctk.CTkLabel(
-            self.body,
+            self.form,
             text="If VIP Invites Only is enabled, Auto-Join will only auto-accept lobby invites from summoners in your VIP list.",
             font=get_font("caption"), text_color=get_color("colors.text.muted"),
-            wraplength=320, justify="left"
+            wraplength=FORM_WRAP, justify="left"
         ).pack(anchor="w")
 
     def _build_auto_honor(self):
         """Auto Honor settings form."""
         ctk.CTkLabel(
-            self.body, text="Honor Priority Strategy",
+            self.form, text="Honor Priority Strategy",
             font=get_font("body", "bold"), text_color=get_color("colors.text.primary")
         ).pack(anchor="w", pady=(0, 8))
 
@@ -280,49 +352,49 @@ class AutomationEditor(ctk.CTkToplevel):
 
         for val, label, desc in options:
             rb = ctk.CTkRadioButton(
-                self.body, text=label, value=val,
+                self.form, text=label, value=val,
                 variable=self._honor_var,
                 font=get_font("body", "bold"),
                 fg_color=get_color("colors.accent.gold", "#C8AA6E")
             )
             rb.pack(anchor="w", pady=(4, 0))
             ctk.CTkLabel(
-                self.body, text=desc,
+                self.form, text=desc,
                 font=get_font("caption"), text_color=get_color("colors.text.muted")
             ).pack(anchor="w", padx=(24, 0), pady=(0, 8))
 
     def _build_skip_stats(self):
         """Skip Stats settings form."""
         ctk.CTkLabel(
-            self.body, text="Post-Match Screen Behavior",
+            self.form, text="Post-Match Screen Behavior",
             font=get_font("body", "bold"), text_color=get_color("colors.text.primary")
         ).pack(anchor="w", pady=(0, 8))
 
         ctk.CTkLabel(
-            self.body,
+            self.form,
             text="Automatically skips the post-match stats screen, clicks Play Again, and restarts matchmaking in a continuous loop without requiring manual client interaction.",
             font=get_font("caption"), text_color=get_color("colors.text.muted"),
-            wraplength=320, justify="left"
+            wraplength=FORM_WRAP, justify="left"
         ).pack(anchor="w")
 
     def _build_auto_save_replays(self):
         """Auto Replays settings form."""
         ctk.CTkLabel(
-            self.body, text="Post-Match Replay Behavior",
+            self.form, text="Post-Match Replay Behavior",
             font=get_font("body", "bold"), text_color=get_color("colors.text.primary")
         ).pack(anchor="w", pady=(0, 8))
 
         ctk.CTkLabel(
-            self.body,
+            self.form,
             text="Automatically requests and downloads the match replay (.rofl) through the League Client as if clicking the download button after the match.\n\nFully compatible with Skip Stats — the replay download is dispatched and saved in the background even if the stats screen is skipped immediately.",
             font=get_font("caption"), text_color=get_color("colors.text.muted"),
-            wraplength=320, justify="left"
+            wraplength=FORM_WRAP, justify="left"
         ).pack(anchor="w")
 
     def _build_auto_runes(self):
         """Auto Runes settings form."""
         ctk.CTkLabel(
-            self.body, text="Rune Automation Mode",
+            self.form, text="Rune Automation Mode",
             font=get_font("body", "bold"), text_color=get_color("colors.text.primary")
         ).pack(anchor="w", pady=(0, 8))
 
@@ -335,21 +407,21 @@ class AutomationEditor(ctk.CTkToplevel):
 
         for val, label, desc in modes:
             rb = ctk.CTkRadioButton(
-                self.body, text=label, value=val,
+                self.form, text=label, value=val,
                 variable=self._runes_mode_var,
                 font=get_font("body", "bold"),
                 fg_color=get_color("colors.accent.gold", "#C8AA6E")
             )
             rb.pack(anchor="w", pady=(4, 0))
             ctk.CTkLabel(
-                self.body, text=desc,
+                self.form, text=desc,
                 font=get_font("caption"), text_color=get_color("colors.text.muted")
             ).pack(anchor="w", padx=(24, 0), pady=(0, 8))
 
     def _build_auto_add_played(self):
         """Auto-Add Played Champions settings form."""
         ctk.CTkLabel(
-            self.body, text="ARAM List Auto-Add Position",
+            self.form, text="ARAM List Auto-Add Position",
             font=get_font("body", "bold"), text_color=get_color("colors.text.primary")
         ).pack(anchor="w", pady=(0, 8))
 
@@ -362,26 +434,26 @@ class AutomationEditor(ctk.CTkToplevel):
 
         for val, label, desc in positions:
             rb = ctk.CTkRadioButton(
-                self.body, text=label, value=val,
+                self.form, text=label, value=val,
                 variable=self._add_pos_var,
                 font=get_font("body", "bold"),
                 fg_color=get_color("colors.accent.gold", "#C8AA6E")
             )
             rb.pack(anchor="w", pady=(4, 0))
             ctk.CTkLabel(
-                self.body, text=desc,
+                self.form, text=desc,
                 font=get_font("caption"), text_color=get_color("colors.text.muted")
             ).pack(anchor="w", padx=(24, 0), pady=(0, 8))
 
     def _build_auto_ban(self):
         """Auto-Ban: open full icon-grid editor (same UX as ARAM list)."""
         ctk.CTkLabel(
-            self.body,
+            self.form,
             text="Ban list is managed in the full champion editor "
                  "(icons + search), just like the ARAM Priority List.",
             font=get_font("caption"),
             text_color=get_color("colors.text.muted"),
-            wraplength=320,
+            wraplength=FORM_WRAP,
             justify="left",
         ).pack(anchor="w", pady=(0, 12))
 
@@ -395,14 +467,14 @@ class AutomationEditor(ctk.CTkToplevel):
         count = len(ban_list) if isinstance(ban_list, list) else 0
 
         ctk.CTkLabel(
-            self.body,
+            self.form,
             text=f"Current ban list: {count} champion{'s' if count != 1 else ''}",
             font=get_font("body", "bold"),
             text_color=get_color("colors.accent.gold", "#C8AA6E"),
         ).pack(anchor="w", pady=(0, 12))
 
         ctk.CTkButton(
-            self.body,
+            self.form,
             text="Open Ban List Editor",
             height=36,
             font=get_font("body", "bold"),
@@ -419,7 +491,7 @@ class AutomationEditor(ctk.CTkToplevel):
             value=bool(self.config.get("auto_ban_respect_hovers", True))
         )
         sw = ctk.CTkSwitch(
-            self.body,
+            self.form,
             text="Respect Teammate Hovers",
             font=get_font("body", "bold"),
             variable=self._respect_hovers_var,
@@ -427,11 +499,11 @@ class AutomationEditor(ctk.CTkToplevel):
         )
         sw.pack(anchor="w", pady=(8, 0))
         ctk.CTkLabel(
-            self.body,
+            self.form,
             text="Will not ban a champion if a teammate has hovered/selected it.",
             font=get_font("caption"),
             text_color=get_color("colors.text.muted"),
-            wraplength=320,
+            wraplength=FORM_WRAP,
             justify="left",
         ).pack(anchor="w", pady=(2, 0))
 
@@ -481,7 +553,7 @@ class AutomationEditor(ctk.CTkToplevel):
             card, text="Displays quick action toggle icon below 'Find Match' button on main page",
             font=get_font("caption"),
             text_color=get_color("colors.text.muted"),
-            wraplength=196, justify="left",
+            wraplength=FORM_WRAP, justify="left",
         )
         sub.pack(anchor="w", padx=12, pady=(0, 8))
 

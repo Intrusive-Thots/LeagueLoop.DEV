@@ -1,0 +1,1197 @@
+{
+ "activePlayer": {
+  "abilities": {
+   "E": {
+    "abilityLevel": 0,
+    "displayName": "REDACTED",
+    "id": "AatroxE",
+    "rawDescription": "GeneratedTip_Spell_AatroxE_Description",
+    "rawDisplayName": "GeneratedTip_Spell_AatroxE_DisplayName"
+   },
+   "Passive": {
+    "displayName": "REDACTED",
+    "id": "AatroxPassive",
+    "rawDescription": "GeneratedTip_Passive_AatroxPassive_Description",
+    "rawDisplayName": "GeneratedTip_Passive_AatroxPassive_DisplayName"
+   },
+   "Q": {
+    "abilityLevel": 0,
+    "displayName": "REDACTED",
+    "id": "AatroxQ",
+    "rawDescription": "GeneratedTip_Spell_AatroxQ_Description",
+    "rawDisplayName": "GeneratedTip_Spell_AatroxQ_DisplayName"
+   },
+   "R": {
+    "abilityLevel": 0,
+    "displayName": "REDACTED",
+    "id": "AatroxR",
+    "rawDescription": "GeneratedTip_Spell_AatroxR_Description",
+    "rawDisplayName": "GeneratedTip_Spell_AatroxR_DisplayName"
+   },
+   "W": {
+    "abilityLevel": 0,
+    "displayName": "REDACTED",
+    "id": "AatroxW",
+    "rawDescription": "GeneratedTip_Spell_AatroxW_Description",
+    "rawDisplayName": "GeneratedTip_Spell_AatroxW_DisplayName"
+   }
+  },
+  "championStats": {
+   "abilityHaste": 0.0,
+   "abilityPower": 0.0,
+   "armor": 55.432945251464844,
+   "armorPenetrationFlat": 0.0,
+   "armorPenetrationPercent": 1.0,
+   "attackDamage": 67.375,
+   "attackRange": 225.0,
+   "attackSpeed": 0.6750056743621826,
+   "bonusArmorPenetrationPercent": 1.0,
+   "bonusMagicPenetrationPercent": 1.0,
+   "critChance": 0.0,
+   "critDamage": 200.0,
+   "currentHealth": 968.1500244140625,
+   "healShieldPower": 0.0,
+   "healthRegenRate": 0.7475000619888306,
+   "lifeSteal": 0.0,
+   "magicLethality": 0.0,
+   "magicPenetrationFlat": 0.0,
+   "magicPenetrationPercent": 1.0,
+   "magicResist": 45.37669372558594,
+   "maxHealth": 968.1500244140625,
+   "moveSpeed": 345.0,
+   "omnivamp": 0.0,
+   "physicalLethality": 0.0,
+   "physicalVamp": 0.0,
+   "resourceMax": 0.0,
+   "resourceRegenRate": 0.0,
+   "resourceType": "BLOODWELL",
+   "resourceValue": 0.0,
+   "spellVamp": 0.0,
+   "tenacity": 5.0
+  },
+  "currentGold": 500.0,
+  "fullRunes": {},
+  "level": 3,
+  "riotId": "Player#ANON",
+  "riotIdGameName": "ANON",
+  "riotIdTagLine": "ANON",
+  "summonerName": "ANON",
+  "teamRelativeColors": true
+ },
+ "allPlayers": [
+  {
+   "championName": "Aatrox",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 220011,
+     "price": 750,
+     "rawDescription": "GeneratedTip_Item_220011_Description",
+     "rawDisplayName": "Item_220011_Name",
+     "slot": 0
+    },
+    {
+     "canUse": true,
+     "consumable": false,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 3348,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_3348_Description",
+     "rawDisplayName": "game_item_displayname_3348",
+     "slot": 6
+    }
+   ],
+   "level": 3,
+   "position": "NONE",
+   "rawChampionName": "Character_Aatrox_Name",
+   "rawSkinName": "game_character_displayname_Aatrox",
+   "respawnTimer": 0.0,
+   "riotId": "Player#ANON",
+   "riotIdGameName": "ANON",
+   "riotIdTagLine": "ANON",
+   "runes": null,
+   "scores": {
+    "assists": 0,
+    "creepScore": 0,
+    "deaths": 0,
+    "kills": 0,
+    "wardScore": 0.0
+   },
+   "skinID": 0,
+   "skinName": "Aatrox",
+   "summonerName": "ANON",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryHold_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryHold_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryFlash_DisplayName"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "Cho'Gath",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 220011,
+     "price": 750,
+     "rawDescription": "GeneratedTip_Item_220011_Description",
+     "rawDisplayName": "Item_220011_Name",
+     "slot": 0
+    },
+    {
+     "canUse": true,
+     "consumable": false,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 3348,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_3348_Description",
+     "rawDisplayName": "game_item_displayname_3348",
+     "slot": 6
+    }
+   ],
+   "level": 3,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Chogath",
+   "rawSkinName": "game_character_displayname_Chogath",
+   "respawnTimer": 0.0,
+   "riotId": "Player#ANON",
+   "riotIdGameName": "",
+   "riotIdTagLine": "",
+   "runes": null,
+   "scores": {
+    "assists": 0,
+    "creepScore": 0,
+    "deaths": 0,
+    "kills": 0,
+    "wardScore": 0.0
+   },
+   "skinID": 0,
+   "skinName": "Cho'Gath",
+   "summonerName": "ANON",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryFlash_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryHold_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryHold_DisplayName"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "Jax",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 220008,
+     "price": 750,
+     "rawDescription": "GeneratedTip_Item_220008_Description",
+     "rawDisplayName": "Item_220008_Name",
+     "slot": 0
+    },
+    {
+     "canUse": true,
+     "consumable": false,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 3348,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_3348_Description",
+     "rawDisplayName": "game_item_displayname_3348",
+     "slot": 6
+    }
+   ],
+   "level": 3,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Jax",
+   "rawSkinName": "game_character_skin_displayname_Jax_22",
+   "respawnTimer": 0.0,
+   "riotId": "Player#ANON",
+   "riotIdGameName": "",
+   "riotIdTagLine": "",
+   "runes": null,
+   "scores": {
+    "assists": 0,
+    "creepScore": 0,
+    "deaths": 0,
+    "kills": 0,
+    "wardScore": 0.0
+   },
+   "skinID": 22,
+   "skinName": "Empyrean Jax",
+   "summonerName": "ANON",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryHold_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryHold_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryFlash_DisplayName"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "Cho'Gath",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 220008,
+     "price": 750,
+     "rawDescription": "GeneratedTip_Item_220008_Description",
+     "rawDisplayName": "Item_220008_Name",
+     "slot": 0
+    },
+    {
+     "canUse": true,
+     "consumable": false,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 3348,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_3348_Description",
+     "rawDisplayName": "game_item_displayname_3348",
+     "slot": 6
+    }
+   ],
+   "level": 3,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Chogath",
+   "rawSkinName": "game_character_skin_displayname_Chogath_2",
+   "respawnTimer": 0.0,
+   "riotId": "Player#ANON",
+   "riotIdGameName": "",
+   "riotIdTagLine": "",
+   "runes": null,
+   "scores": {
+    "assists": 0,
+    "creepScore": 0,
+    "deaths": 0,
+    "kills": 0,
+    "wardScore": 0.0
+   },
+   "skinID": 2,
+   "skinName": "Gentleman Cho'Gath",
+   "summonerName": "ANON",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryHold_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryHold_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryFlash_DisplayName"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "Nautilus",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 220008,
+     "price": 750,
+     "rawDescription": "GeneratedTip_Item_220008_Description",
+     "rawDisplayName": "Item_220008_Name",
+     "slot": 0
+    },
+    {
+     "canUse": true,
+     "consumable": false,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 3348,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_3348_Description",
+     "rawDisplayName": "game_item_displayname_3348",
+     "slot": 6
+    }
+   ],
+   "level": 3,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Nautilus",
+   "rawSkinName": "game_character_skin_displayname_Nautilus_3",
+   "respawnTimer": 0.0,
+   "riotId": "Player#ANON",
+   "riotIdGameName": "",
+   "riotIdTagLine": "",
+   "runes": null,
+   "scores": {
+    "assists": 0,
+    "creepScore": 0,
+    "deaths": 0,
+    "kills": 0,
+    "wardScore": 0.0
+   },
+   "skinID": 3,
+   "skinName": "AstroNautilus",
+   "summonerName": "ANON",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryHold_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryHold_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryFlash_DisplayName"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "Vladimir",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 220008,
+     "price": 750,
+     "rawDescription": "GeneratedTip_Item_220008_Description",
+     "rawDisplayName": "Item_220008_Name",
+     "slot": 0
+    },
+    {
+     "canUse": true,
+     "consumable": false,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 3348,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_3348_Description",
+     "rawDisplayName": "game_item_displayname_3348",
+     "slot": 6
+    }
+   ],
+   "level": 3,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Vladimir",
+   "rawSkinName": "game_character_skin_displayname_Vladimir_14",
+   "respawnTimer": 0.0,
+   "riotId": "Player#ANON",
+   "riotIdGameName": "",
+   "riotIdTagLine": "",
+   "runes": null,
+   "scores": {
+    "assists": 0,
+    "creepScore": 0,
+    "deaths": 0,
+    "kills": 0,
+    "wardScore": 0.0
+   },
+   "skinID": 14,
+   "skinName": "Nightbringer Vladimir",
+   "summonerName": "ANON",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryFlash_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryHold_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryHold_DisplayName"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "Evelynn",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 220008,
+     "price": 750,
+     "rawDescription": "GeneratedTip_Item_220008_Description",
+     "rawDisplayName": "Item_220008_Name",
+     "slot": 0
+    },
+    {
+     "canUse": true,
+     "consumable": false,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 3348,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_3348_Description",
+     "rawDisplayName": "game_item_displayname_3348",
+     "slot": 6
+    }
+   ],
+   "level": 3,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Evelynn",
+   "rawSkinName": "game_character_displayname_Evelynn",
+   "respawnTimer": 0.0,
+   "riotId": "Player#ANON",
+   "riotIdGameName": "",
+   "riotIdTagLine": "",
+   "runes": null,
+   "scores": {
+    "assists": 0,
+    "creepScore": 0,
+    "deaths": 0,
+    "kills": 0,
+    "wardScore": 0.0
+   },
+   "skinID": 0,
+   "skinName": "Evelynn",
+   "summonerName": "ANON",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryHold_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryHold_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryFlash_DisplayName"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "Bel'Veth",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 220008,
+     "price": 750,
+     "rawDescription": "GeneratedTip_Item_220008_Description",
+     "rawDisplayName": "Item_220008_Name",
+     "slot": 0
+    },
+    {
+     "canUse": true,
+     "consumable": false,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 3348,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_3348_Description",
+     "rawDisplayName": "game_item_displayname_3348",
+     "slot": 6
+    }
+   ],
+   "level": 3,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Belveth",
+   "rawSkinName": "game_character_displayname_Belveth",
+   "respawnTimer": 0.0,
+   "riotId": "Player#ANON",
+   "riotIdGameName": "",
+   "riotIdTagLine": "",
+   "runes": null,
+   "scores": {
+    "assists": 0,
+    "creepScore": 0,
+    "deaths": 0,
+    "kills": 0,
+    "wardScore": 0.0
+   },
+   "skinID": 0,
+   "skinName": "Bel'Veth",
+   "summonerName": "ANON",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryHold_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryHold_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryFlash_DisplayName"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "Karma",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 220011,
+     "price": 750,
+     "rawDescription": "GeneratedTip_Item_220011_Description",
+     "rawDisplayName": "Item_220011_Name",
+     "slot": 0
+    },
+    {
+     "canUse": true,
+     "consumable": false,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 3348,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_3348_Description",
+     "rawDisplayName": "game_item_displayname_3348",
+     "slot": 6
+    }
+   ],
+   "level": 3,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Karma",
+   "rawSkinName": "game_character_displayname_Karma",
+   "respawnTimer": 0.0,
+   "riotId": "Player#ANON",
+   "riotIdGameName": "",
+   "riotIdTagLine": "",
+   "runes": null,
+   "scores": {
+    "assists": 0,
+    "creepScore": 0,
+    "deaths": 0,
+    "kills": 0,
+    "wardScore": 0.0
+   },
+   "skinID": 0,
+   "skinName": "Karma",
+   "summonerName": "ANON",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryHold_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryHold_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryFlash_DisplayName"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "Ashe",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 220008,
+     "price": 750,
+     "rawDescription": "GeneratedTip_Item_220008_Description",
+     "rawDisplayName": "Item_220008_Name",
+     "slot": 0
+    },
+    {
+     "canUse": true,
+     "consumable": false,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 3348,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_3348_Description",
+     "rawDisplayName": "game_item_displayname_3348",
+     "slot": 6
+    }
+   ],
+   "level": 3,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Ashe",
+   "rawSkinName": "game_character_skin_displayname_Ashe_25",
+   "respawnTimer": 0.0,
+   "riotId": "Player#ANON",
+   "riotIdGameName": "",
+   "riotIdTagLine": "",
+   "runes": null,
+   "scores": {
+    "assists": 0,
+    "creepScore": 0,
+    "deaths": 0,
+    "kills": 0,
+    "wardScore": 0.0
+   },
+   "skinID": 25,
+   "skinName": "Fae Dragon Ashe (Rose Quartz)",
+   "summonerName": "ANON",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryHold_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryHold_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryFlash_DisplayName"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "Taliyah",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 220011,
+     "price": 750,
+     "rawDescription": "GeneratedTip_Item_220011_Description",
+     "rawDisplayName": "Item_220011_Name",
+     "slot": 0
+    },
+    {
+     "canUse": true,
+     "consumable": false,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 3348,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_3348_Description",
+     "rawDisplayName": "game_item_displayname_3348",
+     "slot": 6
+    }
+   ],
+   "level": 3,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Taliyah",
+   "rawSkinName": "game_character_displayname_Taliyah",
+   "respawnTimer": 0.0,
+   "riotId": "Player#ANON",
+   "riotIdGameName": "",
+   "riotIdTagLine": "",
+   "runes": null,
+   "scores": {
+    "assists": 0,
+    "creepScore": 0,
+    "deaths": 0,
+    "kills": 0,
+    "wardScore": 0.0
+   },
+   "skinID": 0,
+   "skinName": "Taliyah",
+   "summonerName": "ANON",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryFlash_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryHold_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryHold_DisplayName"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "Jinx",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 220011,
+     "price": 750,
+     "rawDescription": "GeneratedTip_Item_220011_Description",
+     "rawDisplayName": "Item_220011_Name",
+     "slot": 0
+    },
+    {
+     "canUse": true,
+     "consumable": false,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 3348,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_3348_Description",
+     "rawDisplayName": "game_item_displayname_3348",
+     "slot": 6
+    }
+   ],
+   "level": 3,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Jinx",
+   "rawSkinName": "game_character_displayname_Jinx",
+   "respawnTimer": 0.0,
+   "riotId": "Player#ANON",
+   "riotIdGameName": "",
+   "riotIdTagLine": "",
+   "runes": null,
+   "scores": {
+    "assists": 0,
+    "creepScore": 0,
+    "deaths": 0,
+    "kills": 0,
+    "wardScore": 0.0
+   },
+   "skinID": 0,
+   "skinName": "Jinx",
+   "summonerName": "ANON",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryHold_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryHold_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryFlash_DisplayName"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "Graves",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 220011,
+     "price": 750,
+     "rawDescription": "GeneratedTip_Item_220011_Description",
+     "rawDisplayName": "Item_220011_Name",
+     "slot": 0
+    },
+    {
+     "canUse": true,
+     "consumable": false,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 3348,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_3348_Description",
+     "rawDisplayName": "game_item_displayname_3348",
+     "slot": 6
+    }
+   ],
+   "level": 3,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Graves",
+   "rawSkinName": "game_character_displayname_Graves",
+   "respawnTimer": 0.0,
+   "riotId": "Player#ANON",
+   "riotIdGameName": "",
+   "riotIdTagLine": "",
+   "runes": null,
+   "scores": {
+    "assists": 0,
+    "creepScore": 0,
+    "deaths": 0,
+    "kills": 0,
+    "wardScore": 0.0
+   },
+   "skinID": 0,
+   "skinName": "Graves",
+   "summonerName": "ANON",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryFlash_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryHold_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryHold_DisplayName"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "Zac",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 220011,
+     "price": 750,
+     "rawDescription": "GeneratedTip_Item_220011_Description",
+     "rawDisplayName": "Item_220011_Name",
+     "slot": 0
+    },
+    {
+     "canUse": true,
+     "consumable": false,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 3348,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_3348_Description",
+     "rawDisplayName": "game_item_displayname_3348",
+     "slot": 6
+    }
+   ],
+   "level": 3,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Zac",
+   "rawSkinName": "game_character_displayname_Zac",
+   "respawnTimer": 0.0,
+   "riotId": "Player#ANON",
+   "riotIdGameName": "",
+   "riotIdTagLine": "",
+   "runes": null,
+   "scores": {
+    "assists": 0,
+    "creepScore": 0,
+    "deaths": 0,
+    "kills": 0,
+    "wardScore": 0.0
+   },
+   "skinID": 0,
+   "skinName": "Zac",
+   "summonerName": "ANON",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryFlash_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryHold_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryHold_DisplayName"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "Leona",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 220008,
+     "price": 750,
+     "rawDescription": "GeneratedTip_Item_220008_Description",
+     "rawDisplayName": "Item_220008_Name",
+     "slot": 0
+    },
+    {
+     "canUse": true,
+     "consumable": false,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 3348,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_3348_Description",
+     "rawDisplayName": "game_item_displayname_3348",
+     "slot": 6
+    }
+   ],
+   "level": 3,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Leona",
+   "rawSkinName": "game_character_displayname_Leona",
+   "respawnTimer": 0.0,
+   "riotId": "Player#ANON",
+   "riotIdGameName": "",
+   "riotIdTagLine": "",
+   "runes": null,
+   "scores": {
+    "assists": 0,
+    "creepScore": 0,
+    "deaths": 0,
+    "kills": 0,
+    "wardScore": 0.0
+   },
+   "skinID": 0,
+   "skinName": "Leona",
+   "summonerName": "ANON",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryHold_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryHold_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryFlash_DisplayName"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "Kennen",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 220008,
+     "price": 750,
+     "rawDescription": "GeneratedTip_Item_220008_Description",
+     "rawDisplayName": "Item_220008_Name",
+     "slot": 0
+    },
+    {
+     "canUse": true,
+     "consumable": false,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 3348,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_3348_Description",
+     "rawDisplayName": "game_item_displayname_3348",
+     "slot": 6
+    }
+   ],
+   "level": 3,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Kennen",
+   "rawSkinName": "game_character_skin_displayname_Kennen_7",
+   "respawnTimer": 0.0,
+   "riotId": "Player#ANON",
+   "riotIdGameName": "",
+   "riotIdTagLine": "",
+   "runes": null,
+   "scores": {
+    "assists": 0,
+    "creepScore": 0,
+    "deaths": 0,
+    "kills": 0,
+    "wardScore": 0.0
+   },
+   "skinID": 7,
+   "skinName": "Super Kennen",
+   "summonerName": "ANON",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryHold_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryHold_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryFlash_DisplayName"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "Akshan",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 220008,
+     "price": 750,
+     "rawDescription": "GeneratedTip_Item_220008_Description",
+     "rawDisplayName": "Item_220008_Name",
+     "slot": 0
+    },
+    {
+     "canUse": true,
+     "consumable": false,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 3348,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_3348_Description",
+     "rawDisplayName": "game_item_displayname_3348",
+     "slot": 6
+    }
+   ],
+   "level": 3,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Akshan",
+   "rawSkinName": "game_character_skin_displayname_Akshan_9",
+   "respawnTimer": 0.0,
+   "riotId": "Player#ANON",
+   "riotIdGameName": "",
+   "riotIdTagLine": "",
+   "runes": null,
+   "scores": {
+    "assists": 0,
+    "creepScore": 0,
+    "deaths": 0,
+    "kills": 0,
+    "wardScore": 0.0
+   },
+   "skinID": 9,
+   "skinName": "Cyber Pop Akshan (Obsidian)",
+   "summonerName": "ANON",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryHold_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryHold_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryFlash_DisplayName"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "Xayah",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 220008,
+     "price": 750,
+     "rawDescription": "GeneratedTip_Item_220008_Description",
+     "rawDisplayName": "Item_220008_Name",
+     "slot": 0
+    },
+    {
+     "canUse": true,
+     "consumable": false,
+     "count": 1,
+     "displayName": "REDACTED",
+     "itemID": 3348,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_3348_Description",
+     "rawDisplayName": "game_item_displayname_3348",
+     "slot": 6
+    }
+   ],
+   "level": 3,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Xayah",
+   "rawSkinName": "game_character_skin_displayname_Xayah_3",
+   "respawnTimer": 0.0,
+   "riotId": "Player#ANON",
+   "riotIdGameName": "",
+   "riotIdTagLine": "",
+   "runes": null,
+   "scores": {
+    "assists": 0,
+    "creepScore": 0,
+    "deaths": 0,
+    "kills": 0,
+    "wardScore": 0.0
+   },
+   "skinID": 3,
+   "skinName": "SSG Xayah",
+   "summonerName": "ANON",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryHold_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryHold_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "REDACTED",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerCherryFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerCherryFlash_DisplayName"
+    }
+   },
+   "team": "ORDER"
+  }
+ ],
+ "events": {
+  "Events": [
+   {
+    "EventID": 0,
+    "EventName": "GameStart",
+    "EventTime": 0.07812300324440002
+   }
+  ]
+ },
+ "gameData": {
+  "gameMode": "CHERRY",
+  "gameTime": 8.807371139526367,
+  "mapName": "Map30",
+  "mapNumber": 30,
+  "mapTerrain": "Default"
+ }
+}

@@ -2,6 +2,7 @@
 Sidebar navigation and main layout component.
 """
 import customtkinter as ctk  # type: ignore
+from ui.components.scroll_autohide import autohide_scrollbar
 from ui.components.glyphs import ctk_glyph, set_icon
 import os
 import threading
@@ -66,6 +67,9 @@ class SidebarWidget(ctk.CTkFrame):
         self._play_again_in_flight = False
         
         EventBus.on("lobby_event", self._on_lobby_event)
+        # A finished switch means a different account: nothing account-scoped
+        # on screen (friends, header, loot) is valid any more.
+        EventBus.on("account_switch_finished", self._on_account_switch_finished)
 
         self._setup_ui()
         self.after(100, self._load_icons_async)
@@ -438,6 +442,7 @@ class SidebarWidget(ctk.CTkFrame):
             scrollbar_button_hover_color=get_color("colors.text.muted"),
             scrollbar_fg_color="transparent",
         )
+        autohide_scrollbar(self.automations_scroll)
         try:
             self.automations_scroll._scrollbar.configure(width=6)
         except Exception as exc:
@@ -638,6 +643,7 @@ class SidebarWidget(ctk.CTkFrame):
 
         # ── Advanced Settings Tab Content ──
         self.advanced_scroll = ctk.CTkScrollableFrame(self.main_body, fg_color="transparent")
+        autohide_scrollbar(self.advanced_scroll)
         
         # AUTOMATION & BEHAVIOR
         card_auto = make_card(self.advanced_scroll, title="AUTOMATION & BEHAVIOR", padx=0, pady=(0, SECTION_GAP))
@@ -669,7 +675,6 @@ class SidebarWidget(ctk.CTkFrame):
             tooltip_text="After a game ends, ask the League client to download the replay (.rofl). Fully compatible with Skip Stats.",
             height=46,
         )
-        self.row_auto_save_replays.text_label.configure(wraplength=170)
         self.row_auto_save_replays.pack(fill="x", pady=(INNER_GAP, 0))
 
         self.lbl_replay_help = ctk.CTkLabel(
@@ -681,12 +686,13 @@ class SidebarWidget(ctk.CTkFrame):
             justify="left",
             anchor="w",
         )
-        self.lbl_replay_help.pack(fill="x", pady=(2, INNER_GAP))
+        self.lbl_replay_help.pack(fill="x", pady=(2, 2))
 
         self.lbl_replay_folder = ctk.CTkLabel(
             card_replays,
-            text="Replay folder: open Settings with the client running to look it up.",
+            text="Replay folder shows when League is open.",
             font=get_font("caption"),
+            height=0,  # one caption line; CTkLabel's 28px default floats it
             text_color=get_color("colors.text.muted"),
             wraplength=230,
             justify="left",
@@ -873,29 +879,37 @@ class SidebarWidget(ctk.CTkFrame):
             except Exception as exc:
                 Logger.debug("AppSidebar", f"Could not open screenshots dir: {exc}", exc=exc)
 
-        btn_debug_folder = make_button(
+        # A real secondary button on the label column, like Download / Fix
+        # Ping, instead of a free-floating ghost label that read as text.
+        self.row_debug_folder = SettingsActionRow(
             card_diag,
-            text="Open Screenshots Folder",
-            style="ghost",
-            font=get_font("caption", "bold"),
-            width=165,
-            height=24,
-            command=_open_screenshots_dir
+            label_text="Screenshots folder",
+            description="Captured in debug mode",
+            button_text="Open",
+            button_width=90,
+            style="secondary",
+            command=_open_screenshots_dir,
         )
-        btn_debug_folder.pack(anchor="w", pady=(0, 0))
+        self.row_debug_folder.pack(fill="x", pady=(0, 0))
 
         # ABOUT
         card_about = make_card(self.advanced_scroll, title="ABOUT", padx=0, pady=(0, SECTION_GAP))
         from core.version import __version__
-        ctk.CTkLabel(card_about, text="League Loop", font=get_font("title", "bold"), text_color=get_color("colors.text.primary")).pack(anchor="w")
-        ctk.CTkLabel(card_about, text=f"Version {__version__}", font=get_font("caption"), text_color=get_color("colors.text.muted")).pack(anchor="w", pady=(0, INNER_GAP))
-        
+
         def _open_about():
             from ui.components.about_page import AboutPage
             AboutPage(self.master)
-        
-        btn_about = make_button(card_about, text="Info & Legal", style="ghost", font=get_font("caption", "bold"), width=100, height=24, command=_open_about)
-        btn_about.pack(anchor="w")
+
+        self.row_about = SettingsActionRow(
+            card_about,
+            label_text="League Loop",
+            description=f"Version {__version__}",
+            button_text="Info & Legal",
+            button_width=90,
+            style="secondary",
+            command=_open_about,
+        )
+        self.row_about.pack(fill="x", pady=(0, 0))
 
         # ── Profile Section (Moved into Advanced Scroll) ──
         self.profile_frame = make_card(
@@ -1146,7 +1160,14 @@ class SidebarWidget(ctk.CTkFrame):
         # Focused exclusively on ARAM aspects: non-ARAM tools remain hidden
         self._pack_game_tool_container_if_needed()
 
-    def _on_mode_change(self, new_mode):
+    def _on_mode_change(self, new_mode, create_lobby=True):
+        """Switch the selected mode; `create_lobby` only for a user's choice.
+
+        Syncing the selector to a lobby the client is already in used to go
+        through here too, which left and re-created that lobby (live: the
+        first lobby event after launch sent DELETE + POST /lol-lobby/v2/lobby
+        while James sat in a Ranked lobby — it would have dropped a party).
+        """
         self.config.set("aram_mode", new_mode)
         if self.scraper:
             self.scraper.set_mode(new_mode)
@@ -1161,7 +1182,7 @@ class SidebarWidget(ctk.CTkFrame):
         except Exception:
             qid = self._get_queue_id_for_mode(new_mode)
 
-        if qid and self.lcu and getattr(self.lcu, "is_connected", False):
+        if create_lobby and qid and self.lcu and getattr(self.lcu, "is_connected", False):
             def _create_lobby_thread():
                 try:
                     # If in a friend's lobby, leave it and apply 5-minute cooldown
@@ -1201,12 +1222,53 @@ class SidebarWidget(ctk.CTkFrame):
         if detected_mode:
             current_mode = self.config.get("aram_mode", "ARAM")
             if detected_mode != current_mode:
-                self.after(0, lambda: self._on_mode_change(detected_mode))
+                self.after(0, lambda: self._on_mode_change(detected_mode, create_lobby=False))
 
     # ── Handlers ──
+    def _on_account_switch_finished(self, result=None):
+        """EventBus (worker thread): a switch ended - drop the old account's view."""
+        if result is not None and not getattr(result, "ok", False):
+            return
+        try:
+            EventBus.invoke_thread_safe(self, self.reset_client_scope)
+        except Exception as exc:
+            Logger.debug("AppSidebar", "_on_account_switch_finished suppressed an error", exc=exc)
+
+    def reset_client_scope(self):
+        """Forget everything tied to the previous League session or account.
+
+        Without this the header kept "Client not running / Offline" after a
+        reconnect (phase dedup saw None -> None and never repainted) and the
+        friend list kept the previous account's friends.
+        """
+        try:
+            if not self.winfo_exists():
+                return
+        except Exception:
+            return
+        lcu = getattr(self, "lcu", None) or getattr(self.master, "lcu", None)
+        connected = bool(lcu is not None and getattr(lcu, "is_connected", False) is True)
+        self._last_ui_phase = None
+        self._current_game_phase = "None"
+        try:
+            self._stop_local_queue_timer()
+        except Exception as exc:
+            Logger.debug("AppSidebar", "reset_client_scope timer suppressed an error", exc=exc)
+        try:
+            self._set_header_state("idle" if connected else "offline")
+        except Exception as exc:
+            Logger.debug("AppSidebar", "reset_client_scope header suppressed an error", exc=exc)
+        fl = getattr(self, "friend_list", None)
+        if fl is not None and hasattr(fl, "reset_for_new_session"):
+            try:
+                fl.reset_for_new_session(fetch=connected)
+            except Exception as exc:
+                Logger.debug("AppSidebar", "reset_client_scope friends suppressed an error", exc=exc)
+
     def on_lcu_connection_changed(self, connected: bool):
-        """Handles LCU connection state changes."""
+        """Handles LCU connection state changes (incl. a new session while connected)."""
         if not self.winfo_exists(): return
+        self.reset_client_scope()
         if connected:
             def _update_queues_bg():
                 try:
@@ -1253,6 +1315,27 @@ class SidebarWidget(ctk.CTkFrame):
         self.estimate_label.configure(text=status, text_color=status_col)
         self.progress_bar.set(progress)
         self.progress_bar.configure(progress_color=bar_col or get_color("colors.accent.gold", "#C8AA6E"))
+
+    def _champ_select_state(self):
+        container = getattr(self.master, "container", None)
+        manager = getattr(container, "state_manager", None)
+        try:
+            return manager.state.champ_select if manager is not None else None
+        except Exception:
+            return None
+
+    def _refresh_draft_status(self):
+        """Header line during the draft: whose turn and the time left."""
+        cs = self._champ_select_state()
+        if cs is None or not getattr(cs, "active", False):
+            return
+        try:
+            from services.draft.status import draft_status
+            text, my_turn = draft_status(cs)
+            color = get_color("colors.accent.gold", "#C8AA6E") if my_turn else get_color("colors.text.muted")
+            self.estimate_label.configure(text=text, text_color=color)
+        except Exception as exc:
+            Logger.debug("AppSidebar", "draft status refresh failed", exc=exc)
 
     def set_power_state(self, state: bool):
         """Pure visual/logical toggle without user-cancel side effects."""
@@ -1901,7 +1984,7 @@ class SidebarWidget(ctk.CTkFrame):
                 text = (
                     f"Replay folder: {path}"
                     if path
-                    else "Replay folder: connect the League client to see it."
+                    else "Replay folder shows when League is open."
                 )
                 try:
                     label.configure(text=text)
@@ -2326,6 +2409,7 @@ class SidebarWidget(ctk.CTkFrame):
                             self.friend_list._toggle_collapse()
                     except Exception as exc:
                         Logger.debug("AppSidebar", "Failed to collapse friend list in champ select", exc=exc)
+            self._refresh_draft_status()
             self._last_ui_phase = "ChampSelect"
 
         elif phase == "InProgress":
@@ -2384,7 +2468,7 @@ class SidebarWidget(ctk.CTkFrame):
                 queue_id = getattr(master.automation, "current_queue_id", None)
             game_mode = (session.get("gameConfig") or {}).get("gameMode", "").upper() if session else ""
             bench_enabled = session.get("benchEnabled", False) if session else False
-            is_aram = bool(bench) or bench_enabled or (queue_id in {450, 2400, 1010}) or (game_mode in {"ARAM", "ARAM_MAYHEM", "ARURF"})
+            is_aram = bool(bench) or bench_enabled or (queue_id in {450, 2400, 1010}) or (game_mode in {"ARAM", "ARAM_MAYHEM", "KIWI", "ARURF"})
 
             if is_aram and team and getattr(self, "assets", None):
                 bench_names = []

@@ -18,6 +18,7 @@ import threading
 from core.events import EventBus
 import tkinter as tk
 import customtkinter as ctk
+from ui.components.scroll_autohide import autohide_scrollbar
 from ui.components.glyphs import set_icon
 from services import friend_presence
 
@@ -157,6 +158,8 @@ class FriendPriorityList(ctk.CTkFrame):
         }
         self._last_render_sig = None
         self._row_widgets = []  # Track FriendRow instances for cleanup
+        #: Bumped on every new League session; fetches from an older one are dropped.
+        self._session_epoch = 0
 
         self._build_ui()
 
@@ -263,6 +266,7 @@ class FriendPriorityList(ctk.CTkFrame):
             scrollbar_button_hover_color=get_color("colors.text.muted"),
             scrollbar_fg_color="transparent",
         )
+        autohide_scrollbar(self.scroll)
         try:
             self.scroll._scrollbar.configure(width=6)
         except Exception as exc:
@@ -337,14 +341,61 @@ class FriendPriorityList(ctk.CTkFrame):
         except Exception:
             return
 
+        epoch = getattr(self, "_session_epoch", 0)
+
         def task():
             """Background task."""
             try:
                 res = self.lcu.request("GET", "/lol-chat/v1/friends", silent=True)
-                if res and res.status_code == 200:
+                if res and res.status_code == 200 and epoch == getattr(self, "_session_epoch", 0):
                     self._process_friends(res.json())
             except Exception as e:
                 Logger.debug("FriendList", f"Initial fetch error: {e}")
+
+        threading.Thread(target=task, daemon=True).start()
+
+    def reset_for_new_session(self, fetch: bool = True, attempts: int = 10, delay_ms: int = 3000):
+        """Drop the previous session's friends and load this one's.
+
+        Right after League starts, chat answers 404/503 for a while, so the
+        fetch is retried until it gets a list (or gives up after `attempts`).
+        """
+        self._session_epoch = getattr(self, "_session_epoch", 0) + 1
+        epoch = self._session_epoch
+        self._friends_data = []
+        self._last_render_sig = None
+        try:
+            self._render_list()
+        except Exception as exc:
+            Logger.debug("FriendList", "reset render suppressed an error", exc=exc)
+        if fetch and self.lcu:
+            self._fetch_until_loaded(epoch, attempts, delay_ms)
+
+    def _fetch_until_loaded(self, epoch, attempts_left, delay_ms):
+        if epoch != getattr(self, "_session_epoch", 0) or attempts_left <= 0:
+            return
+        try:
+            if not self.winfo_exists():
+                return
+        except Exception:
+            return
+
+        def task():
+            got = False
+            try:
+                res = self.lcu.request("GET", "/lol-chat/v1/friends", silent=True)
+                if res is not None and getattr(res, "status_code", 0) == 200:
+                    data = res.json()
+                    if isinstance(data, list) and epoch == getattr(self, "_session_epoch", 0):
+                        self._process_friends(data)
+                        got = True
+            except Exception as e:
+                Logger.debug("FriendList", f"Session fetch error: {e}")
+            if not got:
+                try:
+                    self.after(delay_ms, lambda: self._fetch_until_loaded(epoch, attempts_left - 1, delay_ms))
+                except Exception as exc:
+                    Logger.debug("FriendList", "retry schedule suppressed an error", exc=exc)
 
         threading.Thread(target=task, daemon=True).start()
 

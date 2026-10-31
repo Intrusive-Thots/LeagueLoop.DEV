@@ -93,6 +93,36 @@ bare `ctk.CTk()` root with a stub config and a real `AssetManager`, run under
 - Kept deliberately: ●/○ status dots and ★ rank text (data, not chrome); About title 16
   (display); loot category emoji (live data only); friend-list/toast paddings that drive layout.
 
+## Pass 7 audit (2026-10-29, offline fixtures, Xvfb renders of every tab/popup/toast/menu)
+Priority order. #23 stays parked.
+
+- [x] 39. **P1 Popups open off-screen** — `about_page.py`, `automation_editor.py` centred on the
+  300px sidebar with no clamp (About/editor opened at negative x, title bar unreachable);
+  `ban_list_window.py` / `aram_list_window.py` only clamped x/y<0 to 100 and ignored
+  right/bottom edges. New `ui/components/window_place.py` (`clamp_rect`, `work_area_for` —
+  Win32 monitor rcWork, so left-hand monitors with negative coords stay valid —
+  `place_on_screen`, `centre_on`) used by all four; 5 tests in `tests/test_window_place.py`.
+- [x] 40. **P1 Settings ghost buttons** — `app_sidebar.py` "Open Screenshots Folder" and About
+  "Info & Legal" were transparent fixed-width buttons, bold text floating indented off the
+  label column with no affordance. Now `SettingsActionRow`s ("Screenshots folder · Captured in
+  debug mode · Open", "League Loop · Version … · Info & Legal") matching Fix Ping/Download.
+- [x] 41. **P2 Settings row typography** — `SettingsActionRow` titles now regular body like
+  the toggle/hotkey rows. `SettingsToggleRow` measures its label on `<Configure>` and sets a
+  balanced, left-justified wraplength (`balanced_wrap`) instead of the hard-coded 170 →
+  "Auto-save replays / after each match", no centred orphan.
+- [x] 42. **P2 Replay-folder copy** — default + empty-path text is "Replay folder shows when
+  League is open." (one line); label `height=0` so it doesn't float in CTk's 28px box.
+- [x] 43. **P3 Empty-state scrollbars** — new `ui/components/scroll_autohide.py`
+  (`autohide_scrollbar`) shows a CTkScrollableFrame's bar only on overflow; wired into friend
+  list, accounts, loot vault, arena, AutomationEditor, priority grid, activity log and
+  Settings/Automations. Pins canvas height before hiding (no flip loop) + flap guard; tests in
+  `tests/test_scroll_autohide.py`.
+- [x] 44. **P3 Minor** — Loot Refresh/Claim now sit in a uniform 2-column grid (pack
+  `expand` only split spare space, so "Refresh" was wider). AutomationEditor puts the
+  type-specific fields in a card matching the "Show Icon on Main Page" card, captions wrap at
+  `FORM_WRAP` (300) with `_balance_captions` evening two-line captions (no "pop." / "on main
+  page" orphans); `tests/test_editor_caption_wrap.py`.
+
 ## Blocked (needs a live League client)
 23. Real LCU phase transitions + status pill; champ-select pick/ban panel and ARAM bench
     live highlight; loot opening/crafting results, item art, loot category icons; real
@@ -104,4 +134,54 @@ bare `ctk.CTk()` root with a stub config and a real `AssetManager`, run under
 - **Fixed from live data:** friends on mobile / in Riot Client / playing other Riot games were counted "online" and would have been mass-invited → new `services/friend_presence.py` (kinds, colours, status text, `is_invitable`); badge + Invite All now count invitable friends only. Friend status line was clipped to nothing (two 28px labels in a 40px row) → fixed. Season-pass claim reported phantom "Claimed N rewards" every run → skip claim POST when `rewardsCount <= 0`.
 - **Fixtures:** `tests/fixtures/lcu/{friends,loot,summoner,phase}.json` (anonymised live payloads), `tests/test_live_lcu_payloads.py`.
 - **Still blocked (James not in phase / forbidden):** champ-select pick/ban panel, ARAM bench highlighting, arena synergy, phase transitions, loot opening art + category icons (nothing openable), real invite flow. No champ-select/lobby payloads could be captured (404 outside those phases). TFT pass claim still counts any 2xx.
+### #23 live-client pass 2 (2026-10-29, ARAM: Mayhem draft on James's PC, read-only GETs + screenshots)
+- **Captured:** 8 `/lol-champ-select/v1/session` snapshots (BAN_PICK → FINALIZATION → GAME_STARTING, ~4 s apart) with two bench swaps by James (Ryze → Singed); gameflow ChampSelect → InProgress; `/lol-tft-pass/v1/active-passes`. LeagueLoop was not running on the PC, so the sidebar was checked by feeding the real payloads through the app on the box.
+- **Live-verified:** queue 2400 / gameMode `KIWI` is detected as ARAM; every pick action is pre-completed (no in-progress pick); after a swap `championPickIntent` is 0 and `championId` carries the pick; ARAM list highlights YOU / TEAM / BENCH match the draft exactly.
+- **Fixed from live data:** the draft timer is a snapshot as of `internalNowInEpochMs` that the LCU only refreshes on draft changes (two reads 9 s apart both said 19.8 s) → new `services/draft/timer.py` ages it; used by the status timer and the arena "<2 s left" ban/lock logic. TFT pass claim PUT every run and counted any 2xx → now skips passes with no unlocked REWARDABLE milestones (James's pass: one REWARDABLE but premium-locked) and counts only milestones the response or a re-read shows as claimed. `KIWI` added to the sidebar's ARAM game modes.
+- **Fixtures:** `tests/fixtures/lcu/champ_select_aram_mayhem_*.json`, `gameflow_session_champ_select.json`, `tft_active_passes.json`.
+- **Still blocked:** pick/ban panel with real bans and an in-progress pick (needs a Draft/Ranked or Blind game), classic ARAM (450) reroll flow, arena synergy (needs an Arena draft), loot opening art (nothing openable), live in-game/EndOfGame payloads beyond the phase name.
 - **Incident:** during live verification the app's loot automation claimed rewards on the real account (11 rewards at 23:23:04 UTC-4 incl. 2×750 BE, 25 OE, event pass rewards; an Open All that opened 0). Nothing disenchanted, crafted, queued or invited. Future live runs must use a sandbox config with all loot automation off and no GUI clicks.
+### #23 live-client pass 3 (2026-10-29, Ranked Solo/Duo on James's PC, app under a read-only launcher)
+- **Setup:** LeagueLoop ran from a ui-polish worktree through a launcher that patches `requests.Session.request` to block and log every non-GET call (the websocket only subscribes). Every automation toggle was off in config (backup kept). A separate GET-only poller captured lobby → matchmaking → ready check → champ select (every 2 s) → in game, with screenshots.
+- **Blocked writes (would have hit the real account):** `DELETE` + `POST /lol-lobby/v2/lobby` on the first lobby event, and two hover `PATCH /lol-champ-select/v1/session/actions/{id}`. (A ready-check accept at 03:29:54 UTC-4, triggered from the app UI rather than an automation, was blocked too; James accepted in the client.) Turning toggles off in config is **not** enough for a safe live run.
+- **Fixed from live data:**
+  - Startup ignored `automation_master`: the engine started un-paused with "Auto on" showing. It now starts paused and draws the power button from the saved master switch. A paused engine still ticks (GET-only) so the phase/queue display keeps updating; every handler that writes already returns when paused.
+  - Syncing the mode selector to the client's lobby went through `_on_mode_change`, which left and re-created the lobby (that would drop a party). It now only syncs the UI (`create_lobby=False`); only a user's pick creates a lobby.
+  - The queue clock read `/lol-lobby/v2/lobby/matchmaking/search-state`, which has no `timeInQueue`/`estimatedQueueTime`, so it showed "Est 2:00" while the client said 1:08. It now reads `/lol-matchmaking/v1/search`, with the old endpoint as fallback.
+  - Champ select showed "● Drafting" for the whole draft. The header now shows the turn and an aged countdown (`services/draft/status.py`): Declare intent / Your ban / Bans revealed / Your pick (gold) / Team picking / Enemy picking / Finalizing, e.g. "● Your pick · 0:18". `ChampSelectState` carries `timer_phase` and `timer_sampled_at`.
+- **Live-verified:** ranked bans appear only in `actions` (all 10 at once, `hasSimultaneousBans`); `session.bans` stays empty; a `ten_bans_reveal` action follows; picks run in pairs with both `isInProgress`; PLANNING marks every ban action in progress (it's not a ban turn); the timer is still a stale snapshot (same `internalNowInEpochMs` across up to 9 reads).
+- **Fixtures:** `tests/fixtures/lcu/champ_select_ranked_{planning,ban_turn,bans_reveal,my_pick,team_pick,enemy_pick,finalization}.json`, `matchmaking_search_ranked.json`, `lobby_matchmaking_search_state.json`, `ready_check_ranked.json`; `tests/test_ranked_live_pass.py`.
+- **Still open:** a full pick/ban panel (portraits per ban slot) — the sidebar has only the status line; arena synergy (needs an Arena draft); classic ARAM (450) reroll; loot opening art; EndOfGame payload checks. The ready-check accept button and auto-honor were not exercised with real writes.
+
+### #23 live-client pass 4 (Arena: Bravery Arena, queue 1740), 2026-10-29
+
+Captured live under the read-only launcher (GET-only poller + screenshots).
+Anonymized fixtures: `tests/fixtures/lcu/*arena_bravery*.json`,
+`live_client_arena_bravery.json`, `end_of_game_ranked.json`.
+
+Real shape: all 18 players in `myTeam` (`team: 1`), `theirTeam` empty, 18
+simultaneous picks (40 s) then FINALIZATION (10 s), no bans. The local trio
+(cells 9-11) are the only rows with visible spells/intent. `-3` = Bravery.
+Live client data (`/liveclientdata/allgamedata`): every player is team ORDER;
+no subteam, augment or placement fields, so in-game augments can't be shown
+from that API.
+
+Fixed:
+- [x] Queue 1740 / gameMode CHERRY not detected as Arena: it ran the 5v5
+  draft assistant over the 18-player lobby (old build sent 3 hover PATCHes,
+  all blocked). Detection now uses `ARENA_QUEUES` or the lobby `gameMode`.
+- [x] Arena "teammate" was the first other cell (a hidden stranger), so pairs
+  never fired. `services/draft/arena.py` finds the visible trio/partner and
+  prefers the teammate whose champion has a configured pair.
+- [x] `-3` treated as a champion (target, hover, lock). Now ignored.
+- [x] Banned ids read only `bannedChampions` (never present); now also
+  `bans.*TeamBans` and completed ban actions.
+- [x] End-of-game record: `role` was always blank (real block has
+  `selectedPosition` / `detectedTeamPosition`).
+- [x] Queue name map: 1740 "Bravery Arena" (the mode label read "Queue 1740").
+
+Still open:
+- [ ] Arena tool is never shown in the sidebar (`_update_game_tool_visibility`
+  hides it on purpose); no live partner/synergy display yet.
+- [ ] Arena in-game augments: not in the live client API; needs another source.
+- [ ] Bravery: should a pair allow choosing the -3 Bravery option itself?

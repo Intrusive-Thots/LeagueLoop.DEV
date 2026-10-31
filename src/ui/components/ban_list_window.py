@@ -225,14 +225,15 @@ class BanListWindow(ctk.CTkToplevel):
                 y = my + 40
             except Exception:
                 x, y = 200, 150
-        if x < 0:
-            x = 100
-        if y < 0:
-            y = 100
         try:
-            self.geometry(f"{w}x{h}+{x}+{y}")
+            from ui.components.window_place import place_on_screen
+            place_on_screen(self, x, y, w, h, anchor=self.master.winfo_toplevel())
         except Exception as exc:
             Logger.debug("BanListWindow", "_set_initial_geometry suppressed an error", exc=exc)
+            try:
+                self.geometry(f"{w}x{h}+{x}+{y}")
+            except Exception as exc2:
+                Logger.debug("BanListWindow", "fallback geometry failed", exc=exc2)
 
     def _on_close(self):
         self.destroy()
