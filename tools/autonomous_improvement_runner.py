@@ -492,13 +492,17 @@ def run_loop(
     semantic_learnings: Optional[List[Dict[str, Any]]] = None,
     procedural_methods: Optional[List[Dict[str, Any]]] = None,
     prune_storage_flag: bool = False,
+    max_screenshots_keep: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Executes the full Autonomous Improvement Loop."""
     prune_res = None
     if prune_storage_flag:
         try:
             from tools.leagueloop_diagnostics import prune_storage as do_prune_storage, get_leagueloop_paths
-            prune_res = do_prune_storage(get_leagueloop_paths()["base"], dry_run=dry_run)
+            prune_kwargs = {"dry_run": dry_run}
+            if max_screenshots_keep is not None:
+                prune_kwargs["max_screenshots_keep"] = max_screenshots_keep
+            prune_res = do_prune_storage(get_leagueloop_paths()["base"], **prune_kwargs)
         except Exception as e:
             prune_res = {"error": str(e)}
 
@@ -921,6 +925,7 @@ def main(argv=None):
     parser.add_argument("--feature", default=None, help="Custom feature optimization name to record")
     parser.add_argument("--impact", default=None, help="Custom impact description to record")
     parser.add_argument("--prune-storage", action="store_true", help="Execute safe storage pruning during autonomous loop")
+    parser.add_argument("--max-screenshots-keep", type=int, default=None, help="Maximum number of recent screenshots to retain during storage pruning")
     args, unknown = parser.parse_known_args(argv)
 
     if args.check_baseline:
@@ -935,7 +940,7 @@ def main(argv=None):
     runner_flags_no_val = {
         "--all-tests", "--staged", "--dry-run", "--check-baseline", "--json", "--prune-storage", "-h", "--help"
     }
-    runner_flags_with_val = {"--feature", "--impact"}
+    runner_flags_with_val = {"--feature", "--impact", "--max-screenshots-keep"}
 
     targets_to_run = []
     i = 0
@@ -962,6 +967,7 @@ def main(argv=None):
         feature=args.feature,
         impact=args.impact,
         prune_storage_flag=args.prune_storage,
+        max_screenshots_keep=args.max_screenshots_keep,
     )
 
     if args.json:

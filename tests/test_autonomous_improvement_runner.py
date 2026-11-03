@@ -371,6 +371,55 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
                 main(["--prune-storage"])
             self.assertEqual(cm.exception.code, 0)
 
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_prune_storage_with_max_screenshots_keep(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 100,
+            "diagnostics": {"healthy": True},
+            "metrics": {"total_py_files": 174, "total_py_lines": 50000},
+            "entropy": {"status": "PASS", "avg_entropy": 10.0, "bare_excepts_total": 0},
+            "tests": {"passed": 807, "failed": 0, "duration_seconds": 1.2, "success": True},
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+        }
+
+        with patch("sys.stdout") as mock_stdout:
+            with self.assertRaises(SystemExit) as cm:
+                main(["--prune-storage", "--max-screenshots-keep", "50"])
+            self.assertEqual(cm.exception.code, 0)
+            mock_run_loop.assert_called_once_with(
+                all_tests=False,
+                targets=None,
+                staged=False,
+                dry_run=False,
+                feature=None,
+                impact=None,
+                prune_storage_flag=True,
+                max_screenshots_keep=50,
+            )
+
+    @patch("tools.leagueloop_diagnostics.prune_storage")
+    @patch("tools.autonomous_improvement_runner.run_silent_excepts_check")
+    @patch("tools.autonomous_improvement_runner.run_diagnostics_check")
+    @patch("tools.autonomous_improvement_runner.run_entropy_check")
+    @patch("tools.autonomous_improvement_runner.run_tests_check")
+    @patch("tools.autonomous_improvement_runner.sync_mempalace")
+    def test_run_loop_passes_max_screenshots_keep(
+        self, mock_mempalace, mock_tests, mock_entropy, mock_diag, mock_silent, mock_prune
+    ):
+        mock_diag.return_value = {"healthy": True}
+        mock_entropy.return_value = {"status": "PASS", "avg_entropy": 10.0, "bare_excepts_total": 0}
+        mock_tests.return_value = {"exit_code": 0, "success": True, "duration_seconds": 1.0, "passed": 807, "failed": 0, "skipped": 0}
+        mock_silent.return_value = {"status": "PASS", "silent_handlers_count": 0, "files_audited": 92}
+        mock_prune.return_value = {"total_freed_mb": 50.0, "logs_pruned": {"mb": 0.0}, "screenshots_pruned": {"mb": 50.0}}
+
+        res = run_loop(prune_storage_flag=True, max_screenshots_keep=75, dry_run=True)
+        self.assertIsNotNone(res.get("prune_results"))
+        mock_prune.assert_called_once()
+        args, kwargs = mock_prune.call_args
+        self.assertEqual(kwargs.get("max_screenshots_keep"), 75)
+        self.assertTrue(kwargs.get("dry_run"))
+
     @patch("pathlib.Path.exists")
     @patch("pathlib.Path.read_text")
     def test_main_cli_check_baseline(self, mock_read, mock_exists):
@@ -435,6 +484,7 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
                 feature=None,
                 impact=None,
                 prune_storage_flag=False,
+                max_screenshots_keep=None,
             )
 
     @patch("subprocess.run")
@@ -483,6 +533,7 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
                 feature=None,
                 impact=None,
                 prune_storage_flag=False,
+                max_screenshots_keep=None,
             )
 
 
