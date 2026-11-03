@@ -54,7 +54,10 @@ class _Rings:
         self.saved = {}
         root.bind_all("<KeyPress-Tab>", self._kbd, add="+")
         root.bind_all("<Shift-KeyPress-Tab>", self._kbd, add="+")
-        root.bind_all("<ISO_Left_Tab>", self._kbd, add="+")
+        try:
+            root.bind_all("<ISO_Left_Tab>", self._kbd, add="+")
+        except Exception as exc:
+            Logger.debug("FocusRing", "<ISO_Left_Tab> binding not supported on this platform", exc=exc)
         root.bind_all("<ButtonPress>", self._mouse, add="+")
         root.bind_all("<FocusIn>", self._focus_in, add="+")
         root.bind_all("<FocusOut>", self._focus_out, add="+")
