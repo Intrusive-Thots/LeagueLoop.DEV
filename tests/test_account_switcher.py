@@ -178,6 +178,18 @@ class TestAccountSwitcherUnit(unittest.TestCase):
         self.assertEqual(res.outcome, SwitchOutcome.CLIENT_NOT_RUNNING)
         self.assertEqual(res.phase, SwitchPhase.WAITING_FOR_CLIENT)
 
+    def test_switch_waits_for_running_but_unready_client(self):
+        """If RiotClientServices.exe is running but its local API is not up yet, wait_until_client_ready must be called."""
+        self._credentialed()
+        self.switcher._client_running = lambda: True
+        self.session.connect.return_value = False
+        self.session.wait_until_client_ready.return_value = False
+
+        res = self.switcher.switch_to(0)
+        self.session.wait_until_client_ready.assert_called_once_with(self.switcher._client_timeout_s)
+        self.assertEqual(res.outcome, SwitchOutcome.CLIENT_UNREACHABLE)
+        self.assertEqual(res.phase, SwitchPhase.WAITING_FOR_CLIENT)
+
     def test_switch_sequence_sign_in_screen_never_appears(self):
         self._credentialed()
         self.switcher._client_running = lambda: True

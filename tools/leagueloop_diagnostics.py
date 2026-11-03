@@ -93,9 +93,12 @@ def inspect_error_log(path: Path, max_lines: int = 30, include_rotated: bool = F
             if "[LCU_NETWORK_THROTTLE]" in sline:
                 result["network_throttles_count"] += 1
             import re
-            if re.search(r"\b(ERROR|CRITICAL)\b", sline):
+            is_benign_switch = "[AccountSwitch]" in sline and any(
+                k in sline for k in ("CLIENT_UNREACHABLE", "CLIENT_NOT_RUNNING", "SESSION_EXPIRED")
+            )
+            if re.search(r"\b(ERROR|CRITICAL)\b", sline) and not is_benign_switch:
                 result["recent_errors"].append(sline)
-            elif re.search(r"\bWARNING\b", sline) and "[LCU_WS_ANOMALY]" not in sline and "[LCU_NETWORK_THROTTLE]" not in sline:
+            elif (re.search(r"\bWARNING\b", sline) or is_benign_switch) and "[LCU_WS_ANOMALY]" not in sline and "[LCU_NETWORK_THROTTLE]" not in sline:
                 result["recent_warnings"].append(sline)
     except Exception as e:
         result["error_reading"] = str(e)

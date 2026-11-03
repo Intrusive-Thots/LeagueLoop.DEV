@@ -80,6 +80,29 @@ class CheckClientChangedTests(unittest.TestCase):
         self.assertFalse(self._run(c, {"connected": False})[0])
         self.assertTrue(c.is_connected)
 
+    def test_same_session_reconnect_does_not_bump_generation(self):
+        from services.api_handler import LCUClient
+        c = LCUClient()
+        league_a = {"connected": True, "port": 51225, "token": "tok-a", "pid": 100}
+        league_b = {"connected": True, "port": 62000, "token": "tok-b", "pid": 200}
+        with patch("services.api_handler.scan_clients", return_value={"league": league_a}), \
+                patch("core.events.EventBus.emit"):
+            c._last_scan_time = 0.0
+            self.assertTrue(c.connect(silent=True))
+            self.assertEqual(c.connection_generation, 1)
+            # Simulate transient HTTP transport drop on same running League session
+            c.is_connected = False
+            c._last_scan_time = 0.0
+            self.assertTrue(c.connect(silent=True))
+            self.assertEqual(c.connection_generation, 1)
+        # New League session (new port/token) must increment generation
+        with patch("services.api_handler.scan_clients", return_value={"league": league_b}), \
+                patch("core.events.EventBus.emit"):
+            c.is_connected = False
+            c._last_scan_time = 0.0
+            self.assertTrue(c.connect(silent=True))
+            self.assertEqual(c.connection_generation, 2)
+
 
 class ClientStateGenerationTests(unittest.TestCase):
     def test_new_generation_resyncs_and_clears_summoner(self):
@@ -218,6 +241,18 @@ class FriendListResetTests(unittest.TestCase):
             fl._fetch_until_loaded(4, 3, 1)
         lcu.request.assert_not_called()
 
+    def test_initial_fetch_skips_when_in_flight_or_disconnected(self):
+        fl, lcu = self._fl([_Res(200, [{"puuid": "a"}])])
+        fl._fetch_in_flight = True
+        with self._inline_threads():
+            fl._initial_fetch(force=True)
+        lcu.request.assert_not_called()
+        fl._fetch_in_flight = False
+        lcu.is_connected = False
+        with self._inline_threads():
+            fl._initial_fetch(force=True)
+        lcu.request.assert_not_called()
+
 
 class SidebarResetTests(unittest.TestCase):
     def setUp(self):
@@ -264,6 +299,16 @@ class SidebarResetTests(unittest.TestCase):
             eb.invoke_thread_safe.assert_not_called()
             AppSidebar._on_account_switch_finished(s, SimpleNamespace(ok=True))
             eb.invoke_thread_safe.assert_called_once()
+
+    def test_on_lcu_connection_changed_dedupes_in_flight_queue_updates(self):
+        from ui.app_sidebar import SidebarWidget as AppSidebar
+        s = self._fake(True)
+        s._update_queues_in_flight = True
+        s.update_accounts_tool_visibility = MagicMock()
+        s.loot_tool = None
+        with patch("ui.app_sidebar.threading.Thread") as mock_thread:
+            AppSidebar.on_lcu_connection_changed(s, True)
+            mock_thread.assert_not_called()
 
 
 class ConnectionLoopSourceTests(unittest.TestCase):

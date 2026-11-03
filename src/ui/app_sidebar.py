@@ -1270,15 +1270,21 @@ class SidebarWidget(ctk.CTkFrame):
         if not self.winfo_exists(): return
         self.reset_client_scope()
         if connected:
-            def _update_queues_bg():
-                try:
-                    from services.queue_manager import update_available_lobby_types
-                    groups = update_available_lobby_types(self.lcu)
-                    if hasattr(self, "session_header") and self.session_header.winfo_exists():
-                        self.after(0, lambda: self.session_header.update_available_modes(groups))
-                except Exception as e:
-                    Logger.debug("UI", f"Error updating queues: {e}")
-            threading.Thread(target=_update_queues_bg, daemon=True).start()
+            if not getattr(self, "_update_queues_in_flight", False):
+                self._update_queues_in_flight = True
+
+                def _update_queues_bg():
+                    try:
+                        from services.queue_manager import update_available_lobby_types
+                        groups = update_available_lobby_types(self.lcu)
+                        if hasattr(self, "session_header") and self.session_header.winfo_exists():
+                            self.after(0, lambda: self.session_header.update_available_modes(groups))
+                    except Exception as e:
+                        Logger.debug("UI", f"Error updating queues: {e}")
+                    finally:
+                        self._update_queues_in_flight = False
+
+                threading.Thread(target=_update_queues_bg, daemon=True).start()
         else:
             self._hide_quick_actions()
             self._stop_local_queue_timer()

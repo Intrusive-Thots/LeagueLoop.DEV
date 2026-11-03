@@ -60,6 +60,7 @@ class LCUClient:
         self._last_scan_time = 0.0
         self._connection_state: ConnectionStateEnum = ConnectionStateEnum.DISCONNECTED
         self._connection_generation: int = 0
+        self._last_connected_session = None
         
         self._tokens = 20.0
         self._token_capacity = 20.0
@@ -2275,6 +2276,7 @@ class LCUClient:
                     self.auth_token = None
                     self.base_url = None
                     self._client_pid = None
+                    self._last_connected_session = None
                     self._connection_state = ConnectionStateEnum.DISCONNECTED
                     self._backoff = min(self._backoff * 1.2, 2.0)
                     return False
@@ -2295,7 +2297,10 @@ class LCUClient:
                     self.session.headers.update(self.headers)
                     self.base_url = f"https://127.0.0.1:{self.port}"
                     self.is_connected = True
-                    self._connection_generation += 1
+                    session_sig = (str(self.port), str(self.auth_token))
+                    if getattr(self, "_last_connected_session", None) != session_sig or self._connection_generation == 0:
+                        self._last_connected_session = session_sig
+                        self._connection_generation += 1
                     self._connection_state = ConnectionStateEnum.CONNECTED
                     self._last_connected_timestamp = time.time()
                     self._backoff = 1.0  # Reset backoff on success
@@ -2347,6 +2352,7 @@ class LCUClient:
                 return False
             Logger.info("LCU", "League Client restarted; reconnecting.")
             self.is_connected = False
+            self._last_connected_session = None
             self._connection_state = ConnectionStateEnum.DISCONNECTED
             self._last_scan_time = 0.0  # reconnect now, not after the backoff
             self._backoff = 1.0

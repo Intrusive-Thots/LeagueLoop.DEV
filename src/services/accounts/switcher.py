@@ -328,6 +328,10 @@ class AccountSwitcher:
             self._progress(SwitchPhase.WAITING_FOR_CLIENT, "Waiting for the Riot Client to start", index)
             if not self.session.wait_until_client_ready(self._client_timeout_s):
                 return self._fail(SwitchOutcome.CLIENT_NOT_RUNNING, SwitchPhase.WAITING_FOR_CLIENT, index, label)
+        elif not self.session.connect():
+            self._progress(SwitchPhase.WAITING_FOR_CLIENT, "Waiting for the Riot Client to start", index)
+            if not self.session.wait_until_client_ready(self._client_timeout_s):
+                return self._fail(SwitchOutcome.CLIENT_UNREACHABLE, SwitchPhase.WAITING_FOR_CLIENT, index, label)
 
         # --- 3. already there? ---------------------------------------------
         if self._already_active(key):

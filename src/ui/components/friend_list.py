@@ -340,17 +340,26 @@ class FriendPriorityList(ctk.CTkFrame):
                 return
         except Exception:
             return
+        if getattr(self.lcu, "is_connected", True) is False:
+            return
+        if getattr(self, "_fetch_in_flight", False):
+            return
 
         epoch = getattr(self, "_session_epoch", 0)
+        self._fetch_in_flight = True
 
         def task():
             """Background task."""
             try:
+                if epoch != getattr(self, "_session_epoch", 0):
+                    return
                 res = self.lcu.request("GET", "/lol-chat/v1/friends", silent=True)
                 if res and res.status_code == 200 and epoch == getattr(self, "_session_epoch", 0):
                     self._process_friends(res.json())
             except Exception as e:
                 Logger.debug("FriendList", f"Initial fetch error: {e}")
+            finally:
+                self._fetch_in_flight = False
 
         threading.Thread(target=task, daemon=True).start()
 
@@ -381,7 +390,10 @@ class FriendPriorityList(ctk.CTkFrame):
             return
 
         def task():
+            if epoch != getattr(self, "_session_epoch", 0):
+                return
             got = False
+            self._fetch_in_flight = True
             try:
                 res = self.lcu.request("GET", "/lol-chat/v1/friends", silent=True)
                 if res is not None and getattr(res, "status_code", 0) == 200:
@@ -391,7 +403,9 @@ class FriendPriorityList(ctk.CTkFrame):
                         got = True
             except Exception as e:
                 Logger.debug("FriendList", f"Session fetch error: {e}")
-            if not got:
+            finally:
+                self._fetch_in_flight = False
+            if not got and epoch == getattr(self, "_session_epoch", 0):
                 try:
                     self.after(delay_ms, lambda: self._fetch_until_loaded(epoch, attempts_left - 1, delay_ms))
                 except Exception as exc:
