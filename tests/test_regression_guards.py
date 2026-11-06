@@ -1054,7 +1054,26 @@ def test_automation_act_handles_matchmaking_search_refusal():
     assert 'endpoint == "/lol-lobby/v2/lobby/matchmaking/search" and code == 400' in text
     assert 'matchmaking search refused (HTTP 400)' in text
 
+def test_lcu_http_anomaly_reason_respects_triggering_sample_type():
+    """LCU-007: 5xx sample anomaly reasons must reflect 5xx threshold even if transport anomaly was previously active."""
+    from services.api_handler import LCUClient
 
+    client = LCUClient()
+    t_thresh = client._http_anomaly_transport_count_threshold
+    s_thresh = client._http_anomaly_5xx_count_threshold
 
+    # Trip transport failure threshold first
+    for _ in range(t_thresh):
+        client._record_http_transport_failure("GET", "/lol-chat/v1/friends", "connection")
+    tel = client.get_http_status_anomaly_telemetry()
+    assert tel["http_status_anomaly_active"] is True
+    assert "HTTP transport failure count" in tel["last_http_status_anomaly"]["reason"]
 
+    # Now trip 5xx threshold with 503 errors
+    for _ in range(s_thresh):
+        client._record_http_status_code(503, "GET", "/lol-chat/v1/friends")
+    tel = client.get_http_status_anomaly_telemetry()
+    assert tel["http_status_anomaly_active"] is True
+    # Reason on a 503 sample must be 5xx count, NOT transport failure count
+    assert f"HTTP 5xx count {s_thresh} reached threshold" in tel["last_http_status_anomaly"]["reason"]
 

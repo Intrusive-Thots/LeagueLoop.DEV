@@ -2726,14 +2726,18 @@ class LCUClient:
             was_active = self._http_status_anomaly_active
             self._http_status_anomaly_active = True
             self._http_anomaly_count += 1
-            if is_transport_anomaly:
+            if is_transport_sample and is_transport_anomaly:
                 reason = f"HTTP transport failure count {window_transport} reached threshold ({reason_override or 'transport'})"
+            elif is_5xx_sample and is_5xx_anomaly:
+                reason = f"HTTP 5xx count {window_5xx} reached threshold"
             elif is_rate_anomaly:
                 reason = (
                     f"Sliding-window error rate {err_rate}% exceeded threshold "
                     f"{self._http_anomaly_error_rate_threshold_pct}% "
                     f"({window_errs}/{window_total} in {self._http_status_window_s:.0f}s)"
                 )
+            elif is_transport_anomaly:
+                reason = f"HTTP transport failure count {window_transport} reached threshold ({reason_override or 'transport'})"
             elif is_5xx_anomaly:
                 reason = f"HTTP 5xx count {window_5xx} reached threshold"
             else:
