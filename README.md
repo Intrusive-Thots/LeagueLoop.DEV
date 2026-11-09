@@ -6,7 +6,7 @@
 
   <p>
     <a href="https://github.com/Intrusive-Thots/LeagueLoop.DEV/actions/workflows/ci.yml"><img src="https://github.com/Intrusive-Thots/LeagueLoop.DEV/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
-    <img src="https://img.shields.io/badge/version-2--09--273--1535-gold.svg" alt="Version 2-09-273-1535"/>
+    <img src="https://img.shields.io/badge/version-2--11--313--1332-gold.svg" alt="Version 2-11-313-1332"/>
     <img src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue" alt="Python 3.10-3.13"/>
     <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey" alt="Windows"/>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT"/></a>
