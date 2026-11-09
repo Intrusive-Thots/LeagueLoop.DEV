@@ -1,12 +1,12 @@
 {
-  "run_number": 299,
-  "last_run": "2026-11-09T13:48:44.639778+00:00",
+  "run_number": 301,
+  "last_run": "2026-11-09T14:26:01.786128+00:00",
   "test_baseline": {
     "passed": 1283,
     "failed": 0,
     "skipped": 0,
     "warnings": 0,
-    "last_targeted_passed": 101,
+    "last_targeted_passed": 224,
     "errors": 0
   },
   "index_baseline": {
@@ -56,8 +56,8 @@
   },
   "storage_baseline": {
     "status": "OPTIMAL",
-    "total_mb": 74.59,
-    "logs_mb": 13.48,
+    "total_mb": 74.6,
+    "logs_mb": 13.49,
     "screenshots_mb": 61.1,
     "warnings_count": 0,
     "thresholds": {
@@ -123,7 +123,7 @@
     "category_counts": {
       "game_phase_change": 5
     },
-    "newest_age_human": "9.7h ago",
+    "newest_age_human": "10.4h ago",
     "thresholds": {
       "strict": false,
       "max_corrupted": 0
@@ -160,7 +160,7 @@
   },
   "debug_baseline": {
     "status": "HEALTHY",
-    "total_lines_inspected": 84911,
+    "total_lines_inspected": 84916,
     "diagnostic_tags_count": 0,
     "level_counts": {
       "DEBUG": 30
@@ -177,7 +177,7 @@
     "version_aligned": true,
     "files_ok": true,
     "test_environment_ok": true,
-    "duration_ms": 1.6
+    "duration_ms": 2.04
   },
   "accounts_preflight_baseline": {
     "status": "HEALTHY",
