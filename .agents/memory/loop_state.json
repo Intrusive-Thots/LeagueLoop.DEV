@@ -1,17 +1,17 @@
 {
-  "run_number": 285,
-  "last_run": "2026-11-09T10:49:56.777937+00:00",
+  "run_number": 287,
+  "last_run": "2026-11-09T11:08:33.721332+00:00",
   "test_baseline": {
-    "passed": 1244,
+    "passed": 1276,
     "failed": 0,
     "skipped": 0,
     "warnings": 0,
-    "last_targeted_passed": 95,
+    "last_targeted_passed": 0,
     "errors": 0
   },
   "index_baseline": {
     "total_files": 213,
-    "total_py_lines": 64511,
+    "total_py_lines": 64797,
     "breakdown": {
       "src": {
         "files": 106,
@@ -19,14 +19,14 @@
       },
       "tests": {
         "files": 96,
-        "lines": 22789
+        "lines": 22968
       },
       "tools": {
         "files": 11,
-        "lines": 4867
+        "lines": 4974
       }
     },
-    "test_to_code_ratio": 0.618
+    "test_to_code_ratio": 0.623
   },
   "entropy_baseline": {
     "status": "WARN",
@@ -76,6 +76,13 @@
     "category_counts": {
       "game_phase_change": 5
     },
-    "newest_age_human": "6.8h ago"
+    "newest_age_human": "7.1h ago"
+  },
+  "session_baseline": {
+    "status": "OPTIMAL",
+    "total_accounts": 5,
+    "healthy_accounts": 5,
+    "corrupted_accounts": 0,
+    "stale_accounts": 0
   }
 }

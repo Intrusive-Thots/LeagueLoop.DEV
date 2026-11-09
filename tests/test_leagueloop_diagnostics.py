@@ -919,6 +919,108 @@ class TestLeagueLoopDiagnostics(unittest.TestCase):
                 out = f.getvalue()
                 self.assertIn("Filtered Crashes [access_violation]: 1", out)
 
+    def test_inspect_saved_sessions_filter_status(self):
+        import json
+        from datetime import datetime
+        now = datetime(2026, 10, 15, 12, 0, 0)
+        now_ts = now.timestamp()
+
+        # Slot 1: Healthy
+        slot1 = self.sessions_dir / "user_alpha"
+        slot1.mkdir(parents=True, exist_ok=True)
+        (slot1 / "session.json").write_text(json.dumps({"account_id": "alpha_10", "captured_at": now_ts - 86400}), encoding="utf-8")
+        (slot1 / "RiotClientPrivateSettings.yaml").write_text("client: true\n", encoding="utf-8")
+        (slot1 / "RiotGamesPrivateSettings.yaml").write_text("games: true\n", encoding="utf-8")
+
+        # Slot 2: Corrupted
+        slot2 = self.sessions_dir / "user_beta"
+        slot2.mkdir(parents=True, exist_ok=True)
+        (slot2 / "session.json").write_text("invalid json", encoding="utf-8")
+
+        # Slot 3: Stale
+        slot3 = self.sessions_dir / "user_gamma"
+        slot3.mkdir(parents=True, exist_ok=True)
+        (slot3 / "session.json").write_text(json.dumps({"account_id": "gamma_30", "captured_at": now_ts - (50 * 86400)}), encoding="utf-8")
+        (slot3 / "RiotClientPrivateSettings.yaml").write_text("client: true\n", encoding="utf-8")
+        (slot3 / "RiotGamesPrivateSettings.yaml").write_text("games: true\n", encoding="utf-8")
+
+        # Filter healthy
+        res_healthy = inspect_saved_sessions(self.sessions_dir, now=now, filter_status="healthy")
+        self.assertEqual(res_healthy.get("filtered_status"), "healthy")
+        self.assertEqual(len(res_healthy.get("filtered_accounts", [])), 2)  # alpha and gamma are not corrupted
+
+        # Filter corrupted
+        res_corrupt = inspect_saved_sessions(self.sessions_dir, now=now, filter_status="corrupted")
+        self.assertEqual(res_corrupt.get("filtered_status"), "corrupted")
+        self.assertEqual(len(res_corrupt.get("filtered_accounts", [])), 1)
+        self.assertEqual(res_corrupt["filtered_accounts"][0]["slot_name"], "user_beta")
+
+        # Filter stale
+        res_stale = inspect_saved_sessions(self.sessions_dir, max_age_days=30.0, now=now, filter_status="stale")
+        self.assertEqual(res_stale.get("filtered_status"), "stale")
+        self.assertEqual(len(res_stale.get("filtered_accounts", [])), 1)
+        self.assertEqual(res_stale["filtered_accounts"][0]["slot_name"], "user_gamma")
+
+    def test_inspect_saved_sessions_filter_account(self):
+        import json
+        slot = self.sessions_dir / "slot_special"
+        slot.mkdir(parents=True, exist_ok=True)
+        (slot / "session.json").write_text(json.dumps({"account_id": "pro_player"}), encoding="utf-8")
+        (slot / "RiotClientPrivateSettings.yaml").write_text("client: true\n", encoding="utf-8")
+        (slot / "RiotGamesPrivateSettings.yaml").write_text("games: true\n", encoding="utf-8")
+
+        res = inspect_saved_sessions(self.sessions_dir, filter_account="pro_player")
+        self.assertEqual(res.get("filtered_account"), "pro_player")
+        self.assertEqual(len(res.get("filtered_accounts", [])), 1)
+        self.assertEqual(res["filtered_accounts"][0]["account_id"], "pro_player")
+
+        res_miss = inspect_saved_sessions(self.sessions_dir, filter_account="non_existent")
+        self.assertEqual(len(res_miss.get("filtered_accounts", [])), 0)
+
+    def test_run_diagnostics_filter_session_status_and_account(self):
+        import json
+        self.paths["error_log"].write_text("INFO Clean", encoding="utf-8")
+        self.paths["crash_log"].write_text("--- session 1 ---\n", encoding="utf-8")
+
+        slot = self.sessions_dir / "target_slot"
+        slot.mkdir(parents=True, exist_ok=True)
+        (slot / "session.json").write_text(json.dumps({"account_id": "target_acc"}), encoding="utf-8")
+        (slot / "RiotClientPrivateSettings.yaml").write_text("client: true\n", encoding="utf-8")
+        (slot / "RiotGamesPrivateSettings.yaml").write_text("games: true\n", encoding="utf-8")
+
+        diag = run_diagnostics(self.paths, filter_session_status="healthy", filter_session_account="target_acc")
+        sv = diag["sessions_analysis"]
+        self.assertEqual(sv.get("filtered_status"), "healthy")
+        self.assertEqual(sv.get("filtered_account"), "target_acc")
+        self.assertEqual(len(sv.get("filtered_accounts", [])), 1)
+
+    def test_main_cli_session_status_and_account(self):
+        import io
+        import json
+        from contextlib import redirect_stdout
+        from tools.leagueloop_diagnostics import main
+
+        self.paths["error_log"].write_text("INFO Clean", encoding="utf-8")
+        self.paths["crash_log"].write_text("--- session 1 ---\n", encoding="utf-8")
+
+        slot = self.sessions_dir / "my_slot"
+        slot.mkdir(parents=True, exist_ok=True)
+        (slot / "session.json").write_text(json.dumps({"account_id": "my_hero"}), encoding="utf-8")
+        (slot / "RiotClientPrivateSettings.yaml").write_text("client: true\n", encoding="utf-8")
+        (slot / "RiotGamesPrivateSettings.yaml").write_text("games: true\n", encoding="utf-8")
+
+        with patch("sys.argv", ["leagueloop_diagnostics", "--session-account", "my_hero", "--summary"]):
+            with patch("tools.leagueloop_diagnostics.get_leagueloop_paths", return_value=self.paths):
+                f = io.StringIO()
+                with redirect_stdout(f):
+                    try:
+                        main()
+                    except SystemExit:
+                        pass
+                out = f.getvalue()
+                self.assertIn("Saved Sessions Vault (Filtered: account: my_hero)", out)
+                self.assertIn("my_hero (my_slot)", out)
+
 
 if __name__ == "__main__":
     unittest.main()

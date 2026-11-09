@@ -605,6 +605,8 @@ def inspect_saved_sessions(
     path: Path,
     max_age_days: Optional[float] = None,
     now: Optional[datetime] = None,
+    filter_status: Optional[str] = None,
+    filter_account: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Audits saved multi-account SessionVault slots in %LOCALAPPDATA%\\LeagueLoop\\sessions.
 
@@ -621,6 +623,13 @@ def inspect_saved_sessions(
         "stale_accounts": 0,
         "accounts": [],
     }
+    if filter_status:
+        result["filtered_status"] = filter_status
+        result["filtered_accounts"] = []
+    if filter_account:
+        result["filtered_account"] = filter_account
+        if "filtered_accounts" not in result:
+            result["filtered_accounts"] = []
     if not path.exists():
         return result
 
@@ -697,6 +706,26 @@ def inspect_saved_sessions(
                 result["healthy_accounts"] += 1
             if is_stale:
                 result["stale_accounts"] += 1
+
+            matches_filter = True
+            if filter_status:
+                norm_status = filter_status.strip().lower()
+                if norm_status in ("healthy", "clean", "ok"):
+                    if is_corrupted:
+                        matches_filter = False
+                elif norm_status in ("corrupted", "corrupt", "broken"):
+                    if not is_corrupted:
+                        matches_filter = False
+                elif norm_status == "stale":
+                    if not is_stale:
+                        matches_filter = False
+            if filter_account and matches_filter:
+                norm_acc = filter_account.strip().lower()
+                if norm_acc not in str(account_id).lower() and norm_acc not in str(slot.name).lower():
+                    matches_filter = False
+
+            if (filter_status or filter_account) and matches_filter:
+                result["filtered_accounts"].append(acc_info)
 
     except Exception as e:
         result["error_reading"] = str(e)
@@ -929,6 +958,8 @@ def run_diagnostics(
     filter_screenshot_category: Optional[str] = None,
     filter_error_category: Optional[str] = None,
     filter_crash_category: Optional[str] = None,
+    filter_session_status: Optional[str] = None,
+    filter_session_account: Optional[str] = None,
 ) -> Dict[str, Any]:
     p = paths or get_leagueloop_paths()
     errors_info = inspect_error_log(
@@ -957,7 +988,13 @@ def run_diagnostics(
     debug_info = inspect_debug_log(debug_path, max_lines=max_lines)
 
     sessions_path = p.get("sessions", p["base"] / "sessions")
-    sessions_info = inspect_saved_sessions(sessions_path, max_age_days=max_session_age_days, now=now)
+    sessions_info = inspect_saved_sessions(
+        sessions_path,
+        max_age_days=max_session_age_days,
+        now=now,
+        filter_status=filter_session_status,
+        filter_account=filter_session_account,
+    )
     storage_info = inspect_storage_usage(p["base"], max_logs_mb=max_logs_mb, max_screenshots_mb=max_screenshots_mb)
 
     category_counts: Dict[str, int] = {}
@@ -1035,6 +1072,8 @@ def main():
     parser.add_argument("--error-category", type=str, default=None, help="Filter reported errors by subsystem category")
     parser.add_argument("--crash-category", type=str, default=None, help="Filter reported crashes by category")
     parser.add_argument("--screenshot-category", type=str, default=None, help="Filter reported debug screenshots by event category")
+    parser.add_argument("--session-status", type=str, default=None, help="Filter reported saved sessions by status (healthy, corrupted, stale)")
+    parser.add_argument("--session-account", type=str, default=None, help="Filter reported saved sessions by account ID or slot name")
     parser.add_argument("--prune-storage", action="store_true", help="Safely prune rotated logs and stale debug screenshots")
     parser.add_argument("--dry-run", action="store_true", help="Preview storage pruning without deleting files")
     parser.add_argument("--max-screenshots-keep", type=int, default=150, help="Maximum number of recent screenshots to keep during prune (default: 150)")
@@ -1072,6 +1111,8 @@ def main():
         filter_screenshot_category=args.screenshot_category,
         filter_error_category=args.error_category,
         filter_crash_category=args.crash_category,
+        filter_session_status=args.session_status,
+        filter_session_account=args.session_account,
     )
 
     if prune_res:
@@ -1200,16 +1241,34 @@ def main():
     if sv.get("exists"):
         corrupted_note = f" [{sv.get('corrupted_accounts', 0)} corrupted]" if sv.get("corrupted_accounts", 0) > 0 else " [all intact]"
         stale_note = f" [{sv.get('stale_accounts', 0)} stale]" if sv.get("stale_accounts", 0) > 0 else ""
-        print(f"\n[Saved Sessions Vault]")
-        print(f"  Total Account Slots: {sv.get('total_accounts', 0)}{corrupted_note}{stale_note}")
-        for acc in sv.get("accounts", []):
-            corrupt_tag = " [CORRUPTED]" if acc.get("is_corrupted") else ""
-            stale_tag = " [STALE]" if acc.get("is_stale") else ""
-            print(f"    - {acc.get('account_id')} ({acc.get('slot_name')}): {acc.get('age_human')}{corrupt_tag}{stale_tag}")
-            if acc.get("missing_files"):
-                print(f"        missing: {acc.get('missing_files')}")
-            if acc.get("corrupted_files"):
-                print(f"        corrupted: {acc.get('corrupted_files')}")
+        filt_label = []
+        if sv.get("filtered_status"):
+            filt_label.append(f"status: {sv['filtered_status']}")
+        if sv.get("filtered_account"):
+            filt_label.append(f"account: {sv['filtered_account']}")
+        if filt_label:
+            print(f"\n[Saved Sessions Vault (Filtered: {', '.join(filt_label)})]")
+            filt_accs = sv.get("filtered_accounts", [])
+            print(f"  Matching Account Slots: {len(filt_accs)}{corrupted_note}{stale_note}")
+            for acc in filt_accs:
+                corrupt_tag = " [CORRUPTED]" if acc.get("is_corrupted") else ""
+                stale_tag = " [STALE]" if acc.get("is_stale") else ""
+                print(f"    - {acc.get('account_id')} ({acc.get('slot_name')}): {acc.get('age_human')}{corrupt_tag}{stale_tag}")
+                if acc.get("missing_files"):
+                    print(f"        missing: {acc.get('missing_files')}")
+                if acc.get("corrupted_files"):
+                    print(f"        corrupted: {acc.get('corrupted_files')}")
+        else:
+            print(f"\n[Saved Sessions Vault]")
+            print(f"  Total Account Slots: {sv.get('total_accounts', 0)}{corrupted_note}{stale_note}")
+            for acc in sv.get("accounts", []):
+                corrupt_tag = " [CORRUPTED]" if acc.get("is_corrupted") else ""
+                stale_tag = " [STALE]" if acc.get("is_stale") else ""
+                print(f"    - {acc.get('account_id')} ({acc.get('slot_name')}): {acc.get('age_human')}{corrupt_tag}{stale_tag}")
+                if acc.get("missing_files"):
+                    print(f"        missing: {acc.get('missing_files')}")
+                if acc.get("corrupted_files"):
+                    print(f"        corrupted: {acc.get('corrupted_files')}")
 
     st = diag.get("storage_analysis", {})
     if st.get("exists"):

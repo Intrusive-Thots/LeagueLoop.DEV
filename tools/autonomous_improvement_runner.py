@@ -81,6 +81,8 @@ def run_diagnostics_check(
     screenshot_category: Optional[str] = None,
     error_category: Optional[str] = None,
     crash_category: Optional[str] = None,
+    session_status: Optional[str] = None,
+    session_account: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Runs diagnostics via tools.leagueloop_diagnostics."""
     try:
@@ -94,6 +96,10 @@ def run_diagnostics_check(
             kwargs["filter_error_category"] = error_category
         if crash_category:
             kwargs["filter_crash_category"] = crash_category
+        if session_status:
+            kwargs["filter_session_status"] = session_status
+        if session_account:
+            kwargs["filter_session_account"] = session_account
         return run_diagnostics(**kwargs)
     except Exception as e:
         return {"healthy": False, "error": str(e)}
@@ -290,6 +296,7 @@ def update_memory_state(
         "error_baseline": {"status": "HEALTHY", "total_errors": 0, "categories": {}},
         "crash_baseline": {"status": "HEALTHY", "recent_crashes_count": 0, "total_actual_crashes": 0},
         "screenshot_baseline": {"status": "OPTIMAL", "total_captures": 0, "corrupted_count": 0, "stale_count": 0, "category_counts": {}, "newest_age_human": "N/A"},
+        "session_baseline": {"status": "OPTIMAL", "total_accounts": 0, "healthy_accounts": 0, "corrupted_accounts": 0, "stale_accounts": 0},
     }
 
     if loop_state_file.exists():
@@ -380,6 +387,17 @@ def update_memory_state(
             "stale_count": (diagnostics_results or {}).get("screenshot_analysis", {}).get("stale_count", 0),
             "category_counts": (diagnostics_results or {}).get("screenshot_analysis", {}).get("category_counts", {}),
             "newest_age_human": (diagnostics_results or {}).get("screenshot_analysis", {}).get("newest_age_human", "N/A"),
+        },
+        "session_baseline": {
+            "status": (
+                "OPTIMAL"
+                if (diagnostics_results or {}).get("sessions_analysis", {}).get("corrupted_accounts", 0) == 0
+                else "CORRUPTED"
+            ),
+            "total_accounts": (diagnostics_results or {}).get("sessions_analysis", {}).get("total_accounts", 0),
+            "healthy_accounts": (diagnostics_results or {}).get("sessions_analysis", {}).get("healthy_accounts", 0),
+            "corrupted_accounts": (diagnostics_results or {}).get("sessions_analysis", {}).get("corrupted_accounts", 0),
+            "stale_accounts": (diagnostics_results or {}).get("sessions_analysis", {}).get("stale_accounts", 0),
         },
     }
 
@@ -582,6 +600,8 @@ def run_loop(
     screenshot_category: Optional[str] = None,
     error_category: Optional[str] = None,
     crash_category: Optional[str] = None,
+    session_status: Optional[str] = None,
+    session_account: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Executes the full Autonomous Improvement Loop."""
     prune_res = None
@@ -597,7 +617,17 @@ def run_loop(
         except Exception as e:
             prune_res = {"error": str(e)}
 
-    diag = run_diagnostics_check(category=warning_category, screenshot_category=screenshot_category, error_category=error_category, crash_category=crash_category)
+    diag_kwargs = {
+        "category": warning_category,
+        "screenshot_category": screenshot_category,
+        "error_category": error_category,
+        "crash_category": crash_category,
+    }
+    if session_status is not None:
+        diag_kwargs["session_status"] = session_status
+    if session_account is not None:
+        diag_kwargs["session_account"] = session_account
+    diag = run_diagnostics_check(**diag_kwargs)
     ver_check = run_version_alignment_check()
     assets_check = run_build_assets_check()
     build_health = run_build_health_check()
@@ -1088,6 +1118,8 @@ def main(argv=None):
     parser.add_argument("--error-category", type=str, default=None, help="Filter diagnostics by error subsystem category")
     parser.add_argument("--crash-category", type=str, default=None, help="Filter diagnostics by crash category")
     parser.add_argument("--screenshot-category", type=str, default=None, help="Filter debug screenshots by event category")
+    parser.add_argument("--session-status", type=str, default=None, help="Filter diagnostics by saved session status (healthy, corrupted, stale)")
+    parser.add_argument("--session-account", type=str, default=None, help="Filter diagnostics by saved session account ID or slot")
     parser.add_argument("--test-timeout", type=float, default=180.0, help="Timeout in seconds for pytest test runner (default: 180.0)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Display verbose execution diagnostics and entropy breakdown")
     args, unknown = parser.parse_known_args(argv)
@@ -1104,7 +1136,11 @@ def main(argv=None):
     runner_flags_no_val = {
         "--all-tests", "--staged", "--dry-run", "--check-baseline", "--json", "--prune-storage", "-h", "--help", "-v", "--verbose"
     }
-    runner_flags_with_val = {"--feature", "--impact", "--max-screenshots-keep", "--max-screenshot-age-days", "--category", "--warning-category", "--error-category", "--crash-category", "--test-timeout", "--screenshot-category"}
+    runner_flags_with_val = {
+        "--feature", "--impact", "--max-screenshots-keep", "--max-screenshot-age-days",
+        "--category", "--warning-category", "--error-category", "--crash-category",
+        "--screenshot-category", "--session-status", "--session-account", "--test-timeout"
+    }
 
     targets_to_run = []
     i = 0
@@ -1142,6 +1178,10 @@ def main(argv=None):
         run_kwargs["crash_category"] = args.crash_category
     if args.screenshot_category is not None:
         run_kwargs["screenshot_category"] = args.screenshot_category
+    if args.session_status is not None:
+        run_kwargs["session_status"] = args.session_status
+    if args.session_account is not None:
+        run_kwargs["session_account"] = args.session_account
     if args.test_timeout != 180.0:
         run_kwargs["test_timeout"] = args.test_timeout
     if args.verbose:
@@ -1166,6 +1206,14 @@ def main(argv=None):
     ca_res = result["diagnostics"].get("crash_analysis", {})
     if ca_res.get("filtered_crash_category"):
         print(f"Filtered Crashes [{ca_res['filtered_crash_category']}]: {len(ca_res.get('filtered_crashes', []))}")
+    sv_res = result["diagnostics"].get("sessions_analysis", {})
+    if sv_res.get("filtered_status") or sv_res.get("filtered_account"):
+        filt_tag = []
+        if sv_res.get("filtered_status"):
+            filt_tag.append(f"status: {sv_res['filtered_status']}")
+        if sv_res.get("filtered_account"):
+            filt_tag.append(f"account: {sv_res['filtered_account']}")
+        print(f"Filtered Saved Sessions [{', '.join(filt_tag)}]: {len(sv_res.get('filtered_accounts', []))}")
     ver_info = result.get("version_alignment", {})
     ver_stat = "[ALIGNED]" if ver_info.get("aligned") else "[MISALIGNED]"
     print(f"Version Alignment: {ver_stat} ({ver_info.get('message', 'N/A')})")
