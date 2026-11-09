@@ -738,6 +738,59 @@ class TestLeagueLoopDiagnostics(unittest.TestCase):
         self.assertTrue(rot.exists())
 
 
+    def test_classify_warning_line_extended_subsystems(self):
+        self.assertEqual(classify_warning_line("Thread [Overlay] border adjusted"), "overlay")
+        self.assertEqual(classify_warning_line("Thread [Theme] token missing"), "theme")
+        self.assertEqual(classify_warning_line("Thread [TokenLoader] token missing"), "theme")
+        self.assertEqual(classify_warning_line("Thread [ProfileService] fetch failed"), "profile")
+        self.assertEqual(classify_warning_line("Thread [ReplayService] missing rofl"), "replay")
+        self.assertEqual(classify_warning_line("Thread [StatsScraper] failed parse"), "stats_scraper")
+        self.assertEqual(classify_warning_line("Thread [DraftAssistant] timeout"), "champ_select")
+        self.assertEqual(classify_warning_line("Thread [ChampSelect] session null"), "champ_select")
+        self.assertEqual(classify_warning_line("Thread [QueueManager] queue unavailable"), "queue_manager")
+        self.assertEqual(classify_warning_line("Thread [SystemOptimizer] priority high"), "system_optimizer")
+        self.assertEqual(classify_warning_line("Thread [RiotID] tag missing"), "riot_id")
+        self.assertEqual(classify_warning_line("Thread [Config] key invalid"), "config")
+        self.assertEqual(classify_warning_line("Thread [Hotkey] binding clash"), "hotkeys")
+        self.assertEqual(classify_warning_line("Thread [TrayIcon] click lost"), "tray")
+
+    def test_inspect_error_log_error_categories(self):
+        log_content = (
+            "2026-11-09 10:00:00 ERROR [API] [LCU_TELEMETRY] Connection failed\n"
+            "2026-11-09 10:01:00 CRITICAL [Core] [RiotClientAPI] Riot Client launch failed\n"
+        )
+        self.paths["error_log"].write_text(log_content, encoding="utf-8")
+        res = inspect_error_log(self.paths["error_log"])
+        self.assertIn("error_categories", res)
+        self.assertEqual(res["error_categories"].get("lcu_telemetry"), 1)
+        self.assertEqual(res["error_categories"].get("riot_client_api"), 1)
+
+    def test_inspect_screenshots_filter_category(self):
+        sc1 = self.screenshots_dir / "20261109_120000_button_click.png"
+        sc2 = self.screenshots_dir / "20261109_120100_game_phase_change.png"
+        sc1.write_bytes(b"data1")
+        sc2.write_bytes(b"data2")
+
+        res_all = inspect_screenshots(self.screenshots_dir, max_count=5)
+        self.assertEqual(len(res_all), 2)
+
+        res_filtered = inspect_screenshots(self.screenshots_dir, max_count=5, filter_category="button_click")
+        self.assertEqual(len(res_filtered), 1)
+        self.assertEqual(res_filtered[0]["category"], "button_click")
+
+    def test_run_diagnostics_filter_screenshot_category(self):
+        sc1 = self.screenshots_dir / "20261109_120000_find_match_click.png"
+        sc2 = self.screenshots_dir / "20261109_120100_game_phase_change.png"
+        sc1.write_bytes(b"data1")
+        sc2.write_bytes(b"data2")
+        self.paths["error_log"].write_text("INFO OK\n", encoding="utf-8")
+
+        res = run_diagnostics(self.paths, filter_screenshot_category="button_click")
+        sm = res["screenshot_analysis"]
+        self.assertEqual(sm.get("filtered_category"), "button_click")
+        self.assertEqual(len(res["recent_screenshots"]), 1)
+        self.assertEqual(res["recent_screenshots"][0]["category"], "button_click")
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -76,13 +76,18 @@ def measure_codebase_metrics(root: Path = PROJECT_ROOT) -> Dict[str, Any]:
     }
 
 
-def run_diagnostics_check(category: Optional[str] = None) -> Dict[str, Any]:
+def run_diagnostics_check(
+    category: Optional[str] = None,
+    screenshot_category: Optional[str] = None,
+) -> Dict[str, Any]:
     """Runs diagnostics via tools.leagueloop_diagnostics."""
     try:
         from tools.leagueloop_diagnostics import run_diagnostics
         kwargs = {}
         if category:
             kwargs["filter_category"] = category
+        if screenshot_category:
+            kwargs["filter_screenshot_category"] = screenshot_category
         return run_diagnostics(**kwargs)
     except Exception as e:
         return {"healthy": False, "error": str(e)}
@@ -276,6 +281,7 @@ def update_memory_state(
         "storage_baseline": {"status": "OPTIMAL", "total_mb": 0.0, "logs_mb": 0.0, "screenshots_mb": 0.0},
         "silent_baseline": {"status": "PASS", "silent_handlers_count": 0, "files_audited": 0},
         "warning_baseline": {"status": "HEALTHY", "total_warnings": 0, "categories": {}},
+        "screenshot_baseline": {"status": "OPTIMAL", "total_captures": 0, "corrupted_count": 0, "stale_count": 0, "category_counts": {}, "newest_age_human": "N/A"},
     }
 
     if loop_state_file.exists():
@@ -347,6 +353,14 @@ def update_memory_state(
             "status": ("HEALTHY" if len((diagnostics_results or {}).get("error_analysis", {}).get("recent_warnings", [])) == 0 else ("WARN" if len((diagnostics_results or {}).get("error_analysis", {}).get("recent_warnings", [])) < 50 else "CRITICAL")),
             "total_warnings": len((diagnostics_results or {}).get("error_analysis", {}).get("recent_warnings", [])),
             "categories": (diagnostics_results or {}).get("error_analysis", {}).get("warning_categories", {}),
+        },
+        "screenshot_baseline": {
+            "status": ("OPTIMAL" if (diagnostics_results or {}).get("screenshot_analysis", {}).get("all_intact", True) and (diagnostics_results or {}).get("screenshot_analysis", {}).get("corrupted_count", 0) == 0 else "WARN"),
+            "total_captures": (diagnostics_results or {}).get("screenshot_analysis", {}).get("total_returned", 0),
+            "corrupted_count": (diagnostics_results or {}).get("screenshot_analysis", {}).get("corrupted_count", 0),
+            "stale_count": (diagnostics_results or {}).get("screenshot_analysis", {}).get("stale_count", 0),
+            "category_counts": (diagnostics_results or {}).get("screenshot_analysis", {}).get("category_counts", {}),
+            "newest_age_human": (diagnostics_results or {}).get("screenshot_analysis", {}).get("newest_age_human", "N/A"),
         },
     }
 
@@ -546,6 +560,7 @@ def run_loop(
     verbose: bool = False,
     warning_category: Optional[str] = None,
     test_timeout: Optional[float] = 180.0,
+    screenshot_category: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Executes the full Autonomous Improvement Loop."""
     prune_res = None
@@ -561,7 +576,7 @@ def run_loop(
         except Exception as e:
             prune_res = {"error": str(e)}
 
-    diag = run_diagnostics_check(category=warning_category)
+    diag = run_diagnostics_check(category=warning_category, screenshot_category=screenshot_category)
     ver_check = run_version_alignment_check()
     assets_check = run_build_assets_check()
     build_health = run_build_health_check()
@@ -1049,6 +1064,7 @@ def main(argv=None):
     parser.add_argument("--max-screenshots-keep", type=int, default=None, help="Maximum number of recent screenshots to retain during storage pruning")
     parser.add_argument("--max-screenshot-age-days", type=float, default=None, help="Maximum age in days for screenshots before pruning")
     parser.add_argument("--category", "--warning-category", type=str, default=None, help="Filter diagnostics by subsystem category (e.g. lcu_telemetry, account_switch)")
+    parser.add_argument("--screenshot-category", type=str, default=None, help="Filter debug screenshots by event category")
     parser.add_argument("--test-timeout", type=float, default=180.0, help="Timeout in seconds for pytest test runner (default: 180.0)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Display verbose execution diagnostics and entropy breakdown")
     args, unknown = parser.parse_known_args(argv)
@@ -1065,7 +1081,7 @@ def main(argv=None):
     runner_flags_no_val = {
         "--all-tests", "--staged", "--dry-run", "--check-baseline", "--json", "--prune-storage", "-h", "--help", "-v", "--verbose"
     }
-    runner_flags_with_val = {"--feature", "--impact", "--max-screenshots-keep", "--max-screenshot-age-days", "--category", "--warning-category", "--test-timeout"}
+    runner_flags_with_val = {"--feature", "--impact", "--max-screenshots-keep", "--max-screenshot-age-days", "--category", "--warning-category", "--test-timeout", "--screenshot-category"}
 
     targets_to_run = []
     i = 0
@@ -1097,6 +1113,8 @@ def main(argv=None):
     }
     if args.category is not None:
         run_kwargs["warning_category"] = args.category
+    if args.screenshot_category is not None:
+        run_kwargs["screenshot_category"] = args.screenshot_category
     if args.test_timeout != 180.0:
         run_kwargs["test_timeout"] = args.test_timeout
     if args.verbose:

@@ -754,10 +754,43 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         mock_diag.return_value = {"healthy": True, "error_analysis": {"recent_warnings": [], "warning_categories": {}}}
         mock_tests.return_value = {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "run_all": False, "success": True}
         res = run_loop(dry_run=True, warning_category="lcu_telemetry", test_timeout=60.0)
-        mock_diag.assert_called_once_with(category="lcu_telemetry")
+        mock_diag.assert_called_once_with(category="lcu_telemetry", screenshot_category=None)
         mock_tests.assert_called_once()
         self.assertEqual(mock_tests.call_args[1].get("timeout"), 60.0)
 
+
+    def test_update_memory_state_screenshot_baseline(self):
+        diag_mock = {
+            "error_analysis": {"recent_warnings": [], "warning_categories": {}},
+            "screenshot_analysis": {
+                "total_returned": 5,
+                "all_intact": True,
+                "corrupted_count": 0,
+                "stale_count": 0,
+                "category_counts": {"game_phase_change": 5},
+                "newest_age_human": "2.5h ago",
+            },
+        }
+        res = update_memory_state(
+            metrics={"total_py_files": 10, "total_py_lines": 500, "breakdown": {}, "test_to_code_ratio": 0.5},
+            test_results={"passed": 5, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "run_all": False},
+            dry_run=True,
+            diagnostics_results=diag_mock,
+        )
+        sb = res["new_state"].get("screenshot_baseline", {})
+        self.assertEqual(sb.get("status"), "OPTIMAL")
+        self.assertEqual(sb.get("total_captures"), 5)
+        self.assertEqual(sb.get("corrupted_count"), 0)
+        self.assertEqual(sb.get("category_counts"), {"game_phase_change": 5})
+
+    @patch("tools.autonomous_improvement_runner.run_diagnostics_check")
+    @patch("tools.autonomous_improvement_runner.run_tests_check")
+    def test_run_loop_with_screenshot_category(self, mock_tests, mock_diag):
+        mock_diag.return_value = {"healthy": True, "error_analysis": {"recent_warnings": [], "warning_categories": {}}, "screenshot_analysis": {}}
+        mock_tests.return_value = {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "run_all": False, "success": True}
+        res = run_loop(dry_run=True, screenshot_category="champion_action")
+        mock_diag.assert_called_once_with(category=None, screenshot_category="champion_action")
+        mock_tests.assert_called_once()
 
 if __name__ == "__main__":
     unittest.main()

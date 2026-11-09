@@ -3202,5 +3202,16 @@
       "delta_entropy": 0.0
     },
     "impact": "Continuous regression prevention, test ratio tracking (0.61), and entropy baseline tracked across Run #282."
+  },
+  {
+    "timestamp": "2026-11-09T10:20:24.351734+00:00",
+    "feature": "Screenshot Category Filtering, Subsystem Error Categorization, and Screenshot Baseline Tracking",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Added screenshot category filtering to inspect_screenshots and diagnostics CLI/runner, expanded subsystem classification for 12 additional subsystems, introduced error_categories rollup, and added screenshot_baseline telemetry to loop state"
   }
 ]

@@ -91,6 +91,30 @@ def classify_warning_line(line: str) -> str:
         return "sys"
     if "[ClientTracker]" in line:
         return "client_tracker"
+    if "[Overlay" in line:
+        return "overlay"
+    if "[Theme]" in line or "[TokenLoader]" in line:
+        return "theme"
+    if "[ProfileService]" in line:
+        return "profile"
+    if "[ReplayService]" in line:
+        return "replay"
+    if "[StatsScraper]" in line:
+        return "stats_scraper"
+    if "[DraftAssistant]" in line or "[ChampSelect]" in line:
+        return "champ_select"
+    if "[QueueManager]" in line:
+        return "queue_manager"
+    if "[SystemOptimizer]" in line:
+        return "system_optimizer"
+    if "[RiotID]" in line:
+        return "riot_id"
+    if "[Config" in line:
+        return "config"
+    if "[Hotkey" in line:
+        return "hotkeys"
+    if "[TrayIcon]" in line:
+        return "tray"
     return "general"
 
 
@@ -103,6 +127,7 @@ def inspect_error_log(
     result: Dict[str, Any] = {
         "exists": path.exists(),
         "recent_errors": [],
+        "error_categories": {},
         "recent_warnings": [],
         "warning_categories": {},
         "ws_anomalies_count": 0,
@@ -130,6 +155,7 @@ def inspect_error_log(
                     result["rotated_log_inspected"] = True
 
         warning_categories: Dict[str, int] = {}
+        error_categories: Dict[str, int] = {}
         for line in tail:
             sline = line.strip()
             if not sline:
@@ -143,6 +169,8 @@ def inspect_error_log(
             )
             if RE_ERROR_CRITICAL.search(sline) and not is_benign_switch:
                 result["recent_errors"].append(sline)
+                ecat = classify_warning_line(sline)
+                error_categories[ecat] = error_categories.get(ecat, 0) + 1
             elif (RE_WARNING.search(sline) or is_benign_switch) and "[LCU_WS_ANOMALY]" not in sline and "[LCU_NETWORK_THROTTLE]" not in sline:
                 result["recent_warnings"].append(sline)
                 cat = classify_warning_line(sline)
@@ -150,6 +178,7 @@ def inspect_error_log(
                 if filter_category and cat == filter_category:
                     result["filtered_warnings"].append(sline)
         result["warning_categories"] = warning_categories
+        result["error_categories"] = error_categories
     except Exception as e:
         result["error_reading"] = str(e)
 
@@ -472,6 +501,7 @@ def inspect_screenshots(
     fallback_path: Optional[Path] = None,
     now: Optional[datetime] = None,
     max_age_hours: Optional[float] = None,
+    filter_category: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     files = []
     source = "primary"
@@ -489,9 +519,11 @@ def inspect_screenshots(
 
     captures = []
     try:
-        for f in files[:max_count]:
-            stat = f.stat()
+        for f in files:
             cat, event_label = classify_screenshot_event(f.name)
+            if filter_category and cat != filter_category:
+                continue
+            stat = f.stat()
             is_corrupted = (stat.st_size == 0)
             age_secs = max(0.0, round(ref_ts - stat.st_mtime, 1))
             age_human = format_human_age(age_secs)
@@ -508,6 +540,8 @@ def inspect_screenshots(
                 "is_stale": is_stale,
                 "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
             })
+            if len(captures) >= max_count:
+                break
     except Exception as e:
         captures.append({"error_reading": str(e)})
 
@@ -840,6 +874,7 @@ def run_diagnostics(
     max_screenshots_mb: float = 100.0,
     strict_storage: bool = False,
     filter_category: Optional[str] = None,
+    filter_screenshot_category: Optional[str] = None,
 ) -> Dict[str, Any]:
     p = paths or get_leagueloop_paths()
     errors_info = inspect_error_log(
@@ -857,6 +892,7 @@ def run_diagnostics(
         fallback_path=fallback_dir,
         now=now,
         max_age_hours=max_screenshot_age_hours,
+        filter_category=filter_screenshot_category,
     )
     debug_path = p.get("debug_log", p["base"] / "logs" / "debug.log")
     debug_info = inspect_debug_log(debug_path, max_lines=max_lines)
@@ -892,6 +928,8 @@ def run_diagnostics(
         "newest_age_seconds": newest_age_sec,
         "newest_age_human": newest_age_hum,
     }
+    if filter_screenshot_category:
+        screenshot_meta["filtered_category"] = filter_screenshot_category
 
     healthy = (
         len(errors_info.get("recent_errors", [])) == 0
@@ -935,6 +973,7 @@ def main():
     parser.add_argument("--max-screenshots-mb", type=float, default=100.0, help="Maximum allowed total size of debug screenshots in MB before warning (default: 100.0)")
     parser.add_argument("--strict-storage", action="store_true", help="Treat storage threshold warnings as fatal health failures")
     parser.add_argument("--category", "--warning-category", type=str, default=None, help="Filter reported warnings by subsystem category")
+    parser.add_argument("--screenshot-category", type=str, default=None, help="Filter reported debug screenshots by event category")
     parser.add_argument("--prune-storage", action="store_true", help="Safely prune rotated logs and stale debug screenshots")
     parser.add_argument("--dry-run", action="store_true", help="Preview storage pruning without deleting files")
     parser.add_argument("--max-screenshots-keep", type=int, default=150, help="Maximum number of recent screenshots to keep during prune (default: 150)")
@@ -969,6 +1008,7 @@ def main():
         max_screenshots_mb=args.max_screenshots_mb,
         strict_storage=args.strict_storage,
         filter_category=args.category,
+        filter_screenshot_category=args.screenshot_category,
     )
 
     if prune_res:
@@ -1063,7 +1103,11 @@ def main():
     integrity_str = f" [{sa_screens.get('corrupted_count', 0)} corrupted]" if sa_screens.get("corrupted_count", 0) > 0 else " [all intact]"
     newest_age_str = f" (newest: {sa_screens.get('newest_age_human')})" if sa_screens.get("newest_age_human") else ""
     stale_str = f" [{sa_screens.get('stale_count', 0)} stale]" if sa_screens.get("stale_count", 0) > 0 else ""
-    print(f"\n[Screenshots Inspection]")
+    filt_sc = sa_screens.get("filtered_category")
+    if filt_sc:
+        print(f"\n[Screenshots Inspection (Filtered: {filt_sc})]")
+    else:
+        print(f"\n[Screenshots Inspection]")
     print(f"  Recent Captures: {len(diag['recent_screenshots'])}{fallback_note}{categories_str}{integrity_str}{stale_str}{newest_age_str}")
     for s in diag["recent_screenshots"]:
         cat_tag = f"[{s.get('category', 'ui')}] " if s.get("category") else ""
