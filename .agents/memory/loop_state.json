@@ -1,12 +1,12 @@
 {
-  "run_number": 288,
-  "last_run": "2026-11-09T11:20:30.924227+00:00",
+  "run_number": 289,
+  "last_run": "2026-11-09T11:26:02.331648+00:00",
   "test_baseline": {
-    "passed": 1276,
+    "passed": 1283,
     "failed": 0,
     "skipped": 0,
     "warnings": 0,
-    "last_targeted_passed": 110,
+    "last_targeted_passed": 0,
     "errors": 0
   },
   "index_baseline": {
@@ -76,7 +76,7 @@
     "category_counts": {
       "game_phase_change": 5
     },
-    "newest_age_human": "7.3h ago"
+    "newest_age_human": "7.4h ago"
   },
   "session_baseline": {
     "status": "OPTIMAL",
