@@ -14,6 +14,9 @@ from tools.autonomous_improvement_runner import (
     run_entropy_check,
     run_tests_check,
     evaluate_governance_invariants,
+    generate_subsystem_remediations,
+    generate_governance_receipt,
+    execute_governance_remediations,
     update_memory_state,
     run_loop,
 )
@@ -1798,6 +1801,10 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         self.assertEqual(res["passed_invariants"], 12)
         self.assertEqual(res["violations_count"], 0)
         self.assertEqual(len(res["violations"]), 0)
+        self.assertIn("receipt", res)
+        self.assertTrue(res["receipt"]["receipt_id"].startswith("gov-"))
+        self.assertEqual(res["receipt"]["status"], "PASS")
+        self.assertEqual(len(res["remediations"]), 0)
 
     def test_evaluate_governance_invariants_violations(self):
         diag = {
@@ -1822,6 +1829,54 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         self.assertEqual(res["status"], "VIOLATION")
         self.assertGreater(res["violations_count"], 0)
         self.assertLess(res["passed_invariants"], 12)
+        self.assertIn("receipt", res)
+        self.assertEqual(res["receipt"]["status"], "VIOLATION")
+        self.assertGreater(len(res["remediations"]), 0)
+        self.assertIn("storage", res["remediations"])
+
+    def test_generate_subsystem_remediations(self):
+        invariants = {
+            "storage": {"passed": False, "status": "WARN"},
+            "build": {"passed": True, "status": "PASS"},
+            "network_stability": {"passed": False, "status": "DEGRADED"},
+        }
+        violations = ["Storage threshold warning", "Connection drops observed"]
+        rem = generate_subsystem_remediations(invariants, violations)
+        self.assertIn("storage", rem)
+        self.assertIn("network_stability", rem)
+        self.assertNotIn("build", rem)
+        self.assertIn("prune", rem["storage"].lower())
+
+    def test_generate_governance_receipt_deterministic(self):
+        invariants = {
+            "storage": {"passed": True, "status": "PASS"},
+            "build": {"passed": True, "status": "PASS"},
+        }
+        r1 = generate_governance_receipt(invariants, [], fail_closed=True)
+        r2 = generate_governance_receipt(invariants, [], fail_closed=True)
+        self.assertEqual(r1["receipt_id"], r2["receipt_id"])
+        self.assertEqual(r1["digest"], r2["digest"])
+        self.assertTrue(r1["receipt_id"].startswith("gov-"))
+        self.assertEqual(r1["status"], "PASS")
+
+    @patch("tools.leagueloop_diagnostics.prune_storage")
+    def test_execute_governance_remediations(self, mock_prune):
+        mock_prune.return_value = {
+            "freed_mb": 15.5,
+            "logs_pruned_count": 2,
+            "screenshots_pruned_count": 5,
+        }
+        gov_results = {
+            "invariants": {
+                "storage": {"passed": False, "status": "WARN"},
+                "warnings": {"passed": False, "status": "WARN"},
+            }
+        }
+        res = execute_governance_remediations(gov_results, dry_run=False)
+        self.assertEqual(res["status"], "APPLIED")
+        self.assertEqual(res["freed_mb"], 15.5)
+        self.assertEqual(len(res["remediations_applied"]), 2)
+        mock_prune.assert_called_once()
 
     @patch("tools.autonomous_improvement_runner.run_loop")
     def test_main_cli_fail_closed_success(self, mock_run_loop):
@@ -1930,6 +1985,81 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
             with self.assertRaises(SystemExit) as cm:
                 main()
             self.assertEqual(cm.exception.code, 0)
+
+    @patch("tools.autonomous_improvement_runner.evaluate_governance_invariants")
+    @patch("tools.autonomous_improvement_runner.run_diagnostics_check")
+    @patch("tools.autonomous_improvement_runner.run_version_alignment_check")
+    @patch("tools.autonomous_improvement_runner.run_build_assets_check")
+    @patch("tools.autonomous_improvement_runner.run_build_health_check")
+    @patch("tools.autonomous_improvement_runner.run_accounts_check")
+    @patch("tools.autonomous_improvement_runner.run_silent_excepts_check")
+    @patch("tools.autonomous_improvement_runner.run_entropy_check")
+    def test_main_cli_check_governance_receipt_file(
+        self,
+        mock_entropy,
+        mock_silent,
+        mock_accounts,
+        mock_build_health,
+        mock_assets,
+        mock_align,
+        mock_diag,
+        mock_gov,
+    ):
+        from tools.autonomous_improvement_runner import main
+        import tempfile
+        mock_diag.return_value = {"storage_analysis": {}}
+        mock_align.return_value = {"aligned": True}
+        mock_assets.return_value = {"ready": True}
+        mock_build_health.return_value = {"status": "HEALTHY"}
+        mock_accounts.return_value = {"status": "HEALTHY"}
+        mock_silent.return_value = {"status": "PASS"}
+        mock_entropy.return_value = {"status": "PASS"}
+        mock_gov.return_value = {
+            "status": "PASS",
+            "passed_invariants": 12,
+            "total_invariants": 12,
+            "violations_count": 0,
+            "violations": [],
+            "invariants": {},
+            "receipt": {"receipt_id": "gov-1234567890abcdef", "status": "PASS"},
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rf = Path(tmpdir) / "test_receipt.json"
+            with patch("sys.argv", [
+                "autonomous_improvement_runner",
+                "--check-governance",
+                "--receipt-file",
+                str(rf),
+            ]):
+                with self.assertRaises(SystemExit) as cm:
+                    main()
+                self.assertEqual(cm.exception.code, 0)
+                self.assertTrue(rf.exists())
+                data = json.loads(rf.read_text(encoding="utf-8"))
+                self.assertEqual(data["receipt_id"], "gov-1234567890abcdef")
+
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_remediate_flag(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 297,
+            "diagnostics": {"healthy": True},
+            "tests": {"passed": 10, "failed": 0, "skipped": 0, "errors": 0, "duration_seconds": 1.0, "success": True},
+            "metrics": {"total_py_files": 10, "total_py_lines": 500},
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+            "governance": {"status": "PASS", "violations_count": 0, "passed_invariants": 12, "total_invariants": 12},
+            "governance_remediations": {"status": "APPLIED", "remediations_applied": ["Storage pruned: freed 10MB"]},
+        }
+        with patch("sys.argv", [
+            "autonomous_improvement_runner",
+            "--remediate",
+            "--dry-run"
+        ]):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 0)
+            mock_run_loop.assert_called_once()
+            self.assertTrue(mock_run_loop.call_args.kwargs.get("remediate"))
 
 
 if __name__ == "__main__":

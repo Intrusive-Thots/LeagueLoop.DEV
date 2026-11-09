@@ -234,7 +234,7 @@
       "Verify saved session vault integrity with --strict-sessions to block corrupted or stale account files.",
       "Enforce clean debug log streams without ERROR or CRITICAL logs using --strict-debug."
     ],
-    "updated_at": "2026-11-09T13:24:06.425971+00:00"
+    "updated_at": "2026-11-09T13:35:50.918028+00:00"
   },
   {
     "method": "Fail-Closed Meta-Governance Execution Protocol",
@@ -243,6 +243,6 @@
       "Run --check-governance for fast (<50ms) standalone invariant auditing before deployment or pull requests.",
       "Inspect loop_state.json governance_baseline to verify total invariants passed and zero violations recorded."
     ],
-    "updated_at": "2026-11-09T13:24:06.425971+00:00"
+    "updated_at": "2026-11-09T13:35:50.918028+00:00"
   }
 ]

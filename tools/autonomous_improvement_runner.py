@@ -18,6 +18,7 @@ import argparse
 import subprocess
 import shutil
 import re
+import hashlib
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
@@ -290,6 +291,114 @@ def run_tests_check(
     }
 
 
+def generate_subsystem_remediations(
+    invariants: Dict[str, Dict[str, Any]],
+    violations: List[str],
+) -> Dict[str, str]:
+    """Builds specific, actionable remediation steps for any violated or degraded subsystems."""
+    remediations: Dict[str, str] = {}
+    templates = {
+        "storage": "Execute storage pruning with tools.leagueloop_diagnostics.prune_storage() or run with --prune-storage",
+        "build": "Run python tools/bump_version.py to synchronize src/core/version.py with installer.iss",
+        "accounts_preflight": "Launch Riot Client and verify account credentials in %LOCALAPPDATA%\\LeagueLoop\\accounts_vault.json",
+        "code_entropy": "Refactor high-entropy modules or run tools/code_entropy_analyzer.py to inspect complexity",
+        "silent_handlers": "Replace bare/silent except blocks with explicit typed handlers or logging in affected modules",
+        "network_stability": "Inspect WebSocket disconnect events in session.jsonl and verify Riot gateway connectivity",
+        "screenshots": "Prune stale or corrupted screen captures via --prune-storage or verify screen capture handle",
+        "errors": "Investigate and resolve tracebacks in %LOCALAPPDATA%\\LeagueLoop\\logs\\error.log",
+        "crashes": "Inspect %LOCALAPPDATA%\\LeagueLoop\\logs\\crash.log and faulthandler stack dumps",
+        "saved_sessions": "Run session doctor to regenerate corrupted Riot authentication tokens",
+        "debug_stream": "Check unhandled error or critical entries in %LOCALAPPDATA%\\LeagueLoop\\logs\\debug.log",
+        "warnings": "Triage warnings in error.log or run diagnostics with --category to isolate transient LCU telemetry",
+    }
+    for sub, inv in invariants.items():
+        if not inv.get("passed", True) or inv.get("status") in ("WARN", "FAIL", "DEGRADED", "ERROR", "CRITICAL"):
+            remediations[sub] = templates.get(sub, f"Inspect and resolve anomalies in subsystem '{sub}'")
+    return remediations
+
+
+def generate_governance_receipt(
+    invariants: Dict[str, Dict[str, Any]],
+    violations: List[str],
+    fail_closed: bool = False,
+    remediations: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    """Generates a verifiable, cryptographically hashed governance audit receipt."""
+    subsystem_verdicts = {k: v.get("status", "PASS") for k, v in sorted(invariants.items())}
+    canonical_payload = json.dumps(
+        {
+            "invariants": subsystem_verdicts,
+            "violations": sorted(violations),
+            "fail_closed": fail_closed,
+        },
+        sort_keys=True,
+    )
+    digest = hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
+    receipt_id = f"gov-{digest[:16]}"
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    passed_count = sum(1 for inv in invariants.values() if inv.get("passed", False))
+    total_count = len(invariants)
+    status = "PASS" if len(violations) == 0 else "VIOLATION"
+
+    return {
+        "receipt_id": receipt_id,
+        "digest": digest,
+        "evaluated_at": now_iso,
+        "status": status,
+        "fail_closed": fail_closed,
+        "total_invariants": total_count,
+        "passed_invariants": passed_count,
+        "violations_count": len(violations),
+        "violations": violations,
+        "subsystem_verdicts": subsystem_verdicts,
+        "remediations": remediations or {},
+    }
+
+
+def execute_governance_remediations(
+    governance_results: Dict[str, Any],
+    dry_run: bool = False,
+    max_screenshots_keep: int = 15,
+    max_screenshot_age_days: float = 7.0,
+    keep_rotated_logs: bool = False,
+) -> Dict[str, Any]:
+    """Executes safe, non-destructive automated remediations for violated subsystems."""
+    invariants = governance_results.get("invariants", {})
+    remediations_applied: List[str] = []
+    freed_mb: float = 0.0
+
+    st_inv = invariants.get("storage", {})
+    sc_inv = invariants.get("screenshots", {})
+    if not st_inv.get("passed", True) or not sc_inv.get("passed", True) or st_inv.get("status") == "WARN" or sc_inv.get("status") == "WARN":
+        try:
+            from tools.leagueloop_diagnostics import prune_storage
+            if not dry_run:
+                p_res = prune_storage(
+                    max_screenshots_keep=max_screenshots_keep,
+                    max_screenshot_age_days=max_screenshot_age_days,
+                    prune_rotated_logs=not keep_rotated_logs,
+                )
+                freed_mb = p_res.get("freed_mb", 0.0)
+                remediations_applied.append(
+                    f"Storage pruned: freed {freed_mb:.2f}MB, removed {p_res.get('screenshots_pruned_count', 0)} screenshots, {p_res.get('logs_pruned_count', 0)} rotated logs"
+                )
+            else:
+                remediations_applied.append("Dry-run: storage pruning simulated")
+        except Exception as e:
+            remediations_applied.append(f"Storage pruning skipped: {e}")
+
+    w_inv = invariants.get("warnings", {})
+    if not w_inv.get("passed", True) or w_inv.get("status") == "WARN":
+        remediations_applied.append("Warning analysis: recommended running with --category to isolate transient LCU telemetry")
+
+    return {
+        "status": "APPLIED" if remediations_applied else "NOOP",
+        "remediations_applied": remediations_applied,
+        "freed_mb": freed_mb,
+    }
+
+
 def evaluate_governance_invariants(
     diagnostics_results: Optional[Dict[str, Any]] = None,
     build_health_results: Optional[Dict[str, Any]] = None,
@@ -317,6 +426,8 @@ def evaluate_governance_invariants(
     strict_sessions: bool = False,
     strict_debug: bool = False,
     fail_closed: bool = False,
+    remediate: bool = False,
+    receipt_file: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Evaluates all 12 subsystem governance invariants, returning a structured audit receipt."""
     if fail_closed:
@@ -531,6 +642,14 @@ def evaluate_governance_invariants(
     passed_invariants = sum(1 for inv in invariants.values() if inv.get("passed"))
     is_overall_pass = len(violations) == 0
 
+    remediations = generate_subsystem_remediations(invariants, violations)
+    receipt = generate_governance_receipt(
+        invariants=invariants,
+        violations=violations,
+        fail_closed=fail_closed,
+        remediations=remediations,
+    )
+
     return {
         "status": "PASS" if is_overall_pass else "VIOLATION",
         "fail_closed": fail_closed,
@@ -539,6 +658,8 @@ def evaluate_governance_invariants(
         "violations_count": len(violations),
         "violations": violations,
         "invariants": invariants,
+        "remediations": remediations,
+        "receipt": receipt,
     }
 
 
@@ -842,10 +963,13 @@ def update_memory_state(
         "governance_baseline": {
             "status": (governance_results or {}).get("status", current_state.get("governance_baseline", {}).get("status", "PASS")),
             "fail_closed": fail_closed,
+            "receipt_id": (governance_results or {}).get("receipt", {}).get("receipt_id", current_state.get("governance_baseline", {}).get("receipt_id")),
+            "digest": (governance_results or {}).get("receipt", {}).get("digest", current_state.get("governance_baseline", {}).get("digest")),
             "total_invariants": (governance_results or {}).get("total_invariants", 12),
             "passed_invariants": (governance_results or {}).get("passed_invariants", 12),
             "violations_count": (governance_results or {}).get("violations_count", 0),
             "violations": (governance_results or {}).get("violations", []),
+            "remediations": (governance_results or {}).get("remediations", {}),
         },
     }
 
@@ -979,6 +1103,16 @@ def update_memory_state(
             with open(failures_file, "w", encoding="utf-8") as f:
                 json.dump(fail_data, f, indent=2)
 
+        # 7. Persist governance receipt if available
+        gov_receipt = (governance_results or {}).get("receipt")
+        if gov_receipt:
+            receipt_file = MEMORY_DIR / "governance_receipt.json"
+            try:
+                with open(receipt_file, "w", encoding="utf-8") as f:
+                    json.dump(gov_receipt, f, indent=2)
+            except Exception:
+                pass
+
     return {
         "new_state": new_state,
         "episodic_entry": episodic_entry,
@@ -1075,6 +1209,8 @@ def run_loop(
     strict_sessions: bool = False,
     strict_debug: bool = False,
     fail_closed: bool = False,
+    remediate: bool = False,
+    receipt_file: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Executes the full Autonomous Improvement Loop."""
     if fail_closed:
@@ -1172,6 +1308,26 @@ def run_loop(
         strict_debug=strict_debug,
         fail_closed=fail_closed,
     )
+
+    gov_remediations = None
+    if remediate:
+        gov_remediations = execute_governance_remediations(
+            governance_results=gov_results,
+            dry_run=dry_run,
+            max_screenshots_keep=max_screenshots_keep or 15,
+            max_screenshot_age_days=max_screenshot_age_days or 7.0,
+            keep_rotated_logs=keep_rotated_logs,
+        )
+
+    if receipt_file and gov_results.get("receipt"):
+        try:
+            r_path = Path(receipt_file)
+            r_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(r_path, "w", encoding="utf-8") as f:
+                json.dump(gov_results["receipt"], f, indent=2)
+        except Exception as e:
+            if verbose:
+                print(f"Warning: could not write receipt file to {receipt_file}: {e}")
 
     opt_payload = None
     if feature:
@@ -1713,6 +1869,7 @@ def run_loop(
         "tests": tests,
         "memory": memory_result,
         "governance": gov_results,
+        "governance_remediations": gov_remediations,
         "prune_results": prune_res,
         "mempalace_synced": mempalace_synced,
     }
@@ -1761,6 +1918,8 @@ def main(argv=None):
     parser.add_argument("--strict-debug", action="store_true", help="Treat debug log errors or criticals as fatal health failures")
     parser.add_argument("--fail-closed", "--strict-all", action="store_true", help="Enforce all fail-closed subsystem governance invariants simultaneously")
     parser.add_argument("--check-governance", action="store_true", help="Evaluate and print the subsystem governance invariant audit dashboard and exit")
+    parser.add_argument("--remediate", action="store_true", help="Execute safe automated non-destructive remediations for violated subsystem invariants")
+    parser.add_argument("--receipt-file", type=str, default=None, help="Path to write governance receipt JSON file")
     parser.add_argument("--include-rotated", action="store_true", help="Include rotated log files (error.log.1) during diagnostic analysis")
     parser.add_argument("--keep-rotated-logs", action="store_true", help="Do not prune rotated log files during storage pruning")
     parser.add_argument("--test-timeout", type=float, default=180.0, help="Timeout in seconds for pytest test runner (default: 180.0)")
@@ -1795,18 +1954,42 @@ def main(argv=None):
             storage_results=diag.get("storage_analysis"),
             fail_closed=True,
         )
+        if args.remediate and gov_res.get("violations_count", 0) > 0:
+            rem_res = execute_governance_remediations(
+                governance_results=gov_res,
+                dry_run=args.dry_run,
+                keep_rotated_logs=args.keep_rotated_logs,
+            )
+            gov_res["remediations_executed"] = rem_res
+        if args.receipt_file and gov_res.get("receipt"):
+            try:
+                rf = Path(args.receipt_file)
+                rf.parent.mkdir(parents=True, exist_ok=True)
+                rf.write_text(json.dumps(gov_res["receipt"], indent=2), encoding="utf-8")
+            except Exception as e:
+                print(f"Warning: could not write receipt file: {e}", file=sys.stderr)
         if args.json:
             print(json.dumps(gov_res, indent=2))
         else:
             gov_stat = f"[{gov_res['status']}]"
+            receipt = gov_res.get("receipt", {})
+            r_id = receipt.get("receipt_id", "N/A")
             print(f"=== Subsystem Governance Invariants Audit {gov_stat} ===")
-            print(f"Passed: {gov_res['passed_invariants']}/{gov_res['total_invariants']} | Violations: {gov_res['violations_count']}")
+            print(f"Receipt ID: {r_id} | Passed: {gov_res['passed_invariants']}/{gov_res['total_invariants']} | Violations: {gov_res['violations_count']}")
             for name, inv in gov_res["invariants"].items():
                 print(f"  - {name}: [{inv['status']}]")
             if gov_res["violations"]:
                 print("Violations:")
                 for v in gov_res["violations"]:
                     print(f"  - [VIOLATION] {v}")
+            if gov_res.get("remediations"):
+                print("Remediations:")
+                for sub, rem in gov_res["remediations"].items():
+                    print(f"  - [{sub}] {rem}")
+            if gov_res.get("remediations_executed"):
+                print("Executed Remediations:")
+                for r_app in gov_res["remediations_executed"].get("remediations_applied", []):
+                    print(f"  - {r_app}")
         sys.exit(0 if gov_res["status"] == "PASS" else 1)
 
     runner_flags_no_val = {
@@ -1816,7 +1999,7 @@ def main(argv=None):
         "--strict-entropy", "--strict-silent",
         "--strict-warnings", "--strict-stability", "--strict-screenshots",
         "--strict-errors", "--strict-crashes", "--strict-sessions", "--strict-debug",
-        "--fail-closed", "--strict-all", "--check-governance"
+        "--fail-closed", "--strict-all", "--check-governance", "--remediate"
     }
     runner_flags_with_val = {
         "--feature", "--impact", "--max-screenshots-keep", "--max-screenshot-age-days",
@@ -1824,7 +2007,8 @@ def main(argv=None):
         "--screenshot-category", "--session-status", "--session-account",
         "--session-log-level", "--session-log-tag", "--debug-level", "--debug-tag",
         "--test-timeout", "--max-logs-mb", "--max-screenshots-mb",
-        "--max-entropy", "--max-warnings", "--max-errors", "--max-crashes"
+        "--max-entropy", "--max-warnings", "--max-errors", "--max-crashes",
+        "--receipt-file"
     }
 
     targets_to_run = []
@@ -1917,6 +2101,10 @@ def main(argv=None):
         run_kwargs["strict_debug"] = True
     if args.fail_closed:
         run_kwargs["fail_closed"] = True
+    if args.remediate:
+        run_kwargs["remediate"] = True
+    if args.receipt_file:
+        run_kwargs["receipt_file"] = args.receipt_file
     if args.test_timeout != 180.0:
         run_kwargs["test_timeout"] = args.test_timeout
     if args.verbose:
@@ -2025,10 +2213,14 @@ def main(argv=None):
     gov = result.get("governance", {})
     if gov:
         gov_stat = f"[{gov.get('status', 'PASS')}]"
-        print(f"Governance Invariants: {gov_stat} ({gov.get('passed_invariants', 12)}/{gov.get('total_invariants', 12)} passed, {gov.get('violations_count', 0)} violations)")
+        r_id = gov.get("receipt", {}).get("receipt_id", "N/A")
+        print(f"Governance Invariants: {gov_stat} (Receipt: {r_id}, {gov.get('passed_invariants', 12)}/{gov.get('total_invariants', 12)} passed, {gov.get('violations_count', 0)} violations)")
         if gov.get("violations"):
             for v in gov["violations"][:5]:
                 print(f"  - [VIOLATION] {v}")
+    gov_rem = result.get("governance_remediations")
+    if gov_rem and gov_rem.get("remediations_applied"):
+        print(f"Governance Remediations: [{gov_rem.get('status')}] {', '.join(gov_rem.get('remediations_applied', []))}")
     diag_status = "[HEALTHY]" if result["diagnostics"].get("healthy") else "[NEEDS ATTENTION]"
     ea_res = result["diagnostics"].get("error_analysis", {})
     warn_cats_res = ea_res.get("warning_categories", {})

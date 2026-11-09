@@ -1,0 +1,26 @@
+{
+  "receipt_id": "gov-8fcc1d0bf85d850e",
+  "digest": "8fcc1d0bf85d850e8d536f93b8dbaffbf9fc79557c342dadc17205489615199f",
+  "evaluated_at": "2026-11-09T13:35:50.918028+00:00",
+  "status": "PASS",
+  "fail_closed": false,
+  "total_invariants": 12,
+  "passed_invariants": 12,
+  "violations_count": 0,
+  "violations": [],
+  "subsystem_verdicts": {
+    "accounts_preflight": "PASS",
+    "build": "PASS",
+    "code_entropy": "PASS",
+    "crashes": "PASS",
+    "debug_stream": "PASS",
+    "errors": "PASS",
+    "network_stability": "PASS",
+    "saved_sessions": "PASS",
+    "screenshots": "PASS",
+    "silent_handlers": "PASS",
+    "storage": "PASS",
+    "warnings": "PASS"
+  },
+  "remediations": {}
+}
