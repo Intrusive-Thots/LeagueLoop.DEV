@@ -310,6 +310,7 @@ def generate_subsystem_remediations(
         "saved_sessions": "Run session doctor to regenerate corrupted Riot authentication tokens",
         "debug_stream": "Check unhandled error or critical entries in %LOCALAPPDATA%\\LeagueLoop\\logs\\debug.log",
         "warnings": "Triage warnings in error.log or run diagnostics with --category to isolate transient LCU telemetry",
+        "completion_contract": "Investigate test failures or run fast_test_runner.py to isolate regressions",
     }
     for sub, inv in invariants.items():
         if not inv.get("passed", True) or inv.get("status") in ("WARN", "FAIL", "DEGRADED", "ERROR", "CRITICAL"):
@@ -590,11 +591,13 @@ def evaluate_governance_invariants(
     max_crashes: Optional[int] = None,
     strict_sessions: bool = False,
     strict_debug: bool = False,
+    strict_completion: bool = False,
+    min_tests_passed: Optional[int] = None,
     fail_closed: bool = False,
     remediate: bool = False,
     receipt_file: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Evaluates all 12 subsystem governance invariants, returning a structured audit receipt."""
+    """Evaluates all 13 subsystem governance invariants, returning a structured audit receipt."""
     if fail_closed:
         strict_storage = True
         strict_build = True
@@ -802,6 +805,39 @@ def evaluate_governance_invariants(
         "recent_warnings": warns_count,
         "strict": strict_warnings,
     }
+
+    # 13. Test suite completion contract invariant
+    if test_results is not None:
+        t_success = bool(test_results.get("success", False))
+        t_passed = int(test_results.get("passed", 0))
+        t_failed = int(test_results.get("failed", 0))
+        t_errors = int(test_results.get("errors", 0))
+        min_req = min_tests_passed if min_tests_passed is not None else 1
+        t_pass = t_success and t_failed == 0 and t_errors == 0 and t_passed >= min_req
+        if (strict_completion or fail_closed) and not t_pass:
+            violations.append(
+                f"Completion contract failure: success={t_success}, passed={t_passed} (min: {min_req}), failed={t_failed}, errors={t_errors}"
+            )
+        invariants["completion_contract"] = {
+            "passed": t_pass,
+            "status": "PASS" if t_pass else "FAIL",
+            "passed_tests": t_passed,
+            "failed_tests": t_failed,
+            "errors": t_errors,
+            "min_required": min_req,
+            "strict": strict_completion or fail_closed,
+        }
+    elif strict_completion:
+        violations.append("Completion contract failure: strict completion required but no test results provided")
+        invariants["completion_contract"] = {
+            "passed": False,
+            "status": "FAIL",
+            "passed_tests": 0,
+            "failed_tests": 0,
+            "errors": 1,
+            "min_required": min_tests_passed or 1,
+            "strict": True,
+        }
 
     total_invariants = len(invariants)
     passed_invariants = sum(1 for inv in invariants.values() if inv.get("passed"))
@@ -1373,6 +1409,8 @@ def run_loop(
     max_crashes: Optional[int] = None,
     strict_sessions: bool = False,
     strict_debug: bool = False,
+    strict_completion: bool = False,
+    min_tests: Optional[int] = None,
     fail_closed: bool = False,
     remediate: bool = False,
     receipt_file: Optional[str] = None,
@@ -1471,6 +1509,8 @@ def run_loop(
         max_crashes=max_crashes,
         strict_sessions=strict_sessions,
         strict_debug=strict_debug,
+        strict_completion=strict_completion,
+        min_tests_passed=min_tests,
         fail_closed=fail_closed,
     )
 
@@ -1705,9 +1745,23 @@ def run_loop(
             "description": "Providing a unified fail-closed meta-governance switch (--fail-closed, --strict-all) and dedicated preflight audit flag (--check-governance) alongside structured governance_baseline tracking enforces all 12 subsystem safety invariants simultaneously without manual CLI flag orchestration.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Test Suite Completion Contract and Non-Empty Invariant",
+            "description": "Evaluating test suite completion as an explicit governance invariant (completion_contract) enforces that test suites actually ran (passed >= min_required, failed == 0, errors == 0), preventing empty, skipped, or truncated test runs from falsely passing quality gates.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
+        {
+            "method": "Test Completion Contract Verification Protocol",
+            "procedure": [
+                "Execute autonomous_improvement_runner with --strict-completion to require non-empty passing test suites.",
+                "Specify minimum required passed tests using --min-tests <count>.",
+                "Verify loop_state.json governance_baseline records completion_contract invariant status as PASS.",
+            ],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        },
         {
             "method": "Fail-Closed Meta-Governance Execution Protocol",
             "procedure": [
@@ -2081,6 +2135,8 @@ def main(argv=None):
     parser.add_argument("--max-crashes", type=int, default=None, help="Maximum allowed crash sessions before failure")
     parser.add_argument("--strict-sessions", action="store_true", help="Treat corrupted or stale saved Riot accounts as fatal health failures")
     parser.add_argument("--strict-debug", action="store_true", help="Treat debug log errors or criticals as fatal health failures")
+    parser.add_argument("--strict-completion", action="store_true", help="Treat failed test suite, 0-test runs, or test errors as fatal completion contract failures")
+    parser.add_argument("--min-tests", type=int, default=None, help="Minimum number of passing tests required for completion contract invariant")
     parser.add_argument("--fail-closed", "--strict-all", action="store_true", help="Enforce all fail-closed subsystem governance invariants simultaneously")
     parser.add_argument("--check-governance", action="store_true", help="Evaluate and print the subsystem governance invariant audit dashboard and exit")
     parser.add_argument("--remediate", action="store_true", help="Execute safe automated non-destructive remediations for violated subsystem invariants")
@@ -2194,6 +2250,7 @@ def main(argv=None):
         "--strict-entropy", "--strict-silent",
         "--strict-warnings", "--strict-stability", "--strict-screenshots",
         "--strict-errors", "--strict-crashes", "--strict-sessions", "--strict-debug",
+        "--strict-completion",
         "--fail-closed", "--strict-all", "--check-governance", "--remediate"
     }
     runner_flags_with_val = {
@@ -2203,6 +2260,7 @@ def main(argv=None):
         "--session-log-level", "--session-log-tag", "--debug-level", "--debug-tag",
         "--test-timeout", "--max-logs-mb", "--max-screenshots-mb",
         "--max-entropy", "--max-warnings", "--max-errors", "--max-crashes",
+        "--min-tests",
         "--receipt-file", "--verify-receipt"
     }
 
@@ -2294,6 +2352,10 @@ def main(argv=None):
         run_kwargs["strict_sessions"] = True
     if args.strict_debug:
         run_kwargs["strict_debug"] = True
+    if args.strict_completion:
+        run_kwargs["strict_completion"] = True
+    if args.min_tests is not None:
+        run_kwargs["min_tests"] = args.min_tests
     if args.fail_closed:
         run_kwargs["fail_closed"] = True
     if args.remediate:
@@ -2399,6 +2461,10 @@ def main(argv=None):
         levs = da.get("level_counts", {})
         if levs.get("ERROR", 0) > 0 or levs.get("CRITICAL", 0) > 0 or da.get("status") not in ("HEALTHY", None):
             exit_ok = False
+    if args.strict_completion:
+        cc = result.get("governance", {}).get("invariants", {}).get("completion_contract", {})
+        if not cc.get("passed", False):
+            exit_ok = False
 
     if args.json:
         print(json.dumps(result, indent=2))
@@ -2409,7 +2475,9 @@ def main(argv=None):
     if gov:
         gov_stat = f"[{gov.get('status', 'PASS')}]"
         r_id = gov.get("receipt", {}).get("receipt_id", "N/A")
-        print(f"Governance Invariants: {gov_stat} (Receipt: {r_id}, {gov.get('passed_invariants', 12)}/{gov.get('total_invariants', 12)} passed, {gov.get('violations_count', 0)} violations)")
+        total_inv_count = gov.get('total_invariants', len(gov.get('invariants', {})))
+        passed_inv_count = gov.get('passed_invariants', len(gov.get('invariants', {})))
+        print(f"Governance Invariants: {gov_stat} (Receipt: {r_id}, {passed_inv_count}/{total_inv_count} passed, {gov.get('violations_count', 0)} violations)")
         if gov.get("violations"):
             for v in gov["violations"][:5]:
                 print(f"  - [VIOLATION] {v}")

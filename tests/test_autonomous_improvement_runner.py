@@ -2199,6 +2199,98 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
                     main()
                 self.assertEqual(cm.exception.code, 1)
 
+    def test_evaluate_governance_invariants_completion_contract_pass(self):
+        diag = {
+            "storage_analysis": {"status": "OPTIMAL", "warnings": []},
+            "session_analysis": {"stability": {"rating": "EXCELLENT", "connection_drops_count": 0, "throttle_events_count": 0}},
+            "screenshot_analysis": {"all_intact": True, "corrupted_count": 0, "stale_count": 0},
+            "error_analysis": {"recent_errors": [], "status": "HEALTHY", "recent_warnings": []},
+            "crash_analysis": {"total_crash_sessions": 0, "status": "HEALTHY"},
+            "sessions_analysis": {"corrupted_accounts": 0, "stale_accounts": 0, "status": "OPTIMAL"},
+            "debug_analysis": {"level_counts": {"ERROR": 0, "CRITICAL": 0}, "status": "HEALTHY"},
+        }
+        test_res = {"success": True, "passed": 15, "failed": 0, "errors": 0}
+        res = evaluate_governance_invariants(
+            diagnostics_results=diag,
+            build_health_results={"status": "HEALTHY"},
+            version_alignment_results={"aligned": True},
+            build_assets_results={"ready": True},
+            accounts_preflight_results={"status": "HEALTHY", "problems_count": 0},
+            entropy_results={"status": "PASS", "bare_excepts_total": 0, "syntax_errors": 0, "avg_entropy": 30.0},
+            silent_excepts_results={"status": "PASS", "silent_handlers_count": 0},
+            test_results=test_res,
+            strict_completion=True,
+            min_tests_passed=10,
+            fail_closed=True,
+        )
+        self.assertEqual(res["status"], "PASS")
+        self.assertEqual(res["total_invariants"], 13)
+        self.assertEqual(res["passed_invariants"], 13)
+        self.assertEqual(res["violations_count"], 0)
+        self.assertIn("completion_contract", res["invariants"])
+        self.assertTrue(res["invariants"]["completion_contract"]["passed"])
+
+    def test_evaluate_governance_invariants_completion_contract_failure(self):
+        diag = {
+            "storage_analysis": {"status": "OPTIMAL", "warnings": []},
+            "session_analysis": {"stability": {"rating": "EXCELLENT", "connection_drops_count": 0, "throttle_events_count": 0}},
+            "screenshot_analysis": {"all_intact": True, "corrupted_count": 0, "stale_count": 0},
+            "error_analysis": {"recent_errors": [], "status": "HEALTHY", "recent_warnings": []},
+            "crash_analysis": {"total_crash_sessions": 0, "status": "HEALTHY"},
+            "sessions_analysis": {"corrupted_accounts": 0, "stale_accounts": 0, "status": "OPTIMAL"},
+            "debug_analysis": {"level_counts": {"ERROR": 0, "CRITICAL": 0}, "status": "HEALTHY"},
+        }
+        test_res = {"success": False, "passed": 2, "failed": 1, "errors": 0}
+        res = evaluate_governance_invariants(
+            diagnostics_results=diag,
+            build_health_results={"status": "HEALTHY"},
+            version_alignment_results={"aligned": True},
+            build_assets_results={"ready": True},
+            accounts_preflight_results={"status": "HEALTHY", "problems_count": 0},
+            entropy_results={"status": "PASS", "bare_excepts_total": 0, "syntax_errors": 0, "avg_entropy": 30.0},
+            silent_excepts_results={"status": "PASS", "silent_handlers_count": 0},
+            test_results=test_res,
+            strict_completion=True,
+            min_tests_passed=5,
+            fail_closed=True,
+        )
+        self.assertEqual(res["status"], "VIOLATION")
+        self.assertGreater(res["violations_count"], 0)
+        self.assertIn("completion_contract", res["invariants"])
+        self.assertFalse(res["invariants"]["completion_contract"]["passed"])
+        self.assertIn("completion_contract", res["remediations"])
+
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_strict_completion_flag(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 302,
+            "diagnostics": {"healthy": True},
+            "tests": {"passed": 10, "failed": 0, "skipped": 0, "errors": 0, "duration_seconds": 1.0, "success": True},
+            "metrics": {"total_py_files": 10, "total_py_lines": 500},
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+            "governance": {
+                "status": "PASS",
+                "violations_count": 0,
+                "passed_invariants": 13,
+                "total_invariants": 13,
+                "invariants": {"completion_contract": {"passed": True, "status": "PASS"}},
+            },
+        }
+        with patch("sys.argv", [
+            "autonomous_improvement_runner",
+            "--strict-completion",
+            "--min-tests",
+            "5",
+            "--dry-run"
+        ]):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 0)
+            args_passed = mock_run_loop.call_args[1]
+            self.assertTrue(args_passed.get("strict_completion"))
+            self.assertEqual(args_passed.get("min_tests"), 5)
+
 
 if __name__ == "__main__":
     unittest.main()
