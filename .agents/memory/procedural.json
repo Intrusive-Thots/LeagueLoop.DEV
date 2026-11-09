@@ -199,5 +199,13 @@
       "Execute python tools/autonomous_improvement_runner.py -v to run targeted regression sweeps with extended entropy breakdowns and preflight details.",
       "Inspect large functions and cyclomatic hot spots before refactoring automation routines."
     ]
+  },
+  {
+    "method": "Diagnostic Warning Subsystem Rollup Protocol",
+    "procedure": [
+      "Classify warning lines into subsystem categories via classify_warning_line() in leagueloop_diagnostics.",
+      "Surface warning_categories dictionary in error_analysis payload for automated health assessments.",
+      "Enforce a 5-item display cap in non-verbose summary output while preserving complete lists under -v/--verbose."
+    ]
   }
 ]

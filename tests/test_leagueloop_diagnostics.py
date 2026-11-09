@@ -16,6 +16,7 @@ from tools.leagueloop_diagnostics import (
     inspect_storage_usage,
     prune_storage,
     classify_screenshot_event,
+    classify_warning_line,
     format_human_age,
     run_diagnostics,
 )
@@ -79,6 +80,31 @@ class TestLeagueLoopDiagnostics(unittest.TestCase):
         self.assertEqual(res["network_throttles_count"], 1)
         self.assertEqual(len(res["recent_errors"]), 2)  # ERROR + CRITICAL
         self.assertEqual(len(res["recent_warnings"]), 1)  # WARNING without anomaly tag
+        self.assertIn("warning_categories", res)
+        self.assertEqual(res["warning_categories"].get("general"), 1)
+
+    def test_classify_warning_line_subsystems(self):
+        self.assertEqual(classify_warning_line("Thread [LCU_TELEMETRY] HTTP 503"), "lcu_telemetry")
+        self.assertEqual(classify_warning_line("Thread [LCU_HTTP_STATUS_ANOMALY] rate exceeded"), "http_status_anomaly")
+        self.assertEqual(classify_warning_line("Thread [AccountSwitch] switch failed CAPTCHA"), "account_switch")
+        self.assertEqual(classify_warning_line("MainThread [RiotClientAPI] Launch failed"), "riot_client_api")
+        self.assertEqual(classify_warning_line("Thread [LCU_WS_ANOMALY] drop"), "lcu_websocket")
+        self.assertEqual(classify_warning_line("Thread [Core] Unknown latency"), "general")
+
+    def test_inspect_error_log_warning_categories_rollup(self):
+        log_content = (
+            "2026-11-08 10:00:00 WARNING [LCU_TELEMETRY] HTTP 503 error\n"
+            "2026-11-08 10:00:01 WARNING [LCU_HTTP_STATUS_ANOMALY] status 503 threshold\n"
+            "2026-11-08 10:00:02 WARNING [AccountSwitch] switch failed CAPTCHA_REQUIRED\n"
+            "2026-11-08 10:00:03 WARNING [RiotClientAPI] Launch League failed\n"
+        )
+        self.paths["error_log"].write_text(log_content, encoding="utf-8")
+        res = inspect_error_log(self.paths["error_log"])
+        cats = res.get("warning_categories", {})
+        self.assertEqual(cats.get("lcu_telemetry"), 1)
+        self.assertEqual(cats.get("http_status_anomaly"), 1)
+        self.assertEqual(cats.get("account_switch"), 1)
+        self.assertEqual(cats.get("riot_client_api"), 1)
 
     def test_inspect_crash_log_distinguishes_sessions_from_crashes(self):
         # 5 normal sessions without crashes

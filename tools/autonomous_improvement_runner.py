@@ -723,6 +723,11 @@ def run_loop(
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
         {
+            "concept": "Diagnostic Warning Subsystem Categorization and Bounded Surface Invariant",
+            "description": "Classifying runtime warnings into subsystem categories (lcu_telemetry, http_status_anomaly, account_switch, riot_client_api, lcu_websocket) and capping non-verbose diagnostic console output to 5 items prevents log flooding while providing instantaneous root-cause visibility during automated health checks.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
+        {
             "concept": "Code Entropy Verbosity and Diagnostic Surface Invariant",
             "description": "Exposing verbose diagnostic flags (-v, --verbose) across code_entropy_analyzer and autonomous_improvement_runner enables granular inspection of top cyclomatic complexity offenders, line-level large functions, and multi-subsystem audit summaries without throwing unrecognized CLI argument errors.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
@@ -903,6 +908,14 @@ def run_loop(
             ],
         },
         {
+            "method": "Diagnostic Warning Subsystem Rollup Protocol",
+            "procedure": [
+                "Classify warning lines into subsystem categories via classify_warning_line() in leagueloop_diagnostics.",
+                "Surface warning_categories dictionary in error_analysis payload for automated health assessments.",
+                "Enforce a 5-item display cap in non-verbose summary output while preserving complete lists under -v/--verbose.",
+            ],
+        },
+        {
             "method": "Verbose Entropy Diagnostic Protocol",
             "procedure": [
                 "Execute python tools/code_entropy_analyzer.py --summary -v to view top high-complexity modules alongside global codebase statistics.",
@@ -918,8 +931,13 @@ def run_loop(
     storage_an = diag.get("storage_analysis", {})
     err_cnt = tests.get("errors", 0)
     err_tag = f", errors={err_cnt}" if err_cnt > 0 else ""
+    ea_info = diag.get("error_analysis", {})
+    warn_cnt_diag = len(ea_info.get("recent_warnings", []))
+    warn_cats_diag = ea_info.get("warning_categories", {})
+    warn_tag_diag = f" ({warn_cnt_diag} warnings: {warn_cats_diag})" if warn_cats_diag else ""
+
     action_details = [
-        "Verified runtime logs (error.log, crash.log, session.jsonl, debug.log) & debug screenshots via leagueloop_diagnostics (healthy status confirmed).",
+        f"Verified runtime logs (error.log, crash.log, session.jsonl, debug.log) & debug screenshots via leagueloop_diagnostics (healthy status confirmed{warn_tag_diag}).",
         f"Version alignment protocol: {'[ALIGNED]' if ver_check.get('aligned') else '[MISALIGNED]'} ({ver_check.get('message')}).",
         f"Build assets readiness: {'[READY]' if assets_check.get('ready') else '[MISSING]'} ({assets_check.get('message')}).",
         f"Build health preflight: [{build_health.get('status', 'UNKNOWN')}] (version={build_health.get('version', 'N/A')}, duration={build_health.get('duration_ms', 0)}ms).",
@@ -950,7 +968,10 @@ def run_loop(
 
     loop_num = memory_result["new_state"]["run_number"]
     test_mode_str = "Full suite" if tests.get("run_all") else "Targeted"
-    diag_status_str = "HEALTHY" if diag.get("healthy") else "NEEDS ATTENTION"
+    ea_info = diag.get("error_analysis", {})
+    warn_cats_diag = ea_info.get("warning_categories", {})
+    warn_summary_str = f" ({len(ea_info.get('recent_warnings', []))} warnings: {warn_cats_diag})" if warn_cats_diag else ""
+    diag_status_str = ("HEALTHY" if diag.get("healthy") else "NEEDS ATTENTION") + warn_summary_str
     entropy_status_str = entropy.get("status", "N/A")
     summary_str = (
         f"Diagnostics: {diag_status_str}. "
@@ -1052,7 +1073,10 @@ def main(argv=None):
 
     print(f"=== LeagueLoop Autonomous Improvement Loop (Run #{result['loop_number']}) ===")
     diag_status = "[HEALTHY]" if result["diagnostics"].get("healthy") else "[NEEDS ATTENTION]"
-    print(f"Diagnostics: {diag_status}")
+    ea_res = result["diagnostics"].get("error_analysis", {})
+    warn_cats_res = ea_res.get("warning_categories", {})
+    warn_tag_res = f" (warnings: {len(ea_res.get('recent_warnings', []))} {warn_cats_res})" if warn_cats_res else ""
+    print(f"Diagnostics: {diag_status}{warn_tag_res}")
     ver_info = result.get("version_alignment", {})
     ver_stat = "[ALIGNED]" if ver_info.get("aligned") else "[MISALIGNED]"
     print(f"Version Alignment: {ver_stat} ({ver_info.get('message', 'N/A')})")

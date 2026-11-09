@@ -69,11 +69,27 @@ def get_leagueloop_paths() -> Dict[str, Path]:
     }
 
 
+def classify_warning_line(line: str) -> str:
+    """Classifies a warning log line into a diagnostic subsystem category."""
+    if "[LCU_TELEMETRY]" in line:
+        return "lcu_telemetry"
+    if "[LCU_HTTP_STATUS_ANOMALY]" in line:
+        return "http_status_anomaly"
+    if "[AccountSwitch]" in line:
+        return "account_switch"
+    if "[RiotClientAPI]" in line:
+        return "riot_client_api"
+    if "[LCU_WS" in line:
+        return "lcu_websocket"
+    return "general"
+
+
 def inspect_error_log(path: Path, max_lines: int = 30, include_rotated: bool = False) -> Dict[str, Any]:
     result: Dict[str, Any] = {
         "exists": path.exists(),
         "recent_errors": [],
         "recent_warnings": [],
+        "warning_categories": {},
         "ws_anomalies_count": 0,
         "network_throttles_count": 0,
         "total_lines_inspected": 0,
@@ -95,6 +111,7 @@ def inspect_error_log(path: Path, max_lines: int = 30, include_rotated: bool = F
                     tail = rot_tail + tail
                     result["rotated_log_inspected"] = True
 
+        warning_categories: Dict[str, int] = {}
         for line in tail:
             sline = line.strip()
             if not sline:
@@ -110,6 +127,9 @@ def inspect_error_log(path: Path, max_lines: int = 30, include_rotated: bool = F
                 result["recent_errors"].append(sline)
             elif (RE_WARNING.search(sline) or is_benign_switch) and "[LCU_WS_ANOMALY]" not in sline and "[LCU_NETWORK_THROTTLE]" not in sline:
                 result["recent_warnings"].append(sline)
+                cat = classify_warning_line(sline)
+                warning_categories[cat] = warning_categories.get(cat, 0) + 1
+        result["warning_categories"] = warning_categories
     except Exception as e:
         result["error_reading"] = str(e)
 
@@ -950,8 +970,16 @@ def main():
     for err in ea.get("recent_errors", []):
         print(f"    - {err}")
     print(f"  Recent Warnings: {len(ea.get('recent_warnings', []))}")
-    for warn in ea.get("recent_warnings", []):
-        print(f"    - {warn}")
+    if ea.get("warning_categories"):
+        print(f"    Categories: {ea.get('warning_categories')}")
+    display_warnings = ea.get("recent_warnings", [])
+    if not args.verbose and len(display_warnings) > 5:
+        for warn in display_warnings[-5:]:
+            print(f"    - {warn}")
+        print(f"    ... and {len(display_warnings) - 5} earlier warnings (use -v to show all)")
+    else:
+        for warn in display_warnings:
+            print(f"    - {warn}")
     print(f"  WS Anomalies (tail): {ea.get('ws_anomalies_count', 0)}")
     print(f"  Network Throttles (tail): {ea.get('network_throttles_count', 0)}")
 

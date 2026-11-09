@@ -296,6 +296,35 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         self.assertIn("4 accounts", acct_action[0])
         self.assertIn("2 usable sessions", acct_action[0])
 
+    @patch("tools.autonomous_improvement_runner.run_diagnostics_check")
+    @patch("tools.autonomous_improvement_runner.run_entropy_check")
+    @patch("tools.autonomous_improvement_runner.run_tests_check")
+    @patch("tools.autonomous_improvement_runner.sync_mempalace")
+    def test_run_loop_warning_categories_telemetry(self, mock_mempalace, mock_tests, mock_entropy, mock_diag):
+        mock_diag.return_value = {
+            "healthy": True,
+            "error_analysis": {
+                "recent_warnings": ["warn1", "warn2"],
+                "warning_categories": {"lcu_telemetry": 1, "riot_client_api": 1},
+            },
+        }
+        mock_entropy.return_value = {"status": "PASS", "avg_entropy": 10.0, "bare_excepts_total": 0}
+        mock_tests.return_value = {
+            "exit_code": 0,
+            "success": True,
+            "duration_seconds": 1.0,
+            "passed": 807,
+            "failed": 0,
+            "skipped": 0,
+        }
+
+        res = run_loop(all_tests=False, dry_run=True)
+        actions = res["memory"]["episodic_entry"]["actions"]
+        diag_action = [a for a in actions if "Verified runtime logs" in a]
+        self.assertEqual(len(diag_action), 1)
+        self.assertIn("2 warnings", diag_action[0])
+        self.assertIn("lcu_telemetry", diag_action[0])
+
     @patch("tools.autonomous_improvement_runner.run_silent_excepts_check")
     @patch("tools.autonomous_improvement_runner.run_diagnostics_check")
     @patch("tools.autonomous_improvement_runner.run_entropy_check")
