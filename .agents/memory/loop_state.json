@@ -1,6 +1,6 @@
 {
-  "run_number": 302,
-  "last_run": "2026-11-09T15:01:00.645379+00:00",
+  "run_number": 303,
+  "last_run": "2026-11-09T15:05:02.385794+00:00",
   "test_baseline": {
     "passed": 1283,
     "failed": 0,
@@ -11,7 +11,7 @@
   },
   "index_baseline": {
     "total_files": 213,
-    "total_py_lines": 67694,
+    "total_py_lines": 67698,
     "breakdown": {
       "src": {
         "files": 106,
@@ -23,7 +23,7 @@
       },
       "tools": {
         "files": 11,
-        "lines": 6405
+        "lines": 6409
       }
     },
     "test_to_code_ratio": 0.663
@@ -160,7 +160,7 @@
   },
   "debug_baseline": {
     "status": "HEALTHY",
-    "total_lines_inspected": 84919,
+    "total_lines_inspected": 84922,
     "diagnostic_tags_count": 0,
     "level_counts": {
       "DEBUG": 30
@@ -177,7 +177,7 @@
     "version_aligned": true,
     "files_ok": true,
     "test_environment_ok": true,
-    "duration_ms": 1.11
+    "duration_ms": 1.22
   },
   "accounts_preflight_baseline": {
     "status": "HEALTHY",
