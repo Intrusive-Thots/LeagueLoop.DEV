@@ -34,6 +34,8 @@ _validation_telemetry: Dict[str, Any] = {
     "last_error": None,
 }
 
+RE_VERSION = re.compile(r'__version__\s*=\s*["\']([^"\']+)["\']')
+
 
 def validate_version(project_root: Union[str, Path]) -> str:
     root_path = Path(project_root) if isinstance(project_root, str) else project_root
@@ -42,7 +44,7 @@ def validate_version(project_root: Union[str, Path]) -> str:
         raise FileNotFoundError(f"Version file missing at {version_file}")
     
     content = version_file.read_text(encoding="utf-8")
-    match = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', content)
+    match = RE_VERSION.search(content)
     if not match:
         raise ValueError("Could not parse __version__ string from src/core/version.py")
     

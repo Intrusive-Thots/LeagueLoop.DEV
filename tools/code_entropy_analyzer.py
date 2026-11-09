@@ -70,8 +70,14 @@ def analyze_python_file(filepath: Union[str, Path]) -> Dict[str, Any]:
 
         lines = code.splitlines()
         loc = len(lines)
-        empty_lines = sum(1 for line in lines if not line.strip())
-        comment_lines = sum(1 for line in lines if line.strip().startswith("#"))
+        empty_lines = 0
+        comment_lines = 0
+        for line in lines:
+            s = line.strip()
+            if not s:
+                empty_lines += 1
+            elif s.startswith("#"):
+                comment_lines += 1
 
         # Entropy score: complexity * 2 + bare_excepts * 10 + large_functions * 5
         entropy_score = (auditor.complexity * 2) + (len(auditor.bare_excepts) * 10) + (len(auditor.large_functions) * 5)
