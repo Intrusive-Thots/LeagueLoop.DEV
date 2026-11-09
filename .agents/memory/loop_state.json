@@ -1,17 +1,17 @@
 {
-  "run_number": 284,
-  "last_run": "2026-11-09T10:35:39.575280+00:00",
+  "run_number": 285,
+  "last_run": "2026-11-09T10:49:56.777937+00:00",
   "test_baseline": {
     "passed": 1244,
     "failed": 0,
     "skipped": 0,
     "warnings": 0,
-    "last_targeted_passed": 88,
+    "last_targeted_passed": 95,
     "errors": 0
   },
   "index_baseline": {
     "total_files": 213,
-    "total_py_lines": 64316,
+    "total_py_lines": 64511,
     "breakdown": {
       "src": {
         "files": 106,
@@ -19,14 +19,14 @@
       },
       "tests": {
         "files": 96,
-        "lines": 22666
+        "lines": 22789
       },
       "tools": {
         "files": 11,
-        "lines": 4795
+        "lines": 4867
       }
     },
-    "test_to_code_ratio": 0.615
+    "test_to_code_ratio": 0.618
   },
   "entropy_baseline": {
     "status": "WARN",
@@ -63,7 +63,10 @@
   "crash_baseline": {
     "status": "HEALTHY",
     "recent_crashes_count": 0,
-    "total_actual_crashes": 2
+    "total_actual_crashes": 2,
+    "categories": {
+      "access_violation": 2
+    }
   },
   "screenshot_baseline": {
     "status": "OPTIMAL",
@@ -73,6 +76,6 @@
     "category_counts": {
       "game_phase_change": 5
     },
-    "newest_age_human": "6.5h ago"
+    "newest_age_human": "6.8h ago"
   }
 }

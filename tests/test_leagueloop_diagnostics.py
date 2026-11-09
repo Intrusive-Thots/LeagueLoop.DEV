@@ -17,6 +17,7 @@ from tools.leagueloop_diagnostics import (
     prune_storage,
     classify_screenshot_event,
     classify_warning_line,
+    classify_crash_body,
     format_human_age,
     run_diagnostics,
 )
@@ -834,6 +835,89 @@ class TestLeagueLoopDiagnostics(unittest.TestCase):
                         pass
                 out = f.getvalue()
                 self.assertIn("Filtered Errors [lcu_telemetry]: 1", out)
+
+
+    def test_classify_crash_body(self):
+        self.assertEqual(classify_crash_body(["Windows fatal exception: access violation"]), "access_violation")
+        self.assertEqual(classify_crash_body(["Windows fatal exception: segmentation fault"]), "segmentation_fault")
+        self.assertEqual(classify_crash_body(["File ssl.py, line 1105 in read", "websockets.sync.connection"]), "network_ssl_abort")
+        self.assertEqual(classify_crash_body(["RecursionError: maximum recursion depth exceeded"]), "recursion_error")
+        self.assertEqual(classify_crash_body(["MemoryError: out of memory"]), "out_of_memory")
+        self.assertEqual(classify_crash_body(["ImportError: cannot import name 'xyz'"]), "module_import_error")
+        self.assertEqual(classify_crash_body(["Traceback (most recent call last):", "ValueError: boom"]), "unhandled_traceback")
+        self.assertEqual(classify_crash_body(["Thread 0x00004e30 (most recent call first):"]), "thread_fatal_exception")
+        self.assertEqual(classify_crash_body(["SystemExit: aborting process"]), "process_abort")
+        self.assertEqual(classify_crash_body(["Some random fatal text"]), "generic_fatal")
+
+    def test_inspect_crash_log_crash_categories(self):
+        crash_log_content = (
+            "--- session 1 2026-08-24T00:56:16-04:00 ---\n"
+            "Windows fatal exception: access violation\n"
+            "Thread 0x00004e30 (most recent call first):\n\n"
+            "--- session 2 2026-08-24T01:00:00-04:00 ---\n"
+            "Traceback (most recent call last):\n"
+            "  File run.py, line 10 in <module>\n"
+            "RecursionError: maximum recursion depth\n\n"
+            "--- session 3 2026-08-24T02:00:00-04:00 ---\n\n"
+        )
+        self.paths["crash_log"].write_text(crash_log_content, encoding="utf-8")
+        res = inspect_crash_log(self.paths["crash_log"], max_sessions=5)
+        self.assertEqual(res["total_actual_crashes"], 2)
+        cats = res.get("crash_categories", {})
+        self.assertEqual(cats.get("access_violation"), 1)
+        self.assertEqual(cats.get("recursion_error"), 1)
+
+    def test_inspect_crash_log_with_filter_crash_category(self):
+        crash_log_content = (
+            "--- session 1 2026-08-24T00:56:16-04:00 ---\n"
+            "Windows fatal exception: access violation\n\n"
+            "--- session 2 2026-08-24T01:00:00-04:00 ---\n"
+            "Traceback (most recent call last):\n"
+            "RecursionError: depth exceeded\n\n"
+        )
+        self.paths["crash_log"].write_text(crash_log_content, encoding="utf-8")
+        res = inspect_crash_log(self.paths["crash_log"], filter_crash_category="access_violation")
+        self.assertEqual(res.get("filtered_crash_category"), "access_violation")
+        fc = res.get("filtered_crashes", [])
+        self.assertEqual(len(fc), 1)
+        self.assertEqual(fc[0]["category"], "access_violation")
+        self.assertEqual(fc[0]["session"], "--- session 1 2026-08-24T00:56:16-04:00 ---")
+
+    def test_run_diagnostics_filter_crash_category(self):
+        crash_log_content = (
+            "--- session 1 2026-08-24T00:56:16-04:00 ---\n"
+            "Windows fatal exception: access violation\n\n"
+            "--- session 2 2026-08-24T01:00:00-04:00 ---\n"
+            "Traceback (most recent call last):\n"
+            "RecursionError: depth exceeded\n\n"
+        )
+        self.paths["crash_log"].write_text(crash_log_content, encoding="utf-8")
+        res = run_diagnostics(self.paths, filter_crash_category="recursion_error")
+        ca = res["crash_analysis"]
+        self.assertEqual(ca.get("filtered_crash_category"), "recursion_error")
+        self.assertEqual(len(ca.get("filtered_crashes", [])), 1)
+        self.assertEqual(ca["filtered_crashes"][0]["category"], "recursion_error")
+
+    def test_main_cli_crash_category(self):
+        import io
+        from contextlib import redirect_stdout
+        from tools.leagueloop_diagnostics import main
+
+        crash_log_content = (
+            "--- session 1 2026-08-24T00:56:16-04:00 ---\n"
+            "Windows fatal exception: access violation\n\n"
+        )
+        self.paths["crash_log"].write_text(crash_log_content, encoding="utf-8")
+        with patch("sys.argv", ["leagueloop_diagnostics", "--crash-category", "access_violation", "--summary"]):
+            with patch("tools.leagueloop_diagnostics.get_leagueloop_paths", return_value=self.paths):
+                f = io.StringIO()
+                with redirect_stdout(f):
+                    try:
+                        main()
+                    except SystemExit:
+                        pass
+                out = f.getvalue()
+                self.assertIn("Filtered Crashes [access_violation]: 1", out)
 
 
 if __name__ == "__main__":

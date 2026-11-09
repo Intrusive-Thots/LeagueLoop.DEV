@@ -191,20 +191,53 @@ def inspect_error_log(
     return result
 
 
-def inspect_crash_log(path: Path, max_sessions: int = 5) -> Dict[str, Any]:
+def classify_crash_body(body_lines: List[str]) -> str:
+    """Classifies crash lines into a diagnostic crash category."""
+    body_text = " ".join(body_lines).lower()
+    if "access violation" in body_text:
+        return "access_violation"
+    if "segmentation fault" in body_text:
+        return "segmentation_fault"
+    if any(k in body_text for k in ("ssl.py", "websockets", "socket.py", "asyncio")):
+        return "network_ssl_abort"
+    if "recursionerror" in body_text or "maximum recursion depth" in body_text:
+        return "recursion_error"
+    if "memoryerror" in body_text or "out of memory" in body_text:
+        return "out_of_memory"
+    if "importerror" in body_text or "modulenotfounderror" in body_text:
+        return "module_import_error"
+    if "traceback" in body_text:
+        return "unhandled_traceback"
+    if "thread 0x" in body_text:
+        return "thread_fatal_exception"
+    if any(k in body_text for k in ("systemexit", "abort")):
+        return "process_abort"
+    return "generic_fatal"
+
+
+def inspect_crash_log(
+    path: Path,
+    max_sessions: int = 5,
+    filter_crash_category: Optional[str] = None,
+) -> Dict[str, Any]:
     result: Dict[str, Any] = {
         "exists": path.exists(),
         "recent_crashes": [],
         "total_sessions_tracked": 0,
         "total_actual_crashes": 0,
         "total_crash_sessions": 0,
+        "crash_categories": {},
     }
+    if filter_crash_category:
+        result["filtered_crash_category"] = filter_crash_category
+        result["filtered_crashes"] = []
     if not path.exists():
         return result
 
     try:
         sessions: List[str] = []
         crashes: List[Dict[str, Any]] = []
+        crash_categories: Dict[str, int] = {}
         current_header = ""
         current_body: List[str] = []
 
@@ -216,11 +249,17 @@ def inspect_crash_log(path: Path, max_sessions: int = 5) -> Dict[str, Any]:
                         body_text = " ".join(current_body).lower()
                         if any(k in body_text for k in ("fatal exception", "traceback", "thread 0x", "access violation", "segmentation fault")):
                             summary = current_body[0] if current_body else "Fatal exception detected"
-                            crashes.append({
+                            cat = classify_crash_body(current_body)
+                            crash_categories[cat] = crash_categories.get(cat, 0) + 1
+                            crash_item = {
                                 "session": current_header,
                                 "summary": summary,
+                                "category": cat,
                                 "details": current_body[:5],
-                            })
+                            }
+                            crashes.append(crash_item)
+                            if filter_crash_category and cat == filter_crash_category:
+                                result["filtered_crashes"].append(crash_item)
                     current_header = sline
                     sessions.append(current_header)
                     current_body = []
@@ -232,14 +271,21 @@ def inspect_crash_log(path: Path, max_sessions: int = 5) -> Dict[str, Any]:
             body_text = " ".join(current_body).lower()
             if any(k in body_text for k in ("fatal exception", "traceback", "thread 0x", "access violation", "segmentation fault")):
                 summary = current_body[0] if current_body else "Fatal exception detected"
-                crashes.append({
+                cat = classify_crash_body(current_body)
+                crash_categories[cat] = crash_categories.get(cat, 0) + 1
+                crash_item = {
                     "session": current_header,
                     "summary": summary,
+                    "category": cat,
                     "details": current_body[:5],
-                })
+                }
+                crashes.append(crash_item)
+                if filter_crash_category and cat == filter_crash_category:
+                    result["filtered_crashes"].append(crash_item)
 
         result["total_sessions_tracked"] = len(sessions)
         result["total_actual_crashes"] = len(crashes)
+        result["crash_categories"] = crash_categories
         recent_headers = set(sessions[-max_sessions:]) if sessions else set()
         recent_crashes = [c for c in crashes if c["session"] in recent_headers]
         result["recent_crashes"] = recent_crashes
@@ -882,6 +928,7 @@ def run_diagnostics(
     filter_category: Optional[str] = None,
     filter_screenshot_category: Optional[str] = None,
     filter_error_category: Optional[str] = None,
+    filter_crash_category: Optional[str] = None,
 ) -> Dict[str, Any]:
     p = paths or get_leagueloop_paths()
     errors_info = inspect_error_log(
@@ -891,7 +938,11 @@ def run_diagnostics(
         filter_category=filter_category,
         filter_error_category=filter_error_category,
     )
-    crashes_info = inspect_crash_log(p["crash_log"], max_sessions=max_sessions)
+    crashes_info = inspect_crash_log(
+        p["crash_log"],
+        max_sessions=max_sessions,
+        filter_crash_category=filter_crash_category,
+    )
     session_info = inspect_session_log(p["session_log"], max_entries=max_lines)
     fallback_dir = p.get("fallback_screenshots")
     screenshots_info = inspect_screenshots(
@@ -982,6 +1033,7 @@ def main():
     parser.add_argument("--strict-storage", action="store_true", help="Treat storage threshold warnings as fatal health failures")
     parser.add_argument("--category", "--warning-category", type=str, default=None, help="Filter reported warnings by subsystem category")
     parser.add_argument("--error-category", type=str, default=None, help="Filter reported errors by subsystem category")
+    parser.add_argument("--crash-category", type=str, default=None, help="Filter reported crashes by category")
     parser.add_argument("--screenshot-category", type=str, default=None, help="Filter reported debug screenshots by event category")
     parser.add_argument("--prune-storage", action="store_true", help="Safely prune rotated logs and stale debug screenshots")
     parser.add_argument("--dry-run", action="store_true", help="Preview storage pruning without deleting files")
@@ -1019,6 +1071,7 @@ def main():
         filter_category=args.category,
         filter_screenshot_category=args.screenshot_category,
         filter_error_category=args.error_category,
+        filter_crash_category=args.crash_category,
     )
 
     if prune_res:
@@ -1108,12 +1161,20 @@ def main():
     print(f"\n[Crash Inspection]")
     print(f"  Sessions Tracked (faulthandler): {ca.get('total_sessions_tracked', 0)}")
     print(f"  Historical Crashes: {ca.get('total_actual_crashes', 0)}")
-    print(f"  Recent Crashes (last 5 sessions): {len(ca.get('recent_crashes', []))}")
-    for c in ca.get("recent_crashes", []):
-        print(f"    - {c.get('session')}: {c.get('summary')}")
-    if ca.get("latest_historical_crash") and not ca.get("recent_crashes"):
+    print(f"  Recent Crashes (last {args.max_sessions} sessions): {len(ca.get('recent_crashes', []))}")
+    if ca.get("crash_categories"):
+        print(f"    Categories: {ca.get('crash_categories')}")
+    if ca.get("filtered_crash_category"):
+        fc = ca.get("filtered_crashes", [])
+        print(f"  Filtered Crashes [{ca['filtered_crash_category']}]: {len(fc)}")
+        for crash in fc:
+            print(f"    - {crash.get('session')}: [{crash.get('category')}] {crash.get('summary')}")
+    else:
+        for c in ca.get("recent_crashes", []):
+            print(f"    - {c.get('session')}: [{c.get('category')}] {c.get('summary')}")
+    if ca.get("latest_historical_crash") and not ca.get("recent_crashes") and not ca.get("filtered_crash_category"):
         lhc = ca["latest_historical_crash"]
-        print(f"  Last Historical Crash: {lhc.get('session')} ({lhc.get('summary')})")
+        print(f"  Last Historical Crash: {lhc.get('session')} [{lhc.get('category', 'unknown')}]: {lhc.get('summary')}")
 
     sa_screens = diag.get("screenshot_analysis", {})
     fallback_note = " (Desktop fallback)" if sa_screens.get("used_fallback") else ""
