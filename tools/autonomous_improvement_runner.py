@@ -610,6 +610,8 @@ def evaluate_governance_invariants(
         strict_crashes = True
         strict_sessions = True
         strict_debug = True
+        if test_results is not None:
+            strict_completion = True
         if max_warnings is None:
             strict_warnings = True
 
@@ -1428,6 +1430,8 @@ def run_loop(
         strict_crashes = True
         strict_sessions = True
         strict_debug = True
+        if test_results is not None:
+            strict_completion = True
         if max_warnings is None:
             strict_warnings = True
 
