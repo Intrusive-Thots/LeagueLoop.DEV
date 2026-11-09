@@ -16,6 +16,8 @@ import json
 import time
 import argparse
 import subprocess
+import shutil
+import re
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
@@ -23,6 +25,13 @@ from typing import Dict, Any, List, Optional
 if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
+
+# Pre-compiled pytest output patterns
+RE_PYTEST_PASSED = re.compile(r"(\d+)\s+passed")
+RE_PYTEST_FAILED = re.compile(r"(\d+)\s+failed")
+RE_PYTEST_SKIPPED = re.compile(r"(\d+)\s+skipped")
+RE_PYTEST_WARNINGS = re.compile(r"(\d+)\s+warnings")
+RE_PYTEST_ERRORS = re.compile(r"(\d+)\s+errors")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -178,14 +187,13 @@ def run_tests_check(
     skipped = 0
     errors = 0
 
-    import re
-    m_pass = re.findall(r"(\d+)\s+passed", output)
+    m_pass = RE_PYTEST_PASSED.findall(output)
     if m_pass:
         passed = int(m_pass[-1])
-    m_fail = re.findall(r"(\d+)\s+failed", output)
+    m_fail = RE_PYTEST_FAILED.findall(output)
     if m_fail:
         failed = int(m_fail[-1])
-    m_skip = re.findall(r"(\d+)\s+skipped", output)
+    m_skip = RE_PYTEST_SKIPPED.findall(output)
     if m_skip:
         skipped = int(m_skip[-1])
     m_warn = re.findall(r"(\d+)\s+warning(?:s)?", output)
@@ -455,7 +463,6 @@ def update_memory_state(
 
 def sync_mempalace(loop_number: int, summary: str) -> bool:
     """Optionally syncs record to MemPalace CLI if installed."""
-    import shutil
     mempalace_exe = Path(os.environ.get("USERPROFILE", "")) / "pipx" / "venvs" / "mempalace" / "Scripts" / "mempalace.exe"
     if not mempalace_exe.exists():
         which_path = shutil.which("mempalace.exe") or shutil.which("mempalace")

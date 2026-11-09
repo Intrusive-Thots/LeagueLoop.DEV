@@ -26,6 +26,17 @@ if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 
+# Pre-compiled regex patterns for diagnostic performance
+RE_ERROR_CRITICAL = re.compile(r"\b(ERROR|CRITICAL)\b")
+RE_WARNING = re.compile(r"\bWARNING\b")
+RE_LOG_LEVEL = re.compile(r"\b(DEBUG|INFO|WARNING|ERROR|CRITICAL)\b")
+RE_TIMESTAMP_PREFIX = re.compile(r"^\d{8}_\d{6}_?")
+RE_LATENCY_ANOMALY = re.compile(r"Latency anomaly detected on event:\s*([\d\.]+)ms", re.IGNORECASE)
+RE_CONNECTION_DROP = re.compile(r"Connection drop recorded:\s*(.*?)(?:\s*\(Total drops:\s*(\d+)\))?$", re.IGNORECASE)
+RE_THROTTLE_BACKOFF = re.compile(r"Rapid connection drops detected.*?backoff floor=([\d\.]+)s", re.IGNORECASE)
+RE_CONNECTED_EVENT = re.compile(r"(?:WebSocket connected|Connected to Riot Client|Connected to LCU)", re.IGNORECASE)
+
+
 def read_tail_bounded(path: Path, max_lines: int = 30) -> tuple[int, List[str]]:
     """Memory-bounded line counter and tail reader using collections.deque."""
     if not path.exists():
@@ -92,13 +103,12 @@ def inspect_error_log(path: Path, max_lines: int = 30, include_rotated: bool = F
                 result["ws_anomalies_count"] += 1
             if "[LCU_NETWORK_THROTTLE]" in sline:
                 result["network_throttles_count"] += 1
-            import re
             is_benign_switch = "[AccountSwitch]" in sline and any(
                 k in sline for k in ("CLIENT_UNREACHABLE", "CLIENT_NOT_RUNNING", "SESSION_EXPIRED")
             )
-            if re.search(r"\b(ERROR|CRITICAL)\b", sline) and not is_benign_switch:
+            if RE_ERROR_CRITICAL.search(sline) and not is_benign_switch:
                 result["recent_errors"].append(sline)
-            elif (re.search(r"\bWARNING\b", sline) or is_benign_switch) and "[LCU_WS_ANOMALY]" not in sline and "[LCU_NETWORK_THROTTLE]" not in sline:
+            elif (RE_WARNING.search(sline) or is_benign_switch) and "[LCU_WS_ANOMALY]" not in sline and "[LCU_NETWORK_THROTTLE]" not in sline:
                 result["recent_warnings"].append(sline)
     except Exception as e:
         result["error_reading"] = str(e)
@@ -205,11 +215,10 @@ def inspect_session_log(path: Path, max_entries: int = 20) -> Dict[str, Any]:
         throttle_events: List[Dict[str, Any]] = []
         drop_reasons: List[str] = []
 
-        import re
-        latency_re = re.compile(r"Latency anomaly detected on event:\s*([\d\.]+)ms", re.IGNORECASE)
-        drop_re = re.compile(r"Connection drop recorded:\s*(.*?)(?:\s*\(Total drops:\s*(\d+)\))?$", re.IGNORECASE)
-        throttle_re = re.compile(r"Rapid connection drops detected.*?backoff floor=([\d\.]+)s", re.IGNORECASE)
-        conn_re = re.compile(r"(?:WebSocket connected|Connected to Riot Client|Connected to LCU)", re.IGNORECASE)
+        latency_re = RE_LATENCY_ANOMALY
+        drop_re = RE_CONNECTION_DROP
+        throttle_re = RE_THROTTLE_BACKOFF
+        conn_re = RE_CONNECTED_EVENT
 
         last_connect_ts: Optional[str] = None
 
@@ -346,13 +355,12 @@ def inspect_debug_log(path: Path, max_lines: int = 30) -> Dict[str, Any]:
         recent_entries = []
         recent_diagnostics = []
 
-        import re
         for line in tail:
             sline = line.strip()
             if not sline:
                 continue
             recent_entries.append(sline)
-            m_level = re.search(r"\b(DEBUG|INFO|WARNING|ERROR|CRITICAL)\b", sline)
+            m_level = RE_LOG_LEVEL.search(sline)
             if m_level:
                 lvl = m_level.group(1)
                 level_counts[lvl] = level_counts.get(lvl, 0) + 1
@@ -384,8 +392,7 @@ def classify_screenshot_event(filename: str) -> tuple[str, str]:
       - 'general_ui': Other captures
     """
     stem = Path(filename).stem
-    import re
-    cleaned = re.sub(r"^\d{8}_\d{6}_?", "", stem)
+    cleaned = RE_TIMESTAMP_PREFIX.sub("", stem)
     cleaned_lower = cleaned.lower()
 
     if "click" in cleaned_lower:
