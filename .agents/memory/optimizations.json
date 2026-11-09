@@ -3321,5 +3321,16 @@
       "status": "Optimized implementation baseline"
     },
     "impact": "Added configurable storage thresholds (--max-logs-mb, --max-screenshots-mb, --strict-storage, --include-rotated) to autonomous runner, self-describing storage thresholds in leagueloop_diagnostics, and pruning_baseline telemetry in loop_state.json."
+  },
+  {
+    "timestamp": "2026-11-09T12:18:40.497293+00:00",
+    "feature": "Build and Accounts Preflight Baseline Governance (Run #292)",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Added build_baseline and accounts_preflight_baseline telemetry to loop_state.json, with --strict-build and --strict-preflight CLI fail-closed governance flags. 67 targeted tests verified with zero regressions."
   }
 ]

@@ -299,6 +299,8 @@ def update_memory_state(
     silent_results: Optional[Dict[str, Any]] = None,
     diagnostics_results: Optional[Dict[str, Any]] = None,
     prune_results: Optional[Dict[str, Any]] = None,
+    build_health_results: Optional[Dict[str, Any]] = None,
+    accounts_preflight_results: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Updates loop_state.json, episodic.json, optimizations.json, semantic.json, procedural.json, and failures.json."""
     MEMORY_DIR.mkdir(parents=True, exist_ok=True)
@@ -325,6 +327,28 @@ def update_memory_state(
         "session_baseline": {"status": "OPTIMAL", "total_accounts": 0, "healthy_accounts": 0, "corrupted_accounts": 0, "stale_accounts": 0},
         "stability_baseline": {"status": "OPTIMAL", "rating": "EXCELLENT", "connection_drops": 0, "recovered_drops": 0, "throttle_events": 0, "is_connected": False, "latency_avg_ms": None},
         "debug_baseline": {"status": "HEALTHY", "total_lines_inspected": 0, "diagnostic_tags_count": 0, "level_counts": {}},
+        "build_baseline": {
+            "status": "HEALTHY",
+            "version": "N/A",
+            "version_aligned": True,
+            "files_ok": True,
+            "test_environment_ok": True,
+            "duration_ms": 0.0,
+        },
+        "accounts_preflight_baseline": {
+            "status": "HEALTHY",
+            "accounts_count": 0,
+            "usable_sessions_count": 0,
+            "expired_sessions_count": 0,
+            "missing_sessions_count": 0,
+            "problems_count": 0,
+            "vault_wired": False,
+            "switcher_wired": False,
+            "riot_client_running": False,
+            "signed_in": False,
+            "api_reachable": False,
+            "current_user": None,
+        },
     }
 
     if loop_state_file.exists():
@@ -468,6 +492,28 @@ def update_memory_state(
             "total_lines_inspected": (diagnostics_results or {}).get("debug_analysis", {}).get("total_lines_inspected", 0),
             "diagnostic_tags_count": (diagnostics_results or {}).get("debug_analysis", {}).get("diagnostic_tags_count", 0),
             "level_counts": (diagnostics_results or {}).get("debug_analysis", {}).get("level_counts", {}),
+        },
+        "build_baseline": {
+            "status": (build_health_results or {}).get("status", current_state.get("build_baseline", {}).get("status", "HEALTHY")),
+            "version": (build_health_results or {}).get("version", current_state.get("build_baseline", {}).get("version", "N/A")),
+            "version_aligned": (build_health_results or {}).get("version_aligned", current_state.get("build_baseline", {}).get("version_aligned", True)),
+            "files_ok": (build_health_results or {}).get("files_ok", current_state.get("build_baseline", {}).get("files_ok", True)),
+            "test_environment_ok": (build_health_results or {}).get("test_environment_ok", current_state.get("build_baseline", {}).get("test_environment_ok", True)),
+            "duration_ms": (build_health_results or {}).get("duration_ms", current_state.get("build_baseline", {}).get("duration_ms", 0.0)),
+        },
+        "accounts_preflight_baseline": {
+            "status": (accounts_preflight_results or {}).get("status", current_state.get("accounts_preflight_baseline", {}).get("status", "HEALTHY")),
+            "accounts_count": (accounts_preflight_results or {}).get("accounts_count", current_state.get("accounts_preflight_baseline", {}).get("accounts_count", 0)),
+            "usable_sessions_count": (accounts_preflight_results or {}).get("usable_sessions_count", current_state.get("accounts_preflight_baseline", {}).get("usable_sessions_count", 0)),
+            "expired_sessions_count": (accounts_preflight_results or {}).get("expired_sessions_count", current_state.get("accounts_preflight_baseline", {}).get("expired_sessions_count", 0)),
+            "missing_sessions_count": (accounts_preflight_results or {}).get("missing_sessions_count", current_state.get("accounts_preflight_baseline", {}).get("missing_sessions_count", 0)),
+            "problems_count": (accounts_preflight_results or {}).get("problems_count", current_state.get("accounts_preflight_baseline", {}).get("problems_count", 0)),
+            "vault_wired": (accounts_preflight_results or {}).get("vault_wired", current_state.get("accounts_preflight_baseline", {}).get("vault_wired", False)),
+            "switcher_wired": (accounts_preflight_results or {}).get("switcher_wired", current_state.get("accounts_preflight_baseline", {}).get("switcher_wired", False)),
+            "riot_client_running": (accounts_preflight_results or {}).get("riot_client_running", current_state.get("accounts_preflight_baseline", {}).get("riot_client_running", False)),
+            "signed_in": (accounts_preflight_results or {}).get("signed_in", current_state.get("accounts_preflight_baseline", {}).get("signed_in", False)),
+            "api_reachable": (accounts_preflight_results or {}).get("api_reachable", current_state.get("accounts_preflight_baseline", {}).get("api_reachable", False)),
+            "current_user": (accounts_preflight_results or {}).get("current_user", current_state.get("accounts_preflight_baseline", {}).get("current_user")),
         },
     }
 
@@ -681,6 +727,8 @@ def run_loop(
     strict_storage: bool = False,
     include_rotated: bool = False,
     keep_rotated_logs: bool = False,
+    strict_build: bool = False,
+    strict_preflight: bool = False,
 ) -> Dict[str, Any]:
     """Executes the full Autonomous Improvement Loop."""
     prune_res = None
@@ -1180,6 +1228,8 @@ def run_loop(
         silent_results=silent_check,
         diagnostics_results=diag,
         prune_results=prune_res,
+        build_health_results=build_health,
+        accounts_preflight_results=accts_check,
     )
 
     loop_num = memory_result["new_state"]["run_number"]
@@ -1247,6 +1297,8 @@ def main(argv=None):
     parser.add_argument("--max-logs-mb", type=float, default=None, help="Maximum allowed total size of logs in MB before warning (default: 100.0)")
     parser.add_argument("--max-screenshots-mb", type=float, default=None, help="Maximum allowed total size of debug screenshots in MB before warning (default: 100.0)")
     parser.add_argument("--strict-storage", action="store_true", help="Treat storage threshold warnings as fatal health failures")
+    parser.add_argument("--strict-build", action="store_true", help="Treat build health, version alignment, or missing asset failures as fatal")
+    parser.add_argument("--strict-preflight", "--strict-accounts", action="store_true", help="Treat account preflight issues or non-healthy account status as fatal")
     parser.add_argument("--include-rotated", action="store_true", help="Include rotated log files (error.log.1) during diagnostic analysis")
     parser.add_argument("--keep-rotated-logs", action="store_true", help="Do not prune rotated log files during storage pruning")
     parser.add_argument("--test-timeout", type=float, default=180.0, help="Timeout in seconds for pytest test runner (default: 180.0)")
@@ -1264,7 +1316,8 @@ def main(argv=None):
 
     runner_flags_no_val = {
         "--all-tests", "--staged", "--dry-run", "--check-baseline", "--json", "--prune-storage",
-        "-h", "--help", "-v", "--verbose", "--strict-storage", "--include-rotated", "--keep-rotated-logs"
+        "-h", "--help", "-v", "--verbose", "--strict-storage", "--include-rotated", "--keep-rotated-logs",
+        "--strict-build", "--strict-preflight", "--strict-accounts"
     }
     runner_flags_with_val = {
         "--feature", "--impact", "--max-screenshots-keep", "--max-screenshot-age-days",
@@ -1332,6 +1385,10 @@ def main(argv=None):
         run_kwargs["include_rotated"] = True
     if args.keep_rotated_logs:
         run_kwargs["keep_rotated_logs"] = True
+    if args.strict_build:
+        run_kwargs["strict_build"] = True
+    if args.strict_preflight:
+        run_kwargs["strict_preflight"] = True
     if args.test_timeout != 180.0:
         run_kwargs["test_timeout"] = args.test_timeout
     if args.verbose:
@@ -1339,9 +1396,29 @@ def main(argv=None):
 
     result = run_loop(**run_kwargs)
 
+    exit_ok = (
+        result["diagnostics"].get("healthy", False)
+        and result["tests"].get("success", False)
+        and result["tests"].get("errors", 0) == 0
+    )
+    if args.strict_storage:
+        st_an = result["diagnostics"].get("storage_analysis", {})
+        if st_an.get("status") != "OPTIMAL" or len(st_an.get("warnings", [])) > 0:
+            exit_ok = False
+    if args.strict_build:
+        bh = result.get("build_health", {})
+        va = result.get("version_alignment", {})
+        ba = result.get("build_assets", {})
+        if bh.get("status") != "HEALTHY" or not va.get("aligned", False) or not ba.get("ready", False):
+            exit_ok = False
+    if args.strict_preflight:
+        ap = result.get("accounts_preflight", {})
+        if ap.get("status") != "HEALTHY" or ap.get("problems_count", 0) > 0:
+            exit_ok = False
+
     if args.json:
         print(json.dumps(result, indent=2))
-        sys.exit(0 if result["diagnostics"].get("healthy") and result["tests"].get("success") else 1)
+        sys.exit(0 if exit_ok else 1)
 
     print(f"=== LeagueLoop Autonomous Improvement Loop (Run #{result['loop_number']}) ===")
     diag_status = "[HEALTHY]" if result["diagnostics"].get("healthy") else "[NEEDS ATTENTION]"
@@ -1452,7 +1529,7 @@ def main(argv=None):
     print(f"Memory Sync: {'Persisted' if result['memory']['persisted'] else 'Dry Run (Unsaved)'}")
     print(f"Outcome: {result['memory']['episodic_entry']['outcome']}")
 
-    sys.exit(0 if result["diagnostics"].get("healthy") and result["tests"].get("success") and result["tests"].get("errors", 0) == 0 else 1)
+    sys.exit(0 if exit_ok else 1)
 
 
 if __name__ == "__main__":

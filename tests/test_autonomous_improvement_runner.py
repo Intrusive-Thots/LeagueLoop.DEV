@@ -1267,6 +1267,126 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
             self.assertTrue(kwargs.get("include_rotated"))
             self.assertTrue(kwargs.get("keep_rotated_logs"))
 
+    def test_update_memory_state_records_build_and_accounts_baselines(self):
+        build_health_mock = {
+            "status": "HEALTHY",
+            "version": "2-10-303-2009",
+            "version_aligned": True,
+            "files_ok": True,
+            "test_environment_ok": True,
+            "duration_ms": 1.25,
+        }
+        accounts_preflight_mock = {
+            "status": "HEALTHY",
+            "accounts_count": 4,
+            "usable_sessions_count": 4,
+            "expired_sessions_count": 0,
+            "missing_sessions_count": 0,
+            "problems_count": 0,
+            "vault_wired": True,
+            "switcher_wired": True,
+            "riot_client_running": True,
+            "signed_in": True,
+            "api_reachable": True,
+            "current_user": "themalcolm3",
+        }
+        res = update_memory_state(
+            metrics={"total_py_files": 10, "total_py_lines": 500, "breakdown": {}, "test_to_code_ratio": 0.5},
+            test_results={"passed": 5, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "run_all": False},
+            dry_run=True,
+            build_health_results=build_health_mock,
+            accounts_preflight_results=accounts_preflight_mock,
+        )
+        new_state = res["new_state"]
+        self.assertIn("build_baseline", new_state)
+        self.assertEqual(new_state["build_baseline"]["status"], "HEALTHY")
+        self.assertEqual(new_state["build_baseline"]["version"], "2-10-303-2009")
+        self.assertTrue(new_state["build_baseline"]["version_aligned"])
+        self.assertTrue(new_state["build_baseline"]["files_ok"])
+        self.assertEqual(new_state["build_baseline"]["duration_ms"], 1.25)
+
+        self.assertIn("accounts_preflight_baseline", new_state)
+        self.assertEqual(new_state["accounts_preflight_baseline"]["status"], "HEALTHY")
+        self.assertEqual(new_state["accounts_preflight_baseline"]["accounts_count"], 4)
+        self.assertEqual(new_state["accounts_preflight_baseline"]["usable_sessions_count"], 4)
+        self.assertEqual(new_state["accounts_preflight_baseline"]["problems_count"], 0)
+        self.assertTrue(new_state["accounts_preflight_baseline"]["vault_wired"])
+        self.assertEqual(new_state["accounts_preflight_baseline"]["current_user"], "themalcolm3")
+
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_strict_build_and_preflight_success(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 292,
+            "diagnostics": {"healthy": True, "error_analysis": {}, "storage_analysis": {"status": "OPTIMAL"}},
+            "version_alignment": {"aligned": True, "message": "aligned"},
+            "build_assets": {"ready": True, "message": "ready"},
+            "build_health": {"status": "HEALTHY", "version": "1.0", "duration_ms": 1.0},
+            "accounts_preflight": {"status": "HEALTHY", "accounts_count": 4, "usable_sessions_count": 4, "problems_count": 0},
+            "tests": {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "success": True},
+            "metrics": {"total_py_files": 10, "total_py_lines": 500, "test_to_code_ratio": 0.5},
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+        }
+        with patch("sys.argv", [
+            "autonomous_improvement_runner",
+            "--strict-build",
+            "--strict-preflight",
+            "--dry-run"
+        ]):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 0)
+            mock_run_loop.assert_called_once()
+            kwargs = mock_run_loop.call_args[1]
+            self.assertTrue(kwargs.get("strict_build"))
+            self.assertTrue(kwargs.get("strict_preflight"))
+
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_strict_build_failure(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 292,
+            "diagnostics": {"healthy": True, "error_analysis": {}},
+            "version_alignment": {"aligned": False, "message": "mismatch"},
+            "build_assets": {"ready": True, "message": "ready"},
+            "build_health": {"status": "HEALTHY", "version": "1.0", "duration_ms": 1.0},
+            "accounts_preflight": {"status": "HEALTHY", "accounts_count": 1, "usable_sessions_count": 1, "problems_count": 0},
+            "tests": {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "success": True},
+            "metrics": {"total_py_files": 10, "total_py_lines": 500, "test_to_code_ratio": 0.5},
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+        }
+        with patch("sys.argv", [
+            "autonomous_improvement_runner",
+            "--strict-build",
+            "--dry-run"
+        ]):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 1)
+
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_strict_preflight_failure(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 292,
+            "diagnostics": {"healthy": True, "error_analysis": {}},
+            "version_alignment": {"aligned": True, "message": "aligned"},
+            "build_assets": {"ready": True, "message": "ready"},
+            "build_health": {"status": "HEALTHY", "version": "1.0", "duration_ms": 1.0},
+            "accounts_preflight": {"status": "WARN", "accounts_count": 4, "usable_sessions_count": 2, "problems_count": 2},
+            "tests": {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "success": True},
+            "metrics": {"total_py_files": 10, "total_py_lines": 500, "test_to_code_ratio": 0.5},
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+        }
+        with patch("sys.argv", [
+            "autonomous_improvement_runner",
+            "--strict-accounts",
+            "--dry-run"
+        ]):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 1)
+
 
 if __name__ == "__main__":
     unittest.main()
