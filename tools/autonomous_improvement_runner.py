@@ -186,10 +186,16 @@ def run_silent_excepts_check(paths: Optional[List[str]] = None) -> Dict[str, Any
 def run_entropy_check(top_n: int = 5) -> Dict[str, Any]:
     """Runs static code entropy & quality audit via tools.code_entropy_analyzer."""
     try:
-        from tools.code_entropy_analyzer import run_entropy_summary, get_top_entropy_files
-        summary = run_entropy_summary(str(PROJECT_ROOT / "src"))
-        summary["top_files"] = get_top_entropy_files(str(PROJECT_ROOT / "src"), top_n=top_n)
-        return summary
+        from tools.code_entropy_analyzer import run_entropy_audit
+        return run_entropy_audit(str(PROJECT_ROOT / "src"), top_n=top_n)
+    except (ImportError, AttributeError):
+        try:
+            from tools.code_entropy_analyzer import run_entropy_summary, get_top_entropy_files
+            summary = run_entropy_summary(str(PROJECT_ROOT / "src"))
+            summary["top_files"] = get_top_entropy_files(str(PROJECT_ROOT / "src"), top_n=top_n)
+            return summary
+        except Exception as e:
+            return {"status": "ERROR", "error": str(e), "top_files": []}
     except Exception as e:
         return {"status": "ERROR", "error": str(e), "top_files": []}
 
@@ -301,6 +307,7 @@ def update_memory_state(
     prune_results: Optional[Dict[str, Any]] = None,
     build_health_results: Optional[Dict[str, Any]] = None,
     accounts_preflight_results: Optional[Dict[str, Any]] = None,
+    max_entropy_threshold: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Updates loop_state.json, episodic.json, optimizations.json, semantic.json, procedural.json, and failures.json."""
     MEMORY_DIR.mkdir(parents=True, exist_ok=True)
@@ -412,6 +419,18 @@ def update_memory_state(
             "status": entropy_info.get("status", "N/A"),
             "avg_entropy": curr_entropy,
             "bare_excepts": entropy_info.get("bare_excepts_total", 0),
+            "syntax_errors": entropy_info.get("syntax_errors", 0),
+            "top_offenders": [
+                {
+                    "file": Path(f.get("file", "")).name,
+                    "score": f.get("entropy_score", 0.0),
+                    "complexity": f.get("cyclomatic_complexity", 0),
+                }
+                for f in entropy_info.get("top_files", [])[:3]
+            ],
+            "thresholds": {
+                "max_entropy": max_entropy_threshold,
+            },
         },
         "storage_baseline": {
             "status": st_info.get("status", "OPTIMAL"),
@@ -429,6 +448,9 @@ def update_memory_state(
             "status": (silent_results or {}).get("status", "PASS"),
             "silent_handlers_count": (silent_results or {}).get("silent_handlers_count", 0),
             "files_audited": (silent_results or {}).get("files_audited", 0),
+            "thresholds": {
+                "max_silent_handlers": 0,
+            },
         },
         "warning_baseline": {
             "status": ("HEALTHY" if len((diagnostics_results or {}).get("error_analysis", {}).get("recent_warnings", [])) == 0 else ("WARN" if len((diagnostics_results or {}).get("error_analysis", {}).get("recent_warnings", [])) < 50 else "CRITICAL")),
@@ -729,6 +751,9 @@ def run_loop(
     keep_rotated_logs: bool = False,
     strict_build: bool = False,
     strict_preflight: bool = False,
+    strict_entropy: bool = False,
+    max_entropy: Optional[float] = None,
+    strict_silent: bool = False,
 ) -> Dict[str, Any]:
     """Executes the full Autonomous Improvement Loop."""
     prune_res = None
@@ -1230,6 +1255,7 @@ def run_loop(
         prune_results=prune_res,
         build_health_results=build_health,
         accounts_preflight_results=accts_check,
+        max_entropy_threshold=max_entropy,
     )
 
     loop_num = memory_result["new_state"]["run_number"]
@@ -1299,6 +1325,9 @@ def main(argv=None):
     parser.add_argument("--strict-storage", action="store_true", help="Treat storage threshold warnings as fatal health failures")
     parser.add_argument("--strict-build", action="store_true", help="Treat build health, version alignment, or missing asset failures as fatal")
     parser.add_argument("--strict-preflight", "--strict-accounts", action="store_true", help="Treat account preflight issues or non-healthy account status as fatal")
+    parser.add_argument("--strict-entropy", action="store_true", help="Treat code entropy FAIL status, bare excepts, or syntax errors as fatal")
+    parser.add_argument("--max-entropy", type=float, default=None, help="Maximum allowed average codebase entropy before failure")
+    parser.add_argument("--strict-silent", action="store_true", help="Treat swallowed/silent exception handlers as fatal")
     parser.add_argument("--include-rotated", action="store_true", help="Include rotated log files (error.log.1) during diagnostic analysis")
     parser.add_argument("--keep-rotated-logs", action="store_true", help="Do not prune rotated log files during storage pruning")
     parser.add_argument("--test-timeout", type=float, default=180.0, help="Timeout in seconds for pytest test runner (default: 180.0)")
@@ -1317,14 +1346,16 @@ def main(argv=None):
     runner_flags_no_val = {
         "--all-tests", "--staged", "--dry-run", "--check-baseline", "--json", "--prune-storage",
         "-h", "--help", "-v", "--verbose", "--strict-storage", "--include-rotated", "--keep-rotated-logs",
-        "--strict-build", "--strict-preflight", "--strict-accounts"
+        "--strict-build", "--strict-preflight", "--strict-accounts",
+        "--strict-entropy", "--strict-silent"
     }
     runner_flags_with_val = {
         "--feature", "--impact", "--max-screenshots-keep", "--max-screenshot-age-days",
         "--category", "--warning-category", "--error-category", "--crash-category",
         "--screenshot-category", "--session-status", "--session-account",
         "--session-log-level", "--session-log-tag", "--debug-level", "--debug-tag",
-        "--test-timeout", "--max-logs-mb", "--max-screenshots-mb"
+        "--test-timeout", "--max-logs-mb", "--max-screenshots-mb",
+        "--max-entropy"
     }
 
     targets_to_run = []
@@ -1389,6 +1420,12 @@ def main(argv=None):
         run_kwargs["strict_build"] = True
     if args.strict_preflight:
         run_kwargs["strict_preflight"] = True
+    if args.strict_entropy:
+        run_kwargs["strict_entropy"] = True
+    if args.max_entropy is not None:
+        run_kwargs["max_entropy"] = args.max_entropy
+    if args.strict_silent:
+        run_kwargs["strict_silent"] = True
     if args.test_timeout != 180.0:
         run_kwargs["test_timeout"] = args.test_timeout
     if args.verbose:
@@ -1414,6 +1451,22 @@ def main(argv=None):
     if args.strict_preflight:
         ap = result.get("accounts_preflight", {})
         if ap.get("status") != "HEALTHY" or ap.get("problems_count", 0) > 0:
+            exit_ok = False
+    if args.strict_entropy:
+        ent = result.get("entropy", {})
+        if (
+            ent.get("status") == "FAIL"
+            or ent.get("bare_excepts_total", 0) > 0
+            or ent.get("syntax_errors", 0) > 0
+        ):
+            exit_ok = False
+    if args.max_entropy is not None:
+        ent = result.get("entropy", {})
+        if ent.get("avg_entropy", 0.0) > args.max_entropy:
+            exit_ok = False
+    if args.strict_silent:
+        sil = result.get("silent_excepts", {})
+        if sil.get("status") != "PASS" or sil.get("silent_handlers_count", 0) > 0:
             exit_ok = False
 
     if args.json:

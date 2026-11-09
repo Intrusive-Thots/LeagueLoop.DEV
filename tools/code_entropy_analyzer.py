@@ -127,13 +127,16 @@ def analyze_directory(target_dir: Union[str, Path]) -> List[Dict[str, Any]]:
     return results
 
 
-def run_entropy_summary(target_dir: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
-    """Computes an aggregate entropy summary for a target directory."""
-    path = _resolve_target_dir(target_dir)
-    results = analyze_directory(path)
+def run_entropy_summary(target_dir: Optional[Union[str, Path, List[Dict[str, Any]]]] = None) -> Dict[str, Any]:
+    """Computes an aggregate entropy summary for a target directory or pre-analyzed results."""
+    if isinstance(target_dir, list):
+        results = target_dir
+    else:
+        path = _resolve_target_dir(target_dir)
+        results = analyze_directory(path) if os.path.isdir(path) else [analyze_python_file(path)]
     total_files = len(results)
     if total_files == 0:
-        return {"total_files": 0, "avg_entropy": 0, "bare_excepts_total": 0, "status": "PASS"}
+        return {"total_files": 0, "avg_entropy": 0, "bare_excepts_total": 0, "syntax_errors": 0, "status": "PASS"}
 
     total_entropy = sum(r.get("entropy_score", 0) for r in results if "entropy_score" in r)
     bare_excepts = sum(len(r.get("bare_excepts", [])) for r in results if "bare_excepts" in r)
@@ -151,12 +154,33 @@ def run_entropy_summary(target_dir: Optional[Union[str, Path]] = None) -> Dict[s
     }
 
 
-def get_top_entropy_files(target_dir: Optional[Union[str, Path]] = None, top_n: int = 5) -> List[Dict[str, Any]]:
+def get_top_entropy_files(
+    target_dir: Optional[Union[str, Path, List[Dict[str, Any]]]] = None,
+    top_n: int = 5,
+) -> List[Dict[str, Any]]:
     """Retrieves top N files sorted by entropy descending."""
+    if isinstance(target_dir, list):
+        sorted_res = sorted(target_dir, key=lambda x: x.get("entropy_score", 0), reverse=True)
+        return sorted_res[:top_n]
     path = _resolve_target_dir(target_dir)
     results = analyze_directory(path) if os.path.isdir(path) else [analyze_python_file(path)]
     sorted_res = sorted(results, key=lambda x: x.get("entropy_score", 0), reverse=True)
     return sorted_res[:top_n]
+
+
+def run_entropy_audit(
+    target_dir: Optional[Union[str, Path, List[Dict[str, Any]]]] = None,
+    top_n: int = 5,
+) -> Dict[str, Any]:
+    """Runs a single-pass aggregate entropy summary and extracts top entropy offenders."""
+    if isinstance(target_dir, list):
+        results = target_dir
+    else:
+        path = _resolve_target_dir(target_dir)
+        results = analyze_directory(path) if os.path.isdir(path) else [analyze_python_file(path)]
+    summary = run_entropy_summary(results)
+    summary["top_files"] = get_top_entropy_files(results, top_n=top_n)
+    return summary
 
 
 def main(argv=None):

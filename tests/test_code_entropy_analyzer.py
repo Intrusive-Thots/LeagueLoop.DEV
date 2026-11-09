@@ -71,6 +71,27 @@ class TestCodeEntropyAnalyzer(unittest.TestCase):
         self.assertEqual(len(top), 1)
         self.assertEqual(top[0]["file"], str(f2))
 
+    def test_run_entropy_audit(self):
+        from tools.code_entropy_analyzer import run_entropy_audit, get_top_entropy_files, run_entropy_summary
+        f1 = self.base / "audit1.py"
+        f1.write_text("def a(): pass\n", encoding="utf-8")
+        f2 = self.base / "audit2.py"
+        f2.write_text("def b(x):\n    if x:\n        pass\n", encoding="utf-8")
+
+        audit = run_entropy_audit(str(self.base), top_n=2)
+        self.assertEqual(audit["total_files"], 2)
+        self.assertEqual(len(audit["top_files"]), 2)
+        self.assertIn("avg_entropy", audit)
+        self.assertEqual(audit["status"], "PASS")
+
+        # Test precomputed results
+        precomputed_top = get_top_entropy_files(audit["top_files"], top_n=1)
+        self.assertEqual(len(precomputed_top), 1)
+        self.assertEqual(precomputed_top[0]["file"], str(f2))
+
+        precomputed_summary = run_entropy_summary(audit["top_files"])
+        self.assertEqual(precomputed_summary["total_files"], 2)
+
     def test_main_cli_arguments(self):
         from tools.code_entropy_analyzer import main
         file_path = self.base / "cli_sample.py"
