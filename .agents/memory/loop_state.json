@@ -1,17 +1,17 @@
 {
-  "run_number": 279,
-  "last_run": "2026-11-09T09:39:47.716933+00:00",
+  "run_number": 282,
+  "last_run": "2026-11-09T10:05:22.672978+00:00",
   "test_baseline": {
     "passed": 1244,
     "failed": 0,
     "skipped": 0,
     "warnings": 0,
-    "last_targeted_passed": 0,
+    "last_targeted_passed": 76,
     "errors": 0
   },
   "index_baseline": {
     "total_files": 213,
-    "total_py_lines": 63883,
+    "total_py_lines": 64021,
     "breakdown": {
       "src": {
         "files": 106,
@@ -19,14 +19,14 @@
       },
       "tests": {
         "files": 96,
-        "lines": 22407
+        "lines": 22472
       },
       "tools": {
         "files": 11,
-        "lines": 4621
+        "lines": 4694
       }
     },
-    "test_to_code_ratio": 0.608
+    "test_to_code_ratio": 0.61
   },
   "entropy_baseline": {
     "status": "WARN",
@@ -44,5 +44,15 @@
     "status": "PASS",
     "silent_handlers_count": 0,
     "files_audited": 104
+  },
+  "warning_baseline": {
+    "status": "WARN",
+    "total_warnings": 30,
+    "categories": {
+      "lcu_telemetry": 15,
+      "http_status_anomaly": 12,
+      "account_switch": 1,
+      "riot_client_api": 2
+    }
   }
 }

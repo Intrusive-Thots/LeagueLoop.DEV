@@ -87,8 +87,13 @@ class TestLeagueLoopDiagnostics(unittest.TestCase):
         self.assertEqual(classify_warning_line("Thread [LCU_TELEMETRY] HTTP 503"), "lcu_telemetry")
         self.assertEqual(classify_warning_line("Thread [LCU_HTTP_STATUS_ANOMALY] rate exceeded"), "http_status_anomaly")
         self.assertEqual(classify_warning_line("Thread [AccountSwitch] switch failed CAPTCHA"), "account_switch")
+        self.assertEqual(classify_warning_line("Thread [AccountManager] not found"), "account_manager")
         self.assertEqual(classify_warning_line("MainThread [RiotClientAPI] Launch failed"), "riot_client_api")
         self.assertEqual(classify_warning_line("Thread [LCU_WS_ANOMALY] drop"), "lcu_websocket")
+        self.assertEqual(classify_warning_line("Thread [Automation] locked in"), "automation")
+        self.assertEqual(classify_warning_line("Thread [Loot] craft failed"), "loot")
+        self.assertEqual(classify_warning_line("Thread [SYS] icon load failed"), "sys")
+        self.assertEqual(classify_warning_line("Thread [ClientTracker] window missing"), "client_tracker")
         self.assertEqual(classify_warning_line("Thread [Core] Unknown latency"), "general")
 
     def test_inspect_error_log_warning_categories_rollup(self):
@@ -105,6 +110,28 @@ class TestLeagueLoopDiagnostics(unittest.TestCase):
         self.assertEqual(cats.get("http_status_anomaly"), 1)
         self.assertEqual(cats.get("account_switch"), 1)
         self.assertEqual(cats.get("riot_client_api"), 1)
+
+    def test_inspect_error_log_with_filter_category(self):
+        log_content = (
+            "2026-11-08 10:00:00 WARNING [LCU_TELEMETRY] HTTP 503 error\n"
+            "2026-11-08 10:00:01 WARNING [LCU_HTTP_STATUS_ANOMALY] status 503 threshold\n"
+            "2026-11-08 10:00:02 WARNING [AccountSwitch] switch failed CAPTCHA_REQUIRED\n"
+        )
+        self.paths["error_log"].write_text(log_content, encoding="utf-8")
+        res = inspect_error_log(self.paths["error_log"], filter_category="account_switch")
+        self.assertEqual(res.get("filtered_category"), "account_switch")
+        self.assertEqual(len(res.get("filtered_warnings", [])), 1)
+        self.assertIn("CAPTCHA_REQUIRED", res["filtered_warnings"][0])
+        # recent_warnings should still contain all 3 warnings
+        self.assertEqual(len(res.get("recent_warnings", [])), 3)
+
+    def test_run_diagnostics_with_filter_category(self):
+        log_content = "2026-11-08 10:00:00 WARNING [LCU_TELEMETRY] HTTP 503 error\n"
+        self.paths["error_log"].write_text(log_content, encoding="utf-8")
+        diag = run_diagnostics(paths=self.paths, filter_category="lcu_telemetry")
+        ea = diag.get("error_analysis", {})
+        self.assertEqual(ea.get("filtered_category"), "lcu_telemetry")
+        self.assertEqual(len(ea.get("filtered_warnings", [])), 1)
 
     def test_inspect_crash_log_distinguishes_sessions_from_crashes(self):
         # 5 normal sessions without crashes

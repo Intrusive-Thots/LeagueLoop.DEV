@@ -77,14 +77,29 @@ def classify_warning_line(line: str) -> str:
         return "http_status_anomaly"
     if "[AccountSwitch]" in line:
         return "account_switch"
+    if "[AccountManager]" in line:
+        return "account_manager"
     if "[RiotClientAPI]" in line:
         return "riot_client_api"
     if "[LCU_WS" in line:
         return "lcu_websocket"
+    if "[Automation]" in line:
+        return "automation"
+    if "[Loot]" in line:
+        return "loot"
+    if "[SYS]" in line:
+        return "sys"
+    if "[ClientTracker]" in line:
+        return "client_tracker"
     return "general"
 
 
-def inspect_error_log(path: Path, max_lines: int = 30, include_rotated: bool = False) -> Dict[str, Any]:
+def inspect_error_log(
+    path: Path,
+    max_lines: int = 30,
+    include_rotated: bool = False,
+    filter_category: Optional[str] = None,
+) -> Dict[str, Any]:
     result: Dict[str, Any] = {
         "exists": path.exists(),
         "recent_errors": [],
@@ -95,6 +110,9 @@ def inspect_error_log(path: Path, max_lines: int = 30, include_rotated: bool = F
         "total_lines_inspected": 0,
         "rotated_log_inspected": False,
     }
+    if filter_category:
+        result["filtered_category"] = filter_category
+        result["filtered_warnings"] = []
     if not path.exists():
         return result
 
@@ -129,6 +147,8 @@ def inspect_error_log(path: Path, max_lines: int = 30, include_rotated: bool = F
                 result["recent_warnings"].append(sline)
                 cat = classify_warning_line(sline)
                 warning_categories[cat] = warning_categories.get(cat, 0) + 1
+                if filter_category and cat == filter_category:
+                    result["filtered_warnings"].append(sline)
         result["warning_categories"] = warning_categories
     except Exception as e:
         result["error_reading"] = str(e)
@@ -819,9 +839,15 @@ def run_diagnostics(
     max_logs_mb: float = 100.0,
     max_screenshots_mb: float = 100.0,
     strict_storage: bool = False,
+    filter_category: Optional[str] = None,
 ) -> Dict[str, Any]:
     p = paths or get_leagueloop_paths()
-    errors_info = inspect_error_log(p["error_log"], max_lines=max_lines, include_rotated=include_rotated)
+    errors_info = inspect_error_log(
+        p["error_log"],
+        max_lines=max_lines,
+        include_rotated=include_rotated,
+        filter_category=filter_category,
+    )
     crashes_info = inspect_crash_log(p["crash_log"], max_sessions=max_sessions)
     session_info = inspect_session_log(p["session_log"], max_entries=max_lines)
     fallback_dir = p.get("fallback_screenshots")
@@ -908,6 +934,7 @@ def main():
     parser.add_argument("--max-logs-mb", type=float, default=100.0, help="Maximum allowed total size of logs in MB before warning (default: 100.0)")
     parser.add_argument("--max-screenshots-mb", type=float, default=100.0, help="Maximum allowed total size of debug screenshots in MB before warning (default: 100.0)")
     parser.add_argument("--strict-storage", action="store_true", help="Treat storage threshold warnings as fatal health failures")
+    parser.add_argument("--category", "--warning-category", type=str, default=None, help="Filter reported warnings by subsystem category")
     parser.add_argument("--prune-storage", action="store_true", help="Safely prune rotated logs and stale debug screenshots")
     parser.add_argument("--dry-run", action="store_true", help="Preview storage pruning without deleting files")
     parser.add_argument("--max-screenshots-keep", type=int, default=150, help="Maximum number of recent screenshots to keep during prune (default: 150)")
@@ -941,6 +968,7 @@ def main():
         max_logs_mb=args.max_logs_mb,
         max_screenshots_mb=args.max_screenshots_mb,
         strict_storage=args.strict_storage,
+        filter_category=args.category,
     )
 
     if prune_res:
@@ -972,14 +1000,20 @@ def main():
     print(f"  Recent Warnings: {len(ea.get('recent_warnings', []))}")
     if ea.get("warning_categories"):
         print(f"    Categories: {ea.get('warning_categories')}")
-    display_warnings = ea.get("recent_warnings", [])
-    if not args.verbose and len(display_warnings) > 5:
-        for warn in display_warnings[-5:]:
+    if ea.get("filtered_category"):
+        fw = ea.get("filtered_warnings", [])
+        print(f"  Filtered Warnings [{ea['filtered_category']}]: {len(fw)}")
+        for warn in fw:
             print(f"    - {warn}")
-        print(f"    ... and {len(display_warnings) - 5} earlier warnings (use -v to show all)")
     else:
-        for warn in display_warnings:
-            print(f"    - {warn}")
+        display_warnings = ea.get("recent_warnings", [])
+        if not args.verbose and len(display_warnings) > 5:
+            for warn in display_warnings[-5:]:
+                print(f"    - {warn}")
+            print(f"    ... and {len(display_warnings) - 5} earlier warnings (use -v to show all)")
+        else:
+            for warn in display_warnings:
+                print(f"    - {warn}")
     print(f"  WS Anomalies (tail): {ea.get('ws_anomalies_count', 0)}")
     print(f"  Network Throttles (tail): {ea.get('network_throttles_count', 0)}")
 

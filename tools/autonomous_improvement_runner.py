@@ -76,11 +76,14 @@ def measure_codebase_metrics(root: Path = PROJECT_ROOT) -> Dict[str, Any]:
     }
 
 
-def run_diagnostics_check() -> Dict[str, Any]:
+def run_diagnostics_check(category: Optional[str] = None) -> Dict[str, Any]:
     """Runs diagnostics via tools.leagueloop_diagnostics."""
     try:
         from tools.leagueloop_diagnostics import run_diagnostics
-        return run_diagnostics()
+        kwargs = {}
+        if category:
+            kwargs["filter_category"] = category
+        return run_diagnostics(**kwargs)
     except Exception as e:
         return {"healthy": False, "error": str(e)}
 
@@ -154,6 +157,7 @@ def run_tests_check(
     run_all: bool = False,
     targets: Optional[List[str]] = None,
     staged: bool = False,
+    timeout: Optional[float] = 180.0,
 ) -> Dict[str, Any]:
     """Executes fast targeted tests, explicit targets, or full test suite."""
     venv_py = PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
@@ -178,7 +182,24 @@ def run_tests_check(
         env["TK_LIBRARY"] = base_tk
 
     start_time = time.time()
-    proc = subprocess.run(cmd, cwd=str(PROJECT_ROOT), capture_output=True, text=True, env=env)
+    try:
+        proc = subprocess.run(cmd, cwd=str(PROJECT_ROOT), capture_output=True, text=True, env=env, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        duration = time.time() - start_time
+        return {
+            "run_all": run_all,
+            "targets": targets or [],
+            "staged": staged,
+            "exit_code": -1,
+            "success": False,
+            "duration_seconds": round(duration, 2),
+            "passed": 0,
+            "failed": 0,
+            "skipped": 0,
+            "warnings": 0,
+            "errors": 1,
+            "raw_output": f"Test runner execution timed out after {timeout}s: {exc}",
+        }
     duration = time.time() - start_time
 
     output = proc.stdout + "\n" + proc.stderr
@@ -235,6 +256,7 @@ def update_memory_state(
     entropy_results: Optional[Dict[str, Any]] = None,
     storage_results: Optional[Dict[str, Any]] = None,
     silent_results: Optional[Dict[str, Any]] = None,
+    diagnostics_results: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Updates loop_state.json, episodic.json, optimizations.json, semantic.json, procedural.json, and failures.json."""
     MEMORY_DIR.mkdir(parents=True, exist_ok=True)
@@ -253,6 +275,7 @@ def update_memory_state(
         "entropy_baseline": {"status": "PASS", "avg_entropy": 0.0, "bare_excepts": 0},
         "storage_baseline": {"status": "OPTIMAL", "total_mb": 0.0, "logs_mb": 0.0, "screenshots_mb": 0.0},
         "silent_baseline": {"status": "PASS", "silent_handlers_count": 0, "files_audited": 0},
+        "warning_baseline": {"status": "HEALTHY", "total_warnings": 0, "categories": {}},
     }
 
     if loop_state_file.exists():
@@ -319,6 +342,11 @@ def update_memory_state(
             "status": (silent_results or {}).get("status", "PASS"),
             "silent_handlers_count": (silent_results or {}).get("silent_handlers_count", 0),
             "files_audited": (silent_results or {}).get("files_audited", 0),
+        },
+        "warning_baseline": {
+            "status": ("HEALTHY" if len((diagnostics_results or {}).get("error_analysis", {}).get("recent_warnings", [])) == 0 else ("WARN" if len((diagnostics_results or {}).get("error_analysis", {}).get("recent_warnings", [])) < 50 else "CRITICAL")),
+            "total_warnings": len((diagnostics_results or {}).get("error_analysis", {}).get("recent_warnings", [])),
+            "categories": (diagnostics_results or {}).get("error_analysis", {}).get("warning_categories", {}),
         },
     }
 
@@ -516,6 +544,8 @@ def run_loop(
     max_screenshots_keep: Optional[int] = None,
     max_screenshot_age_days: Optional[float] = None,
     verbose: bool = False,
+    warning_category: Optional[str] = None,
+    test_timeout: Optional[float] = 180.0,
 ) -> Dict[str, Any]:
     """Executes the full Autonomous Improvement Loop."""
     prune_res = None
@@ -531,7 +561,7 @@ def run_loop(
         except Exception as e:
             prune_res = {"error": str(e)}
 
-    diag = run_diagnostics_check()
+    diag = run_diagnostics_check(category=warning_category)
     ver_check = run_version_alignment_check()
     assets_check = run_build_assets_check()
     build_health = run_build_health_check()
@@ -539,7 +569,7 @@ def run_loop(
     silent_check = run_silent_excepts_check()
     metrics = measure_codebase_metrics(PROJECT_ROOT)
     entropy = run_entropy_check(top_n=10 if verbose else 5)
-    tests = run_tests_check(run_all=all_tests, targets=targets, staged=staged)
+    tests = run_tests_check(run_all=all_tests, targets=targets, staged=staged, timeout=test_timeout)
 
     opt_payload = None
     if feature:
@@ -964,6 +994,7 @@ def run_loop(
         entropy_results=entropy,
         storage_results=storage_an,
         silent_results=silent_check,
+        diagnostics_results=diag,
     )
 
     loop_num = memory_result["new_state"]["run_number"]
@@ -1017,6 +1048,8 @@ def main(argv=None):
     parser.add_argument("--prune-storage", action="store_true", help="Execute safe storage pruning during autonomous loop")
     parser.add_argument("--max-screenshots-keep", type=int, default=None, help="Maximum number of recent screenshots to retain during storage pruning")
     parser.add_argument("--max-screenshot-age-days", type=float, default=None, help="Maximum age in days for screenshots before pruning")
+    parser.add_argument("--category", "--warning-category", type=str, default=None, help="Filter diagnostics by subsystem category (e.g. lcu_telemetry, account_switch)")
+    parser.add_argument("--test-timeout", type=float, default=180.0, help="Timeout in seconds for pytest test runner (default: 180.0)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Display verbose execution diagnostics and entropy breakdown")
     args, unknown = parser.parse_known_args(argv)
 
@@ -1032,7 +1065,7 @@ def main(argv=None):
     runner_flags_no_val = {
         "--all-tests", "--staged", "--dry-run", "--check-baseline", "--json", "--prune-storage", "-h", "--help", "-v", "--verbose"
     }
-    runner_flags_with_val = {"--feature", "--impact", "--max-screenshots-keep", "--max-screenshot-age-days"}
+    runner_flags_with_val = {"--feature", "--impact", "--max-screenshots-keep", "--max-screenshot-age-days", "--category", "--warning-category", "--test-timeout"}
 
     targets_to_run = []
     i = 0
@@ -1062,6 +1095,10 @@ def main(argv=None):
         "max_screenshots_keep": args.max_screenshots_keep,
         "max_screenshot_age_days": args.max_screenshot_age_days,
     }
+    if args.category is not None:
+        run_kwargs["warning_category"] = args.category
+    if args.test_timeout != 180.0:
+        run_kwargs["test_timeout"] = args.test_timeout
     if args.verbose:
         run_kwargs["verbose"] = True
 
@@ -1077,6 +1114,8 @@ def main(argv=None):
     warn_cats_res = ea_res.get("warning_categories", {})
     warn_tag_res = f" (warnings: {len(ea_res.get('recent_warnings', []))} {warn_cats_res})" if warn_cats_res else ""
     print(f"Diagnostics: {diag_status}{warn_tag_res}")
+    if ea_res.get("filtered_category"):
+        print(f"Filtered Warnings [{ea_res['filtered_category']}]: {len(ea_res.get('filtered_warnings', []))}")
     ver_info = result.get("version_alignment", {})
     ver_stat = "[ALIGNED]" if ver_info.get("aligned") else "[MISALIGNED]"
     print(f"Version Alignment: {ver_stat} ({ver_info.get('message', 'N/A')})")
