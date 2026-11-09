@@ -83,6 +83,8 @@ def run_diagnostics_check(
     crash_category: Optional[str] = None,
     session_status: Optional[str] = None,
     session_account: Optional[str] = None,
+    session_log_level: Optional[str] = None,
+    session_log_tag: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Runs diagnostics via tools.leagueloop_diagnostics."""
     try:
@@ -100,6 +102,10 @@ def run_diagnostics_check(
             kwargs["filter_session_status"] = session_status
         if session_account:
             kwargs["filter_session_account"] = session_account
+        if session_log_level:
+            kwargs["filter_session_log_level"] = session_log_level
+        if session_log_tag:
+            kwargs["filter_session_log_tag"] = session_log_tag
         return run_diagnostics(**kwargs)
     except Exception as e:
         return {"healthy": False, "error": str(e)}
@@ -297,6 +303,7 @@ def update_memory_state(
         "crash_baseline": {"status": "HEALTHY", "recent_crashes_count": 0, "total_actual_crashes": 0},
         "screenshot_baseline": {"status": "OPTIMAL", "total_captures": 0, "corrupted_count": 0, "stale_count": 0, "category_counts": {}, "newest_age_human": "N/A"},
         "session_baseline": {"status": "OPTIMAL", "total_accounts": 0, "healthy_accounts": 0, "corrupted_accounts": 0, "stale_accounts": 0},
+        "stability_baseline": {"status": "OPTIMAL", "rating": "EXCELLENT", "connection_drops": 0, "recovered_drops": 0, "throttle_events": 0, "is_connected": False, "latency_avg_ms": None},
     }
 
     if loop_state_file.exists():
@@ -398,6 +405,23 @@ def update_memory_state(
             "healthy_accounts": (diagnostics_results or {}).get("sessions_analysis", {}).get("healthy_accounts", 0),
             "corrupted_accounts": (diagnostics_results or {}).get("sessions_analysis", {}).get("corrupted_accounts", 0),
             "stale_accounts": (diagnostics_results or {}).get("sessions_analysis", {}).get("stale_accounts", 0),
+        },
+        "stability_baseline": {
+            "status": (
+                "OPTIMAL"
+                if (diagnostics_results or {}).get("session_analysis", {}).get("stability", {}).get("rating") == "EXCELLENT"
+                else (
+                    "WARN"
+                    if (diagnostics_results or {}).get("session_analysis", {}).get("stability", {}).get("rating") in ("GOOD", "RECOVERED")
+                    else "DEGRADED"
+                )
+            ),
+            "rating": (diagnostics_results or {}).get("session_analysis", {}).get("stability", {}).get("rating", "N/A"),
+            "connection_drops": (diagnostics_results or {}).get("session_analysis", {}).get("stability", {}).get("connection_drops_count", 0),
+            "recovered_drops": (diagnostics_results or {}).get("session_analysis", {}).get("stability", {}).get("recovered_drops_count", 0),
+            "throttle_events": (diagnostics_results or {}).get("session_analysis", {}).get("stability", {}).get("throttle_events_count", 0),
+            "is_connected": (diagnostics_results or {}).get("session_analysis", {}).get("stability", {}).get("is_connected", False),
+            "latency_avg_ms": (diagnostics_results or {}).get("session_analysis", {}).get("stability", {}).get("latency_stats", {}).get("avg_ms"),
         },
     }
 
@@ -602,6 +626,8 @@ def run_loop(
     crash_category: Optional[str] = None,
     session_status: Optional[str] = None,
     session_account: Optional[str] = None,
+    session_log_level: Optional[str] = None,
+    session_log_tag: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Executes the full Autonomous Improvement Loop."""
     prune_res = None
@@ -627,6 +653,10 @@ def run_loop(
         diag_kwargs["session_status"] = session_status
     if session_account is not None:
         diag_kwargs["session_account"] = session_account
+    if session_log_level is not None:
+        diag_kwargs["session_log_level"] = session_log_level
+    if session_log_tag is not None:
+        diag_kwargs["session_log_tag"] = session_log_tag
     diag = run_diagnostics_check(**diag_kwargs)
     ver_check = run_version_alignment_check()
     assets_check = run_build_assets_check()
@@ -1032,6 +1062,11 @@ def run_loop(
     warn_cats_diag = ea_info.get("warning_categories", {})
     warn_tag_diag = f" ({warn_cnt_diag} warnings: {warn_cats_diag})" if warn_cats_diag else ""
 
+    stab_info = diag.get("session_analysis", {}).get("stability", {})
+    stab_rating = stab_info.get("rating", "UNKNOWN")
+    stab_drops = stab_info.get("connection_drops_count", 0)
+    stab_throttles = stab_info.get("throttle_events_count", 0)
+
     action_details = [
         f"Verified runtime logs (error.log, crash.log, session.jsonl, debug.log) & debug screenshots via leagueloop_diagnostics (healthy status confirmed{warn_tag_diag}).",
         f"Version alignment protocol: {'[ALIGNED]' if ver_check.get('aligned') else '[MISALIGNED]'} ({ver_check.get('message')}).",
@@ -1040,6 +1075,7 @@ def run_loop(
         f"Account switching preflight: [{accts_check.get('status', 'UNKNOWN')}] ({accts_check.get('accounts_count', 0)} accounts, {accts_check.get('usable_sessions_count', 0)} usable sessions, problems={accts_check.get('problems_count', 0)}).",
         f"Swallowed exceptions audit: [{silent_check.get('status', 'UNKNOWN')}] ({silent_check.get('silent_handlers_count', 0)} swallowed exceptions across {silent_check.get('files_audited', 0)} files audited).",
         f"Executed code entropy audit: status={entropy.get('status')}, avg_entropy={entropy.get('avg_entropy', 0)}, bare_excepts={entropy.get('bare_excepts_total', 0)}, top_offender={top_offender}.",
+        f"Network stability verification: [{stab_rating}] (drops={stab_drops}, throttles={stab_throttles}).",
         f"Executed test runner (duration={tests.get('duration_seconds')}s, passed={tests.get('passed')}, failed={tests.get('failed')}{err_tag}).",
         f"Indexed codebase metrics ({metrics.get('total_py_files')} python files, {metrics.get('total_py_lines')} lines; test-to-code ratio: {metrics.get('test_to_code_ratio', 0.0)}).",
         f"Storage footprint monitored: total={storage_an.get('total_mb', 0.0)}MB (status={storage_an.get('status', 'OPTIMAL')}).",
@@ -1072,6 +1108,7 @@ def run_loop(
     entropy_status_str = entropy.get("status", "N/A")
     summary_str = (
         f"Diagnostics: {diag_status_str}. "
+        f"Network stability: [{stab_rating}] (drops={stab_drops}, throttles={stab_throttles}). "
         f"Test baseline: [{test_mode_str}] {tests.get('passed')} passed, {tests.get('failed', 0)} failed ({tests.get('skipped', 0)} skipped) in {tests.get('duration_seconds', 0)}s. "
         f"Codebase metrics: {metrics.get('total_py_files')} files ({metrics.get('total_py_lines')} lines). "
         f"Accounts: {accts_check.get('status', 'UNKNOWN')} ({accts_check.get('usable_sessions_count', 0)}/{accts_check.get('accounts_count', 0)} usable). "
@@ -1120,6 +1157,8 @@ def main(argv=None):
     parser.add_argument("--screenshot-category", type=str, default=None, help="Filter debug screenshots by event category")
     parser.add_argument("--session-status", type=str, default=None, help="Filter diagnostics by saved session status (healthy, corrupted, stale)")
     parser.add_argument("--session-account", type=str, default=None, help="Filter diagnostics by saved session account ID or slot")
+    parser.add_argument("--session-log-level", type=str, default=None, help="Filter reported session.jsonl entries by level (DEBUG, INFO, WARNING, ERROR)")
+    parser.add_argument("--session-log-tag", type=str, default=None, help="Filter reported session.jsonl entries by tag (e.g. LCU_WS, RiotClientAPI)")
     parser.add_argument("--test-timeout", type=float, default=180.0, help="Timeout in seconds for pytest test runner (default: 180.0)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Display verbose execution diagnostics and entropy breakdown")
     args, unknown = parser.parse_known_args(argv)
@@ -1139,7 +1178,8 @@ def main(argv=None):
     runner_flags_with_val = {
         "--feature", "--impact", "--max-screenshots-keep", "--max-screenshot-age-days",
         "--category", "--warning-category", "--error-category", "--crash-category",
-        "--screenshot-category", "--session-status", "--session-account", "--test-timeout"
+        "--screenshot-category", "--session-status", "--session-account",
+        "--session-log-level", "--session-log-tag", "--test-timeout"
     }
 
     targets_to_run = []
@@ -1182,6 +1222,10 @@ def main(argv=None):
         run_kwargs["session_status"] = args.session_status
     if args.session_account is not None:
         run_kwargs["session_account"] = args.session_account
+    if args.session_log_level is not None:
+        run_kwargs["session_log_level"] = args.session_log_level
+    if args.session_log_tag is not None:
+        run_kwargs["session_log_tag"] = args.session_log_tag
     if args.test_timeout != 180.0:
         run_kwargs["test_timeout"] = args.test_timeout
     if args.verbose:
@@ -1214,6 +1258,14 @@ def main(argv=None):
         if sv_res.get("filtered_account"):
             filt_tag.append(f"account: {sv_res['filtered_account']}")
         print(f"Filtered Saved Sessions [{', '.join(filt_tag)}]: {len(sv_res.get('filtered_accounts', []))}")
+    sa_res = result["diagnostics"].get("session_analysis", {})
+    if sa_res.get("filtered_level") or sa_res.get("filtered_tag"):
+        filt_sa = []
+        if sa_res.get("filtered_level"):
+            filt_sa.append(f"level: {sa_res['filtered_level']}")
+        if sa_res.get("filtered_tag"):
+            filt_sa.append(f"tag: {sa_res['filtered_tag']}")
+        print(f"Filtered Session Log [{', '.join(filt_sa)}]: {len(sa_res.get('filtered_entries', []))}")
     ver_info = result.get("version_alignment", {})
     ver_stat = "[ALIGNED]" if ver_info.get("aligned") else "[MISALIGNED]"
     print(f"Version Alignment: {ver_stat} ({ver_info.get('message', 'N/A')})")

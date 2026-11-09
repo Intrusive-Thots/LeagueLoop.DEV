@@ -973,5 +973,90 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
             self.assertEqual(mock_run_loop.call_args[1].get("session_account"), "pro_acc")
 
 
+    def test_update_memory_state_stability_baseline(self):
+        diag_mock = {
+            "session_analysis": {
+                "stability": {
+                    "rating": "EXCELLENT",
+                    "connection_drops_count": 0,
+                    "recovered_drops_count": 0,
+                    "throttle_events_count": 0,
+                    "is_connected": True,
+                    "latency_stats": {"avg_ms": 42.5},
+                }
+            }
+        }
+        res = update_memory_state(
+            metrics={"total_py_files": 10, "total_py_lines": 500, "breakdown": {}, "test_to_code_ratio": 0.5},
+            test_results={"passed": 5, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "run_all": False},
+            dry_run=True,
+            diagnostics_results=diag_mock,
+        )
+        sb = res["new_state"].get("stability_baseline", {})
+        self.assertEqual(sb.get("status"), "OPTIMAL")
+        self.assertEqual(sb.get("rating"), "EXCELLENT")
+        self.assertEqual(sb.get("connection_drops"), 0)
+        self.assertEqual(sb.get("throttle_events"), 0)
+        self.assertTrue(sb.get("is_connected"))
+        self.assertEqual(sb.get("latency_avg_ms"), 42.5)
+
+    @patch("tools.leagueloop_diagnostics.run_diagnostics")
+    def test_run_diagnostics_check_with_session_log_filters(self, mock_diag):
+        mock_diag.return_value = {"healthy": True}
+        run_diagnostics_check(session_log_level="WARNING", session_log_tag="LCU_WS")
+        mock_diag.assert_called_once_with(filter_session_log_level="WARNING", filter_session_log_tag="LCU_WS")
+
+    @patch("tools.autonomous_improvement_runner.run_diagnostics_check")
+    @patch("tools.autonomous_improvement_runner.run_tests_check")
+    def test_run_loop_with_session_log_filters(self, mock_tests, mock_diag):
+        mock_diag.return_value = {"healthy": True, "error_analysis": {}, "crash_analysis": {}, "screenshot_analysis": {}, "sessions_analysis": {}, "session_analysis": {"stability": {}}}
+        mock_tests.return_value = {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "run_all": False, "success": True}
+        res = run_loop(dry_run=True, session_log_level="WARNING", session_log_tag="LCU_WS")
+        mock_diag.assert_called_once_with(
+            category=None,
+            screenshot_category=None,
+            error_category=None,
+            crash_category=None,
+            session_log_level="WARNING",
+            session_log_tag="LCU_WS",
+        )
+        mock_tests.assert_called_once()
+
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_session_log_filters(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 288,
+            "diagnostics": {
+                "healthy": True,
+                "error_analysis": {},
+                "crash_analysis": {},
+                "sessions_analysis": {},
+                "session_analysis": {
+                    "filtered_level": "WARNING",
+                    "filtered_tag": "LCU_WS",
+                    "filtered_entries": [{"level": "WARNING", "tag": "LCU_WS", "msg": "Dropped"}],
+                    "stability": {"rating": "GOOD", "connection_drops_count": 0, "throttle_events_count": 0},
+                },
+            },
+            "version_alignment": {"aligned": True, "message": "aligned"},
+            "build_assets": {"ready": True, "message": "ready"},
+            "build_health": {"status": "HEALTHY", "version": "1.0", "duration_ms": 1.0},
+            "accounts_preflight": {"status": "HEALTHY", "accounts_count": 1, "usable_sessions_count": 1, "problems_count": 0},
+            "silent_excepts": {"status": "PASS", "silent_handlers_count": 0, "files_audited": 10},
+            "entropy": {"status": "PASS", "avg_entropy": 50.0},
+            "metrics": {"total_py_files": 10, "total_py_lines": 500, "test_to_code_ratio": 0.5},
+            "tests": {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "success": True},
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+        }
+        with patch("sys.argv", ["autonomous_improvement_runner", "--session-log-level", "WARNING", "--session-log-tag", "LCU_WS", "--dry-run"]):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 0)
+            mock_run_loop.assert_called_once()
+            self.assertEqual(mock_run_loop.call_args[1].get("session_log_level"), "WARNING")
+            self.assertEqual(mock_run_loop.call_args[1].get("session_log_tag"), "LCU_WS")
+
+
 if __name__ == "__main__":
     unittest.main()

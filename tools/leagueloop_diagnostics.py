@@ -298,7 +298,12 @@ def inspect_crash_log(
     return result
 
 
-def inspect_session_log(path: Path, max_entries: int = 20) -> Dict[str, Any]:
+def inspect_session_log(
+    path: Path,
+    max_entries: int = 20,
+    filter_level: Optional[str] = None,
+    filter_tag: Optional[str] = None,
+) -> Dict[str, Any]:
     default_stats = {"count": 0, "min_ms": None, "max_ms": None, "avg_ms": None}
     result: Dict[str, Any] = {
         "exists": path.exists(),
@@ -320,6 +325,13 @@ def inspect_session_log(path: Path, max_entries: int = 20) -> Dict[str, Any]:
         "connection_drops": [],
         "throttle_events": [],
     }
+    if filter_level:
+        result["filtered_level"] = filter_level
+        result["filtered_entries"] = []
+    if filter_tag:
+        result["filtered_tag"] = filter_tag
+        if "filtered_entries" not in result:
+            result["filtered_entries"] = []
     if not path.exists():
         return result
 
@@ -449,6 +461,19 @@ def inspect_session_log(path: Path, max_entries: int = 20) -> Dict[str, Any]:
         result["latency_stats"] = lat_stats
         result["connection_drops"] = connection_drops
         result["throttle_events"] = throttle_events
+
+        if filter_level or filter_tag:
+            filtered = []
+            for entry in parsed_entries:
+                lvl_match = True
+                tag_match = True
+                if filter_level:
+                    lvl_match = entry.get("level", "").upper() == filter_level.upper()
+                if filter_tag:
+                    tag_match = filter_tag.lower() in entry.get("tag", "").lower()
+                if lvl_match and tag_match:
+                    filtered.append(entry)
+            result["filtered_entries"] = filtered
     except Exception as e:
         result["error_reading"] = str(e)
 
@@ -960,6 +985,8 @@ def run_diagnostics(
     filter_crash_category: Optional[str] = None,
     filter_session_status: Optional[str] = None,
     filter_session_account: Optional[str] = None,
+    filter_session_log_level: Optional[str] = None,
+    filter_session_log_tag: Optional[str] = None,
 ) -> Dict[str, Any]:
     p = paths or get_leagueloop_paths()
     errors_info = inspect_error_log(
@@ -974,7 +1001,12 @@ def run_diagnostics(
         max_sessions=max_sessions,
         filter_crash_category=filter_crash_category,
     )
-    session_info = inspect_session_log(p["session_log"], max_entries=max_lines)
+    session_info = inspect_session_log(
+        p["session_log"],
+        max_entries=max_lines,
+        filter_level=filter_session_log_level,
+        filter_tag=filter_session_log_tag,
+    )
     fallback_dir = p.get("fallback_screenshots")
     screenshots_info = inspect_screenshots(
         p["screenshots"],
@@ -1074,6 +1106,8 @@ def main():
     parser.add_argument("--screenshot-category", type=str, default=None, help="Filter reported debug screenshots by event category")
     parser.add_argument("--session-status", type=str, default=None, help="Filter reported saved sessions by status (healthy, corrupted, stale)")
     parser.add_argument("--session-account", type=str, default=None, help="Filter reported saved sessions by account ID or slot name")
+    parser.add_argument("--session-log-level", type=str, default=None, help="Filter reported session.jsonl entries by level (DEBUG, INFO, WARNING, ERROR)")
+    parser.add_argument("--session-log-tag", type=str, default=None, help="Filter reported session.jsonl entries by tag (e.g. LCU_WS, RiotClientAPI)")
     parser.add_argument("--prune-storage", action="store_true", help="Safely prune rotated logs and stale debug screenshots")
     parser.add_argument("--dry-run", action="store_true", help="Preview storage pruning without deleting files")
     parser.add_argument("--max-screenshots-keep", type=int, default=150, help="Maximum number of recent screenshots to keep during prune (default: 150)")
@@ -1113,6 +1147,8 @@ def main():
         filter_crash_category=args.crash_category,
         filter_session_status=args.session_status,
         filter_session_account=args.session_account,
+        filter_session_log_level=args.session_log_level,
+        filter_session_log_tag=args.session_log_tag,
     )
 
     if prune_res:
@@ -1171,23 +1207,35 @@ def main():
 
     sa = diag.get("session_analysis", {})
     if sa.get("exists"):
-        print(f"\n[Session Log Inspection]")
-        print(f"  Total Session Entries: {sa.get('total_entries', 0)}")
-        print(f"  Levels (tail): {sa.get('level_counts', {})}")
-        print(f"  Active Sessions: {sa.get('active_sessions', [])}")
-        stab = sa.get("stability", {})
-        if stab:
-            rec_tag = f" ({stab.get('recovered_drops_count', 0)} recovered)" if stab.get("recovered_drops_count", 0) > 0 else ""
-            print(f"  Network Stability: [{stab.get('rating', 'UNKNOWN')}]{rec_tag} (drops: {stab.get('connection_drops_count', 0)}, throttles: {stab.get('throttle_events_count', 0)})")
-            lat = stab.get("latency_stats", {})
-            if lat.get("count", 0) > 0:
-                print(f"  Latency Anomalies (tail): {lat['count']} events (min={lat['min_ms']}ms, avg={lat['avg_ms']}ms, max={lat['max_ms']}ms)")
-            if stab.get("drop_reasons"):
-                print(f"  Drop Reasons: {stab['drop_reasons']}")
-        if sa.get("recent_anomalies_or_throttles"):
-            print(f"  Recent Anomalies/Throttles: {len(sa['recent_anomalies_or_throttles'])}")
-            for a in sa["recent_anomalies_or_throttles"][:3]:
-                print(f"    - [{a.get('level')}] {a.get('tag')}: {a.get('msg')}")
+        filt_label = []
+        if sa.get("filtered_level"):
+            filt_label.append(f"level: {sa['filtered_level']}")
+        if sa.get("filtered_tag"):
+            filt_label.append(f"tag: {sa['filtered_tag']}")
+        if filt_label:
+            print(f"\n[Session Log Inspection (Filtered: {', '.join(filt_label)})]")
+            filt_entries = sa.get("filtered_entries", [])
+            print(f"  Matching Session Entries: {len(filt_entries)}")
+            for e in filt_entries[:5]:
+                print(f"    - [{e.get('level')}] {e.get('tag')}: {e.get('msg')}")
+        else:
+            print(f"\n[Session Log Inspection]")
+            print(f"  Total Session Entries: {sa.get('total_entries', 0)}")
+            print(f"  Levels (tail): {sa.get('level_counts', {})}")
+            print(f"  Active Sessions: {sa.get('active_sessions', [])}")
+            stab = sa.get("stability", {})
+            if stab:
+                rec_tag = f" ({stab.get('recovered_drops_count', 0)} recovered)" if stab.get("recovered_drops_count", 0) > 0 else ""
+                print(f"  Network Stability: [{stab.get('rating', 'UNKNOWN')}]{rec_tag} (drops: {stab.get('connection_drops_count', 0)}, throttles: {stab.get('throttle_events_count', 0)})")
+                lat = stab.get("latency_stats", {})
+                if lat.get("count", 0) > 0:
+                    print(f"  Latency Anomalies (tail): {lat['count']} events (min={lat['min_ms']}ms, avg={lat['avg_ms']}ms, max={lat['max_ms']}ms)")
+                if stab.get("drop_reasons"):
+                    print(f"  Drop Reasons: {stab['drop_reasons']}")
+            if sa.get("recent_anomalies_or_throttles"):
+                print(f"  Recent Anomalies/Throttles: {len(sa['recent_anomalies_or_throttles'])}")
+                for a in sa["recent_anomalies_or_throttles"][:3]:
+                    print(f"    - [{a.get('level')}] {a.get('tag')}: {a.get('msg')}")
 
     da = diag.get("debug_analysis", {})
     if args.verbose and da.get("exists"):

@@ -1022,5 +1022,65 @@ class TestLeagueLoopDiagnostics(unittest.TestCase):
                 self.assertIn("my_hero (my_slot)", out)
 
 
+    def test_inspect_session_log_level_and_tag_filtering(self):
+        entries = [
+            '{"ts": "2026-10-14T10:00:00", "level": "INFO", "tag": "START", "session": "s1", "msg": "Booted"}',
+            '{"ts": "2026-10-14T10:01:00", "level": "WARNING", "tag": "LCU_WS", "session": "s1", "msg": "WS latency spike"}',
+            '{"ts": "2026-10-14T10:02:00", "level": "ERROR", "tag": "RiotClientAPI", "session": "s1", "msg": "API timeout"}',
+            '{"ts": "2026-10-14T10:03:00", "level": "WARNING", "tag": "LCU_WS", "session": "s2", "msg": "WS reconnecting"}',
+        ]
+        self.paths["session_log"].write_text("\n".join(entries), encoding="utf-8")
+
+        res_level = inspect_session_log(self.paths["session_log"], max_entries=10, filter_level="WARNING")
+        self.assertEqual(res_level.get("filtered_level"), "WARNING")
+        self.assertEqual(len(res_level.get("filtered_entries", [])), 2)
+        self.assertTrue(all(e["level"] == "WARNING" for e in res_level["filtered_entries"]))
+
+        res_tag = inspect_session_log(self.paths["session_log"], max_entries=10, filter_tag="RiotClientAPI")
+        self.assertEqual(res_tag.get("filtered_tag"), "RiotClientAPI")
+        self.assertEqual(len(res_tag.get("filtered_entries", [])), 1)
+        self.assertEqual(res_tag["filtered_entries"][0]["tag"], "RiotClientAPI")
+
+        res_both = inspect_session_log(self.paths["session_log"], max_entries=10, filter_level="WARNING", filter_tag="LCU_WS")
+        self.assertEqual(len(res_both.get("filtered_entries", [])), 2)
+
+    def test_run_diagnostics_session_log_filters(self):
+        entries = [
+            '{"ts": "2026-10-14T10:00:00", "level": "INFO", "tag": "START", "session": "s1", "msg": "Booted"}',
+            '{"ts": "2026-10-14T10:01:00", "level": "WARNING", "tag": "LCU_WS", "session": "s1", "msg": "Warning in WS"}',
+        ]
+        self.paths["session_log"].write_text("\n".join(entries), encoding="utf-8")
+        diag = run_diagnostics(self.paths, filter_session_log_level="WARNING", filter_session_log_tag="LCU_WS")
+        sa = diag["session_analysis"]
+        self.assertEqual(sa.get("filtered_level"), "WARNING")
+        self.assertEqual(sa.get("filtered_tag"), "LCU_WS")
+        self.assertEqual(len(sa.get("filtered_entries", [])), 1)
+
+    def test_main_cli_session_log_level_and_tag(self):
+        import io
+        from contextlib import redirect_stdout
+        from tools.leagueloop_diagnostics import main
+
+        self.paths["error_log"].write_text("INFO Clean", encoding="utf-8")
+        self.paths["crash_log"].write_text("--- session 1 ---\n", encoding="utf-8")
+        entries = [
+            '{"ts": "2026-10-14T10:00:00", "level": "DEBUG", "tag": "POLL", "msg": "Tick"}',
+            '{"ts": "2026-10-14T10:01:00", "level": "WARNING", "tag": "LCU_WS", "msg": "Websocket disconnect"}',
+        ]
+        self.paths["session_log"].write_text("\n".join(entries), encoding="utf-8")
+
+        with patch("sys.argv", ["leagueloop_diagnostics", "--session-log-level", "WARNING", "--session-log-tag", "LCU_WS"]):
+            with patch("tools.leagueloop_diagnostics.get_leagueloop_paths", return_value=self.paths):
+                f = io.StringIO()
+                with redirect_stdout(f):
+                    try:
+                        main()
+                    except SystemExit:
+                        pass
+                out = f.getvalue()
+                self.assertIn("Session Log Inspection (Filtered: level: WARNING, tag: LCU_WS)", out)
+                self.assertIn("Websocket disconnect", out)
+
+
 if __name__ == "__main__":
     unittest.main()
