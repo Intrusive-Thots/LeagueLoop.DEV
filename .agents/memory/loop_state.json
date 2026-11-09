@@ -1,17 +1,17 @@
 {
-  "run_number": 295,
-  "last_run": "2026-11-09T13:02:53.924859+00:00",
+  "run_number": 296,
+  "last_run": "2026-11-09T13:24:06.426972+00:00",
   "test_baseline": {
     "passed": 1283,
     "failed": 0,
     "skipped": 0,
     "warnings": 0,
-    "last_targeted_passed": 80,
+    "last_targeted_passed": 85,
     "errors": 0
   },
   "index_baseline": {
     "total_files": 213,
-    "total_py_lines": 66339,
+    "total_py_lines": 66879,
     "breakdown": {
       "src": {
         "files": 106,
@@ -19,14 +19,14 @@
       },
       "tests": {
         "files": 96,
-        "lines": 23915
+        "lines": 24074
       },
       "tools": {
         "files": 11,
-        "lines": 5569
+        "lines": 5950
       }
     },
-    "test_to_code_ratio": 0.649
+    "test_to_code_ratio": 0.653
   },
   "entropy_baseline": {
     "status": "WARN",
@@ -56,8 +56,8 @@
   },
   "storage_baseline": {
     "status": "OPTIMAL",
-    "total_mb": 74.57,
-    "logs_mb": 13.46,
+    "total_mb": 74.58,
+    "logs_mb": 13.47,
     "screenshots_mb": 61.1,
     "warnings_count": 0,
     "thresholds": {
@@ -123,7 +123,7 @@
     "category_counts": {
       "game_phase_change": 5
     },
-    "newest_age_human": "9.0h ago",
+    "newest_age_human": "9.3h ago",
     "thresholds": {
       "strict": false,
       "max_corrupted": 0
@@ -160,7 +160,7 @@
   },
   "debug_baseline": {
     "status": "HEALTHY",
-    "total_lines_inspected": 84830,
+    "total_lines_inspected": 84876,
     "diagnostic_tags_count": 0,
     "level_counts": {
       "DEBUG": 30
@@ -177,7 +177,7 @@
     "version_aligned": true,
     "files_ok": true,
     "test_environment_ok": true,
-    "duration_ms": 0.47
+    "duration_ms": 0.38
   },
   "accounts_preflight_baseline": {
     "status": "HEALTHY",
@@ -192,5 +192,13 @@
     "signed_in": true,
     "api_reachable": true,
     "current_user": "themalcolm3"
+  },
+  "governance_baseline": {
+    "status": "PASS",
+    "fail_closed": false,
+    "total_invariants": 12,
+    "passed_invariants": 12,
+    "violations_count": 0,
+    "violations": []
   }
 }

@@ -13,6 +13,7 @@ from tools.autonomous_improvement_runner import (
     run_silent_excepts_check,
     run_entropy_check,
     run_tests_check,
+    evaluate_governance_invariants,
     update_memory_state,
     run_loop,
 )
@@ -1771,6 +1772,164 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
             with self.assertRaises(SystemExit) as cm:
                 main()
             self.assertEqual(cm.exception.code, 1)
+
+    def test_evaluate_governance_invariants_all_pass(self):
+        diag = {
+            "storage_analysis": {"status": "OPTIMAL", "warnings": []},
+            "session_analysis": {"stability": {"rating": "EXCELLENT", "connection_drops_count": 0, "throttle_events_count": 0}},
+            "screenshot_analysis": {"all_intact": True, "corrupted_count": 0, "stale_count": 0},
+            "error_analysis": {"recent_errors": [], "status": "HEALTHY", "recent_warnings": []},
+            "crash_analysis": {"total_crash_sessions": 0, "status": "HEALTHY"},
+            "sessions_analysis": {"corrupted_accounts": 0, "stale_accounts": 0, "status": "OPTIMAL"},
+            "debug_analysis": {"level_counts": {"ERROR": 0, "CRITICAL": 0}, "status": "HEALTHY"},
+        }
+        res = evaluate_governance_invariants(
+            diagnostics_results=diag,
+            build_health_results={"status": "HEALTHY"},
+            version_alignment_results={"aligned": True},
+            build_assets_results={"ready": True},
+            accounts_preflight_results={"status": "HEALTHY", "problems_count": 0},
+            entropy_results={"status": "PASS", "bare_excepts_total": 0, "syntax_errors": 0, "avg_entropy": 30.0},
+            silent_excepts_results={"status": "PASS", "silent_handlers_count": 0},
+            fail_closed=True,
+        )
+        self.assertEqual(res["status"], "PASS")
+        self.assertEqual(res["total_invariants"], 12)
+        self.assertEqual(res["passed_invariants"], 12)
+        self.assertEqual(res["violations_count"], 0)
+        self.assertEqual(len(res["violations"]), 0)
+
+    def test_evaluate_governance_invariants_violations(self):
+        diag = {
+            "storage_analysis": {"status": "WARNING", "warnings": ["Logs exceed threshold"]},
+            "session_analysis": {"stability": {"rating": "DEGRADED", "connection_drops_count": 2, "throttle_events_count": 1}},
+            "screenshot_analysis": {"all_intact": False, "corrupted_count": 1, "stale_count": 1},
+            "error_analysis": {"recent_errors": ["Fatal error occurred"], "status": "ERROR", "recent_warnings": ["Warning line"]},
+            "crash_analysis": {"total_crash_sessions": 1, "status": "CRITICAL"},
+            "sessions_analysis": {"corrupted_accounts": 1, "stale_accounts": 0, "status": "CORRUPTED"},
+            "debug_analysis": {"level_counts": {"ERROR": 2, "CRITICAL": 0}, "status": "ERROR"},
+        }
+        res = evaluate_governance_invariants(
+            diagnostics_results=diag,
+            build_health_results={"status": "ERROR"},
+            version_alignment_results={"aligned": False},
+            build_assets_results={"ready": False},
+            accounts_preflight_results={"status": "ERROR", "problems_count": 2},
+            entropy_results={"status": "FAIL", "bare_excepts_total": 1, "syntax_errors": 0, "avg_entropy": 95.0},
+            silent_excepts_results={"status": "WARN", "silent_handlers_count": 3},
+            fail_closed=True,
+        )
+        self.assertEqual(res["status"], "VIOLATION")
+        self.assertGreater(res["violations_count"], 0)
+        self.assertLess(res["passed_invariants"], 12)
+
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_fail_closed_success(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 296,
+            "diagnostics": {"healthy": True},
+            "version_alignment": {"aligned": True, "message": "aligned"},
+            "build_assets": {"ready": True, "message": "ready"},
+            "build_health": {"status": "HEALTHY", "version": "1.0", "duration_ms": 1.0},
+            "accounts_preflight": {"status": "HEALTHY", "accounts_count": 1, "usable_sessions_count": 1, "problems_count": 0},
+            "entropy": {"status": "PASS", "avg_entropy": 25.0, "bare_excepts_total": 0, "syntax_errors": 0},
+            "silent_excepts": {"status": "PASS", "silent_handlers_count": 0, "files_audited": 10},
+            "tests": {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "success": True},
+            "metrics": {"total_py_files": 10, "total_py_lines": 500, "test_to_code_ratio": 0.5},
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+            "governance": {"status": "PASS", "violations_count": 0, "passed_invariants": 12, "total_invariants": 12, "violations": []},
+        }
+        with patch("sys.argv", [
+            "autonomous_improvement_runner",
+            "--fail-closed",
+            "--dry-run"
+        ]):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 0)
+
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_fail_closed_failure(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 296,
+            "diagnostics": {"healthy": True},
+            "version_alignment": {"aligned": True, "message": "aligned"},
+            "build_assets": {"ready": True, "message": "ready"},
+            "build_health": {"status": "HEALTHY", "version": "1.0", "duration_ms": 1.0},
+            "accounts_preflight": {"status": "HEALTHY", "accounts_count": 1, "usable_sessions_count": 1, "problems_count": 0},
+            "entropy": {"status": "PASS", "avg_entropy": 25.0, "bare_excepts_total": 0, "syntax_errors": 0},
+            "silent_excepts": {"status": "PASS", "silent_handlers_count": 0, "files_audited": 10},
+            "tests": {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "success": True},
+            "metrics": {"total_py_files": 10, "total_py_lines": 500, "test_to_code_ratio": 0.5},
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+            "governance": {"status": "VIOLATION", "violations_count": 2, "passed_invariants": 10, "total_invariants": 12, "violations": ["Violation 1", "Violation 2"]},
+        }
+        with patch("sys.argv", [
+            "autonomous_improvement_runner",
+            "--fail-closed",
+            "--dry-run"
+        ]):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 1)
+
+    @patch("tools.autonomous_improvement_runner.evaluate_governance_invariants")
+    @patch("tools.autonomous_improvement_runner.run_diagnostics_check")
+    @patch("tools.autonomous_improvement_runner.run_version_alignment_check")
+    @patch("tools.autonomous_improvement_runner.run_build_assets_check")
+    @patch("tools.autonomous_improvement_runner.run_build_health_check")
+    @patch("tools.autonomous_improvement_runner.run_accounts_check")
+    @patch("tools.autonomous_improvement_runner.run_silent_excepts_check")
+    @patch("tools.autonomous_improvement_runner.run_entropy_check")
+    def test_main_cli_check_governance(
+        self,
+        mock_entropy,
+        mock_silent,
+        mock_accounts,
+        mock_build_health,
+        mock_assets,
+        mock_align,
+        mock_diag,
+        mock_gov,
+    ):
+        from tools.autonomous_improvement_runner import main
+        mock_diag.return_value = {"storage_analysis": {}}
+        mock_align.return_value = {"aligned": True}
+        mock_assets.return_value = {"ready": True}
+        mock_build_health.return_value = {"status": "HEALTHY"}
+        mock_accounts.return_value = {"status": "HEALTHY"}
+        mock_silent.return_value = {"status": "PASS"}
+        mock_entropy.return_value = {"status": "PASS"}
+        mock_gov.return_value = {
+            "status": "PASS",
+            "passed_invariants": 12,
+            "total_invariants": 12,
+            "violations_count": 0,
+            "violations": [],
+            "invariants": {
+                "storage": {"status": "PASS"},
+                "build": {"status": "PASS"},
+                "accounts_preflight": {"status": "PASS"},
+                "code_entropy": {"status": "PASS"},
+                "silent_handlers": {"status": "PASS"},
+                "network_stability": {"status": "PASS"},
+                "screenshots": {"status": "PASS"},
+                "errors": {"status": "PASS"},
+                "crashes": {"status": "PASS"},
+                "saved_sessions": {"status": "PASS"},
+                "debug_stream": {"status": "PASS"},
+                "warnings": {"status": "PASS"},
+            },
+        }
+        with patch("sys.argv", [
+            "autonomous_improvement_runner",
+            "--check-governance"
+        ]):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 0)
 
 
 if __name__ == "__main__":
