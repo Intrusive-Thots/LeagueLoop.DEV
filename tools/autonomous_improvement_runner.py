@@ -1742,7 +1742,7 @@ def run_loop(
         },
         {
             "concept": "Fail-Closed Meta-Governance and Invariant Audit Dashboard",
-            "description": "Providing a unified fail-closed meta-governance switch (--fail-closed, --strict-all) and dedicated preflight audit flag (--check-governance) alongside structured governance_baseline tracking enforces all 12 subsystem safety invariants simultaneously without manual CLI flag orchestration.",
+            "description": "Providing a unified fail-closed meta-governance switch (--fail-closed, --strict-all) and dedicated preflight audit flag (--check-governance) alongside structured governance_baseline tracking enforces all 13 subsystem safety invariants simultaneously without manual CLI flag orchestration.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
         {
@@ -1765,7 +1765,7 @@ def run_loop(
         {
             "method": "Fail-Closed Meta-Governance Execution Protocol",
             "procedure": [
-                "Execute full invariant verification via --fail-closed or --strict-all to enforce zero-tolerance gates across all 12 subsystem invariants.",
+                "Execute full invariant verification via --fail-closed or --strict-all to enforce zero-tolerance gates across all 13 subsystem invariants.",
                 "Run --check-governance for fast (<50ms) standalone invariant auditing before deployment or pull requests.",
                 "Inspect loop_state.json governance_baseline to verify total invariants passed and zero violations recorded.",
             ],
