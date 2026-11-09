@@ -1,7 +1,9 @@
 {
-  "receipt_id": "gov-8fcc1d0bf85d850e",
-  "digest": "8fcc1d0bf85d850e8d536f93b8dbaffbf9fc79557c342dadc17205489615199f",
-  "evaluated_at": "2026-11-09T13:35:50.918028+00:00",
+  "receipt_id": "gov-c9ba4da5588b9e0e",
+  "digest": "c9ba4da5588b9e0e40d43eae9c5a658b31244533e7fcf4503c3a58e34e39915c",
+  "evaluated_at": "2026-11-09T13:48:44.639269+00:00",
+  "expires_at": "2026-11-10T13:48:44.639269+00:00",
+  "lease_ttl_seconds": 86400.0,
   "status": "PASS",
   "fail_closed": false,
   "total_invariants": 12,

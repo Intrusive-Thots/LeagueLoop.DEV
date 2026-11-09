@@ -1,4 +1,5 @@
 import json
+import hashlib
 import unittest
 from pathlib import Path
 from unittest.mock import patch, MagicMock, mock_open
@@ -16,6 +17,7 @@ from tools.autonomous_improvement_runner import (
     evaluate_governance_invariants,
     generate_subsystem_remediations,
     generate_governance_receipt,
+    verify_governance_receipt,
     execute_governance_remediations,
     update_memory_state,
     run_loop,
@@ -2060,6 +2062,142 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
             self.assertEqual(cm.exception.code, 0)
             mock_run_loop.assert_called_once()
             self.assertTrue(mock_run_loop.call_args.kwargs.get("remediate"))
+
+    def test_generate_governance_receipt_with_lease(self):
+        invariants = {
+            "storage": {"passed": True, "status": "PASS"},
+            "build": {"passed": True, "status": "PASS"},
+        }
+        r = generate_governance_receipt(invariants, [], fail_closed=True, lease_ttl_seconds=3600.0)
+        self.assertIn("lease_ttl_seconds", r)
+        self.assertEqual(r["lease_ttl_seconds"], 3600.0)
+        self.assertIn("expires_at", r)
+        self.assertTrue(r["receipt_id"].startswith("gov-"))
+
+    def test_verify_governance_receipt_valid(self):
+        invariants = {
+            "storage": {"passed": True, "status": "PASS"},
+            "build": {"passed": True, "status": "PASS"},
+        }
+        r = generate_governance_receipt(invariants, [], fail_closed=True)
+        v = verify_governance_receipt(r)
+        self.assertTrue(v["valid"])
+        self.assertEqual(v["status"], "VALID")
+        self.assertEqual(v["receipt_id"], r["receipt_id"])
+        self.assertEqual(v["digest"], r["digest"])
+        self.assertFalse(v["is_expired"])
+
+    def test_verify_governance_receipt_legacy_valid(self):
+        invariants = {
+            "storage": {"passed": True, "status": "PASS"},
+            "build": {"passed": True, "status": "PASS"},
+        }
+        r = generate_governance_receipt(invariants, [], fail_closed=True)
+        del r["lease_ttl_seconds"]
+        canonical = json.dumps(
+            {
+                "invariants": r["subsystem_verdicts"],
+                "violations": [],
+                "fail_closed": True,
+            },
+            sort_keys=True,
+        )
+        r["digest"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        r["receipt_id"] = f"gov-{r['digest'][:16]}"
+        v = verify_governance_receipt(r)
+        self.assertTrue(v["valid"])
+        self.assertEqual(v["status"], "VALID")
+
+    def test_verify_governance_receipt_tampered_digest(self):
+        invariants = {
+            "storage": {"passed": True, "status": "PASS"},
+        }
+        r = generate_governance_receipt(invariants, [], fail_closed=False)
+        r["subsystem_verdicts"]["storage"] = "WARN"
+        v = verify_governance_receipt(r)
+        self.assertFalse(v["valid"])
+        self.assertEqual(v["status"], "TAMPERED")
+        self.assertIn("Digest mismatch", v["error"])
+
+    def test_verify_governance_receipt_tampered_id(self):
+        invariants = {
+            "storage": {"passed": True, "status": "PASS"},
+        }
+        r = generate_governance_receipt(invariants, [], fail_closed=False)
+        r["receipt_id"] = "gov-tamperedid1234"
+        v = verify_governance_receipt(r)
+        self.assertFalse(v["valid"])
+        self.assertEqual(v["status"], "TAMPERED")
+        self.assertIn("Receipt ID mismatch", v["error"])
+
+    def test_verify_governance_receipt_expired(self):
+        invariants = {
+            "storage": {"passed": True, "status": "PASS"},
+        }
+        r = generate_governance_receipt(invariants, [], fail_closed=False, lease_ttl_seconds=10.0)
+        r["evaluated_at"] = "2020-01-01T00:00:00+00:00"
+        r["expires_at"] = "2020-01-01T00:00:10+00:00"
+        v = verify_governance_receipt(r)
+        self.assertFalse(v["valid"])
+        self.assertEqual(v["status"], "EXPIRED")
+        self.assertIn("expired", v["error"])
+
+    def test_verify_governance_receipt_malformed(self):
+        v1 = verify_governance_receipt("not-a-dict")
+        self.assertFalse(v1["valid"])
+        self.assertEqual(v1["status"], "MALFORMED")
+
+        v2 = verify_governance_receipt({"receipt_id": "gov-123"})
+        self.assertFalse(v2["valid"])
+        self.assertEqual(v2["status"], "MALFORMED")
+
+    def test_verify_governance_receipt_with_violations(self):
+        invariants = {
+            "storage": {"passed": False, "status": "WARN"},
+        }
+        r = generate_governance_receipt(invariants, ["Storage warning"], fail_closed=True)
+        v = verify_governance_receipt(r)
+        self.assertTrue(v["valid"])
+        self.assertEqual(v["status"], "VIOLATION_RECORDED")
+        self.assertEqual(v["violations_count"], 1)
+
+    def test_execute_governance_remediations_receipt(self):
+        gov_results = {
+            "invariants": {
+                "warnings": {"passed": False, "status": "WARN"},
+            }
+        }
+        res = execute_governance_remediations(gov_results, dry_run=True)
+        self.assertIn("receipt", res)
+        self.assertTrue(res["receipt"]["receipt_id"].startswith("rem-"))
+        self.assertEqual(res["receipt"]["status"], "APPLIED")
+
+    def test_main_cli_verify_receipt_valid(self):
+        from tools.autonomous_improvement_runner import main
+        import tempfile
+        invariants = {"storage": {"passed": True, "status": "PASS"}}
+        r = generate_governance_receipt(invariants, [], fail_closed=False)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rf = Path(tmpdir) / "test_receipt.json"
+            rf.write_text(json.dumps(r), encoding="utf-8")
+            with patch("sys.argv", ["autonomous_improvement_runner", "--verify-receipt", str(rf)]):
+                with self.assertRaises(SystemExit) as cm:
+                    main()
+                self.assertEqual(cm.exception.code, 0)
+
+    def test_main_cli_verify_receipt_tampered(self):
+        from tools.autonomous_improvement_runner import main
+        import tempfile
+        invariants = {"storage": {"passed": True, "status": "PASS"}}
+        r = generate_governance_receipt(invariants, [], fail_closed=False)
+        r["subsystem_verdicts"]["storage"] = "FAIL"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rf = Path(tmpdir) / "test_receipt.json"
+            rf.write_text(json.dumps(r), encoding="utf-8")
+            with patch("sys.argv", ["autonomous_improvement_runner", "--verify-receipt", str(rf)]):
+                with self.assertRaises(SystemExit) as cm:
+                    main()
+                self.assertEqual(cm.exception.code, 1)
 
 
 if __name__ == "__main__":

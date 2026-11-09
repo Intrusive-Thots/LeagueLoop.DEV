@@ -20,7 +20,7 @@ import shutil
 import re
 import hashlib
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Optional
 
 if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
@@ -322,20 +322,25 @@ def generate_governance_receipt(
     violations: List[str],
     fail_closed: bool = False,
     remediations: Optional[Dict[str, str]] = None,
+    lease_ttl_seconds: float = 86400.0,
 ) -> Dict[str, Any]:
-    """Generates a verifiable, cryptographically hashed governance audit receipt."""
+    """Generates a verifiable, cryptographically hashed governance audit receipt with expiring lease."""
     subsystem_verdicts = {k: v.get("status", "PASS") for k, v in sorted(invariants.items())}
     canonical_payload = json.dumps(
         {
             "invariants": subsystem_verdicts,
             "violations": sorted(violations),
             "fail_closed": fail_closed,
+            "lease_ttl_seconds": lease_ttl_seconds,
         },
         sort_keys=True,
     )
     digest = hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
     receipt_id = f"gov-{digest[:16]}"
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
+    expires_dt = now_dt + timedelta(seconds=lease_ttl_seconds)
+    expires_iso = expires_dt.isoformat()
 
     passed_count = sum(1 for inv in invariants.values() if inv.get("passed", False))
     total_count = len(invariants)
@@ -345,6 +350,8 @@ def generate_governance_receipt(
         "receipt_id": receipt_id,
         "digest": digest,
         "evaluated_at": now_iso,
+        "expires_at": expires_iso,
+        "lease_ttl_seconds": lease_ttl_seconds,
         "status": status,
         "fail_closed": fail_closed,
         "total_invariants": total_count,
@@ -353,6 +360,144 @@ def generate_governance_receipt(
         "violations": violations,
         "subsystem_verdicts": subsystem_verdicts,
         "remediations": remediations or {},
+    }
+
+
+def verify_governance_receipt(
+    receipt_data: Dict[str, Any],
+    max_age_seconds: Optional[float] = None,
+    current_time: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Verifies cryptographic integrity, canonical digest, and lease validity of a governance receipt."""
+    if not isinstance(receipt_data, dict):
+        return {
+            "valid": False,
+            "status": "MALFORMED",
+            "error": "Receipt is not a JSON object",
+            "receipt_id": "N/A",
+        }
+
+    required_keys = ["receipt_id", "digest", "evaluated_at", "subsystem_verdicts", "violations", "fail_closed"]
+    missing = [k for k in required_keys if k not in receipt_data]
+    if missing:
+        return {
+            "valid": False,
+            "status": "MALFORMED",
+            "error": f"Missing required fields: {', '.join(missing)}",
+            "receipt_id": receipt_data.get("receipt_id", "N/A"),
+        }
+
+    subsystem_verdicts = receipt_data.get("subsystem_verdicts", {})
+    violations = receipt_data.get("violations", [])
+    fail_closed = receipt_data.get("fail_closed", False)
+    recorded_digest = receipt_data.get("digest", "")
+    receipt_id = receipt_data.get("receipt_id", "")
+
+    # Canonical verification (supports modern payload with lease_ttl_seconds and legacy payload)
+    payload_variants = []
+    if "lease_ttl_seconds" in receipt_data:
+        payload_variants.append(
+            json.dumps(
+                {
+                    "invariants": subsystem_verdicts,
+                    "violations": sorted(violations),
+                    "fail_closed": fail_closed,
+                    "lease_ttl_seconds": receipt_data["lease_ttl_seconds"],
+                },
+                sort_keys=True,
+            )
+        )
+    payload_variants.append(
+        json.dumps(
+            {
+                "invariants": subsystem_verdicts,
+                "violations": sorted(violations),
+                "fail_closed": fail_closed,
+            },
+            sort_keys=True,
+        )
+    )
+
+    matching_digest = None
+    for p in payload_variants:
+        cand_digest = hashlib.sha256(p.encode("utf-8")).hexdigest()
+        if cand_digest.lower() == str(recorded_digest).lower():
+            matching_digest = cand_digest
+            break
+
+    if not matching_digest:
+        return {
+            "valid": False,
+            "status": "TAMPERED",
+            "error": "Digest mismatch: payload does not match cryptographic hash",
+            "receipt_id": receipt_id,
+            "digest": recorded_digest,
+        }
+
+    expected_id = f"gov-{matching_digest[:16]}"
+    if receipt_id != expected_id:
+        return {
+            "valid": False,
+            "status": "TAMPERED",
+            "error": f"Receipt ID mismatch: expected {expected_id}, got {receipt_id}",
+            "receipt_id": receipt_id,
+            "digest": recorded_digest,
+        }
+
+    # Lease expiration check
+    eval_iso = receipt_data.get("evaluated_at", "")
+    now_dt = current_time or datetime.now(timezone.utc)
+    age_seconds: Optional[float] = None
+    is_expired = False
+    try:
+        eval_dt = datetime.fromisoformat(str(eval_iso).replace("Z", "+00:00"))
+        age_seconds = max(0.0, (now_dt - eval_dt).total_seconds())
+        if max_age_seconds is not None and age_seconds > max_age_seconds:
+            is_expired = True
+        elif "expires_at" in receipt_data and receipt_data["expires_at"]:
+            exp_iso = receipt_data["expires_at"]
+            exp_dt = datetime.fromisoformat(str(exp_iso).replace("Z", "+00:00"))
+            if now_dt > exp_dt:
+                is_expired = True
+    except Exception as e:
+        return {
+            "valid": False,
+            "status": "MALFORMED",
+            "error": f"Invalid timestamp format: {e}",
+            "receipt_id": receipt_id,
+        }
+
+    if is_expired:
+        return {
+            "valid": False,
+            "status": "EXPIRED",
+            "error": f"Receipt lease has expired (age: {age_seconds:.1f}s)",
+            "receipt_id": receipt_id,
+            "digest": recorded_digest,
+            "age_seconds": round(age_seconds, 2) if age_seconds is not None else None,
+            "evaluated_at": eval_iso,
+            "expires_at": receipt_data.get("expires_at"),
+        }
+
+    recorded_status = receipt_data.get("status", "PASS")
+    has_violations = len(violations) > 0 or recorded_status != "PASS"
+
+    return {
+        "valid": True,
+        "status": "VIOLATION_RECORDED" if has_violations else "VALID",
+        "receipt_id": receipt_id,
+        "digest": recorded_digest,
+        "age_seconds": round(age_seconds, 2) if age_seconds is not None else None,
+        "is_expired": False,
+        "evaluated_at": eval_iso,
+        "expires_at": receipt_data.get("expires_at"),
+        "total_invariants": receipt_data.get("total_invariants", len(subsystem_verdicts)),
+        "passed_invariants": receipt_data.get("passed_invariants", sum(1 for v in subsystem_verdicts.values() if v == "PASS")),
+        "violations_count": len(violations),
+        "violations": violations,
+        "fail_closed": fail_closed,
+        "subsystem_verdicts": subsystem_verdicts,
+        "remediations": receipt_data.get("remediations", {}),
     }
 
 
@@ -392,10 +537,30 @@ def execute_governance_remediations(
     if not w_inv.get("passed", True) or w_inv.get("status") == "WARN":
         remediations_applied.append("Warning analysis: recommended running with --category to isolate transient LCU telemetry")
 
+    rem_payload = json.dumps(
+        {
+            "remediations_applied": sorted(remediations_applied),
+            "freed_mb": round(freed_mb, 2),
+            "status": "APPLIED" if remediations_applied else "NOOP",
+        },
+        sort_keys=True,
+    )
+    rem_digest = hashlib.sha256(rem_payload.encode("utf-8")).hexdigest()
+    rem_id = f"rem-{rem_digest[:16]}"
+    rem_receipt = {
+        "receipt_id": rem_id,
+        "digest": rem_digest,
+        "executed_at": datetime.now(timezone.utc).isoformat(),
+        "status": "APPLIED" if remediations_applied else "NOOP",
+        "remediations_applied": remediations_applied,
+        "freed_mb": freed_mb,
+    }
+
     return {
         "status": "APPLIED" if remediations_applied else "NOOP",
         "remediations_applied": remediations_applied,
         "freed_mb": freed_mb,
+        "receipt": rem_receipt,
     }
 
 
@@ -1920,6 +2085,7 @@ def main(argv=None):
     parser.add_argument("--check-governance", action="store_true", help="Evaluate and print the subsystem governance invariant audit dashboard and exit")
     parser.add_argument("--remediate", action="store_true", help="Execute safe automated non-destructive remediations for violated subsystem invariants")
     parser.add_argument("--receipt-file", type=str, default=None, help="Path to write governance receipt JSON file")
+    parser.add_argument("--verify-receipt", type=str, default=None, help="Path to governance receipt JSON file to verify cryptographic digest and lease validity")
     parser.add_argument("--include-rotated", action="store_true", help="Include rotated log files (error.log.1) during diagnostic analysis")
     parser.add_argument("--keep-rotated-logs", action="store_true", help="Do not prune rotated log files during storage pruning")
     parser.add_argument("--test-timeout", type=float, default=180.0, help="Timeout in seconds for pytest test runner (default: 180.0)")
@@ -1992,6 +2158,35 @@ def main(argv=None):
                     print(f"  - {r_app}")
         sys.exit(0 if gov_res["status"] == "PASS" else 1)
 
+    if args.verify_receipt:
+        receipt_path = Path(args.verify_receipt)
+        if not receipt_path.exists():
+            print(f"Error: receipt file not found: {receipt_path}", file=sys.stderr)
+            sys.exit(1)
+        try:
+            r_data = json.loads(receipt_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            print(f"Error: invalid JSON in receipt file: {e}", file=sys.stderr)
+            sys.exit(1)
+        v_res = verify_governance_receipt(r_data)
+        if args.json:
+            print(json.dumps(v_res, indent=2))
+        else:
+            v_stat = f"[{v_res['status']}]"
+            print(f"=== Governance Receipt Verification {v_stat} ===")
+            print(f"Receipt ID: {v_res.get('receipt_id', 'N/A')} | Status: {v_res['status']}")
+            print(f"Digest: {v_res.get('digest', 'N/A')}")
+            if v_res.get("evaluated_at"):
+                exp_tag = f" | Expires At: {v_res.get('expires_at')}" if v_res.get("expires_at") else ""
+                print(f"Evaluated At: {v_res['evaluated_at']}{exp_tag}")
+            if v_res.get("age_seconds") is not None:
+                print(f"Lease Age: {v_res['age_seconds']:.1f}s (Expired: {v_res.get('is_expired', False)})")
+            if v_res.get("error"):
+                print(f"Error: {v_res['error']}")
+            else:
+                print(f"Invariants: {v_res.get('passed_invariants', 0)}/{v_res.get('total_invariants', 0)} passed ({v_res.get('violations_count', 0)} violations)")
+        sys.exit(0 if (v_res.get("valid") and v_res.get("status") == "VALID") else 1)
+
     runner_flags_no_val = {
         "--all-tests", "--staged", "--dry-run", "--check-baseline", "--json", "--prune-storage",
         "-h", "--help", "-v", "--verbose", "--strict-storage", "--include-rotated", "--keep-rotated-logs",
@@ -2008,7 +2203,7 @@ def main(argv=None):
         "--session-log-level", "--session-log-tag", "--debug-level", "--debug-tag",
         "--test-timeout", "--max-logs-mb", "--max-screenshots-mb",
         "--max-entropy", "--max-warnings", "--max-errors", "--max-crashes",
-        "--receipt-file"
+        "--receipt-file", "--verify-receipt"
     }
 
     targets_to_run = []

@@ -3408,5 +3408,16 @@
       "status": "Optimized implementation baseline"
     },
     "impact": "Added deterministic cryptographic receipt generation (gov-xxx), remediation action mapping, receipt file export, and safe automated remediation execution across all 12 subsystem invariants."
+  },
+  {
+    "timestamp": "2026-11-09T13:48:44.639269+00:00",
+    "feature": "governance receipt verification and expiring lease contracts",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Verifiable cryptographic receipt validation (--verify-receipt) with expiring lease TTLs and tamper detection"
   }
 ]

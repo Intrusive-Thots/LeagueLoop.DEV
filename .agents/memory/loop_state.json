@@ -1,17 +1,17 @@
 {
-  "run_number": 298,
-  "last_run": "2026-11-09T13:35:50.919031+00:00",
+  "run_number": 299,
+  "last_run": "2026-11-09T13:48:44.639778+00:00",
   "test_baseline": {
     "passed": 1283,
     "failed": 0,
     "skipped": 0,
     "warnings": 0,
-    "last_targeted_passed": 90,
+    "last_targeted_passed": 101,
     "errors": 0
   },
   "index_baseline": {
     "total_files": 213,
-    "total_py_lines": 67201,
+    "total_py_lines": 67534,
     "breakdown": {
       "src": {
         "files": 106,
@@ -19,14 +19,14 @@
       },
       "tests": {
         "files": 96,
-        "lines": 24204
+        "lines": 24342
       },
       "tools": {
         "files": 11,
-        "lines": 6142
+        "lines": 6337
       }
     },
-    "test_to_code_ratio": 0.657
+    "test_to_code_ratio": 0.66
   },
   "entropy_baseline": {
     "status": "WARN",
@@ -56,8 +56,8 @@
   },
   "storage_baseline": {
     "status": "OPTIMAL",
-    "total_mb": 74.58,
-    "logs_mb": 13.47,
+    "total_mb": 74.59,
+    "logs_mb": 13.48,
     "screenshots_mb": 61.1,
     "warnings_count": 0,
     "thresholds": {
@@ -123,7 +123,7 @@
     "category_counts": {
       "game_phase_change": 5
     },
-    "newest_age_human": "9.5h ago",
+    "newest_age_human": "9.7h ago",
     "thresholds": {
       "strict": false,
       "max_corrupted": 0
@@ -160,7 +160,7 @@
   },
   "debug_baseline": {
     "status": "HEALTHY",
-    "total_lines_inspected": 84880,
+    "total_lines_inspected": 84911,
     "diagnostic_tags_count": 0,
     "level_counts": {
       "DEBUG": 30
@@ -177,7 +177,7 @@
     "version_aligned": true,
     "files_ok": true,
     "test_environment_ok": true,
-    "duration_ms": 0.79
+    "duration_ms": 1.6
   },
   "accounts_preflight_baseline": {
     "status": "HEALTHY",
@@ -196,8 +196,8 @@
   "governance_baseline": {
     "status": "PASS",
     "fail_closed": false,
-    "receipt_id": "gov-8fcc1d0bf85d850e",
-    "digest": "8fcc1d0bf85d850e8d536f93b8dbaffbf9fc79557c342dadc17205489615199f",
+    "receipt_id": "gov-c9ba4da5588b9e0e",
+    "digest": "c9ba4da5588b9e0e40d43eae9c5a658b31244533e7fcf4503c3a58e34e39915c",
     "total_invariants": 12,
     "passed_invariants": 12,
     "violations_count": 0,
