@@ -29,7 +29,7 @@ if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
 # Pre-compiled regex patterns for diagnostic performance
 RE_ERROR_CRITICAL = re.compile(r"\b(ERROR|CRITICAL)\b")
 RE_WARNING = re.compile(r"\bWARNING\b")
-RE_LOG_LEVEL = re.compile(r"\b(DEBUG|INFO|WARNING|ERROR|CRITICAL)\b")
+RE_LOG_LEVEL = re.compile(r"\b(DEBUG|INFO|ACTION|WARNING|ERROR|CRITICAL)\b")
 RE_TIMESTAMP_PREFIX = re.compile(r"^\d{8}_\d{6}_?")
 RE_LATENCY_ANOMALY = re.compile(r"Latency anomaly detected on event:\s*([\d\.]+)ms", re.IGNORECASE)
 RE_CONNECTION_DROP = re.compile(r"Connection drop recorded:\s*(.*?)(?:\s*\(Total drops:\s*(\d+)\))?$", re.IGNORECASE)
@@ -480,7 +480,12 @@ def inspect_session_log(
     return result
 
 
-def inspect_debug_log(path: Path, max_lines: int = 30) -> Dict[str, Any]:
+def inspect_debug_log(
+    path: Path,
+    max_lines: int = 30,
+    filter_level: Optional[str] = None,
+    filter_tag: Optional[str] = None,
+) -> Dict[str, Any]:
     """Inspects recent execution context from debug.log using bounded streaming."""
     result: Dict[str, Any] = {
         "exists": path.exists(),
@@ -490,6 +495,13 @@ def inspect_debug_log(path: Path, max_lines: int = 30) -> Dict[str, Any]:
         "diagnostic_tags_count": 0,
         "recent_diagnostics": [],
     }
+    if filter_level:
+        result["filtered_level"] = filter_level
+        result["filtered_entries"] = []
+    if filter_tag:
+        result["filtered_tag"] = filter_tag
+        if "filtered_entries" not in result:
+            result["filtered_entries"] = []
     if not path.exists():
         return result
 
@@ -518,6 +530,20 @@ def inspect_debug_log(path: Path, max_lines: int = 30) -> Dict[str, Any]:
         result["level_counts"] = level_counts
         result["recent_entries"] = recent_entries
         result["recent_diagnostics"] = recent_diagnostics
+
+        if filter_level or filter_tag:
+            filtered = []
+            for sline in recent_entries:
+                lvl_match = True
+                tag_match = True
+                if filter_level:
+                    m = RE_LOG_LEVEL.search(sline)
+                    lvl_match = bool(m and m.group(1).upper() == filter_level.upper())
+                if filter_tag:
+                    tag_match = filter_tag.lower() in sline.lower()
+                if lvl_match and tag_match:
+                    filtered.append(sline)
+            result["filtered_entries"] = filtered
     except Exception as e:
         result["error_reading"] = str(e)
 
@@ -987,6 +1013,8 @@ def run_diagnostics(
     filter_session_account: Optional[str] = None,
     filter_session_log_level: Optional[str] = None,
     filter_session_log_tag: Optional[str] = None,
+    filter_debug_level: Optional[str] = None,
+    filter_debug_tag: Optional[str] = None,
 ) -> Dict[str, Any]:
     p = paths or get_leagueloop_paths()
     errors_info = inspect_error_log(
@@ -1017,7 +1045,12 @@ def run_diagnostics(
         filter_category=filter_screenshot_category,
     )
     debug_path = p.get("debug_log", p["base"] / "logs" / "debug.log")
-    debug_info = inspect_debug_log(debug_path, max_lines=max_lines)
+    debug_info = inspect_debug_log(
+        debug_path,
+        max_lines=max_lines,
+        filter_level=filter_debug_level,
+        filter_tag=filter_debug_tag,
+    )
 
     sessions_path = p.get("sessions", p["base"] / "sessions")
     sessions_info = inspect_saved_sessions(
@@ -1108,6 +1141,8 @@ def main():
     parser.add_argument("--session-account", type=str, default=None, help="Filter reported saved sessions by account ID or slot name")
     parser.add_argument("--session-log-level", type=str, default=None, help="Filter reported session.jsonl entries by level (DEBUG, INFO, WARNING, ERROR)")
     parser.add_argument("--session-log-tag", type=str, default=None, help="Filter reported session.jsonl entries by tag (e.g. LCU_WS, RiotClientAPI)")
+    parser.add_argument("--debug-level", type=str, default=None, help="Filter reported debug.log entries by level (DEBUG, INFO, ACTION, WARNING, ERROR, CRITICAL)")
+    parser.add_argument("--debug-tag", type=str, default=None, help="Filter reported debug.log entries by tag or keyword (e.g. LCU_DIAGNOSTICS, Automation)")
     parser.add_argument("--prune-storage", action="store_true", help="Safely prune rotated logs and stale debug screenshots")
     parser.add_argument("--dry-run", action="store_true", help="Preview storage pruning without deleting files")
     parser.add_argument("--max-screenshots-keep", type=int, default=150, help="Maximum number of recent screenshots to keep during prune (default: 150)")
@@ -1149,6 +1184,8 @@ def main():
         filter_session_account=args.session_account,
         filter_session_log_level=args.session_log_level,
         filter_session_log_tag=args.session_log_tag,
+        filter_debug_level=args.debug_level,
+        filter_debug_tag=args.debug_tag,
     )
 
     if prune_res:
@@ -1238,13 +1275,25 @@ def main():
                     print(f"    - [{a.get('level')}] {a.get('tag')}: {a.get('msg')}")
 
     da = diag.get("debug_analysis", {})
-    if args.verbose and da.get("exists"):
-        print(f"\n[Debug Log Execution Context]")
-        print(f"  Total Debug Lines: {da.get('total_lines_inspected', 0)}")
-        print(f"  Levels (tail): {da.get('level_counts', {})}")
-        print(f"  Diagnostic Tags (tail): {da.get('diagnostic_tags_count', 0)}")
-        for d in da.get("recent_diagnostics", [])[:5]:
-            print(f"    - {d}")
+    if da.get("exists"):
+        filt_da = []
+        if da.get("filtered_level"):
+            filt_da.append(f"level: {da['filtered_level']}")
+        if da.get("filtered_tag"):
+            filt_da.append(f"tag: {da['filtered_tag']}")
+        if filt_da:
+            print(f"\n[Debug Log Inspection (Filtered: {', '.join(filt_da)})]")
+            filt_entries = da.get("filtered_entries", [])
+            print(f"  Matching Debug Entries: {len(filt_entries)}")
+            for e in filt_entries[:5]:
+                print(f"    - {e}")
+        elif args.verbose:
+            print(f"\n[Debug Log Execution Context]")
+            print(f"  Total Debug Lines: {da.get('total_lines_inspected', 0)}")
+            print(f"  Levels (tail): {da.get('level_counts', {})}")
+            print(f"  Diagnostic Tags (tail): {da.get('diagnostic_tags_count', 0)}")
+            for d in da.get("recent_diagnostics", [])[:5]:
+                print(f"    - {d}")
 
     ca = diag["crash_analysis"]
     print(f"\n[Crash Inspection]")

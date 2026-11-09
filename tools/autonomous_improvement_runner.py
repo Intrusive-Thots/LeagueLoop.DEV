@@ -85,6 +85,8 @@ def run_diagnostics_check(
     session_account: Optional[str] = None,
     session_log_level: Optional[str] = None,
     session_log_tag: Optional[str] = None,
+    debug_level: Optional[str] = None,
+    debug_tag: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Runs diagnostics via tools.leagueloop_diagnostics."""
     try:
@@ -106,6 +108,10 @@ def run_diagnostics_check(
             kwargs["filter_session_log_level"] = session_log_level
         if session_log_tag:
             kwargs["filter_session_log_tag"] = session_log_tag
+        if debug_level:
+            kwargs["filter_debug_level"] = debug_level
+        if debug_tag:
+            kwargs["filter_debug_tag"] = debug_tag
         return run_diagnostics(**kwargs)
     except Exception as e:
         return {"healthy": False, "error": str(e)}
@@ -304,6 +310,7 @@ def update_memory_state(
         "screenshot_baseline": {"status": "OPTIMAL", "total_captures": 0, "corrupted_count": 0, "stale_count": 0, "category_counts": {}, "newest_age_human": "N/A"},
         "session_baseline": {"status": "OPTIMAL", "total_accounts": 0, "healthy_accounts": 0, "corrupted_accounts": 0, "stale_accounts": 0},
         "stability_baseline": {"status": "OPTIMAL", "rating": "EXCELLENT", "connection_drops": 0, "recovered_drops": 0, "throttle_events": 0, "is_connected": False, "latency_avg_ms": None},
+        "debug_baseline": {"status": "HEALTHY", "total_lines_inspected": 0, "diagnostic_tags_count": 0, "level_counts": {}},
     }
 
     if loop_state_file.exists():
@@ -422,6 +429,17 @@ def update_memory_state(
             "throttle_events": (diagnostics_results or {}).get("session_analysis", {}).get("stability", {}).get("throttle_events_count", 0),
             "is_connected": (diagnostics_results or {}).get("session_analysis", {}).get("stability", {}).get("is_connected", False),
             "latency_avg_ms": (diagnostics_results or {}).get("session_analysis", {}).get("stability", {}).get("latency_stats", {}).get("avg_ms"),
+        },
+        "debug_baseline": {
+            "status": (
+                "HEALTHY"
+                if (diagnostics_results or {}).get("debug_analysis", {}).get("level_counts", {}).get("ERROR", 0) == 0
+                and (diagnostics_results or {}).get("debug_analysis", {}).get("level_counts", {}).get("CRITICAL", 0) == 0
+                else "ERROR"
+            ) if (diagnostics_results or {}).get("debug_analysis", {}).get("level_counts", {}).get("WARNING", 0) == 0 else "WARN",
+            "total_lines_inspected": (diagnostics_results or {}).get("debug_analysis", {}).get("total_lines_inspected", 0),
+            "diagnostic_tags_count": (diagnostics_results or {}).get("debug_analysis", {}).get("diagnostic_tags_count", 0),
+            "level_counts": (diagnostics_results or {}).get("debug_analysis", {}).get("level_counts", {}),
         },
     }
 
@@ -628,6 +646,8 @@ def run_loop(
     session_account: Optional[str] = None,
     session_log_level: Optional[str] = None,
     session_log_tag: Optional[str] = None,
+    debug_level: Optional[str] = None,
+    debug_tag: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Executes the full Autonomous Improvement Loop."""
     prune_res = None
@@ -657,6 +677,10 @@ def run_loop(
         diag_kwargs["session_log_level"] = session_log_level
     if session_log_tag is not None:
         diag_kwargs["session_log_tag"] = session_log_tag
+    if debug_level is not None:
+        diag_kwargs["debug_level"] = debug_level
+    if debug_tag is not None:
+        diag_kwargs["debug_tag"] = debug_tag
     diag = run_diagnostics_check(**diag_kwargs)
     ver_check = run_version_alignment_check()
     assets_check = run_build_assets_check()
@@ -1159,6 +1183,8 @@ def main(argv=None):
     parser.add_argument("--session-account", type=str, default=None, help="Filter diagnostics by saved session account ID or slot")
     parser.add_argument("--session-log-level", type=str, default=None, help="Filter reported session.jsonl entries by level (DEBUG, INFO, WARNING, ERROR)")
     parser.add_argument("--session-log-tag", type=str, default=None, help="Filter reported session.jsonl entries by tag (e.g. LCU_WS, RiotClientAPI)")
+    parser.add_argument("--debug-level", type=str, default=None, help="Filter reported debug.log entries by level (DEBUG, INFO, ACTION, WARNING, ERROR, CRITICAL)")
+    parser.add_argument("--debug-tag", type=str, default=None, help="Filter reported debug.log entries by tag or keyword (e.g. LCU_DIAGNOSTICS, Automation)")
     parser.add_argument("--test-timeout", type=float, default=180.0, help="Timeout in seconds for pytest test runner (default: 180.0)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Display verbose execution diagnostics and entropy breakdown")
     args, unknown = parser.parse_known_args(argv)
@@ -1179,7 +1205,7 @@ def main(argv=None):
         "--feature", "--impact", "--max-screenshots-keep", "--max-screenshot-age-days",
         "--category", "--warning-category", "--error-category", "--crash-category",
         "--screenshot-category", "--session-status", "--session-account",
-        "--session-log-level", "--session-log-tag", "--test-timeout"
+        "--session-log-level", "--session-log-tag", "--debug-level", "--debug-tag", "--test-timeout"
     }
 
     targets_to_run = []
@@ -1226,6 +1252,10 @@ def main(argv=None):
         run_kwargs["session_log_level"] = args.session_log_level
     if args.session_log_tag is not None:
         run_kwargs["session_log_tag"] = args.session_log_tag
+    if args.debug_level is not None:
+        run_kwargs["debug_level"] = args.debug_level
+    if args.debug_tag is not None:
+        run_kwargs["debug_tag"] = args.debug_tag
     if args.test_timeout != 180.0:
         run_kwargs["test_timeout"] = args.test_timeout
     if args.verbose:
@@ -1266,6 +1296,14 @@ def main(argv=None):
         if sa_res.get("filtered_tag"):
             filt_sa.append(f"tag: {sa_res['filtered_tag']}")
         print(f"Filtered Session Log [{', '.join(filt_sa)}]: {len(sa_res.get('filtered_entries', []))}")
+    da_res = result["diagnostics"].get("debug_analysis", {})
+    if da_res.get("filtered_level") or da_res.get("filtered_tag"):
+        filt_da = []
+        if da_res.get("filtered_level"):
+            filt_da.append(f"level: {da_res['filtered_level']}")
+        if da_res.get("filtered_tag"):
+            filt_da.append(f"tag: {da_res['filtered_tag']}")
+        print(f"Filtered Debug Log [{', '.join(filt_da)}]: {len(da_res.get('filtered_entries', []))}")
     ver_info = result.get("version_alignment", {})
     ver_stat = "[ALIGNED]" if ver_info.get("aligned") else "[MISALIGNED]"
     print(f"Version Alignment: {ver_stat} ({ver_info.get('message', 'N/A')})")

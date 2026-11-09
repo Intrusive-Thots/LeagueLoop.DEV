@@ -1082,5 +1082,68 @@ class TestLeagueLoopDiagnostics(unittest.TestCase):
                 self.assertIn("Websocket disconnect", out)
 
 
+    def test_inspect_debug_log_level_and_tag_filtering(self):
+        lines = [
+            "2026-10-14 10:00:00.000 +0000  INFO     MainApp   Booted up",
+            "2026-10-14 10:01:00.000 +0000  ACTION   AutoLoop  [Automation] Draft: locked in Ahri",
+            "2026-10-14 10:02:00.000 +0000  WARNING  LCUClient [LCU_WS_ANOMALY] WS latency spike",
+            "2026-10-14 10:03:00.000 +0000  ACTION   AutoLoop  [Automation] Match accepted",
+        ]
+        self.paths["debug_log"].write_text("\n".join(lines), encoding="utf-8")
+
+        res_level = inspect_debug_log(self.paths["debug_log"], max_lines=10, filter_level="ACTION")
+        self.assertEqual(res_level.get("filtered_level"), "ACTION")
+        self.assertEqual(len(res_level.get("filtered_entries", [])), 2)
+        self.assertIn("locked in Ahri", res_level["filtered_entries"][0])
+
+        res_tag = inspect_debug_log(self.paths["debug_log"], max_lines=10, filter_tag="LCU_WS_ANOMALY")
+        self.assertEqual(res_tag.get("filtered_tag"), "LCU_WS_ANOMALY")
+        self.assertEqual(len(res_tag.get("filtered_entries", [])), 1)
+        self.assertIn("WS latency spike", res_tag["filtered_entries"][0])
+
+        res_both = inspect_debug_log(self.paths["debug_log"], max_lines=10, filter_level="ACTION", filter_tag="Draft")
+        self.assertEqual(len(res_both.get("filtered_entries", [])), 1)
+        self.assertIn("locked in Ahri", res_both["filtered_entries"][0])
+
+    def test_run_diagnostics_debug_log_filters(self):
+        lines = [
+            "2026-10-14 10:00:00.000 +0000  INFO     MainApp   Booted up",
+            "2026-10-14 10:01:00.000 +0000  ACTION   AutoLoop  [Automation] Draft: locked in Ahri",
+        ]
+        self.paths["debug_log"].write_text("\n".join(lines), encoding="utf-8")
+        diag = run_diagnostics(self.paths, filter_debug_level="ACTION", filter_debug_tag="Draft")
+        da = diag["debug_analysis"]
+        self.assertEqual(da.get("filtered_level"), "ACTION")
+        self.assertEqual(da.get("filtered_tag"), "Draft")
+        self.assertEqual(len(da.get("filtered_entries", [])), 1)
+        self.assertIn("locked in Ahri", da["filtered_entries"][0])
+
+    def test_main_cli_debug_log_level_and_tag(self):
+        import io
+        from contextlib import redirect_stdout
+        from tools.leagueloop_diagnostics import main
+
+        self.paths["error_log"].write_text("INFO Clean", encoding="utf-8")
+        self.paths["crash_log"].write_text("--- session 1 ---\n", encoding="utf-8")
+        self.paths["session_log"].write_text("{}", encoding="utf-8")
+        lines = [
+            "2026-10-14 10:00:00.000 +0000  INFO     MainApp   Booted up",
+            "2026-10-14 10:01:00.000 +0000  ACTION   AutoLoop  [Automation] Draft: locked in Ahri",
+        ]
+        self.paths["debug_log"].write_text("\n".join(lines), encoding="utf-8")
+
+        with patch("sys.argv", ["leagueloop_diagnostics", "--debug-level", "ACTION", "--debug-tag", "Draft"]):
+            with patch("tools.leagueloop_diagnostics.get_leagueloop_paths", return_value=self.paths):
+                f = io.StringIO()
+                with redirect_stdout(f):
+                    try:
+                        main()
+                    except SystemExit:
+                        pass
+                out = f.getvalue()
+                self.assertIn("Debug Log Inspection (Filtered: level: ACTION, tag: Draft)", out)
+                self.assertIn("locked in Ahri", out)
+
+
 if __name__ == "__main__":
     unittest.main()
