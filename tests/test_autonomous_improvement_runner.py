@@ -2291,6 +2291,94 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
             self.assertTrue(args_passed.get("strict_completion"))
             self.assertEqual(args_passed.get("min_tests"), 5)
 
+    def test_generate_and_verify_denial_receipt(self):
+        from tools.autonomous_improvement_runner import generate_denial_receipt, verify_denial_receipt
+        receipt = generate_denial_receipt(
+            candidate_action="deploy_package",
+            failed_preconditions=["Storage threshold exceeded", "Warning limit exceeded"],
+            remediations={"storage": "Prune old screenshots"},
+        )
+        self.assertEqual(receipt["status"], "DENIED")
+        self.assertEqual(receipt["candidate_action"], "deploy_package")
+        self.assertEqual(receipt["failed_preconditions_count"], 2)
+        self.assertTrue(receipt["receipt_id"].startswith("denial-"))
+        self.assertIn("clock_source", receipt)
+
+        v_res = verify_denial_receipt(receipt)
+        self.assertTrue(v_res["valid"])
+        self.assertEqual(v_res["status"], "VALID")
+        self.assertEqual(v_res["candidate_action"], "deploy_package")
+
+    def test_verify_denial_receipt_tampered(self):
+        from tools.autonomous_improvement_runner import generate_denial_receipt, verify_denial_receipt
+        receipt = generate_denial_receipt(
+            candidate_action="deploy_package",
+            failed_preconditions=["Storage threshold exceeded"],
+        )
+        tampered = dict(receipt)
+        tampered["failed_preconditions"] = ["Storage threshold exceeded", "Injected precondition"]
+        v_res = verify_denial_receipt(tampered)
+        self.assertFalse(v_res["valid"])
+        self.assertEqual(v_res["status"], "TAMPERED")
+
+    def test_evaluate_governance_invariants_denial_receipt_presence(self):
+        from tools.autonomous_improvement_runner import evaluate_governance_invariants
+        diag = {
+            "storage_analysis": {"status": "OPTIMAL", "warnings": []},
+            "stability": {"rating": "EXCELLENT", "connection_drops_count": 0, "throttle_events_count": 0},
+            "screenshot_analysis": {"all_intact": True, "corrupted_count": 0, "stale_count": 0},
+            "error_analysis": {"recent_errors": ["Fatal error logged"], "status": "FAIL", "recent_warnings": []},
+            "crash_analysis": {"total_crash_sessions": 0, "status": "HEALTHY"},
+            "sessions_analysis": {"corrupted_accounts": 0, "stale_accounts": 0, "status": "OPTIMAL"},
+            "debug_analysis": {"level_counts": {"ERROR": 0, "CRITICAL": 0}, "status": "HEALTHY"},
+        }
+        res = evaluate_governance_invariants(
+            diagnostics_results=diag,
+            build_health_results={"status": "HEALTHY"},
+            version_alignment_results={"aligned": True},
+            build_assets_results={"ready": True},
+            accounts_preflight_results={"status": "HEALTHY", "problems_count": 0},
+            entropy_results={"status": "PASS", "bare_excepts_total": 0, "syntax_errors": 0, "avg_entropy": 30.0},
+            silent_excepts_results={"status": "PASS", "silent_handlers_count": 0},
+            strict_errors=True,
+            candidate_action="test_governance_candidate",
+        )
+        self.assertEqual(res["status"], "VIOLATION")
+        self.assertIsNotNone(res.get("denial_receipt"))
+        dr = res["denial_receipt"]
+        self.assertEqual(dr["candidate_action"], "test_governance_candidate")
+        self.assertEqual(dr["status"], "DENIED")
+        self.assertGreater(dr["failed_preconditions_count"], 0)
+
+    @patch("tools.autonomous_improvement_runner.verify_denial_receipt")
+    def test_main_cli_verify_denial_receipt(self, mock_verify):
+        import tempfile
+        from tools.autonomous_improvement_runner import main
+        mock_verify.return_value = {
+            "valid": True,
+            "status": "VALID",
+            "receipt_id": "denial-1234567890abcdef",
+            "digest": "1234567890abcdef",
+            "candidate_action": "test_action",
+            "refusal_timestamp": "2026-11-09T00:00:00Z",
+            "refusing_component": "runner",
+            "failed_preconditions_count": 1,
+            "failed_preconditions": ["Rule violated"],
+        }
+        import os
+        with tempfile.NamedTemporaryFile("w", delete=False, suffix=".json") as f:
+            f.write(json.dumps({"receipt_id": "denial-1234567890abcdef", "digest": "1234567890abcdef"}))
+            tmp_path = f.name
+        try:
+            with patch("sys.argv", ["autonomous_improvement_runner", "--verify-denial-receipt", tmp_path]):
+                with self.assertRaises(SystemExit) as cm:
+                    main()
+                self.assertEqual(cm.exception.code, 0)
+                mock_verify.assert_called_once()
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
 
 if __name__ == "__main__":
     unittest.main()

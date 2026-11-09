@@ -41,6 +41,11 @@ AGENTS_DIR = PROJECT_ROOT / ".agents"
 MEMORY_DIR = AGENTS_DIR / "memory"
 TOOLS_DIR = PROJECT_ROOT / "tools"
 
+try:
+    from src.core.version import __version__ as VERSION
+except Exception:
+    VERSION = "2.0.0"
+
 
 def measure_codebase_metrics(root: Path = PROJECT_ROOT) -> Dict[str, Any]:
     """Calculates total python files and lines across src, tests, and tools, with granular breakdown."""
@@ -324,6 +329,7 @@ def generate_governance_receipt(
     fail_closed: bool = False,
     remediations: Optional[Dict[str, str]] = None,
     lease_ttl_seconds: float = 86400.0,
+    denial_receipt: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Generates a verifiable, cryptographically hashed governance audit receipt with expiring lease."""
     subsystem_verdicts = {k: v.get("status", "PASS") for k, v in sorted(invariants.items())}
@@ -347,7 +353,7 @@ def generate_governance_receipt(
     total_count = len(invariants)
     status = "PASS" if len(violations) == 0 else "VIOLATION"
 
-    return {
+    receipt_obj: Dict[str, Any] = {
         "receipt_id": receipt_id,
         "digest": digest,
         "evaluated_at": now_iso,
@@ -361,6 +367,144 @@ def generate_governance_receipt(
         "violations": violations,
         "subsystem_verdicts": subsystem_verdicts,
         "remediations": remediations or {},
+    }
+    if denial_receipt:
+        receipt_obj["denial_receipt"] = denial_receipt
+    return receipt_obj
+
+
+def generate_denial_receipt(
+    candidate_action: str,
+    failed_preconditions: List[str],
+    policy_evidence_versions: Optional[Dict[str, Any]] = None,
+    refusing_component: str = "autonomous_improvement_runner.evaluate_governance_invariants",
+    clock_source: str = "system_utc",
+    remediations: Optional[Dict[str, str]] = None,
+    context: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Generates an auditable, cryptographically verifiable denial receipt for blocked actions.
+
+    Adheres to the denial-receipt-not-silence protocol: binds candidate action,
+    evaluation time, clock source, exact failed preconditions, policy/evidence versions,
+    and refusing component so callers never mistake fail-closed silence for successful execution.
+    """
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
+    policy_versions = policy_evidence_versions or {
+        "version": VERSION,
+        "invariants_contract_count": 13,
+    }
+    canonical_payload = json.dumps(
+        {
+            "candidate_action": candidate_action,
+            "clock_source": clock_source,
+            "failed_preconditions": sorted(failed_preconditions),
+            "policy_evidence_versions": policy_versions,
+            "refusal_timestamp": now_iso,
+            "refusing_component": refusing_component,
+        },
+        sort_keys=True,
+    )
+    digest = hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
+    receipt_id = f"denial-{digest[:16]}"
+
+    return {
+        "receipt_id": receipt_id,
+        "digest": digest,
+        "status": "DENIED",
+        "candidate_action": candidate_action,
+        "refusal_timestamp": now_iso,
+        "clock_source": clock_source,
+        "refusing_component": refusing_component,
+        "failed_preconditions_count": len(failed_preconditions),
+        "failed_preconditions": failed_preconditions,
+        "policy_evidence_versions": policy_versions,
+        "remediations": remediations or {},
+        "context": context or {},
+    }
+
+
+def verify_denial_receipt(receipt_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Verifies cryptographic integrity, canonical digest, and structure of a denial receipt."""
+    if not isinstance(receipt_data, dict):
+        return {
+            "valid": False,
+            "status": "MALFORMED",
+            "error": "Receipt is not a JSON object",
+            "receipt_id": "N/A",
+        }
+
+    required_keys = [
+        "receipt_id",
+        "digest",
+        "status",
+        "candidate_action",
+        "refusal_timestamp",
+        "failed_preconditions",
+        "refusing_component",
+    ]
+    missing = [k for k in required_keys if k not in receipt_data]
+    if missing:
+        return {
+            "valid": False,
+            "status": "MALFORMED",
+            "error": f"Missing required fields: {', '.join(missing)}",
+            "receipt_id": receipt_data.get("receipt_id", "N/A"),
+        }
+
+    if receipt_data.get("status") != "DENIED":
+        return {
+            "valid": False,
+            "status": "INVALID_STATUS",
+            "error": f"Expected status DENIED, got {receipt_data.get('status')}",
+            "receipt_id": receipt_data.get("receipt_id", "N/A"),
+        }
+
+    canonical_payload = json.dumps(
+        {
+            "candidate_action": receipt_data.get("candidate_action"),
+            "clock_source": receipt_data.get("clock_source", "system_utc"),
+            "failed_preconditions": sorted(receipt_data.get("failed_preconditions", [])),
+            "policy_evidence_versions": receipt_data.get("policy_evidence_versions", {}),
+            "refusal_timestamp": receipt_data.get("refusal_timestamp"),
+            "refusing_component": receipt_data.get("refusing_component"),
+        },
+        sort_keys=True,
+    )
+    computed_digest = hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
+    recorded_digest = receipt_data.get("digest", "")
+    receipt_id = receipt_data.get("receipt_id", "")
+
+    if computed_digest.lower() != str(recorded_digest).lower():
+        return {
+            "valid": False,
+            "status": "TAMPERED",
+            "error": "Digest mismatch: payload does not match cryptographic hash",
+            "receipt_id": receipt_id,
+            "digest": recorded_digest,
+        }
+
+    expected_id = f"denial-{computed_digest[:16]}"
+    if receipt_id != expected_id:
+        return {
+            "valid": False,
+            "status": "TAMPERED",
+            "error": f"Receipt ID mismatch: expected {expected_id}, got {receipt_id}",
+            "receipt_id": receipt_id,
+            "digest": recorded_digest,
+        }
+
+    return {
+        "valid": True,
+        "status": "VALID",
+        "receipt_id": receipt_id,
+        "digest": recorded_digest,
+        "candidate_action": receipt_data.get("candidate_action"),
+        "refusal_timestamp": receipt_data.get("refusal_timestamp"),
+        "refusing_component": receipt_data.get("refusing_component"),
+        "failed_preconditions_count": len(receipt_data.get("failed_preconditions", [])),
+        "failed_preconditions": receipt_data.get("failed_preconditions", []),
+        "remediations": receipt_data.get("remediations", {}),
     }
 
 
@@ -596,6 +740,7 @@ def evaluate_governance_invariants(
     fail_closed: bool = False,
     remediate: bool = False,
     receipt_file: Optional[str] = None,
+    candidate_action: str = "governance_evaluation",
 ) -> Dict[str, Any]:
     """Evaluates all 13 subsystem governance invariants, returning a structured audit receipt."""
     if fail_closed:
@@ -846,11 +991,30 @@ def evaluate_governance_invariants(
     is_overall_pass = len(violations) == 0
 
     remediations = generate_subsystem_remediations(invariants, violations)
+    denial_receipt = None
+    if not is_overall_pass:
+        denial_receipt = generate_denial_receipt(
+            candidate_action=candidate_action,
+            failed_preconditions=violations,
+            remediations=remediations,
+            policy_evidence_versions={
+                "version": VERSION,
+                "invariants_contract_count": total_invariants,
+                "fail_closed": fail_closed,
+            },
+            context={
+                "passed_invariants": passed_invariants,
+                "total_invariants": total_invariants,
+                "invariants": {k: v.get("status") for k, v in invariants.items()},
+            },
+        )
+
     receipt = generate_governance_receipt(
         invariants=invariants,
         violations=violations,
         fail_closed=fail_closed,
         remediations=remediations,
+        denial_receipt=denial_receipt,
     )
 
     return {
@@ -863,6 +1027,7 @@ def evaluate_governance_invariants(
         "invariants": invariants,
         "remediations": remediations,
         "receipt": receipt,
+        "denial_receipt": denial_receipt,
     }
 
 
@@ -1316,6 +1481,21 @@ def update_memory_state(
             except Exception:
                 pass
 
+        # 8. Persist denial receipt if violations occurred, or clean up stale denial receipt if pass
+        denial_receipt = (governance_results or {}).get("denial_receipt")
+        denial_file = MEMORY_DIR / "denial_receipt.json"
+        if denial_receipt:
+            try:
+                with open(denial_file, "w", encoding="utf-8") as f:
+                    json.dump(denial_receipt, f, indent=2)
+            except Exception:
+                pass
+        elif (governance_results or {}).get("status") == "PASS" and denial_file.exists():
+            try:
+                denial_file.unlink()
+            except Exception:
+                pass
+
     return {
         "new_state": new_state,
         "episodic_entry": episodic_entry,
@@ -1754,9 +1934,23 @@ def run_loop(
             "description": "Evaluating test suite completion as an explicit governance invariant (completion_contract) enforces that test suites actually ran (passed >= min_required, failed == 0, errors == 0), preventing empty, skipped, or truncated test runs from falsely passing quality gates.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Cryptographic Governance Denial Receipts (denial-receipt-not-silence)",
+            "description": "Persisting structured cryptographic denial receipts (denial_receipt.json) whenever fail-closed gates or strict invariants refuse actions binds candidate actions, clock sources, failed preconditions, and refusing components to prevent treating gate refusals as ambiguous silence.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
+        {
+            "method": "Governance Denial Receipt Audit and Verification Protocol",
+            "procedure": [
+                "Execute autonomous_improvement_runner with --check-governance --fail-closed to audit all 13 invariants.",
+                "Inspect .agents/memory/denial_receipt.json upon gate refusal to verify exact failed preconditions.",
+                "Verify denial receipt integrity and candidate action binding using --verify-denial-receipt <path>.",
+            ],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        },
         {
             "method": "Test Completion Contract Verification Protocol",
             "procedure": [
@@ -2146,6 +2340,7 @@ def main(argv=None):
     parser.add_argument("--remediate", action="store_true", help="Execute safe automated non-destructive remediations for violated subsystem invariants")
     parser.add_argument("--receipt-file", type=str, default=None, help="Path to write governance receipt JSON file")
     parser.add_argument("--verify-receipt", type=str, default=None, help="Path to governance receipt JSON file to verify cryptographic digest and lease validity")
+    parser.add_argument("--verify-denial-receipt", type=str, default=None, help="Path to denial receipt JSON file to verify cryptographic digest and refusal preconditions")
     parser.add_argument("--include-rotated", action="store_true", help="Include rotated log files (error.log.1) during diagnostic analysis")
     parser.add_argument("--keep-rotated-logs", action="store_true", help="Do not prune rotated log files during storage pruning")
     parser.add_argument("--test-timeout", type=float, default=180.0, help="Timeout in seconds for pytest test runner (default: 180.0)")
@@ -2169,6 +2364,21 @@ def main(argv=None):
         accts_check = run_accounts_check()
         silent_check = run_silent_excepts_check()
         entropy = run_entropy_check(top_n=5)
+        cached_test_results = None
+        state_file = MEMORY_DIR / "loop_state.json"
+        if state_file.exists():
+            try:
+                s_data = json.loads(state_file.read_text(encoding="utf-8"))
+                tb = s_data.get("test_baseline", {})
+                if tb:
+                    cached_test_results = {
+                        "success": tb.get("failed", 0) == 0 and tb.get("errors", 0) == 0,
+                        "passed": tb.get("last_targeted_passed", tb.get("passed", 0)),
+                        "failed": tb.get("failed", 0),
+                        "errors": tb.get("errors", 0),
+                    }
+            except Exception:
+                pass
         gov_res = evaluate_governance_invariants(
             diagnostics_results=diag,
             build_health_results=build_health,
@@ -2178,7 +2388,27 @@ def main(argv=None):
             entropy_results=entropy,
             silent_excepts_results=silent_check,
             storage_results=diag.get("storage_analysis"),
-            fail_closed=True,
+            test_results=cached_test_results,
+            strict_storage=args.strict_storage,
+            strict_build=args.strict_build,
+            strict_preflight=args.strict_preflight,
+            strict_entropy=args.strict_entropy,
+            max_entropy=args.max_entropy,
+            strict_silent=args.strict_silent,
+            strict_warnings=args.strict_warnings,
+            max_warnings=args.max_warnings,
+            strict_stability=args.strict_stability,
+            strict_screenshots=args.strict_screenshots,
+            strict_errors=args.strict_errors,
+            max_errors=args.max_errors,
+            strict_crashes=args.strict_crashes,
+            max_crashes=args.max_crashes,
+            strict_sessions=args.strict_sessions,
+            strict_debug=args.strict_debug,
+            strict_completion=args.strict_completion,
+            min_tests_passed=args.min_tests,
+            fail_closed=args.fail_closed,
+            candidate_action="preflight_governance_audit",
         )
         if args.remediate and gov_res.get("violations_count", 0) > 0:
             rem_res = execute_governance_remediations(
@@ -2194,6 +2424,20 @@ def main(argv=None):
                 rf.write_text(json.dumps(gov_res["receipt"], indent=2), encoding="utf-8")
             except Exception as e:
                 print(f"Warning: could not write receipt file: {e}", file=sys.stderr)
+        if gov_res.get("denial_receipt"):
+            try:
+                df = MEMORY_DIR / "denial_receipt.json"
+                df.parent.mkdir(parents=True, exist_ok=True)
+                df.write_text(json.dumps(gov_res["denial_receipt"], indent=2), encoding="utf-8")
+            except Exception as e:
+                print(f"Warning: could not write denial receipt file: {e}", file=sys.stderr)
+        elif gov_res.get("status") == "PASS":
+            df = MEMORY_DIR / "denial_receipt.json"
+            if df.exists():
+                try:
+                    df.unlink()
+                except Exception:
+                    pass
         if args.json:
             print(json.dumps(gov_res, indent=2))
         else:
@@ -2202,6 +2446,9 @@ def main(argv=None):
             r_id = receipt.get("receipt_id", "N/A")
             print(f"=== Subsystem Governance Invariants Audit {gov_stat} ===")
             print(f"Receipt ID: {r_id} | Passed: {gov_res['passed_invariants']}/{gov_res['total_invariants']} | Violations: {gov_res['violations_count']}")
+            if gov_res.get("denial_receipt"):
+                dr = gov_res["denial_receipt"]
+                print(f"Denial Receipt: {dr.get('receipt_id')} | Refused: {dr.get('candidate_action')} | Refusing Component: {dr.get('refusing_component')}")
             for name, inv in gov_res["invariants"].items():
                 print(f"  - {name}: [{inv['status']}]")
             if gov_res["violations"]:
@@ -2217,6 +2464,38 @@ def main(argv=None):
                 for r_app in gov_res["remediations_executed"].get("remediations_applied", []):
                     print(f"  - {r_app}")
         sys.exit(0 if gov_res["status"] == "PASS" else 1)
+
+    if args.verify_denial_receipt:
+        receipt_path = Path(args.verify_denial_receipt)
+        if not receipt_path.exists():
+            print(f"Error: denial receipt file not found: {receipt_path}", file=sys.stderr)
+            sys.exit(1)
+        try:
+            r_data = json.loads(receipt_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            print(f"Error: invalid JSON in denial receipt file: {e}", file=sys.stderr)
+            sys.exit(1)
+        d_res = verify_denial_receipt(r_data)
+        if args.json:
+            print(json.dumps(d_res, indent=2))
+        else:
+            d_stat = f"[{d_res['status']}]"
+            print(f"=== Denial Receipt Verification {d_stat} ===")
+            print(f"Receipt ID: {d_res.get('receipt_id', 'N/A')} | Status: {d_res['status']}")
+            print(f"Digest: {d_res.get('digest', 'N/A')}")
+            if d_res.get("candidate_action"):
+                print(f"Candidate Action: {d_res.get('candidate_action')}")
+            if d_res.get("refusal_timestamp"):
+                print(f"Refused At: {d_res.get('refusal_timestamp')}")
+            if d_res.get("refusing_component"):
+                print(f"Refusing Component: {d_res.get('refusing_component')}")
+            if d_res.get("failed_preconditions"):
+                print(f"Failed Preconditions ({d_res.get('failed_preconditions_count', 0)}):")
+                for p in d_res["failed_preconditions"][:5]:
+                    print(f"  - {p}")
+            if d_res.get("error"):
+                print(f"Error: {d_res['error']}")
+        sys.exit(0 if (d_res.get("valid") and d_res.get("status") == "VALID") else 1)
 
     if args.verify_receipt:
         receipt_path = Path(args.verify_receipt)
@@ -2265,7 +2544,7 @@ def main(argv=None):
         "--test-timeout", "--max-logs-mb", "--max-screenshots-mb",
         "--max-entropy", "--max-warnings", "--max-errors", "--max-crashes",
         "--min-tests",
-        "--receipt-file", "--verify-receipt"
+        "--receipt-file", "--verify-receipt", "--verify-denial-receipt"
     }
 
     targets_to_run = []
