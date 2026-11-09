@@ -3213,5 +3213,16 @@
       "status": "Optimized implementation baseline"
     },
     "impact": "Added screenshot category filtering to inspect_screenshots and diagnostics CLI/runner, expanded subsystem classification for 12 additional subsystems, introduced error_categories rollup, and added screenshot_baseline telemetry to loop state"
+  },
+  {
+    "timestamp": "2026-11-09T10:35:39.574280+00:00",
+    "feature": "error-subsystem-categorization-filtering-and-baseline-tracking",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Added error subsystem filtering (--error-category), integrated error_baseline and crash_baseline into loop_state.json, and added comprehensive unit test suites."
   }
 ]

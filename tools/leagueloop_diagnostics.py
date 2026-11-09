@@ -123,6 +123,7 @@ def inspect_error_log(
     max_lines: int = 30,
     include_rotated: bool = False,
     filter_category: Optional[str] = None,
+    filter_error_category: Optional[str] = None,
 ) -> Dict[str, Any]:
     result: Dict[str, Any] = {
         "exists": path.exists(),
@@ -138,6 +139,9 @@ def inspect_error_log(
     if filter_category:
         result["filtered_category"] = filter_category
         result["filtered_warnings"] = []
+    if filter_error_category:
+        result["filtered_error_category"] = filter_error_category
+        result["filtered_errors"] = []
     if not path.exists():
         return result
 
@@ -171,6 +175,8 @@ def inspect_error_log(
                 result["recent_errors"].append(sline)
                 ecat = classify_warning_line(sline)
                 error_categories[ecat] = error_categories.get(ecat, 0) + 1
+                if filter_error_category and ecat == filter_error_category:
+                    result["filtered_errors"].append(sline)
             elif (RE_WARNING.search(sline) or is_benign_switch) and "[LCU_WS_ANOMALY]" not in sline and "[LCU_NETWORK_THROTTLE]" not in sline:
                 result["recent_warnings"].append(sline)
                 cat = classify_warning_line(sline)
@@ -875,6 +881,7 @@ def run_diagnostics(
     strict_storage: bool = False,
     filter_category: Optional[str] = None,
     filter_screenshot_category: Optional[str] = None,
+    filter_error_category: Optional[str] = None,
 ) -> Dict[str, Any]:
     p = paths or get_leagueloop_paths()
     errors_info = inspect_error_log(
@@ -882,6 +889,7 @@ def run_diagnostics(
         max_lines=max_lines,
         include_rotated=include_rotated,
         filter_category=filter_category,
+        filter_error_category=filter_error_category,
     )
     crashes_info = inspect_crash_log(p["crash_log"], max_sessions=max_sessions)
     session_info = inspect_session_log(p["session_log"], max_entries=max_lines)
@@ -973,6 +981,7 @@ def main():
     parser.add_argument("--max-screenshots-mb", type=float, default=100.0, help="Maximum allowed total size of debug screenshots in MB before warning (default: 100.0)")
     parser.add_argument("--strict-storage", action="store_true", help="Treat storage threshold warnings as fatal health failures")
     parser.add_argument("--category", "--warning-category", type=str, default=None, help="Filter reported warnings by subsystem category")
+    parser.add_argument("--error-category", type=str, default=None, help="Filter reported errors by subsystem category")
     parser.add_argument("--screenshot-category", type=str, default=None, help="Filter reported debug screenshots by event category")
     parser.add_argument("--prune-storage", action="store_true", help="Safely prune rotated logs and stale debug screenshots")
     parser.add_argument("--dry-run", action="store_true", help="Preview storage pruning without deleting files")
@@ -1009,6 +1018,7 @@ def main():
         strict_storage=args.strict_storage,
         filter_category=args.category,
         filter_screenshot_category=args.screenshot_category,
+        filter_error_category=args.error_category,
     )
 
     if prune_res:
@@ -1035,8 +1045,16 @@ def main():
     ea = diag["error_analysis"]
     print(f"\n[Logs Inspection]")
     print(f"  Recent Errors: {len(ea.get('recent_errors', []))}")
-    for err in ea.get("recent_errors", []):
-        print(f"    - {err}")
+    if ea.get("error_categories"):
+        print(f"    Categories: {ea.get('error_categories')}")
+    if ea.get("filtered_error_category"):
+        fe = ea.get("filtered_errors", [])
+        print(f"  Filtered Errors [{ea['filtered_error_category']}]: {len(fe)}")
+        for err in fe:
+            print(f"    - {err}")
+    else:
+        for err in ea.get("recent_errors", []):
+            print(f"    - {err}")
     print(f"  Recent Warnings: {len(ea.get('recent_warnings', []))}")
     if ea.get("warning_categories"):
         print(f"    Categories: {ea.get('warning_categories')}")

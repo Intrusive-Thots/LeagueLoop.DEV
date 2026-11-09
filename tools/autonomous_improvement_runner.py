@@ -79,6 +79,7 @@ def measure_codebase_metrics(root: Path = PROJECT_ROOT) -> Dict[str, Any]:
 def run_diagnostics_check(
     category: Optional[str] = None,
     screenshot_category: Optional[str] = None,
+    error_category: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Runs diagnostics via tools.leagueloop_diagnostics."""
     try:
@@ -88,6 +89,8 @@ def run_diagnostics_check(
             kwargs["filter_category"] = category
         if screenshot_category:
             kwargs["filter_screenshot_category"] = screenshot_category
+        if error_category:
+            kwargs["filter_error_category"] = error_category
         return run_diagnostics(**kwargs)
     except Exception as e:
         return {"healthy": False, "error": str(e)}
@@ -281,6 +284,8 @@ def update_memory_state(
         "storage_baseline": {"status": "OPTIMAL", "total_mb": 0.0, "logs_mb": 0.0, "screenshots_mb": 0.0},
         "silent_baseline": {"status": "PASS", "silent_handlers_count": 0, "files_audited": 0},
         "warning_baseline": {"status": "HEALTHY", "total_warnings": 0, "categories": {}},
+        "error_baseline": {"status": "HEALTHY", "total_errors": 0, "categories": {}},
+        "crash_baseline": {"status": "HEALTHY", "recent_crashes_count": 0, "total_actual_crashes": 0},
         "screenshot_baseline": {"status": "OPTIMAL", "total_captures": 0, "corrupted_count": 0, "stale_count": 0, "category_counts": {}, "newest_age_human": "N/A"},
     }
 
@@ -353,6 +358,16 @@ def update_memory_state(
             "status": ("HEALTHY" if len((diagnostics_results or {}).get("error_analysis", {}).get("recent_warnings", [])) == 0 else ("WARN" if len((diagnostics_results or {}).get("error_analysis", {}).get("recent_warnings", [])) < 50 else "CRITICAL")),
             "total_warnings": len((diagnostics_results or {}).get("error_analysis", {}).get("recent_warnings", [])),
             "categories": (diagnostics_results or {}).get("error_analysis", {}).get("warning_categories", {}),
+        },
+        "error_baseline": {
+            "status": ("HEALTHY" if len((diagnostics_results or {}).get("error_analysis", {}).get("recent_errors", [])) == 0 else "ERROR"),
+            "total_errors": len((diagnostics_results or {}).get("error_analysis", {}).get("recent_errors", [])),
+            "categories": (diagnostics_results or {}).get("error_analysis", {}).get("error_categories", {}),
+        },
+        "crash_baseline": {
+            "status": ("HEALTHY" if (diagnostics_results or {}).get("crash_analysis", {}).get("total_crash_sessions", 0) == 0 else "CRITICAL"),
+            "recent_crashes_count": (diagnostics_results or {}).get("crash_analysis", {}).get("total_crash_sessions", 0),
+            "total_actual_crashes": (diagnostics_results or {}).get("crash_analysis", {}).get("total_actual_crashes", 0),
         },
         "screenshot_baseline": {
             "status": ("OPTIMAL" if (diagnostics_results or {}).get("screenshot_analysis", {}).get("all_intact", True) and (diagnostics_results or {}).get("screenshot_analysis", {}).get("corrupted_count", 0) == 0 else "WARN"),
@@ -561,6 +576,7 @@ def run_loop(
     warning_category: Optional[str] = None,
     test_timeout: Optional[float] = 180.0,
     screenshot_category: Optional[str] = None,
+    error_category: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Executes the full Autonomous Improvement Loop."""
     prune_res = None
@@ -576,7 +592,7 @@ def run_loop(
         except Exception as e:
             prune_res = {"error": str(e)}
 
-    diag = run_diagnostics_check(category=warning_category, screenshot_category=screenshot_category)
+    diag = run_diagnostics_check(category=warning_category, screenshot_category=screenshot_category, error_category=error_category)
     ver_check = run_version_alignment_check()
     assets_check = run_build_assets_check()
     build_health = run_build_health_check()
@@ -1064,6 +1080,7 @@ def main(argv=None):
     parser.add_argument("--max-screenshots-keep", type=int, default=None, help="Maximum number of recent screenshots to retain during storage pruning")
     parser.add_argument("--max-screenshot-age-days", type=float, default=None, help="Maximum age in days for screenshots before pruning")
     parser.add_argument("--category", "--warning-category", type=str, default=None, help="Filter diagnostics by subsystem category (e.g. lcu_telemetry, account_switch)")
+    parser.add_argument("--error-category", type=str, default=None, help="Filter diagnostics by error subsystem category")
     parser.add_argument("--screenshot-category", type=str, default=None, help="Filter debug screenshots by event category")
     parser.add_argument("--test-timeout", type=float, default=180.0, help="Timeout in seconds for pytest test runner (default: 180.0)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Display verbose execution diagnostics and entropy breakdown")
@@ -1081,7 +1098,7 @@ def main(argv=None):
     runner_flags_no_val = {
         "--all-tests", "--staged", "--dry-run", "--check-baseline", "--json", "--prune-storage", "-h", "--help", "-v", "--verbose"
     }
-    runner_flags_with_val = {"--feature", "--impact", "--max-screenshots-keep", "--max-screenshot-age-days", "--category", "--warning-category", "--test-timeout", "--screenshot-category"}
+    runner_flags_with_val = {"--feature", "--impact", "--max-screenshots-keep", "--max-screenshot-age-days", "--category", "--warning-category", "--error-category", "--test-timeout", "--screenshot-category"}
 
     targets_to_run = []
     i = 0
@@ -1113,6 +1130,8 @@ def main(argv=None):
     }
     if args.category is not None:
         run_kwargs["warning_category"] = args.category
+    if args.error_category is not None:
+        run_kwargs["error_category"] = args.error_category
     if args.screenshot_category is not None:
         run_kwargs["screenshot_category"] = args.screenshot_category
     if args.test_timeout != 180.0:
@@ -1134,6 +1153,8 @@ def main(argv=None):
     print(f"Diagnostics: {diag_status}{warn_tag_res}")
     if ea_res.get("filtered_category"):
         print(f"Filtered Warnings [{ea_res['filtered_category']}]: {len(ea_res.get('filtered_warnings', []))}")
+    if ea_res.get("filtered_error_category"):
+        print(f"Filtered Errors [{ea_res['filtered_error_category']}]: {len(ea_res.get('filtered_errors', []))}")
     ver_info = result.get("version_alignment", {})
     ver_stat = "[ALIGNED]" if ver_info.get("aligned") else "[MISALIGNED]"
     print(f"Version Alignment: {ver_stat} ({ver_info.get('message', 'N/A')})")

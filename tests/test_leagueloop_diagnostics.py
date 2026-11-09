@@ -791,6 +791,50 @@ class TestLeagueLoopDiagnostics(unittest.TestCase):
         self.assertEqual(len(res["recent_screenshots"]), 1)
         self.assertEqual(res["recent_screenshots"][0]["category"], "button_click")
 
+    def test_inspect_error_log_with_filter_error_category(self):
+        log_content = (
+            "2026-11-09 10:00:00 ERROR [API] [LCU_TELEMETRY] Connection failed\n"
+            "2026-11-09 10:01:00 CRITICAL [Core] [RiotClientAPI] Riot Client launch failed\n"
+        )
+        self.paths["error_log"].write_text(log_content, encoding="utf-8")
+        res = inspect_error_log(self.paths["error_log"], filter_error_category="lcu_telemetry")
+        self.assertEqual(res.get("filtered_error_category"), "lcu_telemetry")
+        self.assertEqual(len(res.get("filtered_errors", [])), 1)
+        self.assertIn("Connection failed", res["filtered_errors"][0])
+
+    def test_run_diagnostics_filter_error_category(self):
+        log_content = (
+            "2026-11-09 10:00:00 ERROR [API] [LCU_TELEMETRY] Connection failed\n"
+            "2026-11-09 10:01:00 CRITICAL [Core] [RiotClientAPI] Riot Client launch failed\n"
+        )
+        self.paths["error_log"].write_text(log_content, encoding="utf-8")
+        res = run_diagnostics(self.paths, filter_error_category="riot_client_api")
+        ea = res["error_analysis"]
+        self.assertEqual(ea.get("filtered_error_category"), "riot_client_api")
+        self.assertEqual(len(ea.get("filtered_errors", [])), 1)
+        self.assertIn("Riot Client launch failed", ea["filtered_errors"][0])
+
+    def test_main_cli_error_category(self):
+        import io
+        from contextlib import redirect_stdout
+        from tools.leagueloop_diagnostics import main
+
+        log_content = (
+            "2026-11-09 10:00:00 ERROR [API] [LCU_TELEMETRY] Connection failed\n"
+            "2026-11-09 10:01:00 CRITICAL [Core] [RiotClientAPI] Riot Client launch failed\n"
+        )
+        self.paths["error_log"].write_text(log_content, encoding="utf-8")
+        with patch("sys.argv", ["leagueloop_diagnostics", "--error-category", "lcu_telemetry", "--summary"]):
+            with patch("tools.leagueloop_diagnostics.get_leagueloop_paths", return_value=self.paths):
+                f = io.StringIO()
+                with redirect_stdout(f):
+                    try:
+                        main()
+                    except SystemExit:
+                        pass
+                out = f.getvalue()
+                self.assertIn("Filtered Errors [lcu_telemetry]: 1", out)
+
+
 if __name__ == "__main__":
     unittest.main()
-

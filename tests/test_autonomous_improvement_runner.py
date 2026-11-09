@@ -754,7 +754,7 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         mock_diag.return_value = {"healthy": True, "error_analysis": {"recent_warnings": [], "warning_categories": {}}}
         mock_tests.return_value = {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "run_all": False, "success": True}
         res = run_loop(dry_run=True, warning_category="lcu_telemetry", test_timeout=60.0)
-        mock_diag.assert_called_once_with(category="lcu_telemetry", screenshot_category=None)
+        mock_diag.assert_called_once_with(category="lcu_telemetry", screenshot_category=None, error_category=None)
         mock_tests.assert_called_once()
         self.assertEqual(mock_tests.call_args[1].get("timeout"), 60.0)
 
@@ -789,9 +789,73 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         mock_diag.return_value = {"healthy": True, "error_analysis": {"recent_warnings": [], "warning_categories": {}}, "screenshot_analysis": {}}
         mock_tests.return_value = {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "run_all": False, "success": True}
         res = run_loop(dry_run=True, screenshot_category="champion_action")
-        mock_diag.assert_called_once_with(category=None, screenshot_category="champion_action")
+        mock_diag.assert_called_once_with(category=None, screenshot_category="champion_action", error_category=None)
         mock_tests.assert_called_once()
+
+    def test_update_memory_state_error_and_crash_baseline(self):
+        diag_mock = {
+            "error_analysis": {
+                "recent_errors": ["ERROR [LCU_TELEMETRY] Failed"],
+                "error_categories": {"lcu_telemetry": 1},
+                "recent_warnings": [],
+                "warning_categories": {},
+            },
+            "crash_analysis": {
+                "total_crash_sessions": 1,
+                "total_actual_crashes": 2,
+            },
+        }
+        res = update_memory_state(
+            metrics={"total_py_files": 10, "total_py_lines": 500, "breakdown": {}, "test_to_code_ratio": 0.5},
+            test_results={"passed": 5, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "run_all": False},
+            dry_run=True,
+            diagnostics_results=diag_mock,
+        )
+        eb = res["new_state"].get("error_baseline", {})
+        self.assertEqual(eb.get("status"), "ERROR")
+        self.assertEqual(eb.get("total_errors"), 1)
+        self.assertEqual(eb.get("categories"), {"lcu_telemetry": 1})
+
+        cb = res["new_state"].get("crash_baseline", {})
+        self.assertEqual(cb.get("status"), "CRITICAL")
+        self.assertEqual(cb.get("recent_crashes_count"), 1)
+        self.assertEqual(cb.get("total_actual_crashes"), 2)
+
+    @patch("tools.autonomous_improvement_runner.run_diagnostics_check")
+    @patch("tools.autonomous_improvement_runner.run_tests_check")
+    def test_run_loop_with_error_category(self, mock_tests, mock_diag):
+        mock_diag.return_value = {"healthy": True, "error_analysis": {"recent_warnings": [], "warning_categories": {}, "recent_errors": []}, "screenshot_analysis": {}}
+        mock_tests.return_value = {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "run_all": False, "success": True}
+        res = run_loop(dry_run=True, error_category="lcu_telemetry")
+        mock_diag.assert_called_once_with(category=None, screenshot_category=None, error_category="lcu_telemetry")
+        mock_tests.assert_called_once()
+
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_error_category(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 284,
+            "diagnostics": {
+                "healthy": True,
+                "error_analysis": {"filtered_error_category": "lcu_telemetry", "filtered_errors": ["ERROR [LCU_TELEMETRY] Failed"]},
+            },
+            "version_alignment": {"aligned": True, "message": "aligned"},
+            "build_assets": {"ready": True, "message": "ready"},
+            "build_health": {"status": "HEALTHY", "version": "1.0", "duration_ms": 1.0},
+            "accounts_preflight": {"status": "HEALTHY", "accounts_count": 1, "usable_sessions_count": 1, "problems_count": 0},
+            "silent_excepts": {"status": "PASS", "silent_handlers_count": 0, "files_audited": 10},
+            "entropy": {"status": "PASS", "avg_entropy": 50.0},
+            "metrics": {"total_py_files": 10, "total_py_lines": 500, "test_to_code_ratio": 0.5},
+            "tests": {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "success": True},
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+        }
+        with patch("sys.argv", ["autonomous_improvement_runner", "--error-category", "lcu_telemetry", "--dry-run"]):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 0)
+            mock_run_loop.assert_called_once()
+            self.assertEqual(mock_run_loop.call_args[1].get("error_category"), "lcu_telemetry")
+
 
 if __name__ == "__main__":
     unittest.main()
-

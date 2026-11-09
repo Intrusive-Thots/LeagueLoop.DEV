@@ -1,17 +1,17 @@
 {
-  "run_number": 283,
-  "last_run": "2026-11-09T10:20:24.351734+00:00",
+  "run_number": 284,
+  "last_run": "2026-11-09T10:35:39.575280+00:00",
   "test_baseline": {
     "passed": 1244,
     "failed": 0,
     "skipped": 0,
     "warnings": 0,
-    "last_targeted_passed": 82,
+    "last_targeted_passed": 88,
     "errors": 0
   },
   "index_baseline": {
     "total_files": 213,
-    "total_py_lines": 64169,
+    "total_py_lines": 64316,
     "breakdown": {
       "src": {
         "files": 106,
@@ -19,14 +19,14 @@
       },
       "tests": {
         "files": 96,
-        "lines": 22558
+        "lines": 22666
       },
       "tools": {
         "files": 11,
-        "lines": 4756
+        "lines": 4795
       }
     },
-    "test_to_code_ratio": 0.612
+    "test_to_code_ratio": 0.615
   },
   "entropy_baseline": {
     "status": "WARN",
@@ -35,8 +35,8 @@
   },
   "storage_baseline": {
     "status": "OPTIMAL",
-    "total_mb": 74.54,
-    "logs_mb": 13.43,
+    "total_mb": 74.55,
+    "logs_mb": 13.44,
     "screenshots_mb": 61.1,
     "warnings_count": 0
   },
@@ -55,6 +55,16 @@
       "riot_client_api": 2
     }
   },
+  "error_baseline": {
+    "status": "HEALTHY",
+    "total_errors": 0,
+    "categories": {}
+  },
+  "crash_baseline": {
+    "status": "HEALTHY",
+    "recent_crashes_count": 0,
+    "total_actual_crashes": 2
+  },
   "screenshot_baseline": {
     "status": "OPTIMAL",
     "total_captures": 5,
@@ -63,6 +73,6 @@
     "category_counts": {
       "game_phase_change": 5
     },
-    "newest_age_human": "6.3h ago"
+    "newest_age_human": "6.5h ago"
   }
 }
