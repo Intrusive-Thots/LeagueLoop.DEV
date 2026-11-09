@@ -87,6 +87,10 @@ def run_diagnostics_check(
     session_log_tag: Optional[str] = None,
     debug_level: Optional[str] = None,
     debug_tag: Optional[str] = None,
+    max_logs_mb: Optional[float] = None,
+    max_screenshots_mb: Optional[float] = None,
+    strict_storage: bool = False,
+    include_rotated: bool = False,
 ) -> Dict[str, Any]:
     """Runs diagnostics via tools.leagueloop_diagnostics."""
     try:
@@ -112,6 +116,14 @@ def run_diagnostics_check(
             kwargs["filter_debug_level"] = debug_level
         if debug_tag:
             kwargs["filter_debug_tag"] = debug_tag
+        if max_logs_mb is not None:
+            kwargs["max_logs_mb"] = max_logs_mb
+        if max_screenshots_mb is not None:
+            kwargs["max_screenshots_mb"] = max_screenshots_mb
+        if strict_storage:
+            kwargs["strict_storage"] = True
+        if include_rotated:
+            kwargs["include_rotated"] = True
         return run_diagnostics(**kwargs)
     except Exception as e:
         return {"healthy": False, "error": str(e)}
@@ -286,6 +298,7 @@ def update_memory_state(
     storage_results: Optional[Dict[str, Any]] = None,
     silent_results: Optional[Dict[str, Any]] = None,
     diagnostics_results: Optional[Dict[str, Any]] = None,
+    prune_results: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Updates loop_state.json, episodic.json, optimizations.json, semantic.json, procedural.json, and failures.json."""
     MEMORY_DIR.mkdir(parents=True, exist_ok=True)
@@ -303,6 +316,7 @@ def update_memory_state(
         "index_baseline": {"total_files": 0, "total_py_lines": 0},
         "entropy_baseline": {"status": "PASS", "avg_entropy": 0.0, "bare_excepts": 0},
         "storage_baseline": {"status": "OPTIMAL", "total_mb": 0.0, "logs_mb": 0.0, "screenshots_mb": 0.0},
+        "pruning_baseline": {"status": "IDLE", "last_freed_mb": 0.0, "logs_pruned_count": 0, "screenshots_pruned_count": 0, "last_pruned": "N/A"},
         "silent_baseline": {"status": "PASS", "silent_handlers_count": 0, "files_audited": 0},
         "warning_baseline": {"status": "HEALTHY", "total_warnings": 0, "categories": {}},
         "error_baseline": {"status": "HEALTHY", "total_errors": 0, "categories": {}},
@@ -344,6 +358,15 @@ def update_memory_state(
     delta_entropy = round(curr_entropy - prev_entropy, 2) if prev_entropy else 0.0
 
     st_info = storage_results or {}
+    prune_info = prune_results or {}
+    pruned_mb = prune_info.get("total_freed_mb", 0.0)
+    pruning_baseline = {
+        "status": "PRUNED" if pruned_mb > 0 else "IDLE",
+        "last_freed_mb": pruned_mb,
+        "logs_pruned_count": prune_info.get("logs_pruned", {}).get("count", 0),
+        "screenshots_pruned_count": prune_info.get("screenshots_pruned", {}).get("count", 0),
+        "last_pruned": datetime.now(timezone.utc).isoformat() if pruned_mb > 0 else current_state.get("pruning_baseline", {}).get("last_pruned", "N/A"),
+    }
     new_state = {
         "run_number": next_run,
         "last_run": datetime.now(timezone.utc).isoformat(),
@@ -372,7 +395,12 @@ def update_memory_state(
             "logs_mb": st_info.get("logs", {}).get("total_mb", 0.0) if isinstance(st_info.get("logs"), dict) else 0.0,
             "screenshots_mb": st_info.get("screenshots", {}).get("total_mb", 0.0) if isinstance(st_info.get("screenshots"), dict) else 0.0,
             "warnings_count": len(st_info.get("warnings", [])),
+            "thresholds": st_info.get("thresholds", {
+                "max_logs_mb": 100.0,
+                "max_screenshots_mb": 100.0,
+            }),
         },
+        "pruning_baseline": pruning_baseline,
         "silent_baseline": {
             "status": (silent_results or {}).get("status", "PASS"),
             "silent_handlers_count": (silent_results or {}).get("silent_handlers_count", 0),
@@ -648,13 +676,21 @@ def run_loop(
     session_log_tag: Optional[str] = None,
     debug_level: Optional[str] = None,
     debug_tag: Optional[str] = None,
+    max_logs_mb: Optional[float] = None,
+    max_screenshots_mb: Optional[float] = None,
+    strict_storage: bool = False,
+    include_rotated: bool = False,
+    keep_rotated_logs: bool = False,
 ) -> Dict[str, Any]:
     """Executes the full Autonomous Improvement Loop."""
     prune_res = None
     if prune_storage_flag:
         try:
             from tools.leagueloop_diagnostics import prune_storage as do_prune_storage, get_leagueloop_paths
-            prune_kwargs = {"dry_run": dry_run}
+            prune_kwargs = {
+                "dry_run": dry_run,
+                "prune_rotated_logs": not keep_rotated_logs,
+            }
             if max_screenshots_keep is not None:
                 prune_kwargs["max_screenshots_keep"] = max_screenshots_keep
             if max_screenshot_age_days is not None:
@@ -681,6 +717,14 @@ def run_loop(
         diag_kwargs["debug_level"] = debug_level
     if debug_tag is not None:
         diag_kwargs["debug_tag"] = debug_tag
+    if max_logs_mb is not None:
+        diag_kwargs["max_logs_mb"] = max_logs_mb
+    if max_screenshots_mb is not None:
+        diag_kwargs["max_screenshots_mb"] = max_screenshots_mb
+    if strict_storage:
+        diag_kwargs["strict_storage"] = True
+    if include_rotated:
+        diag_kwargs["include_rotated"] = True
     diag = run_diagnostics_check(**diag_kwargs)
     ver_check = run_version_alignment_check()
     assets_check = run_build_assets_check()
@@ -882,9 +926,23 @@ def run_loop(
             "description": "Exposing verbose diagnostic flags (-v, --verbose) across code_entropy_analyzer and autonomous_improvement_runner enables granular inspection of top cyclomatic complexity offenders, line-level large functions, and multi-subsystem audit summaries without throwing unrecognized CLI argument errors.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Storage Threshold Governance and Prune Baseline Invariant",
+            "description": "Exposing configurable storage thresholds (--max-logs-mb, --max-screenshots-mb, --strict-storage) and recording pruning_baseline metrics in loop_state.json ensures disk bloat from rotated logs and screenshot captures is deterministically governed and tracked across autonomous improvement cycles.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
+        {
+            "method": "Storage Threshold Governance and Pruning Baseline Protocol",
+            "procedure": [
+                "Configure storage thresholds via --max-logs-mb and --max-screenshots-mb in autonomous_improvement_runner.",
+                "Enforce strict fail-closed health evaluation via --strict-storage in CI/CD or resource-constrained environments.",
+                "Execute storage pruning via --prune-storage with optional --keep-rotated-logs or --max-screenshots-keep limits.",
+                "Verify pruning_baseline (last_freed_mb, logs_pruned_count, screenshots_pruned_count, last_pruned) is updated in loop_state.json.",
+            ],
+        },
         {
             "method": "MemPalace Diary Fallback Staging Protocol",
             "procedure": [
@@ -1121,6 +1179,7 @@ def run_loop(
         storage_results=storage_an,
         silent_results=silent_check,
         diagnostics_results=diag,
+        prune_results=prune_res,
     )
 
     loop_num = memory_result["new_state"]["run_number"]
@@ -1185,6 +1244,11 @@ def main(argv=None):
     parser.add_argument("--session-log-tag", type=str, default=None, help="Filter reported session.jsonl entries by tag (e.g. LCU_WS, RiotClientAPI)")
     parser.add_argument("--debug-level", type=str, default=None, help="Filter reported debug.log entries by level (DEBUG, INFO, ACTION, WARNING, ERROR, CRITICAL)")
     parser.add_argument("--debug-tag", type=str, default=None, help="Filter reported debug.log entries by tag or keyword (e.g. LCU_DIAGNOSTICS, Automation)")
+    parser.add_argument("--max-logs-mb", type=float, default=None, help="Maximum allowed total size of logs in MB before warning (default: 100.0)")
+    parser.add_argument("--max-screenshots-mb", type=float, default=None, help="Maximum allowed total size of debug screenshots in MB before warning (default: 100.0)")
+    parser.add_argument("--strict-storage", action="store_true", help="Treat storage threshold warnings as fatal health failures")
+    parser.add_argument("--include-rotated", action="store_true", help="Include rotated log files (error.log.1) during diagnostic analysis")
+    parser.add_argument("--keep-rotated-logs", action="store_true", help="Do not prune rotated log files during storage pruning")
     parser.add_argument("--test-timeout", type=float, default=180.0, help="Timeout in seconds for pytest test runner (default: 180.0)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Display verbose execution diagnostics and entropy breakdown")
     args, unknown = parser.parse_known_args(argv)
@@ -1199,13 +1263,15 @@ def main(argv=None):
             sys.exit(1)
 
     runner_flags_no_val = {
-        "--all-tests", "--staged", "--dry-run", "--check-baseline", "--json", "--prune-storage", "-h", "--help", "-v", "--verbose"
+        "--all-tests", "--staged", "--dry-run", "--check-baseline", "--json", "--prune-storage",
+        "-h", "--help", "-v", "--verbose", "--strict-storage", "--include-rotated", "--keep-rotated-logs"
     }
     runner_flags_with_val = {
         "--feature", "--impact", "--max-screenshots-keep", "--max-screenshot-age-days",
         "--category", "--warning-category", "--error-category", "--crash-category",
         "--screenshot-category", "--session-status", "--session-account",
-        "--session-log-level", "--session-log-tag", "--debug-level", "--debug-tag", "--test-timeout"
+        "--session-log-level", "--session-log-tag", "--debug-level", "--debug-tag",
+        "--test-timeout", "--max-logs-mb", "--max-screenshots-mb"
     }
 
     targets_to_run = []
@@ -1256,6 +1322,16 @@ def main(argv=None):
         run_kwargs["debug_level"] = args.debug_level
     if args.debug_tag is not None:
         run_kwargs["debug_tag"] = args.debug_tag
+    if args.max_logs_mb is not None:
+        run_kwargs["max_logs_mb"] = args.max_logs_mb
+    if args.max_screenshots_mb is not None:
+        run_kwargs["max_screenshots_mb"] = args.max_screenshots_mb
+    if args.strict_storage:
+        run_kwargs["strict_storage"] = True
+    if args.include_rotated:
+        run_kwargs["include_rotated"] = True
+    if args.keep_rotated_logs:
+        run_kwargs["keep_rotated_logs"] = True
     if args.test_timeout != 180.0:
         run_kwargs["test_timeout"] = args.test_timeout
     if args.verbose:

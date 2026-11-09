@@ -811,6 +811,10 @@ def inspect_storage_usage(
         "is_warning": False,
         "warnings": [],
         "status": "OPTIMAL",
+        "thresholds": {
+            "max_logs_mb": max_logs_mb,
+            "max_screenshots_mb": max_screenshots_mb,
+        },
     }
     if not base_path.exists():
         return result

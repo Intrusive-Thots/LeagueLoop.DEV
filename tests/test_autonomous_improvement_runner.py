@@ -1134,6 +1134,139 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
             self.assertEqual(mock_run_loop.call_args[1].get("debug_level"), "ACTION")
             self.assertEqual(mock_run_loop.call_args[1].get("debug_tag"), "Automation")
 
+    @patch("tools.leagueloop_diagnostics.run_diagnostics")
+    def test_run_diagnostics_check_with_storage_thresholds(self, mock_diag):
+        mock_diag.return_value = {"healthy": True}
+        run_diagnostics_check(max_logs_mb=50.0, max_screenshots_mb=75.0, strict_storage=True, include_rotated=True)
+        mock_diag.assert_called_once_with(
+            max_logs_mb=50.0,
+            max_screenshots_mb=75.0,
+            strict_storage=True,
+            include_rotated=True,
+        )
+
+    def test_update_memory_state_pruning_baseline_and_thresholds(self):
+        diag_mock = {
+            "debug_analysis": {"total_lines_inspected": 10, "diagnostic_tags_count": 0, "level_counts": {}},
+            "storage_analysis": {
+                "status": "OPTIMAL",
+                "total_mb": 45.0,
+                "logs": {"total_mb": 15.0},
+                "screenshots": {"total_mb": 30.0},
+                "warnings": [],
+                "thresholds": {"max_logs_mb": 50.0, "max_screenshots_mb": 75.0},
+            },
+        }
+        prune_mock = {
+            "total_freed_mb": 12.5,
+            "logs_pruned": {"count": 3, "mb": 5.0},
+            "screenshots_pruned": {"count": 10, "mb": 7.5},
+        }
+        res = update_memory_state(
+            metrics={"total_py_files": 10, "total_py_lines": 500, "breakdown": {}, "test_to_code_ratio": 0.5},
+            test_results={"passed": 5, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "run_all": False},
+            dry_run=True,
+            diagnostics_results=diag_mock,
+            storage_results=diag_mock["storage_analysis"],
+            prune_results=prune_mock,
+        )
+        sb = res["new_state"].get("storage_baseline", {})
+        self.assertEqual(sb.get("thresholds", {}).get("max_logs_mb"), 50.0)
+        self.assertEqual(sb.get("thresholds", {}).get("max_screenshots_mb"), 75.0)
+
+        pb = res["new_state"].get("pruning_baseline", {})
+        self.assertEqual(pb.get("status"), "PRUNED")
+        self.assertEqual(pb.get("last_freed_mb"), 12.5)
+        self.assertEqual(pb.get("logs_pruned_count"), 3)
+        self.assertEqual(pb.get("screenshots_pruned_count"), 10)
+
+    @patch("tools.autonomous_improvement_runner.run_diagnostics_check")
+    @patch("tools.autonomous_improvement_runner.run_tests_check")
+    @patch("tools.leagueloop_diagnostics.prune_storage")
+    def test_run_loop_with_storage_governance(self, mock_prune, mock_tests, mock_diag):
+        mock_prune.return_value = {
+            "total_freed_mb": 5.0,
+            "logs_pruned": {"count": 1, "mb": 2.0},
+            "screenshots_pruned": {"count": 5, "mb": 3.0},
+        }
+        mock_diag.return_value = {
+            "healthy": True,
+            "error_analysis": {},
+            "crash_analysis": {},
+            "screenshot_analysis": {},
+            "sessions_analysis": {},
+            "session_analysis": {"stability": {}},
+            "debug_analysis": {},
+            "storage_analysis": {"status": "OPTIMAL", "total_mb": 40.0, "logs": {}, "screenshots": {}},
+        }
+        mock_tests.return_value = {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "run_all": False, "success": True}
+        res = run_loop(
+            dry_run=True,
+            prune_storage_flag=True,
+            keep_rotated_logs=True,
+            max_logs_mb=60.0,
+            max_screenshots_mb=80.0,
+            strict_storage=True,
+            include_rotated=True,
+        )
+        mock_prune.assert_called_once()
+        self.assertFalse(mock_prune.call_args[1].get("prune_rotated_logs"))
+        mock_diag.assert_called_once_with(
+            category=None,
+            screenshot_category=None,
+            error_category=None,
+            crash_category=None,
+            max_logs_mb=60.0,
+            max_screenshots_mb=80.0,
+            strict_storage=True,
+            include_rotated=True,
+        )
+        self.assertIsNotNone(res.get("prune_results"))
+
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_storage_governance_flags(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 291,
+            "diagnostics": {
+                "healthy": True,
+                "error_analysis": {},
+                "crash_analysis": {},
+                "sessions_analysis": {},
+                "session_analysis": {"stability": {"rating": "GOOD"}},
+                "debug_analysis": {},
+                "storage_analysis": {"status": "OPTIMAL", "total_mb": 40.0},
+            },
+            "version_alignment": {"aligned": True, "message": "aligned"},
+            "build_assets": {"ready": True, "message": "ready"},
+            "build_health": {"status": "HEALTHY", "version": "1.0", "duration_ms": 1.0},
+            "accounts_preflight": {"status": "HEALTHY", "accounts_count": 1, "usable_sessions_count": 1, "problems_count": 0},
+            "silent_excepts": {"status": "PASS", "silent_handlers_count": 0, "files_audited": 10},
+            "entropy": {"status": "PASS", "avg_entropy": 50.0},
+            "metrics": {"total_py_files": 10, "total_py_lines": 500, "test_to_code_ratio": 0.5},
+            "tests": {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "success": True},
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+        }
+        with patch("sys.argv", [
+            "autonomous_improvement_runner",
+            "--max-logs-mb", "80.0",
+            "--max-screenshots-mb", "120.0",
+            "--strict-storage",
+            "--include-rotated",
+            "--keep-rotated-logs",
+            "--dry-run"
+        ]):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 0)
+            mock_run_loop.assert_called_once()
+            kwargs = mock_run_loop.call_args[1]
+            self.assertEqual(kwargs.get("max_logs_mb"), 80.0)
+            self.assertEqual(kwargs.get("max_screenshots_mb"), 120.0)
+            self.assertTrue(kwargs.get("strict_storage"))
+            self.assertTrue(kwargs.get("include_rotated"))
+            self.assertTrue(kwargs.get("keep_rotated_logs"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -570,6 +570,9 @@ class TestLeagueLoopDiagnostics(unittest.TestCase):
         self.assertEqual(res["logs"]["rotated_file_count"], 1)
         self.assertEqual(res["screenshots"]["file_count"], 1)
         self.assertEqual(res["sessions"]["slot_count"], 1)
+        self.assertIn("thresholds", res)
+        self.assertEqual(res["thresholds"]["max_logs_mb"], 100.0)
+        self.assertEqual(res["thresholds"]["max_screenshots_mb"], 100.0)
 
         # Test warning trigger with tiny threshold
         res_warn = inspect_storage_usage(self.base, max_logs_mb=0.0001)

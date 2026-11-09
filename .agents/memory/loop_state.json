@@ -1,17 +1,17 @@
 {
-  "run_number": 290,
-  "last_run": "2026-11-09T11:49:20.943597+00:00",
+  "run_number": 291,
+  "last_run": "2026-11-09T12:03:53.683615+00:00",
   "test_baseline": {
     "passed": 1283,
     "failed": 0,
     "skipped": 0,
     "warnings": 0,
-    "last_targeted_passed": 117,
+    "last_targeted_passed": 121,
     "errors": 0
   },
   "index_baseline": {
     "total_files": 213,
-    "total_py_lines": 65269,
+    "total_py_lines": 65485,
     "breakdown": {
       "src": {
         "files": 106,
@@ -19,14 +19,14 @@
       },
       "tests": {
         "files": 96,
-        "lines": 23253
+        "lines": 23389
       },
       "tools": {
         "files": 11,
-        "lines": 5161
+        "lines": 5241
       }
     },
-    "test_to_code_ratio": 0.631
+    "test_to_code_ratio": 0.635
   },
   "entropy_baseline": {
     "status": "WARN",
@@ -38,7 +38,18 @@
     "total_mb": 74.55,
     "logs_mb": 13.44,
     "screenshots_mb": 61.1,
-    "warnings_count": 0
+    "warnings_count": 0,
+    "thresholds": {
+      "max_logs_mb": 100.0,
+      "max_screenshots_mb": 100.0
+    }
+  },
+  "pruning_baseline": {
+    "status": "IDLE",
+    "last_freed_mb": 0.0,
+    "logs_pruned_count": 0,
+    "screenshots_pruned_count": 0,
+    "last_pruned": "N/A"
   },
   "silent_baseline": {
     "status": "PASS",
@@ -76,7 +87,7 @@
     "category_counts": {
       "game_phase_change": 5
     },
-    "newest_age_human": "7.8h ago"
+    "newest_age_human": "8.0h ago"
   },
   "session_baseline": {
     "status": "OPTIMAL",
@@ -96,7 +107,7 @@
   },
   "debug_baseline": {
     "status": "HEALTHY",
-    "total_lines_inspected": 84775,
+    "total_lines_inspected": 84777,
     "diagnostic_tags_count": 0,
     "level_counts": {
       "DEBUG": 30

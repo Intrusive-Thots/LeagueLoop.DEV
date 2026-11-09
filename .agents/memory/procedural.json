@@ -207,5 +207,14 @@
       "Surface warning_categories dictionary in error_analysis payload for automated health assessments.",
       "Enforce a 5-item display cap in non-verbose summary output while preserving complete lists under -v/--verbose."
     ]
+  },
+  {
+    "method": "Storage Threshold Governance and Pruning Baseline Protocol",
+    "procedure": [
+      "Configure storage thresholds via --max-logs-mb and --max-screenshots-mb in autonomous_improvement_runner.",
+      "Enforce strict fail-closed health evaluation via --strict-storage in CI/CD or resource-constrained environments.",
+      "Execute storage pruning via --prune-storage with optional --keep-rotated-logs or --max-screenshots-keep limits.",
+      "Verify pruning_baseline (last_freed_mb, logs_pruned_count, screenshots_pruned_count, last_pruned) is updated in loop_state.json."
+    ]
   }
 ]
