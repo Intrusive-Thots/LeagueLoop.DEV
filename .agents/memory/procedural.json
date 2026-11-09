@@ -183,5 +183,13 @@
       "Verify that failed alignments or missing files continue to emit actionable [FAIL] messages.",
       "Ensure telemetry and JSON output retain comprehensive validation timestamps and status flags."
     ]
+  },
+  {
+    "method": "MemPalace Diary Fallback Staging Protocol",
+    "procedure": [
+      "Attempt direct MemPalace CLI synchronization with bounded subprocess timeout=10.",
+      "If CLI subcommand fails or peer MCP server holds the palace lock, verify ~/.mempalace/inbox exists.",
+      "Append markdown-formatted diary record to inbox/autonomous_improvement_diary.md for asynchronous mining and zero telemetry loss."
+    ]
   }
 ]

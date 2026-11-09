@@ -644,6 +644,26 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         result = sync_mempalace(164, "Summary")
         self.assertFalse(result)
 
+    @patch("builtins.open", new_callable=mock_open)
+    @patch("subprocess.run")
+    @patch("pathlib.Path.exists")
+    def test_sync_mempalace_inbox_staging_fallback(self, mock_exists, mock_subproc, mock_file):
+        from tools.autonomous_improvement_runner import sync_mempalace
+        mock_exists.return_value = True
+        mock_proc = MagicMock()
+        mock_proc.returncode = 1  # CLI returns error (e.g. invalid 'diary' subcommand)
+        mock_subproc.return_value = mock_proc
+
+        result = sync_mempalace(164, "Summary text")
+        self.assertTrue(result)
+        mock_subproc.assert_called_once()
+        self.assertEqual(mock_subproc.call_args[1].get("timeout"), 10)
+        mock_file.assert_called_once()
+        handle = mock_file()
+        written = "".join(call[0][0] for call in handle.write.call_args_list)
+        self.assertIn("Run #164", written)
+        self.assertIn("Summary text", written)
+
 
 if __name__ == "__main__":
     unittest.main()

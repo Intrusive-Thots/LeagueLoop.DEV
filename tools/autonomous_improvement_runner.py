@@ -462,7 +462,7 @@ def update_memory_state(
 
 
 def sync_mempalace(loop_number: int, summary: str) -> bool:
-    """Optionally syncs record to MemPalace CLI if installed."""
+    """Optionally syncs record to MemPalace CLI if installed, falling back to inbox staging."""
     mempalace_exe = Path(os.environ.get("USERPROFILE", "")) / "pipx" / "venvs" / "mempalace" / "Scripts" / "mempalace.exe"
     if not mempalace_exe.exists():
         which_path = shutil.which("mempalace.exe") or shutil.which("mempalace")
@@ -480,10 +480,24 @@ def sync_mempalace(loop_number: int, summary: str) -> bool:
                 [str(mempalace_exe), "--palace", str(palace_dir), "diary", "write", diary_text],
                 capture_output=True,
                 text=True,
+                timeout=10,
             )
-            return res.returncode == 0
+            if res.returncode == 0:
+                return True
         except Exception:
             return False
+
+        # Fallback when mempalace CLI lacks diary subcommand or peer MCP writer holds lock:
+        # Stage the diary entry to MemPalace inbox so ingestion/sweep captures it without data loss.
+        inbox_dir = Path(os.environ.get("USERPROFILE", "")) / ".mempalace" / "inbox"
+        if inbox_dir.exists():
+            try:
+                stage_file = inbox_dir / "autonomous_improvement_diary.md"
+                with open(stage_file, "a", encoding="utf-8") as f:
+                    f.write(f"\n## Run #{loop_number} ({today_iso})\n{diary_text}\n")
+                return True
+            except Exception:
+                pass
     return False
 
 
@@ -702,9 +716,22 @@ def run_loop(
             "description": "Using raw byte newlines counting (b.count(b'\\n')) instead of line-by-line file object generators accelerates repository-wide line indexing by ~30% with zero deviation in metrics.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "MemPalace Diary Inbox Staging and Timeout Invariant",
+            "description": "Providing bounded subprocess timeouts (timeout=10) and fallback staging to ~/.mempalace/inbox/autonomous_improvement_diary.md ensures autonomous improvement records are reliably captured and never hung by lock contention or CLI subcommand differences.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
+        {
+            "method": "MemPalace Diary Fallback Staging Protocol",
+            "procedure": [
+                "Attempt direct MemPalace CLI synchronization with bounded subprocess timeout=10.",
+                "If CLI subcommand fails or peer MCP server holds the palace lock, verify ~/.mempalace/inbox exists.",
+                "Append markdown-formatted diary record to inbox/autonomous_improvement_diary.md for asynchronous mining and zero telemetry loss.",
+            ],
+        },
         {
             "method": "Fast Build System Verification Protocol",
             "procedure": [
