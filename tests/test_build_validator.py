@@ -155,6 +155,25 @@ class TestBuildValidatorComprehensive(unittest.TestCase):
         main(["--telemetry", "--json"])
         mock_exit.assert_called_with(0)
 
+    @patch("builtins.print")
+    def test_quiet_mode_suppresses_stdout(self, mock_print):
+        # With quiet=True, success prints are suppressed
+        ver = validate_version(self.root, quiet=True)
+        self.assertEqual(ver, "2-10-289-1636")
+        mock_print.assert_not_called()
+
+        ok, _ = validate_version_alignment(self.root, quiet=True)
+        self.assertTrue(ok)
+        mock_print.assert_not_called()
+
+        files_ok = validate_files(self.root, quiet=True)
+        self.assertTrue(files_ok)
+        mock_print.assert_not_called()
+
+        health = verify_system_wide_health(self.root, quiet=True)
+        self.assertEqual(health["status"], "HEALTHY")
+        mock_print.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

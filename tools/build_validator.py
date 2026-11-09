@@ -37,7 +37,7 @@ _validation_telemetry: Dict[str, Any] = {
 RE_VERSION = re.compile(r'__version__\s*=\s*["\']([^"\']+)["\']')
 
 
-def validate_version(project_root: Union[str, Path]) -> str:
+def validate_version(project_root: Union[str, Path], quiet: bool = False) -> str:
     root_path = Path(project_root) if isinstance(project_root, str) else project_root
     version_file = root_path / "src" / "core" / "version.py"
     if not version_file.exists():
@@ -49,11 +49,12 @@ def validate_version(project_root: Union[str, Path]) -> str:
         raise ValueError("Could not parse __version__ string from src/core/version.py")
     
     version_str = match.group(1)
-    print(f"[OK] Version detected: {version_str}")
+    if not quiet:
+        print(f"[OK] Version detected: {version_str}")
     return version_str
 
 
-def validate_version_alignment(project_root: Union[str, Path]) -> Tuple[bool, str]:
+def validate_version_alignment(project_root: Union[str, Path], quiet: bool = False) -> Tuple[bool, str]:
     """Validates that src/core/version.py and installer.iss are strictly aligned."""
     root_path = Path(project_root) if isinstance(project_root, str) else project_root
     if str(root_path) not in sys.path:
@@ -68,7 +69,8 @@ def validate_version_alignment(project_root: Union[str, Path]) -> Tuple[bool, st
         from tools.bump_version import check_version_alignment
         ok, msg = check_version_alignment(str(version_file), str(iss_file))
         if ok:
-            print(f"[OK] Version alignment verified: {msg}")
+            if not quiet:
+                print(f"[OK] Version alignment verified: {msg}")
         else:
             print(f"[FAIL] Version alignment mismatch: {msg}")
         return ok, msg
@@ -105,7 +107,7 @@ def validate_test_suite(project_root: Union[str, Path]) -> bool:
         return False
 
 
-def validate_files(project_root: Union[str, Path]) -> bool:
+def validate_files(project_root: Union[str, Path], quiet: bool = False) -> bool:
     root_path = Path(project_root) if isinstance(project_root, str) else project_root
     spec_path = root_path / "LeagueLoop.spec"
     if not spec_path.exists():
@@ -125,11 +127,12 @@ def validate_files(project_root: Union[str, Path]) -> bool:
     if missing:
         print(f"[FAIL] Missing required build files: {missing}")
         return False
-    print("[OK] All required spec files and assets present.")
+    if not quiet:
+        print("[OK] All required spec files and assets present.")
     return True
 
 
-def verify_system_wide_health(project_root: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
+def verify_system_wide_health(project_root: Optional[Union[str, Path]] = None, quiet: bool = True) -> Dict[str, Any]:
     """Task 300: Verify continuous system-wide health and build environment readiness."""
     if project_root is None:
         project_root = PROJECT_ROOT
@@ -141,18 +144,18 @@ def verify_system_wide_health(project_root: Optional[Union[str, Path]] = None) -
     errors = []
 
     try:
-        ver = validate_version(project_root)
+        ver = validate_version(project_root, quiet=quiet)
     except Exception as e:
         ver = "UNKNOWN"
         errors.append(f"Version error: {e}")
         health_status = "UNHEALTHY"
 
-    align_ok, align_msg = validate_version_alignment(project_root)
+    align_ok, align_msg = validate_version_alignment(project_root, quiet=quiet)
     if not align_ok:
         errors.append(f"Version alignment error: {align_msg}")
         health_status = "UNHEALTHY"
 
-    files_ok = validate_files(project_root)
+    files_ok = validate_files(project_root, quiet=quiet)
     if not files_ok:
         errors.append("Missing required spec files or assets")
         if health_status != "UNHEALTHY":

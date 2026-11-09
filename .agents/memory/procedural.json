@@ -175,5 +175,13 @@
       "Run python tools/build_validator.py --telemetry to inspect cycle pass rates.",
       "Run full build validation cycle only prior to release packaging."
     ]
+  },
+  {
+    "method": "Quiet Build Health Preflight Protocol",
+    "procedure": [
+      "Pass quiet=True to build_validator helper routines during automated loops to prevent repetitive console logging.",
+      "Verify that failed alignments or missing files continue to emit actionable [FAIL] messages.",
+      "Ensure telemetry and JSON output retain comprehensive validation timestamps and status flags."
+    ]
   }
 ]
