@@ -182,6 +182,28 @@ class TestCodeEntropyAnalyzer(unittest.TestCase):
         finally:
             os.chdir(cwd_orig)
 
+    def test_verbose_flag(self):
+        from tools.code_entropy_analyzer import main
+        file_path = self.base / "verbose_sample.py"
+        lines = ["def big_func():\n"] + [f"    x_{i} = {i}\n" for i in range(60)] + ["    return x_0\n"]
+        file_path.write_text("".join(lines), encoding="utf-8")
+
+        # Verbose summary JSON
+        with patch("sys.stdout") as mock_stdout:
+            with self.assertRaises(SystemExit) as cm:
+                main([str(file_path), "--summary", "-v", "--json"])
+            self.assertEqual(cm.exception.code, 0)
+
+        # Verbose summary text
+        with patch("sys.stdout") as mock_stdout:
+            with self.assertRaises(SystemExit) as cm:
+                main([str(file_path), "--summary", "--verbose"])
+            self.assertEqual(cm.exception.code, 0)
+
+        # Verbose single file detail
+        with patch("sys.stdout") as mock_stdout:
+            main([str(file_path), "-v"])
+
 
 if __name__ == "__main__":
     unittest.main()

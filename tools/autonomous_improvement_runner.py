@@ -515,6 +515,7 @@ def run_loop(
     prune_storage_flag: bool = False,
     max_screenshots_keep: Optional[int] = None,
     max_screenshot_age_days: Optional[float] = None,
+    verbose: bool = False,
 ) -> Dict[str, Any]:
     """Executes the full Autonomous Improvement Loop."""
     prune_res = None
@@ -537,7 +538,7 @@ def run_loop(
     accts_check = run_accounts_check()
     silent_check = run_silent_excepts_check()
     metrics = measure_codebase_metrics(PROJECT_ROOT)
-    entropy = run_entropy_check()
+    entropy = run_entropy_check(top_n=10 if verbose else 5)
     tests = run_tests_check(run_all=all_tests, targets=targets, staged=staged)
 
     opt_payload = None
@@ -721,6 +722,11 @@ def run_loop(
             "description": "Providing bounded subprocess timeouts (timeout=10) and fallback staging to ~/.mempalace/inbox/autonomous_improvement_diary.md ensures autonomous improvement records are reliably captured and never hung by lock contention or CLI subcommand differences.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Code Entropy Verbosity and Diagnostic Surface Invariant",
+            "description": "Exposing verbose diagnostic flags (-v, --verbose) across code_entropy_analyzer and autonomous_improvement_runner enables granular inspection of top cyclomatic complexity offenders, line-level large functions, and multi-subsystem audit summaries without throwing unrecognized CLI argument errors.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
@@ -896,6 +902,14 @@ def run_loop(
                 "Ensure introspection flags terminate with exit code 0 and never pass unrecognized arguments to pytest.",
             ],
         },
+        {
+            "method": "Verbose Entropy Diagnostic Protocol",
+            "procedure": [
+                "Execute python tools/code_entropy_analyzer.py --summary -v to view top high-complexity modules alongside global codebase statistics.",
+                "Execute python tools/autonomous_improvement_runner.py -v to run targeted regression sweeps with extended entropy breakdowns and preflight details.",
+                "Inspect large functions and cyclomatic hot spots before refactoring automation routines.",
+            ],
+        },
     ]
 
     top_files = entropy.get("top_files", [])
@@ -982,6 +996,7 @@ def main(argv=None):
     parser.add_argument("--prune-storage", action="store_true", help="Execute safe storage pruning during autonomous loop")
     parser.add_argument("--max-screenshots-keep", type=int, default=None, help="Maximum number of recent screenshots to retain during storage pruning")
     parser.add_argument("--max-screenshot-age-days", type=float, default=None, help="Maximum age in days for screenshots before pruning")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Display verbose execution diagnostics and entropy breakdown")
     args, unknown = parser.parse_known_args(argv)
 
     if args.check_baseline:
@@ -994,7 +1009,7 @@ def main(argv=None):
             sys.exit(1)
 
     runner_flags_no_val = {
-        "--all-tests", "--staged", "--dry-run", "--check-baseline", "--json", "--prune-storage", "-h", "--help"
+        "--all-tests", "--staged", "--dry-run", "--check-baseline", "--json", "--prune-storage", "-h", "--help", "-v", "--verbose"
     }
     runner_flags_with_val = {"--feature", "--impact", "--max-screenshots-keep", "--max-screenshot-age-days"}
 
@@ -1015,17 +1030,21 @@ def main(argv=None):
         targets_to_run.append(tok)
         i += 1
 
-    result = run_loop(
-        all_tests=args.all_tests,
-        targets=targets_to_run if targets_to_run else None,
-        staged=args.staged,
-        dry_run=args.dry_run,
-        feature=args.feature,
-        impact=args.impact,
-        prune_storage_flag=args.prune_storage,
-        max_screenshots_keep=args.max_screenshots_keep,
-        max_screenshot_age_days=args.max_screenshot_age_days,
-    )
+    run_kwargs = {
+        "all_tests": args.all_tests,
+        "targets": targets_to_run if targets_to_run else None,
+        "staged": args.staged,
+        "dry_run": args.dry_run,
+        "feature": args.feature,
+        "impact": args.impact,
+        "prune_storage_flag": args.prune_storage,
+        "max_screenshots_keep": args.max_screenshots_keep,
+        "max_screenshot_age_days": args.max_screenshot_age_days,
+    }
+    if args.verbose:
+        run_kwargs["verbose"] = True
+
+    result = run_loop(**run_kwargs)
 
     if args.json:
         print(json.dumps(result, indent=2))
@@ -1083,6 +1102,12 @@ def main(argv=None):
     entropy_info = result.get("entropy", {})
     top_files = entropy_info.get("top_files", [])
     top_msg = f" | top: {[Path(f['file']).name for f in top_files[:3]]}" if top_files else ""
+    if entropy_info:
+        print(f"Codebase Entropy: [{entropy_info.get('status', 'UNKNOWN')}] avg={entropy_info.get('avg_entropy', 0.0)}{top_msg}")
+        if args.verbose and top_files:
+            print("  Top Entropy Offenders:")
+            for tf in top_files[:5]:
+                print(f"    - {Path(tf['file']).name}: score={tf.get('entropy_score', 0.0)} (complexity={tf.get('cyclomatic_complexity', 0)})")
     if result["tests"].get("run_all"):
         test_mode = "Full suite"
     elif result["tests"].get("staged"):

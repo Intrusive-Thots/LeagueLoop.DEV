@@ -167,6 +167,7 @@ def main(argv=None):
     parser.add_argument("--summary", action="store_true", help="Display aggregate codebase entropy summary")
     parser.add_argument("--max-entropy", type=float, default=None, help="Fail if average entropy exceeds this threshold")
     parser.add_argument("--json", action="store_true", help="Output results in JSON format")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Display verbose metrics including top offenders and breakdown")
     args = parser.parse_args(argv)
 
     targets: List[str] = []
@@ -220,6 +221,18 @@ def main(argv=None):
         if args.max_entropy is not None and summary["avg_entropy"] > args.max_entropy:
             summary["status"] = "FAIL"
             summary["threshold_exceeded"] = True
+        if args.verbose and summary["total_files"] > 0:
+            sorted_all = sorted(all_results, key=lambda x: x.get("entropy_score", 0), reverse=True)
+            summary["top_offenders"] = [
+                {
+                    "file": r["file"],
+                    "entropy_score": r.get("entropy_score", 0),
+                    "complexity": r.get("cyclomatic_complexity", 0),
+                    "bare_excepts": len(r.get("bare_excepts", [])),
+                    "large_functions": len(r.get("large_functions", [])),
+                }
+                for r in sorted_all[:5]
+            ]
         if args.json:
             print(json.dumps(summary, indent=2))
         else:
@@ -232,6 +245,10 @@ def main(argv=None):
             print(f"Syntax Errors: {summary['syntax_errors']}")
             if summary.get("threshold_exceeded"):
                 print(f"Threshold Exceeded: Average entropy {summary['avg_entropy']} > {args.max_entropy}")
+            if args.verbose and summary.get("top_offenders"):
+                print("Top Entropy Files:")
+                for off in summary["top_offenders"]:
+                    print(f"  - {off['file']}: score={off['entropy_score']} (complexity={off['complexity']}, bare_excepts={off['bare_excepts']}, large_functions={off['large_functions']})")
         sys.exit(0 if summary["status"] != "FAIL" else 1)
 
     res = []
@@ -270,6 +287,10 @@ def main(argv=None):
                     print(f"  - Bare excepts on lines: {item['bare_excepts']}")
                 if item["large_functions"]:
                     print(f"  - Large functions (>50 lines): {[f['name'] for f in item['large_functions']]}")
+                    if args.verbose:
+                        print("    Large functions detail:")
+                        for fn in item["large_functions"]:
+                            print(f"      * {fn['name']} (line {fn.get('line_no', '?')}, {fn.get('lines', '?')} lines)")
             print("-" * 50)
 
 

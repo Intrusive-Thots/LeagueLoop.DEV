@@ -664,6 +664,33 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         self.assertIn("Run #164", written)
         self.assertIn("Summary text", written)
 
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_verbose_flag(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 278,
+            "diagnostics": {"healthy": True},
+            "metrics": {"total_py_files": 213, "total_py_lines": 63600},
+            "entropy": {
+                "status": "WARN",
+                "avg_entropy": 67.16,
+                "bare_excepts_total": 0,
+                "top_files": [
+                    {"file": "src/services/automation.py", "entropy_score": 827, "cyclomatic_complexity": 376}
+                ],
+            },
+            "tests": {"passed": 1239, "failed": 0, "duration_seconds": 12.5, "success": True},
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+        }
+
+        with patch("sys.stdout") as mock_stdout:
+            with self.assertRaises(SystemExit) as cm:
+                main(["-v", "--dry-run"])
+            self.assertEqual(cm.exception.code, 0)
+
+        # Verify verbose flag was passed to run_loop
+        self.assertTrue(mock_run_loop.call_args[1].get("verbose"))
+
 
 if __name__ == "__main__":
     unittest.main()

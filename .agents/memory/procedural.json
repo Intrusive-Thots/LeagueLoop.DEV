@@ -191,5 +191,13 @@
       "If CLI subcommand fails or peer MCP server holds the palace lock, verify ~/.mempalace/inbox exists.",
       "Append markdown-formatted diary record to inbox/autonomous_improvement_diary.md for asynchronous mining and zero telemetry loss."
     ]
+  },
+  {
+    "method": "Verbose Entropy Diagnostic Protocol",
+    "procedure": [
+      "Execute python tools/code_entropy_analyzer.py --summary -v to view top high-complexity modules alongside global codebase statistics.",
+      "Execute python tools/autonomous_improvement_runner.py -v to run targeted regression sweeps with extended entropy breakdowns and preflight details.",
+      "Inspect large functions and cyclomatic hot spots before refactoring automation routines."
+    ]
   }
 ]
