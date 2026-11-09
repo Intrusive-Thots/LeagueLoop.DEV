@@ -312,6 +312,12 @@ def update_memory_state(
     strict_warnings: bool = False,
     strict_stability: bool = False,
     strict_screenshots: bool = False,
+    max_errors_threshold: Optional[int] = None,
+    strict_errors: bool = False,
+    max_crashes_threshold: Optional[int] = None,
+    strict_crashes: bool = False,
+    strict_sessions: bool = False,
+    strict_debug: bool = False,
 ) -> Dict[str, Any]:
     """Updates loop_state.json, episodic.json, optimizations.json, semantic.json, procedural.json, and failures.json."""
     MEMORY_DIR.mkdir(parents=True, exist_ok=True)
@@ -469,12 +475,20 @@ def update_memory_state(
             "status": ("HEALTHY" if len((diagnostics_results or {}).get("error_analysis", {}).get("recent_errors", [])) == 0 else "ERROR"),
             "total_errors": len((diagnostics_results or {}).get("error_analysis", {}).get("recent_errors", [])),
             "categories": (diagnostics_results or {}).get("error_analysis", {}).get("error_categories", {}),
+            "thresholds": {
+                "max_errors": max_errors_threshold,
+                "strict": strict_errors,
+            },
         },
         "crash_baseline": {
             "status": ("HEALTHY" if (diagnostics_results or {}).get("crash_analysis", {}).get("total_crash_sessions", 0) == 0 else "CRITICAL"),
             "recent_crashes_count": (diagnostics_results or {}).get("crash_analysis", {}).get("total_crash_sessions", 0),
             "total_actual_crashes": (diagnostics_results or {}).get("crash_analysis", {}).get("total_actual_crashes", 0),
             "categories": (diagnostics_results or {}).get("crash_analysis", {}).get("crash_categories", {}),
+            "thresholds": {
+                "max_crashes": max_crashes_threshold,
+                "strict": strict_crashes,
+            },
         },
         "screenshot_baseline": {
             "status": ("OPTIMAL" if (diagnostics_results or {}).get("screenshot_analysis", {}).get("all_intact", True) and (diagnostics_results or {}).get("screenshot_analysis", {}).get("corrupted_count", 0) == 0 else "WARN"),
@@ -498,6 +512,11 @@ def update_memory_state(
             "healthy_accounts": (diagnostics_results or {}).get("sessions_analysis", {}).get("healthy_accounts", 0),
             "corrupted_accounts": (diagnostics_results or {}).get("sessions_analysis", {}).get("corrupted_accounts", 0),
             "stale_accounts": (diagnostics_results or {}).get("sessions_analysis", {}).get("stale_accounts", 0),
+            "thresholds": {
+                "strict": strict_sessions,
+                "max_corrupted": 0,
+                "max_stale": 0 if strict_sessions else None,
+            },
         },
         "stability_baseline": {
             "status": (
@@ -530,6 +549,11 @@ def update_memory_state(
             "total_lines_inspected": (diagnostics_results or {}).get("debug_analysis", {}).get("total_lines_inspected", 0),
             "diagnostic_tags_count": (diagnostics_results or {}).get("debug_analysis", {}).get("diagnostic_tags_count", 0),
             "level_counts": (diagnostics_results or {}).get("debug_analysis", {}).get("level_counts", {}),
+            "thresholds": {
+                "strict": strict_debug,
+                "max_errors": 0 if strict_debug else None,
+                "max_criticals": 0 if strict_debug else None,
+            },
         },
         "build_baseline": {
             "status": (build_health_results or {}).get("status", current_state.get("build_baseline", {}).get("status", "HEALTHY")),
@@ -774,6 +798,12 @@ def run_loop(
     max_warnings: Optional[int] = None,
     strict_stability: bool = False,
     strict_screenshots: bool = False,
+    strict_errors: bool = False,
+    max_errors: Optional[int] = None,
+    strict_crashes: bool = False,
+    max_crashes: Optional[int] = None,
+    strict_sessions: bool = False,
+    strict_debug: bool = False,
 ) -> Dict[str, Any]:
     """Executes the full Autonomous Improvement Loop."""
     prune_res = None
@@ -1029,9 +1059,24 @@ def run_loop(
             "description": "Enforcing fail-closed CLI switches (--strict-warnings, --max-warnings, --strict-stability, --strict-screenshots) alongside threshold persistence in loop_state.json prevents telemetry degradations, unhandled network throttling, and corrupted UI captures from escaping automated audit cycles.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Error, Crash, Saved Session, and Debug Governance Invariants",
+            "description": "Enforcing fail-closed CLI switches (--strict-errors, --max-errors, --strict-crashes, --max-crashes, --strict-sessions, --strict-debug) alongside threshold persistence in loop_state.json guarantees zero unhandled runtime exceptions, session corruption, or debug-level errors escape automated loop iterations.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
+        {
+            "method": "Error, Crash, Saved Session, and Debug Governance Protocol",
+            "procedure": [
+                "Configure error thresholds via --max-errors <limit> or require 0 errors via --strict-errors.",
+                "Enforce crash limits with --max-crashes <limit> or fail on any crash session via --strict-crashes.",
+                "Verify saved session vault integrity with --strict-sessions to block corrupted or stale account files.",
+                "Enforce clean debug log streams without ERROR or CRITICAL logs using --strict-debug.",
+            ],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        },
         {
             "method": "Diagnostic Warning, Stability, and Screenshot Governance Protocol",
             "procedure": [
@@ -1294,6 +1339,12 @@ def run_loop(
         strict_warnings=strict_warnings,
         strict_stability=strict_stability,
         strict_screenshots=strict_screenshots,
+        max_errors_threshold=max_errors,
+        strict_errors=strict_errors,
+        max_crashes_threshold=max_crashes,
+        strict_crashes=strict_crashes,
+        strict_sessions=strict_sessions,
+        strict_debug=strict_debug,
     )
 
     loop_num = memory_result["new_state"]["run_number"]
@@ -1370,6 +1421,12 @@ def main(argv=None):
     parser.add_argument("--max-warnings", type=int, default=None, help="Maximum allowed diagnostic warnings before failure")
     parser.add_argument("--strict-stability", action="store_true", help="Treat non-EXCELLENT network stability or drops/throttles as fatal")
     parser.add_argument("--strict-screenshots", action="store_true", help="Treat corrupted or stale screenshot captures as fatal")
+    parser.add_argument("--strict-errors", action="store_true", help="Treat any diagnostic error log entries as fatal health failures")
+    parser.add_argument("--max-errors", type=int, default=None, help="Maximum allowed diagnostic errors before failure")
+    parser.add_argument("--strict-crashes", action="store_true", help="Treat any unhandled crashes or crash sessions as fatal health failures")
+    parser.add_argument("--max-crashes", type=int, default=None, help="Maximum allowed crash sessions before failure")
+    parser.add_argument("--strict-sessions", action="store_true", help="Treat corrupted or stale saved Riot accounts as fatal health failures")
+    parser.add_argument("--strict-debug", action="store_true", help="Treat debug log errors or criticals as fatal health failures")
     parser.add_argument("--include-rotated", action="store_true", help="Include rotated log files (error.log.1) during diagnostic analysis")
     parser.add_argument("--keep-rotated-logs", action="store_true", help="Do not prune rotated log files during storage pruning")
     parser.add_argument("--test-timeout", type=float, default=180.0, help="Timeout in seconds for pytest test runner (default: 180.0)")
@@ -1390,7 +1447,8 @@ def main(argv=None):
         "-h", "--help", "-v", "--verbose", "--strict-storage", "--include-rotated", "--keep-rotated-logs",
         "--strict-build", "--strict-preflight", "--strict-accounts",
         "--strict-entropy", "--strict-silent",
-        "--strict-warnings", "--strict-stability", "--strict-screenshots"
+        "--strict-warnings", "--strict-stability", "--strict-screenshots",
+        "--strict-errors", "--strict-crashes", "--strict-sessions", "--strict-debug"
     }
     runner_flags_with_val = {
         "--feature", "--impact", "--max-screenshots-keep", "--max-screenshot-age-days",
@@ -1398,7 +1456,7 @@ def main(argv=None):
         "--screenshot-category", "--session-status", "--session-account",
         "--session-log-level", "--session-log-tag", "--debug-level", "--debug-tag",
         "--test-timeout", "--max-logs-mb", "--max-screenshots-mb",
-        "--max-entropy", "--max-warnings"
+        "--max-entropy", "--max-warnings", "--max-errors", "--max-crashes"
     }
 
     targets_to_run = []
@@ -1477,6 +1535,18 @@ def main(argv=None):
         run_kwargs["strict_stability"] = True
     if args.strict_screenshots:
         run_kwargs["strict_screenshots"] = True
+    if args.strict_errors:
+        run_kwargs["strict_errors"] = True
+    if args.max_errors is not None:
+        run_kwargs["max_errors"] = args.max_errors
+    if args.strict_crashes:
+        run_kwargs["strict_crashes"] = True
+    if args.max_crashes is not None:
+        run_kwargs["max_crashes"] = args.max_crashes
+    if args.strict_sessions:
+        run_kwargs["strict_sessions"] = True
+    if args.strict_debug:
+        run_kwargs["strict_debug"] = True
     if args.test_timeout != 180.0:
         run_kwargs["test_timeout"] = args.test_timeout
     if args.verbose:
@@ -1542,6 +1612,35 @@ def main(argv=None):
             or sa.get("corrupted_count", 0) > 0
             or sa.get("stale_count", 0) > 0
         ):
+            exit_ok = False
+    if args.strict_errors:
+        errs = len((result.get("diagnostics", {}).get("error_analysis", {})).get("recent_errors", []))
+        if errs > 0 or result.get("diagnostics", {}).get("error_analysis", {}).get("status") not in ("HEALTHY", None):
+            exit_ok = False
+    if args.max_errors is not None:
+        errs = len((result.get("diagnostics", {}).get("error_analysis", {})).get("recent_errors", []))
+        if errs > args.max_errors:
+            exit_ok = False
+    if args.strict_crashes:
+        cr = result.get("diagnostics", {}).get("crash_analysis", {})
+        if cr.get("total_crash_sessions", 0) > 0 or cr.get("status") not in ("HEALTHY", None):
+            exit_ok = False
+    if args.max_crashes is not None:
+        cr = result.get("diagnostics", {}).get("crash_analysis", {})
+        if cr.get("total_crash_sessions", 0) > args.max_crashes:
+            exit_ok = False
+    if args.strict_sessions:
+        sv = result.get("diagnostics", {}).get("sessions_analysis", {})
+        if (
+            sv.get("corrupted_accounts", 0) > 0
+            or sv.get("stale_accounts", 0) > 0
+            or sv.get("status") not in ("OPTIMAL", "HEALTHY", None)
+        ):
+            exit_ok = False
+    if args.strict_debug:
+        da = result.get("diagnostics", {}).get("debug_analysis", {})
+        levs = da.get("level_counts", {})
+        if levs.get("ERROR", 0) > 0 or levs.get("CRITICAL", 0) > 0 or da.get("status") not in ("HEALTHY", None):
             exit_ok = False
 
     if args.json:

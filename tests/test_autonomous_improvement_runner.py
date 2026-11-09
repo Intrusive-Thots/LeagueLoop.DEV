@@ -1597,6 +1597,12 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
             strict_warnings=True,
             strict_stability=True,
             strict_screenshots=True,
+            max_errors_threshold=5,
+            strict_errors=True,
+            max_crashes_threshold=0,
+            strict_crashes=True,
+            strict_sessions=True,
+            strict_debug=True,
         )
         new_state = res["new_state"]
         self.assertEqual(new_state["warning_baseline"]["thresholds"]["max_warnings"], 25)
@@ -1605,6 +1611,166 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
         self.assertEqual(new_state["stability_baseline"]["thresholds"]["allowed_ratings"], ["EXCELLENT"])
         self.assertTrue(new_state["screenshot_baseline"]["thresholds"]["strict"])
         self.assertEqual(new_state["screenshot_baseline"]["thresholds"]["max_corrupted"], 0)
+        self.assertEqual(new_state["error_baseline"]["thresholds"]["max_errors"], 5)
+        self.assertTrue(new_state["error_baseline"]["thresholds"]["strict"])
+        self.assertEqual(new_state["crash_baseline"]["thresholds"]["max_crashes"], 0)
+        self.assertTrue(new_state["crash_baseline"]["thresholds"]["strict"])
+        self.assertTrue(new_state["session_baseline"]["thresholds"]["strict"])
+        self.assertEqual(new_state["session_baseline"]["thresholds"]["max_stale"], 0)
+        self.assertTrue(new_state["debug_baseline"]["thresholds"]["strict"])
+        self.assertEqual(new_state["debug_baseline"]["thresholds"]["max_errors"], 0)
+
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_strict_errors_failure(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 295,
+            "diagnostics": {
+                "healthy": True,
+                "error_analysis": {"recent_errors": ["Error occurred"], "status": "ERROR"},
+            },
+            "version_alignment": {"aligned": True, "message": "aligned"},
+            "build_assets": {"ready": True, "message": "ready"},
+            "build_health": {"status": "HEALTHY", "version": "1.0", "duration_ms": 1.0},
+            "accounts_preflight": {"status": "HEALTHY", "accounts_count": 1, "usable_sessions_count": 1, "problems_count": 0},
+            "entropy": {"status": "PASS", "avg_entropy": 25.0, "bare_excepts_total": 0, "syntax_errors": 0},
+            "silent_excepts": {"status": "PASS", "silent_handlers_count": 0, "files_audited": 10},
+            "tests": {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "success": True},
+            "metrics": {"total_py_files": 10, "total_py_lines": 500, "test_to_code_ratio": 0.5},
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+        }
+        with patch("sys.argv", [
+            "autonomous_improvement_runner",
+            "--strict-errors",
+            "--dry-run"
+        ]):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 1)
+
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_max_errors_threshold(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 295,
+            "diagnostics": {
+                "healthy": True,
+                "error_analysis": {"recent_errors": ["e1", "e2", "e3"]},
+            },
+            "version_alignment": {"aligned": True, "message": "aligned"},
+            "build_assets": {"ready": True, "message": "ready"},
+            "build_health": {"status": "HEALTHY", "version": "1.0", "duration_ms": 1.0},
+            "accounts_preflight": {"status": "HEALTHY", "accounts_count": 1, "usable_sessions_count": 1, "problems_count": 0},
+            "entropy": {"status": "PASS", "avg_entropy": 25.0, "bare_excepts_total": 0, "syntax_errors": 0},
+            "silent_excepts": {"status": "PASS", "silent_handlers_count": 0, "files_audited": 10},
+            "tests": {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "success": True},
+            "metrics": {"total_py_files": 10, "total_py_lines": 500, "test_to_code_ratio": 0.5},
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+        }
+        # Exceeded: 3 errors > limit 2 -> exit 1
+        with patch("sys.argv", [
+            "autonomous_improvement_runner",
+            "--max-errors", "2",
+            "--dry-run"
+        ]):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 1)
+
+        # Within limit: 3 errors <= limit 4 -> exit 0
+        with patch("sys.argv", [
+            "autonomous_improvement_runner",
+            "--max-errors", "4",
+            "--dry-run"
+        ]):
+            try:
+                main()
+            except SystemExit as e:
+                self.assertEqual(e.code, 0)
+
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_strict_crashes_failure(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 295,
+            "diagnostics": {
+                "healthy": True,
+                "crash_analysis": {"total_crash_sessions": 1, "status": "CRITICAL"},
+            },
+            "version_alignment": {"aligned": True, "message": "aligned"},
+            "build_assets": {"ready": True, "message": "ready"},
+            "build_health": {"status": "HEALTHY", "version": "1.0", "duration_ms": 1.0},
+            "accounts_preflight": {"status": "HEALTHY", "accounts_count": 1, "usable_sessions_count": 1, "problems_count": 0},
+            "entropy": {"status": "PASS", "avg_entropy": 25.0, "bare_excepts_total": 0, "syntax_errors": 0},
+            "silent_excepts": {"status": "PASS", "silent_handlers_count": 0, "files_audited": 10},
+            "tests": {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "success": True},
+            "metrics": {"total_py_files": 10, "total_py_lines": 500, "test_to_code_ratio": 0.5},
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+        }
+        with patch("sys.argv", [
+            "autonomous_improvement_runner",
+            "--strict-crashes",
+            "--dry-run"
+        ]):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 1)
+
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_strict_sessions_failure(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 295,
+            "diagnostics": {
+                "healthy": True,
+                "sessions_analysis": {"corrupted_accounts": 1, "stale_accounts": 0, "status": "CORRUPTED"},
+            },
+            "version_alignment": {"aligned": True, "message": "aligned"},
+            "build_assets": {"ready": True, "message": "ready"},
+            "build_health": {"status": "HEALTHY", "version": "1.0", "duration_ms": 1.0},
+            "accounts_preflight": {"status": "HEALTHY", "accounts_count": 1, "usable_sessions_count": 1, "problems_count": 0},
+            "entropy": {"status": "PASS", "avg_entropy": 25.0, "bare_excepts_total": 0, "syntax_errors": 0},
+            "silent_excepts": {"status": "PASS", "silent_handlers_count": 0, "files_audited": 10},
+            "tests": {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "success": True},
+            "metrics": {"total_py_files": 10, "total_py_lines": 500, "test_to_code_ratio": 0.5},
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+        }
+        with patch("sys.argv", [
+            "autonomous_improvement_runner",
+            "--strict-sessions",
+            "--dry-run"
+        ]):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 1)
+
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_strict_debug_failure(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 295,
+            "diagnostics": {
+                "healthy": True,
+                "debug_analysis": {"level_counts": {"ERROR": 1, "CRITICAL": 0}, "status": "ERROR"},
+            },
+            "version_alignment": {"aligned": True, "message": "aligned"},
+            "build_assets": {"ready": True, "message": "ready"},
+            "build_health": {"status": "HEALTHY", "version": "1.0", "duration_ms": 1.0},
+            "accounts_preflight": {"status": "HEALTHY", "accounts_count": 1, "usable_sessions_count": 1, "problems_count": 0},
+            "entropy": {"status": "PASS", "avg_entropy": 25.0, "bare_excepts_total": 0, "syntax_errors": 0},
+            "silent_excepts": {"status": "PASS", "silent_handlers_count": 0, "files_audited": 10},
+            "tests": {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "success": True},
+            "metrics": {"total_py_files": 10, "total_py_lines": 500, "test_to_code_ratio": 0.5},
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+        }
+        with patch("sys.argv", [
+            "autonomous_improvement_runner",
+            "--strict-debug",
+            "--dry-run"
+        ]):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 1)
 
 
 if __name__ == "__main__":

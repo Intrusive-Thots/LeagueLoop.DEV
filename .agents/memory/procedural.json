@@ -225,5 +225,15 @@
       "Enforce UI capture integrity and 0 corrupted screenshots via --strict-screenshots.",
       "Verify thresholds are recorded in loop_state.json under warning_baseline, stability_baseline, and screenshot_baseline."
     ]
+  },
+  {
+    "method": "Error, Crash, Saved Session, and Debug Governance Protocol",
+    "procedure": [
+      "Configure error thresholds via --max-errors <limit> or require 0 errors via --strict-errors.",
+      "Enforce crash limits with --max-crashes <limit> or fail on any crash session via --strict-crashes.",
+      "Verify saved session vault integrity with --strict-sessions to block corrupted or stale account files.",
+      "Enforce clean debug log streams without ERROR or CRITICAL logs using --strict-debug."
+    ],
+    "updated_at": "2026-11-09T13:02:53.923859+00:00"
   }
 ]

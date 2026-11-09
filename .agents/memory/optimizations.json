@@ -3354,5 +3354,16 @@
       "status": "Optimized implementation baseline"
     },
     "impact": "Added --strict-warnings, --max-warnings, --strict-stability, and --strict-screenshots fail-closed CLI switches and baseline thresholds persistence in loop_state.json across warning_baseline, stability_baseline, and screenshot_baseline."
+  },
+  {
+    "timestamp": "2026-11-09T13:02:53.923859+00:00",
+    "feature": "error, crash, session, and debug governance invariants",
+    "before_metrics": {
+      "status": "Prior implementation baseline"
+    },
+    "after_metrics": {
+      "status": "Optimized implementation baseline"
+    },
+    "impact": "Complete fail-closed CLI switches and baseline thresholds across all diagnostic domains"
   }
 ]
