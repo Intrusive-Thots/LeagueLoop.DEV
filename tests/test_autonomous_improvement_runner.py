@@ -1463,5 +1463,149 @@ class TestAutonomousImprovementRunner(unittest.TestCase):
             self.assertEqual(cm.exception.code, 1)
 
 
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_strict_warnings_failure(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 294,
+            "diagnostics": {"healthy": True, "error_analysis": {"recent_warnings": ["w1", "w2"], "status": "WARN"}},
+            "version_alignment": {"aligned": True, "message": "aligned"},
+            "build_assets": {"ready": True, "message": "ready"},
+            "build_health": {"status": "HEALTHY", "version": "1.0", "duration_ms": 1.0},
+            "accounts_preflight": {"status": "HEALTHY", "accounts_count": 1, "usable_sessions_count": 1, "problems_count": 0},
+            "entropy": {"status": "PASS", "avg_entropy": 25.0, "bare_excepts_total": 0, "syntax_errors": 0},
+            "silent_excepts": {"status": "PASS", "silent_handlers_count": 0, "files_audited": 10},
+            "tests": {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "success": True},
+            "metrics": {"total_py_files": 10, "total_py_lines": 500, "test_to_code_ratio": 0.5},
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+        }
+        with patch("sys.argv", [
+            "autonomous_improvement_runner",
+            "--strict-warnings",
+            "--dry-run"
+        ]):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 1)
+
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_max_warnings_threshold(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 294,
+            "diagnostics": {"healthy": True, "error_analysis": {"recent_warnings": ["w1", "w2", "w3"], "status": "WARN"}},
+            "version_alignment": {"aligned": True, "message": "aligned"},
+            "build_assets": {"ready": True, "message": "ready"},
+            "build_health": {"status": "HEALTHY", "version": "1.0", "duration_ms": 1.0},
+            "accounts_preflight": {"status": "HEALTHY", "accounts_count": 1, "usable_sessions_count": 1, "problems_count": 0},
+            "entropy": {"status": "PASS", "avg_entropy": 25.0, "bare_excepts_total": 0, "syntax_errors": 0},
+            "silent_excepts": {"status": "PASS", "silent_handlers_count": 0, "files_audited": 10},
+            "tests": {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "success": True},
+            "metrics": {"total_py_files": 10, "total_py_lines": 500, "test_to_code_ratio": 0.5},
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+        }
+        # Exceeded: 3 warnings > limit of 2 -> exit 1
+        with patch("sys.argv", [
+            "autonomous_improvement_runner",
+            "--max-warnings", "2",
+            "--dry-run"
+        ]):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 1)
+
+        # Within limit: 3 warnings <= limit of 5 -> exit 0
+        with patch("sys.argv", [
+            "autonomous_improvement_runner",
+            "--max-warnings", "5",
+            "--dry-run"
+        ]):
+            try:
+                main()
+            except SystemExit as e:
+                self.assertEqual(e.code, 0)
+
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_strict_stability_failure(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 294,
+            "diagnostics": {
+                "healthy": True,
+                "error_analysis": {},
+                "session_analysis": {
+                    "stability": {"rating": "DEGRADED", "connection_drops_count": 2, "throttle_events_count": 1}
+                }
+            },
+            "version_alignment": {"aligned": True, "message": "aligned"},
+            "build_assets": {"ready": True, "message": "ready"},
+            "build_health": {"status": "HEALTHY", "version": "1.0", "duration_ms": 1.0},
+            "accounts_preflight": {"status": "HEALTHY", "accounts_count": 1, "usable_sessions_count": 1, "problems_count": 0},
+            "entropy": {"status": "PASS", "avg_entropy": 25.0, "bare_excepts_total": 0, "syntax_errors": 0},
+            "silent_excepts": {"status": "PASS", "silent_handlers_count": 0, "files_audited": 10},
+            "tests": {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "success": True},
+            "metrics": {"total_py_files": 10, "total_py_lines": 500, "test_to_code_ratio": 0.5},
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+        }
+        with patch("sys.argv", [
+            "autonomous_improvement_runner",
+            "--strict-stability",
+            "--dry-run"
+        ]):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 1)
+
+    @patch("tools.autonomous_improvement_runner.run_loop")
+    def test_main_cli_strict_screenshots_failure(self, mock_run_loop):
+        from tools.autonomous_improvement_runner import main
+        mock_run_loop.return_value = {
+            "loop_number": 294,
+            "diagnostics": {
+                "healthy": True,
+                "error_analysis": {},
+                "screenshot_analysis": {"all_intact": False, "corrupted_count": 1, "stale_count": 0}
+            },
+            "version_alignment": {"aligned": True, "message": "aligned"},
+            "build_assets": {"ready": True, "message": "ready"},
+            "build_health": {"status": "HEALTHY", "version": "1.0", "duration_ms": 1.0},
+            "accounts_preflight": {"status": "HEALTHY", "accounts_count": 1, "usable_sessions_count": 1, "problems_count": 0},
+            "entropy": {"status": "PASS", "avg_entropy": 25.0, "bare_excepts_total": 0, "syntax_errors": 0},
+            "silent_excepts": {"status": "PASS", "silent_handlers_count": 0, "files_audited": 10},
+            "tests": {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "success": True},
+            "metrics": {"total_py_files": 10, "total_py_lines": 500, "test_to_code_ratio": 0.5},
+            "memory": {"persisted": False, "episodic_entry": {"outcome": "Success"}},
+        }
+        with patch("sys.argv", [
+            "autonomous_improvement_runner",
+            "--strict-screenshots",
+            "--dry-run"
+        ]):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+            self.assertEqual(cm.exception.code, 1)
+
+    def test_update_memory_state_governance_thresholds(self):
+        from tools.autonomous_improvement_runner import update_memory_state
+        metrics = {"total_py_files": 10, "total_py_lines": 500, "test_to_code_ratio": 0.5}
+        test_results = {"passed": 10, "failed": 0, "skipped": 0, "warnings": 0, "errors": 0, "duration_seconds": 1.0, "success": True}
+        res = update_memory_state(
+            metrics,
+            test_results,
+            dry_run=True,
+            max_warnings_threshold=25,
+            strict_warnings=True,
+            strict_stability=True,
+            strict_screenshots=True,
+        )
+        new_state = res["new_state"]
+        self.assertEqual(new_state["warning_baseline"]["thresholds"]["max_warnings"], 25)
+        self.assertTrue(new_state["warning_baseline"]["thresholds"]["strict"])
+        self.assertTrue(new_state["stability_baseline"]["thresholds"]["strict"])
+        self.assertEqual(new_state["stability_baseline"]["thresholds"]["allowed_ratings"], ["EXCELLENT"])
+        self.assertTrue(new_state["screenshot_baseline"]["thresholds"]["strict"])
+        self.assertEqual(new_state["screenshot_baseline"]["thresholds"]["max_corrupted"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

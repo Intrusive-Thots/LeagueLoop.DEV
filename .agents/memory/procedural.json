@@ -216,5 +216,14 @@
       "Execute storage pruning via --prune-storage with optional --keep-rotated-logs or --max-screenshots-keep limits.",
       "Verify pruning_baseline (last_freed_mb, logs_pruned_count, screenshots_pruned_count, last_pruned) is updated in loop_state.json."
     ]
+  },
+  {
+    "method": "Diagnostic Warning, Stability, and Screenshot Governance Protocol",
+    "procedure": [
+      "Configure warning thresholds via --max-warnings <limit> or require 0 warnings via --strict-warnings in CI/CD environments.",
+      "Enforce network stability rating=EXCELLENT and 0 throttle events via --strict-stability.",
+      "Enforce UI capture integrity and 0 corrupted screenshots via --strict-screenshots.",
+      "Verify thresholds are recorded in loop_state.json under warning_baseline, stability_baseline, and screenshot_baseline."
+    ]
   }
 ]

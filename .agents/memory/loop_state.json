@@ -1,17 +1,17 @@
 {
-  "run_number": 293,
-  "last_run": "2026-11-09T12:37:06.564318+00:00",
+  "run_number": 294,
+  "last_run": "2026-11-09T12:47:54.101678+00:00",
   "test_baseline": {
     "passed": 1283,
     "failed": 0,
     "skipped": 0,
     "warnings": 0,
-    "last_targeted_passed": 123,
+    "last_targeted_passed": 75,
     "errors": 0
   },
   "index_baseline": {
     "total_files": 213,
-    "total_py_lines": 65855,
+    "total_py_lines": 66074,
     "breakdown": {
       "src": {
         "files": 106,
@@ -19,14 +19,14 @@
       },
       "tests": {
         "files": 96,
-        "lines": 23605
+        "lines": 23749
       },
       "tools": {
         "files": 11,
-        "lines": 5395
+        "lines": 5470
       }
     },
-    "test_to_code_ratio": 0.64
+    "test_to_code_ratio": 0.644
   },
   "entropy_baseline": {
     "status": "WARN",
@@ -56,8 +56,8 @@
   },
   "storage_baseline": {
     "status": "OPTIMAL",
-    "total_mb": 74.56,
-    "logs_mb": 13.45,
+    "total_mb": 74.57,
+    "logs_mb": 13.46,
     "screenshots_mb": 61.1,
     "warnings_count": 0,
     "thresholds": {
@@ -88,6 +88,10 @@
       "http_status_anomaly": 12,
       "account_switch": 1,
       "riot_client_api": 2
+    },
+    "thresholds": {
+      "max_warnings": null,
+      "strict": false
     }
   },
   "error_baseline": {
@@ -111,7 +115,11 @@
     "category_counts": {
       "game_phase_change": 5
     },
-    "newest_age_human": "8.6h ago"
+    "newest_age_human": "8.7h ago",
+    "thresholds": {
+      "strict": false,
+      "max_corrupted": 0
+    }
   },
   "session_baseline": {
     "status": "OPTIMAL",
@@ -127,11 +135,19 @@
     "recovered_drops": 0,
     "throttle_events": 0,
     "is_connected": true,
-    "latency_avg_ms": null
+    "latency_avg_ms": null,
+    "thresholds": {
+      "strict": false,
+      "allowed_ratings": [
+        "EXCELLENT",
+        "GOOD",
+        "RECOVERED"
+      ]
+    }
   },
   "debug_baseline": {
     "status": "HEALTHY",
-    "total_lines_inspected": 84785,
+    "total_lines_inspected": 84828,
     "diagnostic_tags_count": 0,
     "level_counts": {
       "DEBUG": 30
@@ -143,7 +159,7 @@
     "version_aligned": true,
     "files_ok": true,
     "test_environment_ok": true,
-    "duration_ms": 0.39
+    "duration_ms": 0.4
   },
   "accounts_preflight_baseline": {
     "status": "HEALTHY",

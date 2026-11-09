@@ -308,6 +308,10 @@ def update_memory_state(
     build_health_results: Optional[Dict[str, Any]] = None,
     accounts_preflight_results: Optional[Dict[str, Any]] = None,
     max_entropy_threshold: Optional[float] = None,
+    max_warnings_threshold: Optional[int] = None,
+    strict_warnings: bool = False,
+    strict_stability: bool = False,
+    strict_screenshots: bool = False,
 ) -> Dict[str, Any]:
     """Updates loop_state.json, episodic.json, optimizations.json, semantic.json, procedural.json, and failures.json."""
     MEMORY_DIR.mkdir(parents=True, exist_ok=True)
@@ -456,6 +460,10 @@ def update_memory_state(
             "status": ("HEALTHY" if len((diagnostics_results or {}).get("error_analysis", {}).get("recent_warnings", [])) == 0 else ("WARN" if len((diagnostics_results or {}).get("error_analysis", {}).get("recent_warnings", [])) < 50 else "CRITICAL")),
             "total_warnings": len((diagnostics_results or {}).get("error_analysis", {}).get("recent_warnings", [])),
             "categories": (diagnostics_results or {}).get("error_analysis", {}).get("warning_categories", {}),
+            "thresholds": {
+                "max_warnings": max_warnings_threshold,
+                "strict": strict_warnings,
+            },
         },
         "error_baseline": {
             "status": ("HEALTHY" if len((diagnostics_results or {}).get("error_analysis", {}).get("recent_errors", [])) == 0 else "ERROR"),
@@ -475,6 +483,10 @@ def update_memory_state(
             "stale_count": (diagnostics_results or {}).get("screenshot_analysis", {}).get("stale_count", 0),
             "category_counts": (diagnostics_results or {}).get("screenshot_analysis", {}).get("category_counts", {}),
             "newest_age_human": (diagnostics_results or {}).get("screenshot_analysis", {}).get("newest_age_human", "N/A"),
+            "thresholds": {
+                "strict": strict_screenshots,
+                "max_corrupted": 0,
+            },
         },
         "session_baseline": {
             "status": (
@@ -503,6 +515,10 @@ def update_memory_state(
             "throttle_events": (diagnostics_results or {}).get("session_analysis", {}).get("stability", {}).get("throttle_events_count", 0),
             "is_connected": (diagnostics_results or {}).get("session_analysis", {}).get("stability", {}).get("is_connected", False),
             "latency_avg_ms": (diagnostics_results or {}).get("session_analysis", {}).get("stability", {}).get("latency_stats", {}).get("avg_ms"),
+            "thresholds": {
+                "strict": strict_stability,
+                "allowed_ratings": ["EXCELLENT"] if strict_stability else ["EXCELLENT", "GOOD", "RECOVERED"],
+            },
         },
         "debug_baseline": {
             "status": (
@@ -754,6 +770,10 @@ def run_loop(
     strict_entropy: bool = False,
     max_entropy: Optional[float] = None,
     strict_silent: bool = False,
+    strict_warnings: bool = False,
+    max_warnings: Optional[int] = None,
+    strict_stability: bool = False,
+    strict_screenshots: bool = False,
 ) -> Dict[str, Any]:
     """Executes the full Autonomous Improvement Loop."""
     prune_res = None
@@ -1004,9 +1024,23 @@ def run_loop(
             "description": "Exposing configurable storage thresholds (--max-logs-mb, --max-screenshots-mb, --strict-storage) and recording pruning_baseline metrics in loop_state.json ensures disk bloat from rotated logs and screenshot captures is deterministically governed and tracked across autonomous improvement cycles.",
             "learned_at": datetime.now(timezone.utc).isoformat(),
         },
+        {
+            "concept": "Diagnostic Warning, Stability, and Screenshot Governance Invariants",
+            "description": "Enforcing fail-closed CLI switches (--strict-warnings, --max-warnings, --strict-stability, --strict-screenshots) alongside threshold persistence in loop_state.json prevents telemetry degradations, unhandled network throttling, and corrupted UI captures from escaping automated audit cycles.",
+            "learned_at": datetime.now(timezone.utc).isoformat(),
+        },
     ]
 
     default_procedural = [
+        {
+            "method": "Diagnostic Warning, Stability, and Screenshot Governance Protocol",
+            "procedure": [
+                "Configure warning thresholds via --max-warnings <limit> or require 0 warnings via --strict-warnings in CI/CD environments.",
+                "Enforce network stability rating=EXCELLENT and 0 throttle events via --strict-stability.",
+                "Enforce UI capture integrity and 0 corrupted screenshots via --strict-screenshots.",
+                "Verify thresholds are recorded in loop_state.json under warning_baseline, stability_baseline, and screenshot_baseline.",
+            ],
+        },
         {
             "method": "Storage Threshold Governance and Pruning Baseline Protocol",
             "procedure": [
@@ -1256,6 +1290,10 @@ def run_loop(
         build_health_results=build_health,
         accounts_preflight_results=accts_check,
         max_entropy_threshold=max_entropy,
+        max_warnings_threshold=max_warnings,
+        strict_warnings=strict_warnings,
+        strict_stability=strict_stability,
+        strict_screenshots=strict_screenshots,
     )
 
     loop_num = memory_result["new_state"]["run_number"]
@@ -1328,6 +1366,10 @@ def main(argv=None):
     parser.add_argument("--strict-entropy", action="store_true", help="Treat code entropy FAIL status, bare excepts, or syntax errors as fatal")
     parser.add_argument("--max-entropy", type=float, default=None, help="Maximum allowed average codebase entropy before failure")
     parser.add_argument("--strict-silent", action="store_true", help="Treat swallowed/silent exception handlers as fatal")
+    parser.add_argument("--strict-warnings", action="store_true", help="Treat any diagnostic warnings as fatal health failures")
+    parser.add_argument("--max-warnings", type=int, default=None, help="Maximum allowed diagnostic warnings before failure")
+    parser.add_argument("--strict-stability", action="store_true", help="Treat non-EXCELLENT network stability or drops/throttles as fatal")
+    parser.add_argument("--strict-screenshots", action="store_true", help="Treat corrupted or stale screenshot captures as fatal")
     parser.add_argument("--include-rotated", action="store_true", help="Include rotated log files (error.log.1) during diagnostic analysis")
     parser.add_argument("--keep-rotated-logs", action="store_true", help="Do not prune rotated log files during storage pruning")
     parser.add_argument("--test-timeout", type=float, default=180.0, help="Timeout in seconds for pytest test runner (default: 180.0)")
@@ -1347,7 +1389,8 @@ def main(argv=None):
         "--all-tests", "--staged", "--dry-run", "--check-baseline", "--json", "--prune-storage",
         "-h", "--help", "-v", "--verbose", "--strict-storage", "--include-rotated", "--keep-rotated-logs",
         "--strict-build", "--strict-preflight", "--strict-accounts",
-        "--strict-entropy", "--strict-silent"
+        "--strict-entropy", "--strict-silent",
+        "--strict-warnings", "--strict-stability", "--strict-screenshots"
     }
     runner_flags_with_val = {
         "--feature", "--impact", "--max-screenshots-keep", "--max-screenshot-age-days",
@@ -1355,7 +1398,7 @@ def main(argv=None):
         "--screenshot-category", "--session-status", "--session-account",
         "--session-log-level", "--session-log-tag", "--debug-level", "--debug-tag",
         "--test-timeout", "--max-logs-mb", "--max-screenshots-mb",
-        "--max-entropy"
+        "--max-entropy", "--max-warnings"
     }
 
     targets_to_run = []
@@ -1426,6 +1469,14 @@ def main(argv=None):
         run_kwargs["max_entropy"] = args.max_entropy
     if args.strict_silent:
         run_kwargs["strict_silent"] = True
+    if args.strict_warnings:
+        run_kwargs["strict_warnings"] = True
+    if args.max_warnings is not None:
+        run_kwargs["max_warnings"] = args.max_warnings
+    if args.strict_stability:
+        run_kwargs["strict_stability"] = True
+    if args.strict_screenshots:
+        run_kwargs["strict_screenshots"] = True
     if args.test_timeout != 180.0:
         run_kwargs["test_timeout"] = args.test_timeout
     if args.verbose:
@@ -1467,6 +1518,30 @@ def main(argv=None):
     if args.strict_silent:
         sil = result.get("silent_excepts", {})
         if sil.get("status") != "PASS" or sil.get("silent_handlers_count", 0) > 0:
+            exit_ok = False
+    if args.strict_warnings:
+        warns = len((result.get("diagnostics", {}).get("error_analysis", {})).get("recent_warnings", []))
+        if warns > 0 or result.get("diagnostics", {}).get("error_analysis", {}).get("status") not in ("HEALTHY", None):
+            exit_ok = False
+    if args.max_warnings is not None:
+        warns = len((result.get("diagnostics", {}).get("error_analysis", {})).get("recent_warnings", []))
+        if warns > args.max_warnings:
+            exit_ok = False
+    if args.strict_stability:
+        stab = result.get("diagnostics", {}).get("session_analysis", {}).get("stability", {})
+        if (
+            stab.get("rating") != "EXCELLENT"
+            or stab.get("connection_drops_count", 0) > 0
+            or stab.get("throttle_events_count", 0) > 0
+        ):
+            exit_ok = False
+    if args.strict_screenshots:
+        sa = result.get("diagnostics", {}).get("screenshot_analysis", {})
+        if (
+            not sa.get("all_intact", True)
+            or sa.get("corrupted_count", 0) > 0
+            or sa.get("stale_count", 0) > 0
+        ):
             exit_ok = False
 
     if args.json:
